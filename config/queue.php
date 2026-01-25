@@ -72,6 +72,14 @@ return [
             'block_for' => null,
             'after_commit' => false,
         ],
+        'redis_event' => [
+            'driver' => 'redis',
+            'connection' => 'eventdriven',
+            'queue' => env('REDIS_EVENTDRIVEN_QUEUE', 'event-driven'),
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            'block_for' => null,
+            'after_commit' => false,
+        ],
 
         'deferred' => [
             'driver' => 'deferred',
