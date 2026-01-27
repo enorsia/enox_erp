@@ -13,6 +13,21 @@
     <link href="{{ asset('assets/css/icons.min.css') }}" rel="stylesheet">
     <link href="{{ asset('assets/css/app.min.css') }}" rel="stylesheet">
     <script src="{{ asset('assets/js/config.js') }}"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-css/iziToast.min.css" />
+    <style>
+        .top_title {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .filter_close_sec {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+        }
+    </style>
+    @stack('css')
 </head>
 
 <body>
@@ -37,10 +52,14 @@
         <!-- End Page Content -->
         <!-- ==================================================== -->
 
-     </div>
-     <!-- END Wrapper -->
+    </div>
+    <!-- END Wrapper -->
 
     <script src="{{ asset('assets/js/vendor.js') }}"></script>
     <script src="{{ asset('assets/js/app.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/iziToast.min.js"></script>
+    @include('master.lara-izitoast')
+    @stack('js')
 </body>
+
 </html>
