@@ -4,15 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Models\Platform;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class PlatformController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $data['platforms'] = Platform::latest()->paginate($this->perPage);
+        $q = $request->q;
+        $data['platforms'] = Platform::query()
+            ->when($q, function ($query) use ($q) {
+                $query->where('name', 'like', '%' . $q . '%');
+            })
+            ->latest()
+            ->paginate($this->perPage)
+            ->withQueryString();
         $data['start'] = ($data['platforms']->currentPage() - 1) * $data['platforms']->perPage() + 1;
         return view('platforms.index', $data);
     }
@@ -35,16 +43,20 @@ class PlatformController extends Controller
             'shipping_charge' => 'nullable|numeric|min:0',
             'note' => 'nullable|string',
         ]);
+        try{
+            Platform::create([
+                'name' => $validated['platform_name'],
+                'shipping_charge' => $validated['shipping_charge'] ?? 0,
+                'note' => $validated['note'],
+            ]);
+            notify()->success('Expense created successfully', 'Success');
+            return redirect()->route('admin.platforms.index');
+        }catch(\Exception $e){
+            Log::error($e->getMessage());
+            notify()->error('Something went wrong', 'Error');
+            return back();
+        }
 
-        Platform::create([
-            'name' => $validated['platform_name'],
-            'shipping_charge' => $validated['shipping_charge'] ?? 0,
-            'note' => $validated['note'],
-        ]);
-
-        return redirect()
-            ->route('admin.platforms.index')
-            ->with('success', 'Platform created successfully.');
     }
 
     /**
@@ -69,16 +81,20 @@ class PlatformController extends Controller
     public function update(Request $request, Platform $platform)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:platforms,name,' . $platform->id,
-            'shipping_charge' => 'required|numeric|min:0',
+            'platform_name' => 'required|string|max:255|unique:platforms,name,' . $platform->id,
+            'shipping_charge' => 'nullable|numeric|min:0',
             'note' => 'nullable|string',
         ]);
 
-        $platform->update($validated);
-
-        return redirect()
-            ->route('admin.platforms.index')
-            ->with('success', 'Platform updated successfully.');
+        try{
+            $platform->update($validated);
+            notify()->success('Platform updated successfully', 'Success');
+            return redirect()->route('admin.platforms.index');
+        }catch(\Exception $e){
+            Log::error($e->getMessage());
+            notify()->error('Something went wrong', 'Error');
+            return back();
+        }
     }
 
     /**
@@ -86,10 +102,15 @@ class PlatformController extends Controller
      */
     public function destroy(Platform $platform)
     {
-        $platform->delete();
+        try {
+            $platform->delete();
+            notify()->success('Expense deleted successfully', 'Success');
+            return redirect()->back();
 
-        return redirect()
-            ->route('admin.platforms.index')
-            ->with('success', 'Platform deleted successfully.');
+        }catch (\Exception $e) {
+            Log::error($e->getMessage());
+            notify()->error($e->getMessage(), 'Error');
+            return back();
+        }
     }
 }

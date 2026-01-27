@@ -2,12 +2,12 @@
 
 @section('content')
     <div class="top_title">
-        @include('master.breadcrumb', [
-            'title' => 'Selling Chart Expense',
+       @include('master.breadcrumb', [
+            'title' => 'Setting',
             'icon' => '',
             'sub_title' => [
-                'Manage Selling Chart ' => '',
-                'Selling Chart Expense' => route('admin.selling_chart.expense.index'),
+                'Setting ' => '',
+                'Platforms' => route('admin.platforms.index'),
             ],
         ])
         <div>
@@ -16,7 +16,7 @@
             </a>
         </div>
     </div>
-    <form method="GET" action="{{ route('admin.selling_chart.expense.index') }}">
+    <form method="GET" action="{{ route('admin.platforms.index') }}">
         <div class="card" id="filterSection">
             <div class="card-body">
                 <div class="row">
@@ -27,18 +27,12 @@
                     </div>
                     <div class="col-12 col-md-4">
                         <div class="form-group mb-3 mb-md-0 new_select_field new_same_item d-flex flex-wrap">
-                            <select name="year" id="year" class="form-control select2">
-                                <option value="">Select Year</option>
-                                @for ($i = 2020; $i <= 2030; $i++)
-                                    <option value="{{ $i }}" {{ request('year') == $i ? 'selected' : '' }}>
-                                        {{ $i }}</option>
-                                @endfor
-                            </select>
+                            <input type="text" name="q" id="q" class="form-control" placeholder="Search" value="{{request('q')}}" />
                         </div>
                     </div>
                     <div class="col-12 col-md-8 text-end">
                         <div class="flex-center">
-                            <a href="{{ route('admin.selling_chart.expense.index') }}"
+                            <a href="{{ route('admin.platforms.index') }}"
                                 class="btn btn-outline-secondary flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
                             <button type="submit" class="btn btn-primary mx-1"><i class="fa fa-filter ms-0"
                                     aria-hidden="true"></i>
@@ -55,12 +49,12 @@
                 <table class="table align-middle mb-0 table-hover table-centered">
                     <thead class="bg-light-subtle">
                         <tr>
-                            <th>#SL</th>
-                            <th>Platform</th>
-                            <th>Created At</th>
-                            <th>Updated At</th>
-                            <th>Note</th>
-                            <th>Action</th>
+                            <th width="10">#SL</th>
+                            <th width="15">Platform</th>
+                            <th width="6">Shipping</th>
+                            <th width="150">Create / Update</th>
+                            <th width="300">Note</th>
+                            <th width="30" class="text-center">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -69,13 +63,16 @@
                                 <tr>
                                     <td>{{ $start + $loop->index }}</td>
                                     <td>{{ $data->name }}</td>
-                                    <td>{{ $data->created_at }}</td>
-                                    <td>{{ $data->updated_at }}</td>
-                                    <td>{{ Str::limit($data->note, 20) }}</td>
+                                    <td>@price($data->shipping_charge)</td>
                                     <td>
+                                        CA: {{ $data->created_at }} <br/>
+                                        UA: {{ $data->updated_at }}
+                                    </td>
+                                    <td>{{ $data->note }}</td>
+                                    <td class="text-center">
                                         <div class="d-inline-flex text-center text-md-start text-nowrap">
                                             <a class="btn btn-soft-primary btn-sm mx-1" title="Edit"
-                                                href="{{ route('admin.selling_chart.expense.edit', $data->id) }}">
+                                                href="{{ route('admin.platforms.edit', $data->id) }}">
                                                 <iconify-icon icon="solar:pen-2-broken" class="fs-18"></iconify-icon>
                                             </a>
 
@@ -85,7 +82,7 @@
                                                     class="fs-18 delete-icon"></iconify-icon>
                                             </button>
                                             <form id="delete-form-{{ $data->id }}" method="POST"
-                                                action="{{ route('admin.selling_chart.expense.destroy', $data->id) }}"
+                                                action="{{ route('admin.platforms.destroy', $data->id) }}"
                                                 style="display: none;">
                                                 @csrf
                                                 @method('DELETE')
