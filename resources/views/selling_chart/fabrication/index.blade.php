@@ -1,109 +1,100 @@
-@extends('backend.master')
+@extends('master.app')
 
 @section('content')
     <div class="top_title">
-        @include('backend.partials.breadcrumb', [
-            'title' => 'Selling Chart Fabrication',
-            'icon' => 'bi bi-graph-up-arrow',
+       @include('master.breadcrumb', [
+            'title' => 'Febrication',
+            'icon' => '',
             'sub_title' => [
-                'Main' => '',
-                'Manage Selling Chart ' => '',
-                'Selling Chart Fabrication' => route('admin.selling_chart.fabrication.index'),
+                'Selling Chart ' => '',
+                'Febrication' => route('admin.selling_chart.fabrication.index'),
             ],
         ])
         <div>
-            @include('backend.component-list.filter-toggle-button')
-            @can('admin.selling_chart.fabrication.create')
-                <a href="{{ route('admin.selling_chart.fabrication.create') }}" class="btn tlt-btn">
-                    Create <span><i class="bi bi-plus-lg me-0"></i></span>
-                </a>
-            @endcan
+            <a href="{{ route('admin.selling_chart.fabrication.create') }}" class="btn btn-outline-secondary">
+                Create <span><i class="bi bi-plus-lg me-0"></i></span>
+            </a>
         </div>
     </div>
+    <form method="GET" action="{{ route('admin.selling_chart.fabrication.index') }}">
+        <div class="card" id="filterSection">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="filter_close_sec">
+                            <h4 class="mb-0"><i class="bi bi-sliders"></i>Filter</h4>
+                        </div>
+                    </div>
 
-    <form method="get" action="{{ route('admin.selling_chart.fabrication.index') }}">
-        <div class="card-dark" id="filterSection">
-            <div class="row">
-                <div class="col-12">
-                    <div class="filter_close_sec">
-                        <h6><i class="bi bi-sliders"></i>Filter</h6>
-                        <i class="bi bi-x filterCloseBtn" style="cursor: pointer"></i>
-                    </div>
-                </div>
-                <div class="col-12 col-xl-4  text-end ">
-                    <div class="flex-center flex-wrap">
-                        <div class="filter_button new_same_item me-3">
-                            <button type="submit" class="btn"><i class="fa fa-filter ms-0" aria-hidden="true"></i>
-                                Filter</button>
-                        </div>
-                        <div class="reset_button new_same_item">
-                            <a href="{{ route('admin.selling_chart.fabrication.index') }}" class="btn flex-center"><i
-                                    class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
+                    <div class="col-12 col-md-2">
+                        <div class="form-group mb-3 mb-md-0 new_select_field new_same_item d-flex flex-wrap">
+                            <input type="text" name="name" id="name" class="form-control" placeholder="Search by name" value="{{request('name')}}" />
                         </div>
                     </div>
-                </div>
-                <div class="col-12 col-md-6 col-xl-4 ">
-                    <div class="form-group new_search new_same_item mb-sm-0 mb-3">
-                        <label for="search">Search</label>
-                        <input class="form-control" type="text" name="name" id="search" placeholder="Search by name"
-                            value="{{ request('name') }}">
-                    </div>
-                </div>
-                <div class="col-12 col-md-6 col-xl-4 ">
-                    <div class="form-group new_select_field new_same_item mb-sm-0 mb-3">
-                        <label for="status">Status</label>
-                        <select class="js-states form-control select2" name="status" id="status">
-                            <option value="">Select status</option>
-                            <option value="1" {{ request('status') == '1' ? 'selected' : '' }}>Active</option>
-                            <option value="0" {{ request('status') == '0' ? 'selected' : '' }}>Inactive</option>
+                    <div class="col-12 col-md-2">
+                        <select name="status" class="form-select data-choices">
+                            <option value="">Status</option>
+                            <option value="1" {{ request('status') === "1" ? 'selected' : '' }}>Active</option>
+                            <option value="0" {{ request('status') === "0" ? 'selected' : '' }}>Inactive</option>
                         </select>
+                    </div>
+                    <div class="col-12 col-md-8 text-end">
+                        <div class="flex-center">
+                            <a href="{{ route('admin.selling_chart.fabrication.index') }}"
+                                class="btn btn-outline-secondary flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
+                            <button type="submit" class="btn btn-primary mx-1"><i class="fa fa-filter ms-0"
+                                    aria-hidden="true"></i>
+                                Search</button>
+                        </div>
                     </div>
                 </div>
             </div>
-
         </div>
     </form>
-
-    <div class="new_table table-responsive">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th class="text-center">#SL</th>
-                    <th class="text-left">Name</th>
-                    <th class="text-center">status</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (!$lookup_names->isEmpty())
-                    @foreach ($lookup_names as $lookup_name)
+    <div class="card shadow-sm mt-3" style="overflow: hidden;">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table align-middle mb-0 table-hover table-centered">
+                    <thead class="bg-light-subtle">
                         <tr>
-                            <td class="text-center">{{ $start + $loop->index }}</td>
-                            <td>{{ $lookup_name->name }}</td>
-                            <td class="text-center">
-                                @if ($lookup_name->status == 1)
-                                    @include('backend.component-list.active-icon', ['title' => 'Active'])
-                                @else
-                                    @include('backend.component-list.inactive-icon', [
-                                        'title' => 'Inactive',
-                                    ])
-                                @endif
-                            </td>
+                            <th width="50">#SL</th>
+                            <th width="700">Name</th>
+                            <th width="200" class="text-center">Status</th>
                         </tr>
-                    @endforeach
-                @else
-                    <tr>
-                        <td colspan="3">
-                            <h5 class="text-danger text-center text-uppercase py-2 mb-0">No Result found.</h5>
-                        </td>
-                    </tr>
-                @endif
-            </tbody>
-        </table>
-
-        {!! $lookup_names->links('backend.partials.custom-paginator') !!}
-
+                    </thead>
+                    <tbody>
+                        @if (!$lookup_names->isEmpty())
+                            @foreach ($lookup_names as $lookup)
+                                <tr>
+                                    <td>{{ $start + $loop->index }}</td>
+                                    <td>{{ $lookup->name }}</td>
+                                    <td class="text-center">
+                                        <div class="d-inline-flex text-center text-md-start text-nowrap">
+                                            @if ($lookup->status == 1)
+                                                <span class="badge bg-success">Active</span>
+                                            @else
+                                                <span class="badge bg-danger">Inactive</span>
+                                            @endif
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        @else
+                            <tr>
+                                <td colspan="9">
+                                    <h5 class="text-danger text-center text-uppercase py-2 mb-0">No Result found.</h5>
+                                </td>
+                            </tr>
+                        @endif
+                    </tbody>
+                </table>
+            </div>
+            {!! optional($lookup_names)->links('master.custom-paginator') !!}
+        </div>
     </div>
+
 @endsection
 
 @push('js')
+    @include('selling_chart.expense.script')
 @endpush
