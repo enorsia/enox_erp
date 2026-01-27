@@ -36,6 +36,12 @@
         .is-invalid {
             color: #ef5f5f;
         }
+
+        .iziToast-title,
+        .iziToast-message {
+            font-size: 16px !important;
+            line-height: 16px !important;
+        }
     </style>
     @stack('css')
 </head>
@@ -70,6 +76,8 @@
     <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/select2-v4.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.0/jquery.validate.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/iziToast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/sweetalert2@11.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/customSweetalert2.min.js"></script>
     @include('master.lara-izitoast')
     <script>
         $('.validate-form').validate({
@@ -84,15 +92,6 @@
                     error.insertAfter(element);
                 }
             },
-
-            highlight: function(element) {
-                $(element).closest('.choices').addClass('is-invalid');
-            },
-
-            unhighlight: function(element) {
-                $(element).closest('.choices').removeClass('is-invalid');
-            },
-
             submitHandler: function(form) {
                 const $btn = $('.validate-btn');
                 $btn.prop('disabled', true).html(
@@ -101,6 +100,38 @@
                 form.submit();
             }
         });
+
+        function deleteData(id) {
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "You won't be able to revert this!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, delete it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('delete-form-' + id).submit();
+                }
+            });
+        }
+
+        function approveData(id) {
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "You won't be able to revert this!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, approve it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('approve-form-' + id).submit();
+                }
+            });
+        }
     </script>
     @stack('js')
 </body>

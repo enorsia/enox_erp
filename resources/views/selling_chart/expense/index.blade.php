@@ -55,36 +55,36 @@
                 <table class="table align-middle mb-0 table-hover table-centered">
                     <thead class="bg-light-subtle">
                         <tr>
-                            <th class="text-center">#SL</th>
-                            <th class="text-center">Year</th>
-                            <th class="text-center">conversion rate</th>
-                            <th class="text-center">commercial expense</th>
-                            <th class="text-center">enorsia expense bd</th>
-                            <th class="text-center">enorsia expense uk</th>
-                            <th class="text-center">shipping cost</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center">Action</th>
+                            <th>#SL</th>
+                            <th>Year</th>
+                            <th>conversion rate</th>
+                            <th>commercial expense</th>
+                            <th>enorsia expense bd</th>
+                            <th>enorsia expense uk</th>
+                            <th>shipping cost</th>
+                            <th>Status</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         @if (!$expenses->isEmpty())
                             @foreach ($expenses as $data)
                                 <tr>
-                                    <td class="text-center">{{ $start + $loop->index }}</td>
-                                    <td class="text-center">{{ $data->year }}</td>
-                                    <td class="text-center">£ {{ $data->conversion_rate }}</td>
-                                    <td class="text-center">£ {{ $data->commercial_expense }}</td>
-                                    <td class="text-center">£ {{ $data->enorsia_expense_bd }}</td>
-                                    <td class="text-center">£ {{ $data->enorsia_expense_uk }}</td>
-                                    <td class="text-center">£ {{ $data->shipping_cost }}</td>
-                                    <td class="text-center">
+                                    <td >{{ $start + $loop->index }}</td>
+                                    <td>{{ $data->year }}</td>
+                                    <td>£ {{ $data->conversion_rate }}</td>
+                                    <td>£ {{ $data->commercial_expense }}</td>
+                                    <td>£ {{ $data->enorsia_expense_bd }}</td>
+                                    <td>£ {{ $data->enorsia_expense_uk }}</td>
+                                    <td>£ {{ $data->shipping_cost }}</td>
+                                    <td>
                                         @if ($data->status == 1)
                                             Active
                                         @else
                                             Inactive
                                         @endif
                                     </td>
-                                    <td class="text-center">
+                                    <td>
                                         <div class="d-inline-flex text-center text-md-start text-nowrap">
                                             <a class="btn btn-soft-primary btn-sm mx-1" title="Edit"
                                                 href="{{ route('admin.selling_chart.expense.edit', $data->id) }}">
