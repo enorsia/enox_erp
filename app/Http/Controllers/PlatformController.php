@@ -12,8 +12,9 @@ class PlatformController extends Controller
      */
     public function index()
     {
-        $platforms = Platform::latest()->paginate(15);
-        return view('platforms.index', compact('platforms'));
+        $data['platforms'] = Platform::latest()->paginate($this->perPage);
+        $data['start'] = ($data['platforms']->currentPage() - 1) * $data['platforms']->perPage() + 1;
+        return view('platforms.index', $data);
     }
 
     /**
@@ -30,12 +31,16 @@ class PlatformController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:platforms,name',
-            'shipping_charge' => 'required|numeric|min:0',
+            'platform_name' => 'required|string|max:255|unique:platforms,name',
+            'shipping_charge' => 'nullable|numeric|min:0',
             'note' => 'nullable|string',
         ]);
 
-        Platform::create($validated);
+        Platform::create([
+            'name' => $validated['platform_name'],
+            'shipping_charge' => $validated['shipping_charge'] ?? 0,
+            'note' => $validated['note'],
+        ]);
 
         return redirect()
             ->route('admin.platforms.index')
