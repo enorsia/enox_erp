@@ -14,6 +14,7 @@
     <link href="{{ asset('assets/css/app.min.css') }}" rel="stylesheet">
     <script src="{{ asset('assets/js/config.js') }}"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-css/iziToast.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-css/select2-v5.min.css" />
     <style>
         .top_title {
             display: flex;
@@ -25,6 +26,15 @@
             border-bottom: 2px solid #eee;
             padding-bottom: 15px;
             margin-bottom: 15px;
+        }
+
+        .choices {
+            width: 100%;
+            margin-bottom: 0;
+        }
+
+        .is-invalid {
+            color: #ef5f5f;
         }
     </style>
     @stack('css')
@@ -54,11 +64,44 @@
 
     </div>
     <!-- END Wrapper -->
-
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="{{ asset('assets/js/vendor.js') }}"></script>
     <script src="{{ asset('assets/js/app.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/select2-v4.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.0/jquery.validate.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/iziToast.min.js"></script>
     @include('master.lara-izitoast')
+    <script>
+        $('.validate-form').validate({
+            ignore: [],
+            errorClass: 'is-invalid',
+            validClass: 'is-valid',
+            errorElement: 'div',
+            errorPlacement: function(error, element) {
+                if (element.hasClass('choices__input')) {
+                    error.insertAfter(element.closest('.choices'));
+                } else {
+                    error.insertAfter(element);
+                }
+            },
+
+            highlight: function(element) {
+                $(element).closest('.choices').addClass('is-invalid');
+            },
+
+            unhighlight: function(element) {
+                $(element).closest('.choices').removeClass('is-invalid');
+            },
+
+            submitHandler: function(form) {
+                const $btn = $('.validate-btn');
+                $btn.prop('disabled', true).html(
+                    '<span class="spinner-border spinner-border-sm me-2"></span>Processing...'
+                );
+                form.submit();
+            }
+        });
+    </script>
     @stack('js')
 </body>
 
