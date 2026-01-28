@@ -1,9 +1,9 @@
-<div class="card-dark main-card mb-3 card p-0" id="selling_chart_view_table">
+<div class="card-dark main-card my-3 card p-0" id="selling_chart_view_table">
     <div class="card-body pb-0">
         <div class="new_search" id="selling_chart_table">
             <div class="selling_table_body new_table m-0">
                 <div class="table-responsive">
-                    <table class="table" style="width: max-content !important;">
+                    <table class="table table-bordered" style="width: max-content !important;">
                         <thead>
                             <tr>
                                 <th class="text-nowrap" scope="col" style="width: 50px !important;">#SL</th>
@@ -60,60 +60,40 @@
                                             @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
 
 
-                                            <a href="javascript:void(0)" onclick="viewChart({{ $chartInfo->id }})">
-                                                @include('backend.component-list.view-icon', [
-                                                    'title' => 'View',
-                                                ])
+                                            <a class="btn btn-light btn-sm" href="javascript:void(0)"
+                                                onclick="viewChart({{ $chartInfo->id }})">
+                                                <iconify-icon icon="solar:eye-broken"
+                                                    class="align-middle fs-18"></iconify-icon>
                                             </a>
-
-                                            {{-- @if ($chartInfo->status == 0)
-                                                <button type="button" onclick="approveData({{ $chartInfo->id }})"
-                                                    class="btn btn-primary btn-sm" title="Approve">
-                                                    <i class="bi bi-check"></i>
-                                                    <span>Approve</span>
+                                            @if ($chartInfo->status == 0)
+                                                <a class="btn btn-soft-primary btn-sm mx-1" title="Edit"
+                                                    href="{{ route('admin.selling_chart.edit', $chartInfo->id) }}">
+                                                    <iconify-icon icon="solar:pen-2-broken"
+                                                        class="fs-18"></iconify-icon>
+                                                </a>
+                                                <button type="button" onclick="deleteData({{ $chartInfo->id }})"
+                                                    class="btn btn-soft-danger btn-sm delete-btn mx-1">
+                                                    <iconify-icon icon="solar:trash-bin-minimalistic-2-broken"
+                                                        class="fs-18 delete-icon"></iconify-icon>
                                                 </button>
 
-                                                <form id="approve-form-{{ $chartInfo->id }}" method="POST"
-                                                    action="{{ route('admin.selling_chart.approve', $chartInfo->id) }}"
+                                                <form id="delete-form-{{ $chartInfo->id }}" method="POST"
+                                                    action="{{ route('admin.selling_chart.destroy', $chartInfo->id) }}"
                                                     style="display: none;">
                                                     @csrf
-                                                    <input type="hidden" name="user_id" value="{{ auth()->id() }}">
+                                                    @method('DELETE')
                                                 </form>
-                                            @endif --}}
-                                            @if ($chartInfo->status == 0)
-                                                @can('admin.selling_chart.edit')
-                                                    <a href="{{ route('admin.selling_chart.edit', $chartInfo->id) }}">
-                                                        @include('backend.component-list.edit-icon', [
-                                                            'title' => 'Edit',
-                                                        ])
-                                                    </a>
-                                                @endcan
-                                                @can('admin.selling_chart.destroy')
-                                                    <button type="button" onclick="deleteData({{ $chartInfo->id }})"
-                                                        style="background: none; border: none;">
-                                                        @include('backend.component-list.delete-icon', [
-                                                            'title' => 'Delete',
-                                                        ])
-                                                    </button>
-
-                                                    <form id="delete-form-{{ $chartInfo->id }}" method="POST"
-                                                        action="{{ route('admin.selling_chart.destroy', $chartInfo->id) }}"
-                                                        style="display: none;">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                    </form>
-                                                @endcan
                                             @endif
                                         </td>
 
                                         <td class="text-nowrap"
                                             @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
                                             @if ($chartInfo->status == 1)
-                                                <span class="badge badge-success text-capitalize px-1">Approved</span>
+                                                <span class="badge bg-success-subtle text-success py-1 px-2">Approved</span>
                                             @elseif($chartInfo->status == 2)
-                                                <span class="badge badge-danger text-capitalize px-1">Rejected</span>
+                                                <span class="badge bg-danger-subtle text-danger px-2 py-1">Rejected</span>
                                             @else
-                                                <span class="badge badge-warning text-capitalize px-1">Not
+                                                <span class="badge bg-primary-subtle text-primary py-1 px-2">Not
                                                     Approved</span>
                                             @endif
 
@@ -145,7 +125,7 @@
                                             {{ $chartInfo->product_code }}</td>
                                         <td class="text-nowrap"
                                             @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
-                                            {{ $ecommerceProduct?->sku }}</td>
+                                            {{ $ecommerceProduct['sku'] ?? '' }}</td>
                                         <td class="text-nowrap"
                                             @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
                                             {{ $chartInfo->design_no }}</td>
@@ -293,7 +273,7 @@
                         </tbody>
                     </table>
                 </div>
-                {!! $chartInfos->links('backend.partials.custom-paginator') !!}
+                {!! $chartInfos->links('master.custom-paginator') !!}
             </div>
         </div>
     </div>

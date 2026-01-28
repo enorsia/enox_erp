@@ -4,9 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\LookupName;
 use App\Models\SellingChartType;
 use App\Models\SellingChartPrice;
+use Illuminate\Support\Facades\Auth;
 
 class SellingChartBasicInfo extends Model
 {
@@ -41,49 +41,21 @@ class SellingChartBasicInfo extends Model
         return $this->hasMany(SellingChartPrice::class, 'basic_info_id');
     }
 
-    public function department()
-    {
-        return $this->belongsTo(LookupName::class, 'department_id', "id");
-    }
-
-    public function season()
-    {
-        return $this->belongsTo(LookupName::class, 'season_id', "id");
-    }
-
-    public function phase()
-    {
-        return $this->belongsTo(LookupName::class, 'phase_id', "id");
-    }
-
-    public function initialRepeated()
-    {
-        return $this->belongsTo(LookupName::class, 'initial_repeated_id', "id");
-    }
-
-    public function fabrication()
-    {
-        return $this->belongsTo(LookupName::class, 'fabrication_id', "id");
-    }
-
-    public function category()
-    {
-        return $this->belongsTo(ProductCategory::class, 'category_id', "id");
-    }
-
     public function miniCategory()
     {
         return $this->belongsTo(SellingChartType::class, 'mini_category', "id");
     }
+
     public function scopeFilter($query, $filters)
     {
-        $ecomP = EcommerceProduct::where('sku', $filters->name)->first();
+        // $ecomP = EcommerceProduct::where('sku', $filters->name)->first();
+        $ecomP = null;
 
         return $query->when($filters->filled('name'), function ($q) use ($filters, $ecomP) {
             $q->where(function ($subQuery) use ($filters, $ecomP) {
-                $subQuery->where('product_code', 'like', '%' . $filters->name . '%')
-                    ->orWhere('design_no', 'like', '%' . ($ecomP ? $ecomP?->style?->name : $filters->name) . '%')
-                    ->orWhere('product_launch_month', 'like', '%' . $filters->name . '%');
+                $subQuery->where('product_code', $filters->name)
+                    ->orWhere('design_no', ($ecomP ? $ecomP?->style?->name : $filters->name))
+                    ->orWhere('product_launch_month', $filters->name);
             });
         })
             ->when($filters->filled('department_id'), function ($q) use ($filters) {
@@ -161,7 +133,7 @@ class SellingChartBasicInfo extends Model
 
     public function scopeSellingSidebarAccess()
     {
-        $email = auth()->user()->email;
+        $email = Auth::user()?->email;
         $accessUser = collect(self::sellingAccessUsers())->where('email', $email)->first();
         if (!$accessUser) return false;
         return true;
@@ -169,7 +141,7 @@ class SellingChartBasicInfo extends Model
 
     public function scopeSellingFullAccess()
     {
-        $email = auth()->user()->email;
+        $email = Auth::user()?->email;
         $accessUser = collect(self::sellingAccessUsers())->where('email', $email)->first();
         if ($accessUser && $accessUser['full_access'] == true) return true;
         return false;
@@ -177,7 +149,7 @@ class SellingChartBasicInfo extends Model
 
     public function scopeSellingApprovedBtnAccess()
     {
-        $email = auth()->user()->email;
+        $email = Auth::user()?->email;
         $accessUser = collect(self::sellingApprovedUsers())->where('email', $email)->first();
         if (!$accessUser) return false;
         return true;

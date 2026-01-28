@@ -3,11 +3,9 @@
     <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down" role="document"
         style="max-width: 1400px;">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 style="font-size: 16px; color:#b7b7b7;" class="modal-title" id="viewSellingChartItemModalLabel">DETAILS</h5>
-                <button type="button" class="close text-light" data-bs-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+             <div class="modal-header">
+                <h5 class="modal-title fs-18" id="exampleModalLabel">DETAILS</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="Orders_order_id">
                 <div id="order_details_section">
@@ -39,15 +37,16 @@
                             <div class="col-lg-4 col-12 last_col">
                                 @if ($chartInfo->design_image)
                                     <p>Design Image: <span>
-                                        <img class="img-fluid" src="{{ $chartInfo->design_image ? cloudflareImage($chartInfo->design_image, 150) : cloudflareImage('099de045-63a0-407d-75ca-8e22f95b8700', 150) }}"
-                                            alt="img"></span>
+                                            <img class="img-fluid"
+                                                src="{{ $chartInfo->design_image ? cloudflareImage($chartInfo->design_image, 150) : cloudflareImage('099de045-63a0-407d-75ca-8e22f95b8700', 150) }}"
+                                                alt="img"></span>
                                     </p>
                                 @endif
                                 @if ($chartInfo->inspiration_image)
                                     <p>Inspiration Image: <span>
-                                        <img class="img-fluid"
-                                            src="{{ $chartInfo->inspiration_image ? cloudflareImage($chartInfo->inspiration_image, 150) : cloudflareImage('099de045-63a0-407d-75ca-8e22f95b8700', 150) }}"
-                                            alt="img"></span>
+                                            <img class="img-fluid"
+                                                src="{{ $chartInfo->inspiration_image ? cloudflareImage($chartInfo->inspiration_image, 150) : cloudflareImage('099de045-63a0-407d-75ca-8e22f95b8700', 150) }}"
+                                                alt="img"></span>
                                     </p>
                                 @endif
                             </div>
@@ -107,28 +106,26 @@
                                     </thead>
                                 </table>
                             </div>
-                            @can('admin.selling_chart.reject_approve')
-                                @if ($chartInfo->status == 0 || $chartInfo->status == 2)
-                                    <button type="button" onclick="approveData({{ $chartInfo->id }})"
-                                        class="btn btn-primary btn-sm float-end" title="Approve">
-                                        <i class="bi bi-check"></i>
-                                        <span>Approve</span>
+                            @if ($chartInfo->status == 0 || $chartInfo->status == 2)
+                                <button type="button" onclick="approveData({{ $chartInfo->id }})"
+                                    class="btn btn-primary mx-2 btn-sm float-end" title="Approve">
+                                    <i class="bi bi-check"></i>
+                                    <span>Approve</span>
+                                </button>
+                                @if ($chartInfo->status != 2)
+                                    <button type="button" onclick='approveData("{{ $chartInfo->id }}", "reject")'
+                                        class="btn btn-danger btn-sm float-end mr-2" title="Reject">
+                                        <i class="bi bi-trash"></i>
+                                        <span>Reject</span>
                                     </button>
-                                    @if ($chartInfo->status != 2)
-                                        <button type="button" onclick='approveData("{{ $chartInfo->id }}", "reject")'
-                                            class="btn btn-danger btn-sm float-end mr-2" title="Reject">
-                                            <i class="bi bi-trash"></i>
-                                            <span>Reject</span>
-                                        </button>
-                                    @endif
-                                    <form id="approve-form-{{ $chartInfo->id }}" method="POST"
-                                        action="{{ route('admin.selling_chart.approve', $chartInfo->id) }}"
-                                        style="display: none;">
-                                        @csrf
-                                        <input type="hidden" name="user_id" value="{{ auth()->id() }}">
-                                    </form>
                                 @endif
-                            @endcan
+                                <form id="approve-form-{{ $chartInfo->id }}" method="POST"
+                                    action="{{ route('admin.selling_chart.approve', $chartInfo->id) }}"
+                                    style="display: none;">
+                                    @csrf
+                                    <input type="hidden" name="user_id" value="{{ auth()->id() }}">
+                                </form>
+                            @endif
                         </div>
 
                     </div>

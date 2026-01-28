@@ -32,7 +32,7 @@
         }
     }
 </style>
-<table class="table create_selling_chart_tbl mb-0">
+<table class="table table-bordered create_selling_chart_tbl mb-0">
     <thead>
         <tr>
             <th style="width:23px">Delete</th>
@@ -49,8 +49,11 @@
     <tbody>
         @foreach ($chartInfo->sellingChartPrices as $ch_price)
             <tr>
-                <td class="text-center">
-                    <button type="button" class=" delete-row" style="background: none; border: none;">@include('backend.component-list.delete-icon', ['title' => "Delete"])</button>
+                <td style="width:23px" class="text-center">
+                    <button type="button" class="btn btn-danger delete-row">
+                        <iconify-icon icon="solar:trash-bin-minimalistic-2-broken"
+                            class="fs-18 delete-icon"></iconify-icon>
+                    </button>
                     <input type="hidden" name="price_id[]" value="{{ $ch_price->id }}">
                 </td>
                 <td>
@@ -66,26 +69,10 @@
                     </div>
                 </td>
                 @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
-                    {{-- <td class="size-field">
-                        <div class="position-relative new_search">
-                            <div class="new_select_field new_same_item d-flex flex-wrap">
-                                <select name="size_id[]" class="js-states form-control ctmr">
-                                    <option value="">Select size</option>
-                                    @foreach ($sizes as $size)
-                                        <option {{ $size?->lookupName?->id == $ch_price->size_id ? 'selected' : '' }}
-                                            value="{{ $size?->lookupName?->id }}">
-                                            {{ $size?->lookupName?->name }}
-                                            {{ \Illuminate\Support\Str::productSize($size?->lookupName?->name, $chartInfo->department_id, 'uk') }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
-                    </td> --}}
                     <td class="size-field">
                         <div class="position-relative new_search">
                             <div class="new_select_field new_same_item d-flex flex-wrap">
-                                <select name="range_id[]" class="js-states form-control ctmr">
+                                <select name="range_id[]" class="ctmr" style="height: 27px;">
                                     <option value="">Select range</option>
                                     @foreach ($ranges as $range)
                                         <option {{ $range->id == $ch_price->range_id ? 'selected' : '' }}

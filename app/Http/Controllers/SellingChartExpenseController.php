@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SellingChartExpense;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 
@@ -31,7 +32,7 @@ class SellingChartExpenseController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate( [
+        $request->validate([
             'year' => 'required|string|max:4',
             'conversion_rate' => 'required|numeric',
             'commercial_expense' => 'required|numeric',
@@ -48,7 +49,6 @@ class SellingChartExpenseController extends Controller
                 return redirect()->route('admin.selling_chart.expense.index');
             }
 
-
             SellingChartExpense::create([
                 'year' => $request->year,
                 'conversion_rate' => $request->conversion_rate,
@@ -63,6 +63,9 @@ class SellingChartExpenseController extends Controller
             return redirect()->route('admin.selling_chart.expense.index');
         } catch (\Throwable $th) {
             notify()->error('Expense creation failed', 'Error');
+            Log::error('SellingChartExpense creation failed', [
+                'message'   => $th->getMessage()
+            ]);
             return redirect()->route('admin.selling_chart.expense.index');
         }
     }
@@ -77,7 +80,7 @@ class SellingChartExpenseController extends Controller
 
     public function update(Request $request, int | string $id)
     {
-        $request->validate( [
+        $request->validate([
             'year' => 'required|string|max:4',
             'conversion_rate' => 'required|numeric',
             'commercial_expense' => 'required|numeric',
@@ -87,6 +90,14 @@ class SellingChartExpenseController extends Controller
         ]);
 
         try {
+            $exists = SellingChartExpense::where('year', $request->year)
+                ->where('id', '!=', $id)
+                ->exists();
+
+            if ($exists) {
+                notify()->error('Expense already exists for this year', 'Error');
+                return back();
+            }
 
             SellingChartExpense::findOrFail($id)->update([
                 'year' => $request->year,
@@ -102,6 +113,9 @@ class SellingChartExpenseController extends Controller
             return redirect(session('backUrl'));
         } catch (\Throwable $th) {
             notify()->error("Expense update failed.", "Error");
+            Log::error('SellingChartExpense update failed', [
+                'message'   => $th->getMessage()
+            ]);
             return back();
         }
     }
@@ -117,6 +131,9 @@ class SellingChartExpenseController extends Controller
             return back();
         } catch (\Throwable $th) {
             notify()->error("Expense deletion failed.", "Error");
+            Log::error('SellingChartExpense delete failed', [
+                'message'   => $th->getMessage()
+            ]);
             return back();
         }
     }

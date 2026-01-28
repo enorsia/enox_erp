@@ -1,27 +1,10 @@
-@extends('backend.master')
+@extends('master.app')
 @push('css')
     <style>
-        .modal-content {
-            background-color: #1f2937;
-            color: white;
-        }
-        .modal-header,
-        .modal-footer {
-            background-color: #1f2937;
-            border-color: #374151;
-        }
-        .modal-header .modal-title,
-        .modal-footer button {
-            color: white;
-        }
-        .la-link {
-            text-decoration: underline;
-            color: #b7b7b7;
-            cursor: pointer;
-        }
         .modal-dialog {
             box-shadow: none
         }
+
         .new_search textarea,
         .new_search textarea:focus {
             background: #374151;
@@ -29,6 +12,7 @@
             color: #fff;
             min-height: 100px;
         }
+
         .table .new_select_field .form-control {
             padding: 8px 8px !important;
             font-size: 16px !important;
@@ -44,12 +28,10 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             grid-gap: 20px;
-            margin: 50px 0px 50px 0px;
+            /* margin: 50px 0px 50px 0px; */
         }
 
         .bottom_item {
-            color: #9CA3AF;
-            background: #1F2937;
             padding: 20px;
             border-radius: 10px;
             display: flex;
@@ -57,6 +39,7 @@
             justify-content: flex-start;
             align-items: center;
             transition: .4s;
+            margin-bottom: 0;
         }
 
         .bottom_item:hover {
@@ -93,45 +76,46 @@
         .filter_button.new_same_item {
             margin: 0.5rem !important;
         }
-        .selling_chart_view_p p{
+
+        .selling_chart_view_p p {
             text-transform: uppercase;
             font-size: 13px;
-            color: #c5c5c5;
         }
 
-        .selling_chart_view_p p span{
+        .selling_chart_view_p p span {
             text-transform: capitalize !important;
             font-size: 13px;
             color: #7ba7e5;
         }
-        .last_col{
+
+        .last_col {
             display: flex;
             flex-direction: row;
             justify-content: space-evenly;
         }
-        .last_col p{
+
+        .last_col p {
             display: flex;
             flex-direction: column;
             justify-content: flex-start;
             align-items: center;
         }
+
         /* .last_col p:nth-child(3), .last_col p:nth-child(4){
-            width: 175px;
-        } */
+                    width: 175px;
+                } */
         /* .selling_chart_view_p p span{
 
-            width: 100px;
-        }*/
-        .selling_chart_view_p p span{
+                    width: 100px;
+                }*/
+        .selling_chart_view_p p span {
             margin-top: 7px;
             width: 95%;
         }
-        .selling_chart_view_p p span img{
+
+        .selling_chart_view_p p span img {
             height: 168px;
             width: 177px;
-        }
-        #ordered_products_table thead tr th, #ordered_products_table tbody tr td{
-            color: #c5c5c5 !important;
         }
 
 
@@ -162,11 +146,13 @@
                 font-size: 12px;
                 padding: 0px 12px;
             }
+
             .selling_chart_view_p p span {
                 margin-top: 7px;
                 width: 95%;
             }
-            .selling_chart_view_p p span img{
+
+            .selling_chart_view_p p span img {
                 height: 168px;
                 width: 100%;
             }
@@ -176,40 +162,35 @@
 
 @section('content')
     <div class="top_title">
-        @include('backend.partials.breadcrumb', [
+        @include('master.breadcrumb', [
             'title' => 'Manage Selling Chart',
             'icon' => 'bi bi-graph-up-arrow',
             'sub_title' => [
-                'Main' => '',
                 'Manage Selling Chart ' => '',
                 'Manage Selling Chart' => route('admin.selling_chart.index'),
-            ]
+            ],
         ])
         <div class="text-end">
-            @include('backend.component-list.filter-toggle-button')
-            @can('admin.selling_chart.upload.sheet')
-            <a href="{{ route('admin.selling_chart.upload.sheet') }}" class="btn tlt-btn me-2">
+            <a href="{{ route('admin.selling_chart.upload.sheet') }}" class="btn btn-info rounded-pill me-2">
                 <i class="bi bi-upload me-2"></i> Import Excel</span>
             </a>
-            @endcan
 
-            @can('admin.selling_chart.create')
-            <a href="{{ route('admin.selling_chart.create') }}" class="btn tlt-btn ml-0">
+            <a href="{{ route('admin.selling_chart.create') }}" class="btn btn-outline-secondary rounded-pill px-3">
                 Create <span><i class="bi bi-plus-lg me-0"></i></span>
             </a>
-            @endcan
         </div>
     </div>
 
-    @include('backend.selling_chart.filter')
+    @include('selling_chart.filter')
 
     <div class="bottom_cards">
 
         @foreach ($deparment_total_colors as $dtc)
-            <div class="bottom_item">
+            <div class="bottom_item card">
                 <div class="bottom_icon">
                     <i>
-                        <img width="32" src="{{ cloudflareImage('5cc020c8-2510-444c-6060-edd319510600') }}" alt="color" />
+                        <img width="32" src="{{ cloudflareImage('5cc020c8-2510-444c-6060-edd319510600') }}"
+                            alt="color" />
                     </i>
                 </div>
                 <div class="bottom_text w-100">
@@ -223,10 +204,11 @@
             </div>
         @endforeach
 
-        <div class="bottom_item">
+        <div class="bottom_item card">
             <div class="bottom_icon">
                 <i>
-                    <img width="30" src="{{ cloudflareImage('734000ef-3e9d-47f3-82ff-662f55b84100') }}" alt="color" />
+                    <img width="30" src="{{ cloudflareImage('734000ef-3e9d-47f3-82ff-662f55b84100') }}"
+                        alt="color" />
                 </i>
             </div>
             <div class="bottom_text w-100">
@@ -243,29 +225,31 @@
             </div>
         </div>
 
-        <div class="bottom_item">
+        <div class="bottom_item card">
             <div class="bottom_icon">
                 <i>
-                    <img width="30" src="{{ cloudflareImage('c802ca32-d61c-4aca-92a6-6bd518e65c00') }}" alt="color" />
+                    <img width="30" src="{{ cloudflareImage('c802ca32-d61c-4aca-92a6-6bd518e65c00') }}"
+                        alt="color" />
                 </i>
             </div>
             <div class="bottom_text w-100">
                 <h6 class="text-uppercase">Total Colors</h6>
-                <div class="d-flex justify-content-between flex-wrap"  style="gap: 5px;">
+                <div class="d-flex justify-content-between flex-wrap" style="gap: 5px;">
                     {{ $totalColors }}
                 </div>
             </div>
         </div>
 
-        <div class="bottom_item">
+        <div class="bottom_item card">
             <div class="bottom_icon">
                 <i>
-                    <img width="35" src="{{ cloudflareImage('e54e8867-dd21-45fd-7713-4d1dcbcb5500') }}" alt="color" />
+                    <img width="35" src="{{ cloudflareImage('e54e8867-dd21-45fd-7713-4d1dcbcb5500') }}"
+                        alt="color" />
                 </i>
             </div>
             <div class="bottom_text w-100">
                 <h6 class="text-uppercase">Total Quantity</h6>
-                <div class="d-flex justify-content-between flex-wrap"  style="gap: 5px;">
+                <div class="d-flex justify-content-between flex-wrap" style="gap: 5px;">
                     {{ $totalQuantity }}
                 </div>
             </div>
@@ -273,9 +257,24 @@
 
     </div>
 
-    @include('backend.selling_chart.index-table')
+    @include('selling_chart.index-table')
     <div class="setViewSellingChartItemModal"></div>
 @endsection
 @push('js')
-    @include('backend.selling_chart.script')
+    @include('selling_chart.script')
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const advanceInput = document.getElementById('advance_search');
+            const collapseEl = document.getElementById('collapseExample');
+
+            collapseEl.addEventListener('shown.bs.collapse', function() {
+                advanceInput.value = 1;
+            });
+
+            collapseEl.addEventListener('hidden.bs.collapse', function() {
+                advanceInput.value = 0;
+            });
+        });
+    </script>
 @endpush

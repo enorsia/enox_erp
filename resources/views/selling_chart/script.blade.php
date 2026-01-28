@@ -1,52 +1,7 @@
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.1/jquery.validate.min.js"></script>
-
 <script>
     /*************** dropdown select2 ********/
     const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
     const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
-    /***** For index*********/
-    $("#season_id").select2({
-        placeholder: "Select a Season",
-        allowClear: true
-    });
-    $("#season_phase_id").select2({
-        placeholder: "Select a Season Phase",
-        allowClear: true
-    });
-    $("#initial_repeat_id").select2({
-        placeholder: "Select Initial/ Repeat Order",
-        allowClear: true
-    });
-
-    /***** For create*********/
-    $("#department_select").select2({
-        placeholder: "Select a department",
-        allowClear: true
-    });
-    $("#season_select").select2({
-        placeholder: "Select a season",
-        allowClear: true
-    });
-    $("#Season_Phase").select2({
-        placeholder: "Select a season phase",
-        allowClear: true
-    });
-    $("#Repeat_Order").select2({
-        placeholder: "Select Initial/ Repeat Order",
-        allowClear: true
-    });
-    $("#product_category").select2({
-        placeholder: "Select Product Category",
-        allowClear: true
-    });
-    $("#product_mini_category").select2({
-        placeholder: "Select Product Mini Category",
-        allowClear: true
-    });
-    $("#fabrication").select2({
-        placeholder: "Select fabrication",
-        allowClear: true
-    });
 
     /**** Image preview*******/
     // const imageInput = document.getElementById('imageInput');
@@ -124,36 +79,15 @@
 
         /******* Form validation *********/
         $('#selling_chart').validate({
-            rules: {
-                department_id: {
-                    required: true
-                },
-                season_id: {
-                    required: true
-                },
-                season_phase_id: {
-                    required: true
-                },
-                order_type_id: {
-                    required: true
-                },
-                product_launch_month: {
-                    required: true
-                },
-                category_id: {
-                    required: true
-                },
-                product_code: {
-                    required: true
-                },
-                design_no: {
-                    required: true
-                },
-                product_description: {
-                    required: true
-                },
-                fabrication: {
-                    required: true
+            ignore: [],
+            errorClass: 'is-invalid',
+            validClass: 'is-valid',
+            errorElement: 'div',
+            errorPlacement: function(error, element) {
+                if (element.hasClass('choices__input')) {
+                    error.insertAfter(element.closest('.choices'));
+                } else {
+                    error.insertAfter(element);
                 }
             },
             submitHandler: function(form) {
@@ -253,7 +187,7 @@
     }
 
     const baseUrl = "{{ url('/admin/selling-chart/get-size-range') }}";
-    const CatbaseUrl = "{{ url('admin/producttwo/get-data') }}";
+    const CatbaseUrl = "{{ url('admin/selling-chart/get-dep-wise-cats') }}";
     const ColorbaseUrl = "{{ url('/admin/selling-chart/get-color-by-search') }}";
 
     $(document).on('input', '.color', function() {
@@ -309,47 +243,63 @@
         });
     }
 
-    $('#department_select').change(function() {
-
-        const id = $(this).val();
-        if ($('.btn-invisible.invisible')) {
-            $('.btn-invisible').removeClass('invisible');
-        } else {
-            $('.btn-invisible').addClass('invisible');
+    let productCategoryChoices = null;
+    function initProductCategoryChoices() {
+        const select = document.querySelector('#product_category');
+        if (!select) return;
+        if (!productCategoryChoices) {
+            productCategoryChoices = new Choices(select, {
+                shouldSort: false,
+                searchEnabled: true,
+                allowHTML: true
+            });
         }
+    }
+
+    initProductCategoryChoices();
+
+    $('#department_select').change(function() {
+        const id = $(this).val();
 
         let url = baseUrl + '/' + id;
         let cat_url = CatbaseUrl + '/' + id;
-
         $.ajax({
             type: 'GET',
             url: cat_url,
             success: function(data) {
-                // console.log(data);
-                let html = '<option value="">Select Category</option>';
-                $.each(data, function(key, value) {
-                    html += '<option value="' + value.id + '">' + value.name +
-                        ' (' + value.category_code + ')' +
-                        '</option>';
-                });
-                $('#product_category').html(html);
+                const dataArray = Object.values(data || {});
+                const choicesData = dataArray.map(item => ({
+                    value: item.id,
+                    label: `${item.name} (${item.category_code})`
+                }));
+
+                productCategoryChoices.clearChoices();
+                productCategoryChoices.setChoices(choicesData, 'value', 'label', true);
             },
             error: function(data) {
                 console.log('Something went wrong.' + data);
             }
         });
 
-        $.ajax({
-            type: 'GET',
-            url: url,
-            success: function(data) {
-                // console.log(data);
-                $('.color-table').html(data);
-            },
-            error: function(data) {
-                console.log('Create fail');
-            }
-        });
+        if ($('.color-table').length > 0) {
+            $.ajax({
+                type: 'GET',
+                url: url,
+                success: function(data) {
+                    // console.log(data);
+                    $('.color-table').html(data);
+
+                    if ($('.btn-invisible.invisible')) {
+                        $('.btn-invisible').removeClass('invisible');
+                    } else {
+                        $('.btn-invisible').addClass('invisible');
+                    }
+                },
+                error: function(data) {
+                    console.log('Create fail');
+                }
+            });
+        }
     });
 
     $(document).on('click', function(event) {
@@ -361,11 +311,14 @@
     /******* Table price calculation  for create page*********/
 
     function createEditPriceCal($row) {
-        let selectedOption = $('#season_select option:selected');
-        let conversionRate = parseFloat(selectedOption.data('conversion-rate')) || 0;
-        let commercialExpense = parseFloat(selectedOption.data('commercial-expense')) || 0;
-        let enorsiaBDExpense = parseFloat(selectedOption.data('enorsia-bd-expense')) || 0;
-        let enorsiaUKExpense = parseFloat(selectedOption.data('enorsia-uk-expense')) || 0;
+        // let selectedOption = $('#season_select option:selected');
+        let selectedVal = $('#season_select').val();
+        let selectedInput = $('.season-exp' + selectedVal);
+        // console.log(selectedOption);
+        let conversionRate = parseFloat(selectedInput.data('conversion-rate')) || 0;
+        let commercialExpense = parseFloat(selectedInput.data('commercial-expense')) || 0;
+        let enorsiaBDExpense = parseFloat(selectedInput.data('enorsia-bd-expense')) || 0;
+        let enorsiaUKExpense = parseFloat(selectedInput.data('enorsia-uk-expense')) || 0;
 
         const priceFOB = parseFloat($row.find('.x_price_fob').val()) || 0;
         let unitPrice = 0;
@@ -479,15 +432,14 @@
 
 
 
-    function viewChart(id)
-    {
-        let url  = "{{route('admin.selling_chart.view.single.chart',':id')}}";
-        url = url.replace(':id',id);
+    function viewChart(id) {
+        let url = "{{ route('admin.selling_chart.view.single.chart', ':id') }}";
+        url = url.replace(':id', id);
         $.ajax({
             type: 'GET',
             url: url,
             success: function(response) {
-                if(response.status == true){
+                if (response.status == true) {
                     $('#viewSellingChartItemModal').remove();
                     $('.setViewSellingChartItemModal').html(response.data);
                     $('#viewSellingChartItemModal').appendTo("body");
@@ -499,9 +451,4 @@
             }
         });
     }
-
-
-
-
-
 </script>

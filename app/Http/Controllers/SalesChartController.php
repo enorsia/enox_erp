@@ -2,15 +2,34 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\SellingChartExport;
+use App\Imports\SellingChartImport;
+use App\Jobs\CloudflareFileDeleteJob;
+use App\Jobs\CloudflareFileUploadJob;
 use App\Models\SellingChartBasicInfo;
+use App\Models\SellingChartExpense;
+use App\Models\SellingChartPrice;
 use App\Models\SellingChartType;
+use Exception;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 
 class SalesChartController extends Controller
 {
-   public function index(Request $request)
+    protected string $baseUrl;
+
+    public function __construct()
+    {
+        $this->baseUrl = config('app.enox_api_base_url') . 'selling-chart/';
+    }
+
+    public function index(Request $request)
     {
 
         $action = $request->input('action');
@@ -20,15 +39,7 @@ class SalesChartController extends Controller
         if ($action == 'bulkEdit') return $this->bulkEdit($request);
 
         $data = $this->getCommonData();
-
-        // colors count calculation start
-        // $data['mini_total_colors'] = SellingChartBasicInfo::filter($request)
-        //     ->select('mini_category')
-        //     ->selectRaw('COUNT(selling_chart_prices.id) as total_count')
-        //     ->join('selling_chart_prices', 'selling_chart_basic_infos.id', '=', 'selling_chart_prices.basic_info_id')
-        //     ->with('miniCategory')
-        //     ->groupBy('mini_category')
-        //     ->get();
+        // dd($data['departments']->toArray());
 
         // style count calculation start
         $data['mini_total_styles'] = SellingChartBasicInfo::filter($request)
@@ -39,14 +50,21 @@ class SalesChartController extends Controller
             ->get();
 
         // Step 1: Get all distinct mini categories
-        // $miniCategories = SellingChartBasicInfo::distinct('mini_category')->pluck('mini_category');
         $miniCategories = SellingChartType::orderBy('id', 'asc')->pluck('name', 'id');
 
         // Step 2: Get counts grouped by department and mini category
+        // $counts = SellingChartBasicInfo::filter($request)
+        //     ->leftJoin('selling_chart_prices', 'selling_chart_basic_infos.id', '=', 'selling_chart_prices.basic_info_id')
+        //     ->select('department_id', 'department_name', 'mini_category')
+        //     ->selectRaw('COUNT(selling_chart_prices.id) as count')
+        //     ->selectRaw('SUM(selling_chart_prices.po_order_qty) as total_quantity')
+        //     ->groupBy('department_id', 'department_name', 'mini_category')
+        //     ->with(['miniCategory'])
+        //     ->get();
         $counts = SellingChartBasicInfo::filter($request)
             ->select('department_id', 'department_name', 'mini_category')
             ->leftJoin('selling_chart_prices', 'selling_chart_basic_infos.id', '=', 'selling_chart_prices.basic_info_id')
-            ->groupBy('department_id', 'mini_category')
+            ->groupBy('department_id', 'department_name', 'mini_category')
             ->selectRaw('mini_category, COUNT(selling_chart_prices.id) as count')
             ->selectRaw('SUM(selling_chart_prices.po_order_qty) as total_quantity')
             ->with(['miniCategory'])
@@ -100,17 +118,24 @@ class SalesChartController extends Controller
             ->orderByDesc('id')
             ->paginate(30);
 
-        $designNos = $data['chartInfos']->pluck('design_no')->unique();
+        $designNos = $data['chartInfos']->pluck('design_no')->unique()->toArray();
 
-        $ecommerceProducts = EcommerceProduct::whereHas('style', function ($query) use ($designNos) {
-            $query->whereIn('name', $designNos);
-        })->with('style')->get();
+        $response = Http::get($this->baseUrl . 'get-ecom-products', [
+            'designNos' => $designNos
+        ]);
 
-        $data['ecommerceMap'] = $ecommerceProducts->keyBy(fn($item) => $item?->style?->name);
+        $ecommerceProducts = collect();
+
+        if ($response->successful()) {
+            $ecommerceProducts = collect($response->json('data.ecommerceProducts', []));
+        }
+
+        // Key by style name
+        $data['ecommerceMap'] = $ecommerceProducts->keyBy(fn($item) => $item['style']['name'] ?? null);
 
         $data['start'] = ($data['chartInfos']->currentPage() - 1) * $data['chartInfos']->perPage() + 1;
 
-        return view('backend.selling_chart.index', $data);
+        return view('selling_chart.index', $data);
     }
 
     public function approve(Request $request, int | string $id)
@@ -131,6 +156,9 @@ class SalesChartController extends Controller
             return redirect()->route('admin.selling_chart.index');
         } catch (\Throwable $th) {
             notify()->error("Approval Failed.", "Error");
+            Log::error('Selling Chart approve failed', [
+                'message'   => $th->getMessage()
+            ]);
             return back();
         }
     }
@@ -163,148 +191,203 @@ class SalesChartController extends Controller
         } catch (\Throwable $th) {
             DB::rollback();
             notify()->error("Selling infos Create Failed.", "Error");
+            Log::error('Selling infos creation failed', [
+                'message'   => $th->getMessage()
+            ]);
             return back();
         }
     }
-    public function create(): View
+    public function create()
     {
 
         $data = $this->getCommonData();
         $data['expenses'] = SellingChartExpense::where('status', 1)->get();
 
-        return view('backend.selling_chart.create', $data);
+        return view('selling_chart.create', $data);
     }
 
     public function uploadSheet()
     {
 
-        return view('backend.selling_chart.import');
+        return view('selling_chart.import');
     }
 
     public function getCommonData(): array
     {
-        $departmentId = LookupType::where('name', 'Department')
-            ->whereStatus(1)
-            ->first()?->id ?? 1;
+        $data = [];
 
-        $seasonId = LookupType::where('name', 'Season')
-            ->whereStatus(1)
-            ->first()?->id ?? 10;
+        try {
+            $lookupData = $this->getLookupResponse([1, 5, 8, 10, 11]);
+            // Split by type_id
+            $data['departments'] = collect($lookupData)->where('type_id', 1)->map(fn($item) => (object) $item);
+            $data['fabrics'] = collect($lookupData)->where('type_id', 5)->map(fn($item) => (object) $item);
+            $data['initialRepeats'] = collect($lookupData)->where('type_id', 8)->map(fn($item) => (object) $item);
+            $data['seasons'] = collect($lookupData)->where('type_id', 10)->map(fn($item) => (object) $item);
+            $data['seasons_phases'] = collect($lookupData)->where('type_id', 11)->map(fn($item) => (object) $item);
 
-        $seasonPhaseId = LookupType::where('name', 'Season Phase')
-            ->whereStatus(1)
-            ->first()?->id ?? 11;
 
+            // 2️⃣ Product Categories
+            $getCategoryData = $this->getCategoryResponse();
+            $data['selling_chart_cats'] = $getCategoryData->map(fn($item) => (object) $item);
 
-        // $data['departments'] = LookupName::where('type_id', $departmentId)
+            $data['selling_chart_types'] = SellingChartType::get();
+        } catch (Exception $e) {
+            Log::error('getCommonData API call failed', [
+                'message' => $e->getMessage()
+            ]);
+            // fallback empty arrays
+            $data['fabrics'] = [];
+            $data['initialRepeats'] = [];
+            $data['seasons'] = [];
+            $data['seasons_phases'] = [];
+            $data['selling_chart_cats'] = [];
+            $data['selling_chart_types'] = [];
+            $data['departments'] = [];
+        }
+        // $seasonId = 10;
+        // $seasonPhaseId = 11;
+
+        // $data['departments'] = LookupName::getDepartments();
+
+        // $data['seasons'] = LookupName::where('type_id', $seasonId)
         //     ->select('id', 'name')
         //     ->whereStatus(1)
         //     ->get();
-        $data['departments'] = LookupName::getDepartments();
 
-        $data['seasons'] = LookupName::where('type_id', $seasonId)
-            ->select('id', 'name')
-            ->whereStatus(1)
-            ->get();
+        // $data['seasons_phases'] = LookupName::where('type_id', $seasonPhaseId)
+        //     ->select('id', 'name')
+        //     ->whereStatus(1)
+        //     ->get();
 
-        $data['seasons_phases'] = LookupName::where('type_id', $seasonPhaseId)
-            ->select('id', 'name')
-            ->whereStatus(1)
-            ->get();
+        // $data['initialRepeats'] = LookupName::where('type_id', 8)->where('status', 1)->get();
+        // $data['fabrics'] = LookupName::where('type_id', 5)->where('status', 1)->get();
 
-        $data['initialRepeats'] = LookupName::where('type_id', 8)->where('status', 1)->get();
-        $data['fabrics'] = LookupName::where('type_id', 5)->where('status', 1)->get();
-
-        $data['selling_chart_cats'] = ProductCategory::get();
-        $data['selling_chart_types'] = SellingChartType::get();
+        // $data['selling_chart_cats'] = ProductCategory::get();
+        // $data['selling_chart_types'] = SellingChartType::get();
         // dd($data['sizes']->toArray()[0]);
 
         return $data;
     }
 
+    public function getLookupResponse($typeIds = [])
+    {
+        $lookupResponse = Http::get($this->baseUrl . 'get-lookup-names', [
+            'typeIds' => $typeIds
+        ]);
+        $lookupData = collect();
+        if ($lookupResponse->successful()) {
+            $lookupData = $lookupResponse->json('data.lookupNames', collect());
+        }
+        return $lookupData;
+    }
+
+    public function getCategoryResponse()
+    {
+        $categoriesResponse = Http::get($this->baseUrl . 'get-product-categories');
+        $categoriesData = $categoriesResponse->successful()
+            ? collect($categoriesResponse->json('data.categories', collect()))->map(fn($item) => (object) $item)
+            : collect();
+
+        return $categoriesData;
+    }
+
     public function getSizeRange($lookup_id)
     {
-
         $department_id = $lookup_id;
 
-        $sizes = $this->getSizes($lookup_id);
-        $ranges = LookupName::where('type_id', 13)->where('status', 1)->get();
-        return view('backend.selling_chart.color-table', compact('sizes', 'ranges', 'department_id'))->render();
+        // $sizes = $this->getSizes($lookup_id);
+        $sizes = collect();
+        $lookupData = $this->getLookupResponse([13]);
+        $ranges = collect($lookupData)->map(fn($item) => (object) $item);
+        return view('selling_chart.color-table', compact('sizes', 'ranges', 'department_id'))->render();
     }
 
     public function getColorBySearch($searchTerm)
     {
-        $colors = ProductColor::select('id', 'lookup_id', 'code')
-            ->with('lookupName:id,name')
-            ->where('status', 1)
-            ->where(function ($query) use ($searchTerm) {
-                $query->whereHas('lookupName', function ($query) use ($searchTerm) {
-                    $query->where('name', 'like', '%' . $searchTerm . '%');
-                })
-                    ->orWhere('code', 'like', '%' . $searchTerm . '%');
-            })
-            ->get()
-            ->take(100);
-
+        $response = Http::get($this->baseUrl . 'get-color-by-search', [
+            'search' => $searchTerm
+        ]);
         $productColors = [];
-        foreach ($colors as $color) {
-            $productColors[] = [
-                'id' => $color->id,
-                'name' => $color->lookupName->name,
-                'code' => $color->code,
-            ];
+
+        if ($response->successful()) {
+            $colors = collect($response->json('data.colors', []));
+
+            $productColors = $colors->map(function ($color) {
+                return [
+                    'id'   => $color['id'],
+                    'name' => $color['lookup_name']['name'],
+                    'code' => $color['code'],
+                ];
+            })->values()->all();
         }
-        return view('backend.selling_chart.color-list', compact('productColors'))->render();
+
+        return view('selling_chart.color-list', compact('productColors'))->render();
+    }
+
+    public function getDepWiseCats(int|string $id)
+    {
+        $categories = collect($this->getCategoryResponse())->where('lookup_id', $id)->map(fn($item) => (object) $item);
+
+        return response()->json($categories);
     }
 
     public function getSizes($lookup_id)
     {
         if (!($lookup_id == 1928 || $lookup_id == 1929)) $lookup_id = 0;
 
-        $bgCatIds = ProductCategory::where('type', 1)
-            ->where('lookup_id', $lookup_id)->pluck('id')->toArray();
+        $categories = collect($this->getCategoryResponse())
+            ->where('type', 1)
+            ->where('lookup_id', $lookup_id)
+            ->map(fn($item) => (object) $item);
 
-        $sizes = ProductSize::whereIn('product_category_id', $bgCatIds)
-            ->with('lookupName')
-            ->groupBy('lookup_id')
-            ->orderBy('lookup_id', 'asc')
-            // ->take(11)
-            ->get();
+        $bgCatIds = $categories->pluck('id')->toArray();
+        $response = Http::post($this->baseUrl . 'get-sizes-by-category', [
+            'category_ids' => $bgCatIds
+        ]);
+
+        $sizes = collect();
+
+        if ($response->successful()) {
+            $sizes = $response->json('data.sizes', collect())->map(fn($item) => (object) $item);
+        }
 
         return $sizes;
     }
 
     public function storeCommonData($request): array
     {
+        // $data['departments'] = collect($lookupData)->where('type_id', 1)->map(fn($item) => (object) $item);
+        //     $data['fabrics'] = collect($lookupData)->where('type_id', 5)->map(fn($item) => (object) $item);
+        //     $data['initialRepeats'] = collect($lookupData)->where('type_id', 8)->map(fn($item) => (object) $item);
+        //     $data['seasons'] = collect($lookupData)->where('type_id', 10)->map(fn($item) => (object) $item);
+        //     $data['seasons_phases'] = collect($lookupData)->where('type_id', 11)->map(fn($item) => (object) $item);
+
+
+        //     // 2️⃣ Product Categories
+        //     $getCategoryData = $this->getCategoryResponse();
+        //     $data['selling_chart_cats'] = $getCategoryData->map(fn($item) => (object) $item);
+
+        $get_datas = $this->getCommonData();
+
         if ($request->department_id) {
-            $data['department'] = LookupName::where('type_id', 1)
-                ->select('id', 'name')
-                ->whereStatus(1)
-                ->findOrFail($request->department_id);
+            $data['department'] = $get_datas['departments']->where('id', $request->department_id)
+                ->firstOrFail();
         }
 
-        $data['season'] = LookupName::where('type_id', 10)
-            ->select('id', 'name')
-            ->whereStatus(1)
-            ->findOrFail($request->season_id);
+        $data['season'] = $get_datas['seasons']->where('id', $request->season_id)
+            ->firstOrFail();
 
-        $data['seasons_phase'] = LookupName::where('type_id', 11)
-            ->select('id', 'name')
-            ->whereStatus(1)
-            ->findOrFail($request->season_phase_id);
+        $data['seasons_phase'] = $get_datas['seasons_phases']->where('id', $request->season_phase_id)
+            ->firstOrFail();
 
-        $data['initialRepeat'] = LookupName::where('type_id', 8)
-            ->select('id', 'name')
-            ->whereStatus(1)
-            ->findOrFail($request->order_type_id);
+        $data['initialRepeat'] = $get_datas['initialRepeats']->where('id', $request->order_type_id)
+            ->firstOrFail();
 
-        $data['fabrication'] = LookupName::where('type_id', 5)
-            ->select('id', 'name')
-            ->whereStatus(1)
-            ->findOrFail($request->fabrication);
+        $data['fabrication'] = $get_datas['fabrics']->where('id', $request->fabrication)
+            ->firstOrFail();
 
         if ($request->category_id) {
-            $data['category'] = ProductCategory::findOrFail($request->category_id);
+            $data['category'] = $get_datas['selling_chart_cats']->where('id', $request->category_id)->firstOrFail();
         }
 
         $data['mini_category'] = SellingChartType::findOrFail($request->mini_category);
@@ -321,7 +404,9 @@ class SalesChartController extends Controller
 
         if ($range_id != null) {
             // $size = LookupName::findOrFail($size_id);
-            $range = LookupName::findOrFail($range_id);
+            $lookupData = $this->getLookupResponse([13]);
+            $ranges = collect($lookupData)->map(fn($item) => (object) $item);
+            $range = $ranges->where('id', $range_id)->firstOrFail();
             // $sizeId = $size->id;
             // $sizeName = $size->name;
             $rangeId = $range->id;
@@ -331,30 +416,29 @@ class SalesChartController extends Controller
         return compact('sizeId', 'sizeName', 'rangeId', 'rangeName');
     }
 
-    public function getMinMaxSize($min_size = null, $max_size = null)
+    // public function getMinMaxSize($min_size = null, $max_size = null)
+    // {
+    //     $minSizeId = null;
+    //     $maxSizeId = null;
+    //     $minSizeName = null;
+    //     $maxSizeName = null;
+
+    //     if ($min_size != null && $max_size != null) {
+    //         $minSize = LookupName::findOrFail($min_size);
+    //         $maxSize = LookupName::findOrFail($max_size);
+    //         $minSizeId = $minSize->id;
+    //         $minSizeName = $minSize->name;
+    //         $maxSizeId = $maxSize->id;
+    //         $maxSizeName = $maxSize->name;
+    //     }
+
+    //     return compact('minSizeId', 'maxSizeId', 'minSizeName', 'maxSizeName');
+    // }
+
+    public function store(Request $request)
     {
-        $minSizeId = null;
-        $maxSizeId = null;
-        $minSizeName = null;
-        $maxSizeName = null;
 
-        if ($min_size != null && $max_size != null) {
-            $minSize = LookupName::findOrFail($min_size);
-            $maxSize = LookupName::findOrFail($max_size);
-            $minSizeId = $minSize->id;
-            $minSizeName = $minSize->name;
-            $maxSizeId = $maxSize->id;
-            $maxSizeName = $maxSize->name;
-        }
-
-        return compact('minSizeId', 'maxSizeId', 'minSizeName', 'maxSizeName');
-    }
-
-    public function store(Request $request): RedirectResponse
-    {
-
-        $this->validate(
-            $request,
+        $request->validate(
             [
                 'department_id' => 'required',
                 'season_id' => 'required',
@@ -460,27 +544,30 @@ class SalesChartController extends Controller
         } catch (\Throwable $th) {
             DB::rollback();
             notify()->error("Selling chart create failed.", "Error");
+            Log::error('Selling Chart create failed', [
+                'message'   => $th->getMessage()
+            ]);
             return back();
         }
     }
 
-    public function edit(string | int $id): View
+    public function edit(string | int $id)
     {
 
         $data = $this->getCommonData();
         $data['chartInfo'] = SellingChartBasicInfo::withCount('sellingChartPrices')->findOrFail($id);
-        $data['sizes'] = $this->getSizes($data['chartInfo']->department_id);
-        $data['ranges'] = LookupName::where('type_id', 13)->where('status', 1)->get();
+        // $data['sizes'] = $this->getSizes($data['chartInfo']->department_id);
+        $lookupData = $this->getLookupResponse([13]);
+        $data['ranges'] = collect($lookupData)->map(fn($item) => (object) $item);
         Session::put('backUrl', url()->previous());
 
-        return view('backend.selling_chart.edit', $data);
+        return view('selling_chart.edit', $data);
     }
 
-    public function update(Request $request, $id): RedirectResponse
+    public function update(Request $request, $id)
     {
 
-        $this->validate(
-            $request,
+        $request->validate(
             [
                 'season_id' => 'required',
                 'season_phase_id' => 'required',
@@ -622,11 +709,14 @@ class SalesChartController extends Controller
         } catch (\Throwable $th) {
             DB::rollback();
             notify()->error("Selling chart update failed.", "Error");
+            Log::error('Selling Chart update failed', [
+                'message'   => $th->getMessage()
+            ]);
             return redirect(session('backUrl'));
         }
     }
 
-    public function destroy(string | int $id): RedirectResponse
+    public function destroy(string | int $id)
     {
 
         try {
@@ -673,6 +763,9 @@ class SalesChartController extends Controller
         } catch (\Throwable $th) {
             DB::rollback();
             notify()->error("Selling chart delete failed.", "Error");
+            Log::error('Selling Chart delete failed', [
+                'message'   => $th->getMessage()
+            ]);
             return back();
         }
     }
@@ -692,18 +785,18 @@ class SalesChartController extends Controller
             ->get();
 
         if (!$data['chartInfos']->isEmpty()) {
-            $data['sizes'] = $this->getSizes($data['chartInfos'][0]['department_id']);
-            $data['ranges'] = LookupName::where('type_id', 13)->where('status', 1)->get();
+            // $data['sizes'] = $this->getSizes($data['chartInfos'][0]['department_id']);
+            $lookupData = $this->getLookupResponse([13]);
+            $data['ranges'] = collect($lookupData)->map(fn($item) => (object) $item);
         }
 
         Session::put('backUrl', url()->previous());
-        return view('backend.selling_chart.bulk-edit', $data);
+        return view('selling_chart.bulk-edit', $data);
     }
 
     public function bulkUpdate(Request $request)
     {
-        $this->validate(
-            $request,
+        $request->validate(
             [
                 'po_order_qty.*' => 'required',
                 'price_fob.*' => 'required',
@@ -760,6 +853,9 @@ class SalesChartController extends Controller
         } catch (\Throwable $th) {
             DB::rollback();
             notify()->error("Selling prices Update Failed.", "Error");
+            Log::error('Selling prices update failed', [
+                'message'   => $th->getMessage()
+            ]);
             return back();
         }
     }
@@ -769,13 +865,22 @@ class SalesChartController extends Controller
         $data['chartInfo'] = SellingChartBasicInfo::with('sellingChartPrices')->findOrFail($id);
         $designNumber = $data['chartInfo']->design_no;
 
-        $data['skus'] = EcommerceProduct::whereHas('style', function ($query) use ($designNumber) {
-            $query->where('name', $designNumber);
-        })->first();
+        $response = Http::get($this->baseUrl . 'get-ecom-products', [
+            'designNos' => $designNumber
+        ]);
+
+        $ecommerceProducts = collect();
+
+        if ($response->successful()) {
+            $ecommerceProducts = collect($response->json('data.ecommerceProducts', []));
+        }
+
+        $data['skus'] = $ecommerceProducts->first();
+
         $data['approveBtnAccess'] = SellingChartBasicInfo::sellingApprovedBtnAccess();
 
 
-        $html = view('backend.selling_chart.view-item', $data)->render();
+        $html = view('selling_chart.view-item', $data)->render();
         return response()->json(['status' => true, 'data' => $html]);
     }
 }

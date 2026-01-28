@@ -1,21 +1,22 @@
-@extends('backend.master')
+@extends('master.app')
 
 @section('content')
     <div class="top_title">
-        @include('backend.partials.breadcrumb', [
+        @include('master.breadcrumb', [
             'title' => 'Import Sales Chart',
             'icon' => 'bi bi-graph-up-arrow',
             'sub_title' => [
-                'Main' => '',
                 'Manage Selling Chart ' => '',
                 'Manage Selling Chart' => route('admin.selling_chart.index'),
                 'Import Sales Chart' => route('admin.selling_chart.upload.sheet'),
-            ]
+            ],
         ])
-        <a href="{{ route('admin.selling_chart.index') }}" class="btn tlt-btn">
-            <i class="fa fa-chevron-left mr-1"></i>
-            Back
-        </a>
+        <div>
+            <a href="{{ route('admin.selling_chart.index') }}" class="btn btn-outline-secondary">
+                <i class="fa fa-chevron-left mr-1"></i>
+                &lt; Back
+            </a>
+        </div>
     </div>
     <div class="row justify-content-center">
         <div class="col-12">
@@ -64,6 +65,5 @@
     </div>
 @endsection
 @push('js')
-    @include('backend.partials.validation-script')
-    @include('backend.selling_chart.script')
+    @include('selling_chart.script')
 @endpush

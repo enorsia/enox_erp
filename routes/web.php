@@ -27,6 +27,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
         Route::get('selling-chart/get-color-by-search/{search}', 'getColorBySearch')->name('selling_chart.get.color');
         Route::get('selling-chart/get-size-range/{department_id}/{ch_info_id?}', 'getSizeRange')->name('selling_chart.get.size.range');
         Route::get('selling-chart/manage/create', 'create')->name('selling_chart.create');
+        Route::get('selling-chart/get-dep-wise-cats/{department_id}', 'getDepWiseCats')->name('selling_chart.getDepWiseCats');
         Route::post('selling-chart/manage', 'store')->name('selling_chart.store');
         Route::get('selling-chart/manage/upload-sheet', 'uploadSheet')->name('selling_chart.upload.sheet');
         Route::post('selling-chart/manage/import', 'import')->name('selling_chart.import');

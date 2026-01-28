@@ -32,13 +32,13 @@
         }
     }
 </style>
-<table class="table create_selling_chart_tbl mb-0">
+<table class="table table-bordered create_selling_chart_tbl mb-0">
     <thead>
         <tr>
             <th style="width:23px">Delete</th>
             <th style="width:80px">Color</th>
 
-            @if (!$sizes->isEmpty())
+            @if ($department_id == 1928 || $department_id == 1929)
                 {{-- <th class="size-th" style="width:40px;">Size (Age)</th> --}}
                 <th class="size-th" style="width:40px;">Range</th>
             @endif
@@ -63,7 +63,9 @@
     <tbody>
         <tr>
             <td class="text-center">
-                <button type="button" class="btn btn-danger btn-sm delete-row"><i class="bi bi-trash"></i></button>
+                <button type="button" class="btn btn-danger btn-sm delete-row">
+                    <iconify-icon icon="solar:trash-bin-minimalistic-2-broken" class="fs-18 delete-icon"></iconify-icon>
+                </button>
             </td>
             <td>
                 <div class="position-relative">
@@ -76,26 +78,11 @@
                 </div>
             </td>
 
-            @if (!$sizes->isEmpty())
-                {{-- <td class="size-field">
-                    <div class="position-relative new_search">
-                        <div class="new_select_field new_same_item d-flex flex-wrap">
-                            <select name="size_id[]" class="js-states form-control ctmr">
-                                <option value="">Select size</option>
-                                @foreach ($sizes as $size)
-                                    <option value="{{ $size?->lookupName?->id }}">
-                                        {{ $size?->lookupName?->name }}
-                                        {{ \Illuminate\Support\Str::productSize($size?->lookupName?->name, $department_id, 'uk') }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
-                </td> --}}
+            @if ($department_id == 1928 || $department_id == 1929)
                 <td class="size-field">
                     <div class="position-relative new_search">
                         <div class="new_select_field new_same_item d-flex flex-wrap">
-                            <select name="range_id[]" class="js-states form-control ctmr">
+                            <select name="range_id[]" class="ctmr" style="height: 27px;">
                                 <option value="">Select range</option>
                                 @foreach ($ranges as $range)
                                     <option value="{{ $range->id }}"

@@ -1,39 +1,38 @@
-@extends('backend.master')
+@extends('master.app')
 
 @section('content')
     <div class="top_title">
-        @include('backend.partials.breadcrumb', [
+        @include('master.breadcrumb', [
             'title' => 'Manage Selling Chart',
             'icon' => 'bi bi-graph-up-arrow',
             'sub_title' => [
-                'Main' => '',
                 'Manage Selling Chart ' => '',
                 'Manage Selling Chart' => route('admin.selling_chart.index'),
-                'Edit' => route('admin.selling_chart.index'),
+                'Edit' => '',
             ]
         ])
-        <a href="{{ session('backUrl', url()->previous()) }}" class="btn tlt-btn">
+        {{-- <a href="{{ session('backUrl', url()->previous()) }}" class="btn tlt-btn">
             <i class="fa fa-chevron-left mr-1"></i>
             Back
-        </a>
+        </a> --}}
     </div>
 
     <div class="row justify-content-center">
         <div class="col-12">
-            <div class="card-dark main-card mb-3 card pb-0">
-                <div class="card-body p-0">
+            <div class="main-card mb-3 card pb-0">
+                <div class="card-body">
                     <form action="{{ route('admin.selling_chart.update', ['id' => $chartInfo->id]) }}" method="POST"
                         class="selling_chart_form" id="selling_chart" enctype="multipart/form-data">
                         @csrf
                         @method('PUT')
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="department_select" class="col-12 col-md-4 col-lg-3">Department <sup
                                     class="text-warning">
                                     (required)</sup></label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <div class="new_select_field new_same_item d-flex flex-wrap">
                                     <select id="department_select" name="department_id" class="js-states form-control"
-                                        disabled>
+                                        disabled data-choices>
                                         <option value="">Select Department</option>
                                         @foreach ($departments as $department)
                                             <option {{ $chartInfo->department_id == $department->id ? 'selected' : '' }}
@@ -49,7 +48,7 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="product_category" class="col-12 col-md-4 col-lg-3">Product Category<sup
                                     class="text-warning">
                                     (required)</sup></label>
@@ -74,13 +73,13 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="product_mini_category" class="col-12 col-md-4 col-lg-3">Product Mini Category<sup
                                     class="text-warning">
                                     (required)</sup></label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="product_mini_category" name="mini_category" class="js-states form-control"
+                                    <select data-choices id="product_mini_category" name="mini_category" data-choices class="form-control"
                                         required>
                                         <option value="">Select Mini Category</option>
                                         @foreach ($selling_chart_types as $selling_chart_type)
@@ -99,12 +98,12 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="season_select" class="col-12 col-md-4 col-lg-3">Season <sup class="text-warning">
                                     (required)</sup></label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="season_select" name="season_id" class="js-states form-control">
+                                    <select data-choices id="season_select" name="season_id" class="js-states form-control" required>
                                         <option value="">Select Season</option>
                                         @foreach ($seasons as $season)
                                             @php
@@ -134,13 +133,13 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="Season_Phase" class="col-12 col-md-4 col-lg-3">Season Phase <sup
                                     class="text-warning">
                                     (required)</sup></label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="Season_Phase" name="season_phase_id" class="js-states form-control">
+                                    <select data-choices id="Season_Phase" name="season_phase_id" class="js-states form-control" required>
                                         <option value="">Select Season Phase</option>
                                         @foreach ($seasons_phases as $seasons_phase)
                                             <option {{ $chartInfo->phase_id == $seasons_phase->id ? 'selected' : '' }}
@@ -156,13 +155,13 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="Repeat_Order" class="col-12 col-md-4 col-lg-3">Initial/ Repeat Order <sup
                                     class="text-warning">
                                     (required)</sup></label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 {{-- <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="Repeat_Order" name="order_type_id" class="js-states form-control">
+                                    <select data-choices id="Repeat_Order" name="order_type_id" class="js-states form-control">
                                         <option value="">Select Order Type</option>
                                         <option {{ $chartInfo->initial_repeated_status == 1 ? 'selected' : '' }}
                                             value="1">Initial</option>
@@ -171,7 +170,7 @@
                                     </select>
                                 </div> --}}
                                 <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="Repeat_Order" name="order_type_id" class="select2 form-control">
+                                    <select data-choices id="Repeat_Order" name="order_type_id" class="select2 form-control" required>
                                         <option value="">Select Initial/ Repeat Order</option>
                                         @foreach ($initialRepeats as $initialRepeat)
                                             <option value="{{ $initialRepeat->id }}"
@@ -189,7 +188,7 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="product_launch_month" class="col-12 col-md-4 col-lg-3">Product Launch Month <sup
                                     class="text-warning">
                                     (required)</sup></label>
@@ -197,7 +196,7 @@
                                 <input type="text" name="product_launch_month" id="product_launch_month"
                                     placeholder="Enter Product Launch Month"
                                     class="form-control @error('product_launch_month') is-invalid @enderror"
-                                    value="{{ $chartInfo->product_launch_month }}">
+                                    value="{{ $chartInfo->product_launch_month }}" required>
                                 @error('product_launch_month')
                                     <span class="text-danger" role="alert">
                                         <strong>{{ $message }}</strong>
@@ -205,7 +204,7 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="product_code" class="col-12 col-md-4 col-lg-3">Product Code <sup
                                     class="text-warning">
                                     (required)</sup></label>
@@ -213,7 +212,7 @@
                                 <input type="text" name="product_code" id="product_code"
                                     placeholder="Enter product code"
                                     class="form-control @error('product_code') is-invalid @enderror"
-                                    value="{{ $chartInfo->product_code }}">
+                                    value="{{ $chartInfo->product_code }}" required>
                                 @error('product_code')
                                     <span class="text-danger" role="alert">
                                         <strong>{{ $message }}</strong>
@@ -221,13 +220,13 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="design_no" class="col-12 col-md-4 col-lg-3">Design No <sup class="text-warning">
                                     (required)</sup></label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <input type="text" name="design_no" id="design_no" placeholder="Enter design no"
                                     class="form-control @error('design_no') is-invalid @enderror"
-                                    value="{{ $chartInfo->design_no }}">
+                                    value="{{ $chartInfo->design_no }}" required>
                                 @error('design_no')
                                     <span class="text-danger" role="alert">
                                         <strong>{{ $message }}</strong>
@@ -235,7 +234,7 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="product_design" class="col-12 col-md-4 col-lg-3">Product Description <sup
                                     class="text-warning">
                                     (required)</sup></label>
@@ -243,7 +242,7 @@
                                 <input type="text" name="product_description" id="product_design"
                                     placeholder="Enter Product Description"
                                     class="form-control @error('product_description') is-invalid @enderror"
-                                    value="{{ $chartInfo->product_description }}">
+                                    value="{{ $chartInfo->product_description }}" required>
                                 @error('product_description')
                                     <span class="text-danger" role="alert">
                                         <strong>{{ $message }}</strong>
@@ -251,13 +250,13 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="fabrication" class="col-12 col-md-4 col-lg-3">Fabrication <sup
                                     class="text-warning">
                                     (required)</sup></label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="fabrication" name="fabrication" class="select2 form-control">
+                                    <select data-choices id="fabrication" name="fabrication" class="select2 form-control" required>
                                         <option value="">Select a fabrication</option>
                                         @foreach ($fabrics as $fabric)
                                             <option {{ $chartInfo->fabrication_id == $fabric->id ? 'selected' : '' }}
@@ -277,7 +276,7 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row" id="input_with_preview">
+                        <div class="position-relative form-group mb-2 new_search row" id="input_with_preview">
                             <label for="name" class="col-12 col-md-4 col-lg-3">Inspiration Image</label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <input type="file" name="image"
@@ -292,7 +291,7 @@
                                 @enderror
                             </div>
                         </div>
-                        <div class="position-relative form-group new_search row" id="input_with_preview">
+                        <div class="position-relative form-group mb-2 new_search row" id="input_with_preview">
                             <label for="name" class="col-12 col-md-4 col-lg-3">Design Image</label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <input type="file" name="design_image"
@@ -312,7 +311,7 @@
                                 <div class="selling_table_body">
                                     <input type="hidden" id="ch_in_id" value="{{ $chartInfo->id }}" />
                                     <div class="new_table table-responsive color-table mb-0">
-                                        @include('backend.selling_chart.edit-color-table')
+                                        @include('selling_chart.edit-color-table')
                                     </div>
                                 </div>
                             </div>
@@ -404,6 +403,5 @@
     </div> --}}
 @endsection
 @push('js')
-    @include('backend.partials.validation-script')
-    @include('backend.selling_chart.script')
+    @include('selling_chart.script')
 @endpush

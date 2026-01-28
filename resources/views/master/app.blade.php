@@ -23,7 +23,7 @@
         }
 
         .filter_close_sec {
-            border-bottom: 2px solid #eee;
+            border-bottom-width: 2px !important;
             padding-bottom: 15px;
             margin-bottom: 15px;
         }
@@ -41,6 +41,29 @@
         .iziToast-message {
             font-size: 16px !important;
             line-height: 16px !important;
+        }
+
+        .selling_chart_form .image-preview {
+            width: 150px;
+            height: 150px;
+            display: none;
+            margin-top: 10px;
+        }
+
+        #input_with_preview input[type="file"] {
+            cursor: pointer;
+            line-height: 31px;
+
+        }
+
+        #selling_chart_table .new_table table tr th,
+        #selling_chart_table .new_table table tr td {
+            text-align: center;
+        }
+
+        #selling_chart_table .new_table table tbody tr td input,
+        #selling_chart_table .new_table table tbody tr td select {
+            width: 100% !important;
         }
     </style>
     @stack('css')
@@ -80,6 +103,8 @@
     <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/customSweetalert2.min.js"></script>
     @include('master.lara-izitoast')
     <script>
+        var loader = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+    <span class="">Loading...</span>`;
         $('.validate-form').validate({
             ignore: [],
             errorClass: 'is-invalid',
@@ -94,9 +119,7 @@
             },
             submitHandler: function(form) {
                 const $btn = $('.validate-btn');
-                $btn.prop('disabled', true).html(
-                    '<span class="spinner-border spinner-border-sm me-2"></span>Processing...'
-                );
+                $btn.prop('disabled', true).html(loader);
                 form.submit();
             }
         });

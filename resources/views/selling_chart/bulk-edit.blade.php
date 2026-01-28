@@ -1,4 +1,4 @@
-@extends('backend.master')
+@extends('master.app')
 @push('css')
     <style>
         .warning-text .swal2-title {
@@ -14,24 +14,31 @@
         .selling_chart_form input[type="checkbox"]:checked::after {
             content: "";
         }
+
+        #selling_chart_table .new_table table tbody tr td input {
+            width: 80px !important;
+            text-align: center;
+        }
+        #selling_chart_table .new_table table tbody tr td input, #selling_chart_table .new_table table tbody tr td select {
+            width: 100px !important;
+        }
     </style>
 @endpush
 @section('content')
     <div class="top_title">
-        @include('backend.partials.breadcrumb', [
+        @include('master.breadcrumb', [
             'title' => 'Bult Edit',
             'icon' => 'bi bi-graph-up-arrow',
             'sub_title' => [
-                'Main' => '',
                 'Manage Selling Chart ' => '',
                 'Manage Selling Chart' => route('admin.selling_chart.index'),
-                'Bult edit' => route('admin.selling_chart.index'),
+                'Bult edit' => '',
             ],
         ])
-        <a href="{{ session('backUrl', url()->previous()) }}" class="btn tlt-btn">
+        {{-- <a href="{{ session('backUrl', url()->previous()) }}" class="btn tlt-btn">
             <i class="fa fa-chevron-left mr-1"></i>
             Back
-        </a>
+        </a> --}}
     </div>
     <div class="row justify-content-center">
         <div class="col-12">
@@ -44,7 +51,7 @@
                             <div class="col-12">
                                 <div class="selling_table_body">
                                     <div class="new_table table-responsive">
-                                        <table class="table selling_chart_edit_table"
+                                        <table class="table table-bordered selling_chart_edit_table"
                                             style="width: max-contents !importtant;">
                                             <thead>
                                                 <tr>
@@ -132,13 +139,15 @@
                                                                 <td>{{ $chartInfo->design_no }}</td>
                                                                 <td>
                                                                     @if ($chartInfo->design_image)
-                                                                        <img class="img-fluid" src="{{ cloudflareImage($chartInfo->design_image, 50) }}"
+                                                                        <img class="img-fluid"
+                                                                            src="{{ cloudflareImage($chartInfo->design_image, 50) }}"
                                                                             alt="Design Image">
                                                                     @endif
                                                                 </td>
                                                                 <td>
                                                                     @if ($chartInfo->inspiration_image)
-                                                                        <img class="img-fluid" src="{{ cloudflareImage($chartInfo->inspiration_image, 50) }}"
+                                                                        <img class="img-fluid"
+                                                                            src="{{ cloudflareImage($chartInfo->inspiration_image, 50) }}"
                                                                             alt="Inspiration Image">
                                                                     @endif
                                                                 </td>
@@ -271,6 +280,5 @@
     </div>
 @endsection
 @push('js')
-    @include('backend.partials.validation-script')
-    @include('backend.selling_chart.script')
+    @include('selling_chart.script')
 @endpush
