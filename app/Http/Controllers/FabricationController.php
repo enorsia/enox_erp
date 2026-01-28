@@ -2,58 +2,101 @@
 
 namespace App\Http\Controllers;
 
+use App\ApiServices\FabricationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Client\RequestException;
 
 class FabricationController extends Controller
 {
-    public function index(Request $request): View
+    public function __construct(
+        protected FabricationService $service
+    ) {}
+
+    public function index(Request $request)
     {
+        $data = [
+            'lookup_names' => collect(),
+            'start' => 0,
+        ];
 
-        $name = $request->name;
-        $status = $request->status;
+        try {
+            /** @var \Illuminate\Http\Client\Response $response */
+            $response = $this->service->get([
+                'page' => $request->integer('page', 1),
+                'name' => $request->name,
+                'status' => $request->status,
+            ]);
+            if ($response->failed()) {
+                throw new \Exception('API request failed');
+            }
+            $apiData = $response->json();
 
-        $query = LookupName::query();
+            $items = collect($apiData['data'] ?? [])
+                ->map(fn ($item) => (object) $item);
 
-        $query->when($name, function ($query, $name) {
-            return $query->where('name', 'like', "%{$name}%");
-        })
-            ->when($status !== null, function ($query) use ($status) {
-                return $query->where('status', $status);
-            });
-
-        $data['lookup_names'] = $query->where('type_id', 5)
-            ->orderBy('id', 'desc')
-            ->with('type')
-            ->paginate(30);
-
-        $data['start'] = ($data['lookup_names']->currentPage() - 1) * $data['lookup_names']->perPage() + 1;
-
+            $data['lookup_names'] = new \Illuminate\Pagination\LengthAwarePaginator(
+                $items,
+                $apiData['pagination']['total'] ?? 0,
+                $apiData['pagination']['per_page'] ?? 30,
+                $apiData['pagination']['current_page'] ?? 1,
+                [
+                    'path' => $request->url(),
+                    'query' => $request->query(),
+                ]
+            );
+            $data['start'] = $apiData['pagination']['start'] ?? 0;
+        } catch (\Exception $e) {
+            Log::error('Fabrication API Error', [
+                'message' => $e->getMessage(),
+            ]);
+        }
         return view('selling_chart.fabrication.index', $data);
     }
 
-    public function create(): View
+    public function create()
     {
-
         return view('selling_chart.fabrication.create');
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request)
     {
-
-        $this->validate($request, [
-            'name' => 'required|unique:lookup_names,name'
+        $request->validate([
+            'name' => 'required|string|max:255',
         ]);
 
-        try {
-            LookupName::create([
-                'name' => $request->name,
-                'type_id' => 5,
-                'status' => $request->filled('status'),
-            ]);
+        $payload = [
+            'name'   => $request->name,
+            'status' => $request->has('status'),
+        ];
 
+        try {
+            /** @var \Illuminate\Http\Client\Response $response */
+            $response = $this->service->store($payload);
+            notify()->success('Febrication created successfully', 'Success');
             return redirect()->route('admin.selling_chart.fabrication.index');
-        } catch (\Throwable $th) {
-            return back();
+
+        }catch (RequestException $e) {
+            // Catch API validation errors (422)
+            if ($e->response && $e->response->status() === 422) {
+                return back()
+                    ->withErrors($e->response->json('errors') ?? [])
+                    ->withInput();
+            }
+
+            // Other exceptions
+            Log::error('Fabrication store failed', [
+                'error' => $e->getMessage(),
+            ]);
+            notify()->error('Something went wrong. Please try again', 'Error');
+            return back()->withInput();
+        }
+        catch (\Throwable $e) {
+            Log::error('Fabrication store failed', [
+                'error' => $e->getMessage(),
+            ]);
+            notify()->error('Something went wrong. Please try again', 'Error');
+            return back()->withInput();
         }
     }
 }
