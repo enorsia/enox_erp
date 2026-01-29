@@ -6,9 +6,9 @@
     @endif
     <div class="top_title_body_left">
         <div class="top_title_text">
-            <h3>{{ $title ?? '' }}</h3>
+            <h3 class="mb-0">{{ $title ?? '' }}</h3>
         </div>
-        <div class="top_title_breadcrumb">
+        {{-- <div class="top_title_breadcrumb">
             @foreach ($sub_title ?? [] as $text => $url)
                 @if ($url)
                     <span><a href="{{ $url }}">{{ $text }}</a></span>
@@ -22,6 +22,6 @@
                     @endif
                 @endif
             @endforeach
-        </div>
+        </div> --}}
     </div>
 </div>

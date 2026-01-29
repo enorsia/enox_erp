@@ -32,13 +32,13 @@
                         </div>
                     </div>
                     <div class="col-12 col-md-2">
-                        <select name="status" class="form-select data-choices">
+                        <select name="status" class="form-select" data-choices>
                             <option value="">Status</option>
                             <option value="1" {{ request('status') === "1" ? 'selected' : '' }}>Active</option>
                             <option value="0" {{ request('status') === "0" ? 'selected' : '' }}>Inactive</option>
                         </select>
                     </div>
-                    <div class="col-12 col-md-7 text-end">
+                    <div class="col-12 col-md-7 text-end mt-2 mt-md-0">
                         <div class="flex-center">
                             <a href="{{ route('admin.selling_chart.fabrication.index') }}"
                                 class="btn btn-outline-danger flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
@@ -52,7 +52,7 @@
         </div>
     </form>
     <div class="card shadow-sm mt-3" style="overflow: hidden;">
-        <div class="card-body p-0">
+        <div class="card-body px-0 pt-0">
             <div class="table-responsive">
                 <table class="table align-middle mb-0 table-hover table-centered">
                     <thead class="bg-light-subtle">

@@ -27,7 +27,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Bult Edit',
+            'title' => 'Chart Bult Edit',
             'icon' => 'bi bi-graph-up-arrow',
             'sub_title' => [
                 'Manage Selling Chart ' => '',

@@ -1,5 +1,5 @@
 <div class="card-dark main-card my-3 card p-0" id="selling_chart_view_table">
-    <div class="card-body pb-0">
+    <div class="card-body">
         <div class="new_search" id="selling_chart_table">
             <div class="selling_table_body new_table m-0">
                 <div class="table-responsive">

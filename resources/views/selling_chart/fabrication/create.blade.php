@@ -3,7 +3,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Febrication',
+            'title' => 'Febrication Create',
             'icon' => '',
             'sub_title' => [
                 'Manage Selling Chart ' => route('admin.selling_chart.index'),

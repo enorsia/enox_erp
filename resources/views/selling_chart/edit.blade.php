@@ -3,7 +3,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Manage Selling Chart',
+            'title' => 'Chart Edit',
             'icon' => 'bi bi-graph-up-arrow',
             'sub_title' => [
                 'Manage Selling Chart ' => '',
@@ -316,7 +316,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="d-flex flex-row justify-content-between position-relative" style="top: -55px;">
+                        <div class="d-flex flex-row justify-content-between position-relative">
                             <button type="button" class="btn btn-lg btn-info fs-6 px-4 add_more_btn"><i
                                     class="bi bi-plus-lg"></i> Add More </button>
                             <button type="submit" class="btn btn-lg btn-primary fs-6 px-4 submit-btn"><i

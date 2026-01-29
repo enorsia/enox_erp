@@ -3,7 +3,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Selling Chart Expense',
+            'title' => 'Expense',
             'icon' => '',
             'sub_title' => [
                 'Manage Selling Chart ' => '',
@@ -26,7 +26,7 @@
                         </div>
                     </div>
                     <div class="col-12 col-md-4">
-                        <div class="form-group mb-3 mb-md-0 new_select_field new_same_item d-flex flex-wrap">
+                        <div class="form-group new_select_field new_same_item d-flex flex-wrap">
                             <select name="year" id="year" class="form-control" data-choices>
                                 <option value="">Select Year</option>
                                 @for ($i = 2020; $i <= 2030; $i++)
@@ -36,7 +36,7 @@
                             </select>
                         </div>
                     </div>
-                    <div class="col-12 col-md-8 text-end">
+                    <div class="col-12 col-md-8 text-end mt-2 mt-md-0">
                         <div class="flex-center">
                             <a href="{{ route('admin.selling_chart.expense.index') }}"
                                 class="btn btn-outline-danger flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
@@ -50,7 +50,7 @@
         </div>
     </form>
     <div class="card shadow-sm mt-3" style="overflow: hidden;">
-        <div class="card-body p-0">
+        <div class="card-body px-0 pt-0">
             <div class="table-responsive">
                 <table class="table align-middle mb-0 table-hover table-centered">
                     <thead class="bg-light-subtle">

@@ -51,7 +51,7 @@
                     <span class="nav-icon">
                         <iconify-icon icon="solar:t-shirt-bold-duotone"></iconify-icon>
                     </span>
-                    <span class="nav-text"> Manage Selling Chart </span>
+                    <span class="nav-text">Selling Chart </span>
                 </a>
                 <div class="collapse {{ request()->routeIs(
                     'admin.selling_chart.index',
@@ -68,21 +68,36 @@
                     : '' }}"
                     id="sidebarSellingChart">
                     <ul class="nav sub-navbar-nav">
-                        <li class="sub-nav-item {{ request()->routeIs('admin.selling_chart.index', 'admin.selling_chart.create', 'admin.selling_chart.edit', 'admin.selling_chart.upload.sheet') ? 'active' : '' }}">
-                            <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.index', 'admin.selling_chart.create', 'admin.selling_chart.edit', 'admin.selling_chart.upload.sheet') ? 'active' : '' }}" href="{{ route('admin.selling_chart.index') }}">Manage Selling
+                        <li
+                            class="sub-nav-item {{ request()->routeIs('admin.selling_chart.index', 'admin.selling_chart.create', 'admin.selling_chart.edit', 'admin.selling_chart.upload.sheet') ? 'active' : '' }}">
+                            <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.index', 'admin.selling_chart.create', 'admin.selling_chart.edit', 'admin.selling_chart.upload.sheet') ? 'active' : '' }}"
+                                href="{{ route('admin.selling_chart.index') }}">
                                 Chart</a>
                         </li>
-                        <li class="sub-nav-item {{ request()->routeIs('admin.selling_chart.fabrication.index', 'admin.selling_chart.fabrication.create') ? 'active' : '' }}">
-                            <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.fabrication.index', 'admin.selling_chart.fabrication.create') ? 'active' : '' }}" href="{{ route('admin.selling_chart.fabrication.index') }}">Selling
-                                Chart Fabrication</a>
+                        <li
+                            class="sub-nav-item {{ request()->routeIs('admin.selling_chart.fabrication.index', 'admin.selling_chart.fabrication.create') ? 'active' : '' }}">
+                            <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.fabrication.index', 'admin.selling_chart.fabrication.create') ? 'active' : '' }}"
+                                href="{{ route('admin.selling_chart.fabrication.index') }}">
+                                Fabrication</a>
                         </li>
                         <li
                             class="sub-nav-item {{ request()->routeIs('admin.selling_chart.expense.index', 'admin.selling_chart.expense.create', 'admin.selling_chart.expense.edit') ? 'active' : '' }}">
                             <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.expense.index', 'admin.selling_chart.expense.create', 'admin.selling_chart.expense.edit') ? 'active' : '' }}"
-                                href="{{ route('admin.selling_chart.expense.index') }}">Selling Chart Expense</a>
+                                href="{{ route('admin.selling_chart.expense.index') }}">Expense</a>
                         </li>
                     </ul>
                 </div>
+            </li>
+            <li class="menu-title">Settings</li>
+            <li
+                class="nav-item {{ request()->routeIs('admin.platforms.index', 'admin.platforms.create', 'admin.platforms.edit') ? 'active' : '' }}">
+                <a class="nav-link {{ request()->routeIs('admin.platforms.index', 'admin.platforms.create', 'admin.platforms.edit') ? 'active' : '' }}"
+                    href="{{ route('admin.platforms.index') }}">
+                    <span class="nav-icon">
+                        <iconify-icon icon="solar:shop-bold-duotone"></iconify-icon>
+                    </span>
+                    <span class="nav-text"> Platforms </span>
+                </a>
             </li>
         </ul>
     </div>

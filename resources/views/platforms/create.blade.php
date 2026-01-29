@@ -3,7 +3,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Setting',
+            'title' => 'Platforms Create',
             'icon' => '',
             'sub_title' => [
                 'Platforms ' => route('admin.platforms.index'),

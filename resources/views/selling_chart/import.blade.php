@@ -3,7 +3,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Import Sales Chart',
+            'title' => 'Chart Import',
             'icon' => 'bi bi-graph-up-arrow',
             'sub_title' => [
                 'Manage Selling Chart ' => '',
@@ -11,12 +11,12 @@
                 'Import Sales Chart' => route('admin.selling_chart.upload.sheet'),
             ],
         ])
-        <div>
+        {{-- <div>
             <a href="{{ route('admin.selling_chart.index') }}" class="btn btn-outline-secondary">
                 <i class="fa fa-chevron-left mr-1"></i>
                 &lt; Back
             </a>
-        </div>
+        </div> --}}
     </div>
     <div class="row justify-content-center">
         <div class="col-12">

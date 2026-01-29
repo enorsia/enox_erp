@@ -3,7 +3,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Selling Chart Expense',
+            'title' => 'Expense Create',
             'icon' => '',
             'sub_title' => [
                 'Manage Selling Chart ' => '',
@@ -11,12 +11,6 @@
                 'Create' => '',
             ],
         ])
-
-        <div>
-            <a href="{{ session('backUrl', url()->previous()) }}" class="btn btn-outline-secondary">
-                &lt; Back
-            </a>
-        </div>
     </div>
     <div class="row justify-content-center">
         <div class="col-lg-12">

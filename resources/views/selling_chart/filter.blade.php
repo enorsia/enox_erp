@@ -5,7 +5,7 @@
                 <div class="col-12">
                     <div class="filter_close_sec border-bottom d-flex align-items-center justify-content-between">
                         <h4 class="mb-0"><i class="bi bi-sliders"></i>Filter</h4>
-                        <button type="button" class="btn btn-outline-secondary advance-btn d-flex" data-bs-toggle="collapse"
+                        <button type="button" class="btn btn-outline-secondary advance-btn d-flex" title="Advance Search" data-bs-toggle="collapse"
                             href="#collapseAdvance" role="button" aria-expanded="false"
                             aria-controls="collapseAdvance"><iconify-icon icon="solar:card-search-broken"
                                 class="fs-25"></iconify-icon></button>
@@ -120,28 +120,28 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-sm-5 col-md-4">
                     <div class="form-group new_search new_same_item ">
                         <input class="form-control" id="search_id" type="text" name="name"
                             placeholder="Search here.. " value="{{ request('name') }}">
                     </div>
                 </div>
-                <div class="col-12 col-md-8 text-end">
+                <div class="col-6 col-sm-7 col-md-8 text-end mt-2 mt-sm-0">
                     <div class="flex-center">
                         <a href="{{ route('admin.selling_chart.index') }}"
-                            class="btn btn-outline-danger flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i>
+                            class="btn btn-outline-danger flex-center mx-1 mb-1 mb-md-0"><i class="bi bi-arrow-clockwise ms-0"></i>
                             Reset</a>
-                        <button type="submit" class="btn btn-primary mx-1"><i class="fa fa-filter ms-0"
+                        <button type="submit" class="btn btn-primary mx-1 mb-1 mb-md-0"><i class="fa fa-filter ms-0"
                                 aria-hidden="true"></i>
                             Search</button>
                     </div>
                 </div>
-                <div class="col-12">
+                <div class="col-6 col-md-12">
                     <div class="mt-2" id="filter_dropdown">
-                        <button type="submit" value="bulkEdit" name="action" class="btn btn-soft-secondary me-2"><i
+                        <button type="submit" value="bulkEdit" name="action" class="btn btn-soft-secondary me-2 mb-1 mb-md-0"><i
                                 class="bi bi-pencil-square ms-0"></i>
                             Bulk Edit</button>
-                        <button type="submit" class="btn btn-soft-info export_button" value="excel"
+                        <button type="submit" class="btn btn-soft-info export_button mb-1 mb-md-0" value="excel"
                             name="action"><i class="bi bi-download"></i> Export Excel</button>
                     </div>
                 </div>

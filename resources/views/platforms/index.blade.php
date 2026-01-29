@@ -3,11 +3,10 @@
 @section('content')
     <div class="top_title">
        @include('master.breadcrumb', [
-            'title' => 'Setting',
+            'title' => 'Platforms',
             'icon' => '',
             'sub_title' => [
-                'Setting ' => '',
-                'Platforms' => route('admin.platforms.index'),
+                'Enox ERP Platforms' => '',
             ],
         ])
         <div>
@@ -21,19 +20,19 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-12">
-                        <div class="filter_close_sec">
+                        <div class="filter_close_sec border-bottom">
                             <h4 class="mb-0"><i class="bi bi-sliders"></i>Filter</h4>
                         </div>
                     </div>
                     <div class="col-12 col-md-4">
                         <div class="form-group mb-3 mb-md-0 new_select_field new_same_item d-flex flex-wrap">
-                            <input type="text" name="q" id="q" class="form-control" placeholder="Search" value="{{request('q')}}" />
+                            <input type="text" name="q" id="q" class="form-control" placeholder="Search here...." value="{{request('q')}}" />
                         </div>
                     </div>
-                    <div class="col-12 col-md-8 text-end">
+                    <div class="col-12 col-md-8 text-end mt-2 mt-md-0">
                         <div class="flex-center">
                             <a href="{{ route('admin.platforms.index') }}"
-                                class="btn btn-outline-secondary flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
+                                class="btn btn-outline-danger flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
                             <button type="submit" class="btn btn-primary mx-1"><i class="fa fa-filter ms-0"
                                     aria-hidden="true"></i>
                                 Search</button>
@@ -44,7 +43,7 @@
         </div>
     </form>
     <div class="card shadow-sm mt-3" style="overflow: hidden;">
-        <div class="card-body p-0">
+        <div class="card-body px-0 pt-0">
             <div class="table-responsive">
                 <table class="table align-middle mb-0 table-hover table-centered">
                     <thead class="bg-light-subtle">

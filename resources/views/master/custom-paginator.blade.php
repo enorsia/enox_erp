@@ -1,12 +1,12 @@
 @if ($paginator->hasPages())
-    <div class="table_pagination d-md-flex justify-content-between mt-2 px-2">
+    <div class="table_pagination d-md-flex align-items-center justify-content-between mt-2 px-2">
         <div class="pagination_total_text">
-            <p>Showing <span>{{ $paginator->firstItem() }}-{{ $paginator->lastItem() }}</span> of
+            <p class="mb-2 mb-md-0">Showing <span>{{ $paginator->firstItem() }}-{{ $paginator->lastItem() }}</span> of
                 <span>{{ $paginator->total() }}</span>
             </p>
         </div>
         <nav aria-label="Page navigation example">
-            <ul class="pagination justify-content-end">
+            <ul class="pagination justify-content-end mb-0">
                 @if ($paginator->onFirstPage())
                     <li class="page-item disabled">
                         <span class="page-link">Previous</span>

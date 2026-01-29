@@ -19,6 +19,7 @@
         .top_title {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             margin-bottom: 20px;
         }
 
@@ -31,8 +32,9 @@
             padding-bottom: 8px;
             margin-bottom: 12px;
         }
-       .filter_close_sec .advance-btn {
-                min-height: 43px;
+
+        .filter_close_sec .advance-btn {
+            min-height: 43px;
         }
 
         .choices {
@@ -71,6 +73,39 @@
         #selling_chart_table .new_table table tbody tr td input,
         #selling_chart_table .new_table table tbody tr td select {
             width: 100% !important;
+        }
+
+        .choices__placeholder,
+        input::placeholder {
+            opacity: 0.4 !important;
+        }
+
+        .table_pagination .pagination {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+        }
+
+        .color-box {
+            position: absolute;
+            top: 27px;
+            left: 0;
+            width: 100%;
+            max-height: 120px;
+            z-index: 9;
+            overflow-y: auto;
+        }
+
+        .color-box .list-group-item {
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        @media (min-width: 768px) {
+            #selling_chart_table .create_selling_chart_tbl {
+                width: 100% !important;
+            }
         }
     </style>
     @stack('css')

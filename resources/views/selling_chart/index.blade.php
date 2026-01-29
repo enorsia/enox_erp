@@ -206,7 +206,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Manage Selling Chart',
+            'title' => 'Chart',
             'icon' => 'bi bi-graph-up-arrow',
             'sub_title' => [
                 'Manage Selling Chart ' => '',
@@ -321,7 +321,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const advanceInput = document.getElementById('advance_search');
-            const collapseEl = document.getElementById('collapseExample');
+            const collapseEl = document.getElementById('collapseAdvance');
 
             collapseEl.addEventListener('shown.bs.collapse', function() {
                 advanceInput.value = 1;

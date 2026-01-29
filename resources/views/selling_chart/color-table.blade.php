@@ -1,38 +1,4 @@
-<style>
-    .color-box {
-        position: absolute;
-        top: 27px;
-        left: 0;
-        width: 100%;
-        max-height: 120px;
-        z-index: 9;
-        overflow-y: auto;
-    }
-
-    .color-box .list-group-item {
-        background: #374151;
-        color: #fff;
-        padding: 5px 10px;
-        border-bottom: 2px solid #323436;
-        cursor: pointer;
-        font-size: 12px;
-    }
-
-    .color-box .list-group-item:hover {
-        background: #323436;
-    }
-
-    #selling_chart_table .table-responsive {
-        padding-bottom: 110px;
-    }
-
-    @media (min-width: 768px) {
-        #selling_chart_table .create_selling_chart_tbl {
-            width: 100% !important;
-        }
-    }
-</style>
-<table class="table table-bordered create_selling_chart_tbl mb-0">
+<table class="table table-bordered create_selling_chart_tbl">
     <thead>
         <tr>
             <th style="width:23px">Delete</th>
