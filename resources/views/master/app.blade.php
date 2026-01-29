@@ -22,10 +22,17 @@
             margin-bottom: 20px;
         }
 
+        #filterSection .card-body {
+            padding-top: 15px;
+        }
+
         .filter_close_sec {
             border-bottom-width: 2px !important;
-            padding-bottom: 15px;
-            margin-bottom: 15px;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+        }
+       .filter_close_sec .advance-btn {
+                min-height: 43px;
         }
 
         .choices {

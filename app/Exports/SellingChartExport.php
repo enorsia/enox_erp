@@ -25,7 +25,7 @@ class SellingChartExport implements FromCollection, WithHeadings, WithEvents, Sh
         ini_set('memory_limit', '1024M');
 
         $this->items = $items;
-        $this->sellingChartApiService = app(SellingChartApiService::class);;
+        $this->sellingChartApiService = app(SellingChartApiService::class);
     }
 
     public function startCell(): string

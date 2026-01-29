@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\ApiServices\SellingChartApiService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\SellingChartType;
@@ -48,14 +49,34 @@ class SellingChartBasicInfo extends Model
 
     public function scopeFilter($query, $filters)
     {
-        // $ecomP = EcommerceProduct::where('sku', $filters->name)->first();
-        $ecomP = null;
+        return $query->when($filters->filled('name'), function ($q) use ($filters) {
+            $designName = null;
 
-        return $query->when($filters->filled('name'), function ($q) use ($filters, $ecomP) {
-            $q->where(function ($subQuery) use ($filters, $ecomP) {
+            $exists = $q->clone()
+                ->where('product_code', $filters->name)
+                ->orWhere('design_no', $filters->name)
+                ->orWhere('product_launch_month', $filters->name)
+                ->exists();
+
+            if (!$exists) {
+                $sellingChartApiService = app(SellingChartApiService::class);
+
+                $ecommerceProducts = $sellingChartApiService->getEcomProducts([
+                    'designNos' => [$filters->name]
+                ]);
+                $ecomP = $ecommerceProducts->first();
+
+                $designName = $ecomP['style']['name'] ?? null;
+            }
+
+            $q->where(function ($subQuery) use ($filters, $designName) {
                 $subQuery->where('product_code', $filters->name)
-                    ->orWhere('design_no', ($ecomP ? $ecomP?->style?->name : $filters->name))
+                    ->orWhere('design_no', $filters->name)
                     ->orWhere('product_launch_month', $filters->name);
+
+                if ($designName) {
+                    $subQuery->orWhere('design_no', $designName);
+                }
             });
         })
             ->when($filters->filled('department_id'), function ($q) use ($filters) {

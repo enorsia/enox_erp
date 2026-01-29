@@ -102,12 +102,12 @@
         }
 
         /* .last_col p:nth-child(3), .last_col p:nth-child(4){
-                    width: 175px;
-                } */
+                                                                    width: 175px;
+                                                                } */
         /* .selling_chart_view_p p span{
 
-                    width: 100px;
-                }*/
+                                                                    width: 100px;
+                                                                }*/
         .selling_chart_view_p p span {
             margin-top: 7px;
             width: 95%;
@@ -157,6 +157,49 @@
                 width: 100%;
             }
         }
+
+        .platform-divider {
+            position: relative;
+        }
+
+        .divider-content {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            position: relative;
+        }
+
+        .divider-content .btn {
+            padding: 0;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .divider-line {
+            flex: 1;
+            height: 2px;
+            position: relative;
+        }
+
+        /* 🌞 Light theme */
+        html[data-bs-theme="light"] .divider-line {
+            background: linear-gradient(90deg,
+                    transparent,
+                    rgba(0, 0, 0, 0.12),
+                    transparent);
+        }
+
+        /* 🌙 Dark theme */
+        html[data-bs-theme="dark"] .divider-line {
+            background: linear-gradient(90deg,
+                    transparent,
+                    rgba(255, 255, 255, 0.25),
+                    transparent);
+        }
     </style>
 @endpush
 
@@ -183,78 +226,90 @@
 
     @include('selling_chart.filter')
 
-    <div class="bottom_cards">
+    <div class="platform-divider">
+        <div class="divider-content">
+            <div class="divider-line"></div>
+            <button title="Show Count" class="btn border" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCards"
+                aria-expanded="false" aria-controls="collapseCards">
+                <iconify-icon icon="solar:double-alt-arrow-down-linear" class="fs-18"></iconify-icon>
+            </button>
+            <div class="divider-line"></div>
+        </div>
+    </div>
+    <div class="collapse" id="collapseCards">
+        <div class="bottom_cards pt-3">
 
-        @foreach ($deparment_total_colors as $dtc)
+            @foreach ($deparment_total_colors as $dtc)
+                <div class="bottom_item card">
+                    <div class="bottom_icon">
+                        <i>
+                            <img width="32" src="{{ cloudflareImage('5cc020c8-2510-444c-6060-edd319510600') }}"
+                                alt="color" />
+                        </i>
+                    </div>
+                    <div class="bottom_text w-100">
+                        <h6 class="text-uppercase">{{ $dtc['department_name'] }}</h6>
+                        <div class="d-flex justify-content-between flex-wrap" style="gap: 5px;">
+                            @foreach ($dtc['mini_categories'] as $mini_tc)
+                                <p>{{ $mini_tc['mini_category_name'] }}: <br> {{ $mini_tc['count'] }}</p>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+
             <div class="bottom_item card">
                 <div class="bottom_icon">
                     <i>
-                        <img width="32" src="{{ cloudflareImage('5cc020c8-2510-444c-6060-edd319510600') }}"
+                        <img width="30" src="{{ cloudflareImage('734000ef-3e9d-47f3-82ff-662f55b84100') }}"
                             alt="color" />
                     </i>
                 </div>
                 <div class="bottom_text w-100">
-                    <h6 class="text-uppercase">{{ $dtc['department_name'] }}</h6>
+                    <h6 class="text-uppercase">Style Count</h6>
                     <div class="d-flex justify-content-between flex-wrap" style="gap: 5px;">
-                        @foreach ($dtc['mini_categories'] as $mini_tc)
-                            <p>{{ $mini_tc['mini_category_name'] }}: <br> {{ $mini_tc['count'] }}</p>
-                        @endforeach
+                        @if (!$mini_total_styles->isEmpty())
+                            @foreach ($mini_total_styles as $mini_tc)
+                                <p>{{ $mini_tc?->miniCategory?->name }}: <br> {{ $mini_tc->total_count }}</p>
+                            @endforeach
+                        @else
+                            <strong class="fs-5">0</strong>
+                        @endif
                     </div>
                 </div>
             </div>
-        @endforeach
 
-        <div class="bottom_item card">
-            <div class="bottom_icon">
-                <i>
-                    <img width="30" src="{{ cloudflareImage('734000ef-3e9d-47f3-82ff-662f55b84100') }}"
-                        alt="color" />
-                </i>
-            </div>
-            <div class="bottom_text w-100">
-                <h6 class="text-uppercase">Style Count</h6>
-                <div class="d-flex justify-content-between flex-wrap" style="gap: 5px;">
-                    @if (!$mini_total_styles->isEmpty())
-                        @foreach ($mini_total_styles as $mini_tc)
-                            <p>{{ $mini_tc?->miniCategory?->name }}: <br> {{ $mini_tc->total_count }}</p>
-                        @endforeach
-                    @else
-                        <strong class="fs-5">0</strong>
-                    @endif
+            <div class="bottom_item card">
+                <div class="bottom_icon">
+                    <i>
+                        <img width="30" src="{{ cloudflareImage('c802ca32-d61c-4aca-92a6-6bd518e65c00') }}"
+                            alt="color" />
+                    </i>
+                </div>
+                <div class="bottom_text w-100">
+                    <h6 class="text-uppercase">Total Colors</h6>
+                    <div class="d-flex justify-content-between flex-wrap" style="gap: 5px;">
+                        {{ $totalColors }}
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="bottom_item card">
-            <div class="bottom_icon">
-                <i>
-                    <img width="30" src="{{ cloudflareImage('c802ca32-d61c-4aca-92a6-6bd518e65c00') }}"
-                        alt="color" />
-                </i>
-            </div>
-            <div class="bottom_text w-100">
-                <h6 class="text-uppercase">Total Colors</h6>
-                <div class="d-flex justify-content-between flex-wrap" style="gap: 5px;">
-                    {{ $totalColors }}
+            <div class="bottom_item card">
+                <div class="bottom_icon">
+                    <i>
+                        <img width="35" src="{{ cloudflareImage('e54e8867-dd21-45fd-7713-4d1dcbcb5500') }}"
+                            alt="color" />
+                    </i>
+                </div>
+                <div class="bottom_text w-100">
+                    <h6 class="text-uppercase">Total Quantity</h6>
+                    <div class="d-flex justify-content-between flex-wrap" style="gap: 5px;">
+                        {{ $totalQuantity }}
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="bottom_item card">
-            <div class="bottom_icon">
-                <i>
-                    <img width="35" src="{{ cloudflareImage('e54e8867-dd21-45fd-7713-4d1dcbcb5500') }}"
-                        alt="color" />
-                </i>
-            </div>
-            <div class="bottom_text w-100">
-                <h6 class="text-uppercase">Total Quantity</h6>
-                <div class="d-flex justify-content-between flex-wrap" style="gap: 5px;">
-                    {{ $totalQuantity }}
-                </div>
-            </div>
         </div>
-
     </div>
 
     @include('selling_chart.index-table')
