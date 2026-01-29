@@ -2,14 +2,14 @@
 
 namespace App\Imports;
 
-use App\Models\LookupName;
-use App\Models\ProductCategory;
-use App\Models\ProductColor;
+use App\ApiServices\FabricationService;
+use App\ApiServices\SellingChartApiService;
 use App\Models\SellingChartBasicInfo;
 use App\Models\SellingChartPrice;
 use App\Models\SellingChartType;
 use Exception;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
@@ -19,12 +19,19 @@ class SellingChartImport implements ToCollection, WithHeadingRow, WithCalculated
 {
     protected $basic_info_id = null;
     protected $size_range_p = 0;
+    protected $sellingChartApiService;
+    protected $fabricationService;
+
+    public function __construct()
+    {
+        $this->sellingChartApiService = app(SellingChartApiService::class);
+        $this->fabricationService = app(FabricationService::class);
+    }
 
     public function collection(Collection $rows)
     {
         $rows = $rows->toArray();
         $datas = [];
-        // dd($rows);
 
         foreach ($rows as $key => $row) {
 
@@ -126,32 +133,27 @@ class SellingChartImport implements ToCollection, WithHeadingRow, WithCalculated
     protected function saveChartInfos($infos, $prices)
     {
         if (!empty($infos)) {
+            $get_datas = $this->sellingChartApiService->getCommonData();
+
+
             $departmentText = $this->departmentNormalize($infos['department']);
-            $department = LookupName::where('type_id', 1)
-                ->where('name', $departmentText)
-                ->select('id', 'name')
-                ->whereStatus(1)
+            $department = $get_datas['departments']->where('name', $departmentText)
                 ->first();
-
-
             $this->flashMsg($department, $infos['department']);
 
-            $season = LookupName::where('type_id', 10)
-                ->where('name', $infos['season'])
-                ->select('id', 'name')
-                ->whereStatus(1)
+            $season = $get_datas['seasons']->where('name', $infos['season'])
                 ->first();
             $this->flashMsg($season, $infos['season']);
 
-            $seasons_phase = LookupName::where('type_id', 11)
-                ->whereRaw('LEFT(name, 2) = ?', [substr($infos['season_phase'], 0, 2)])
-                ->select('id', 'name')
-                ->whereStatus(1)
-                ->first();
+            // $seasons_phase = $get_datas['seasons_phases']->whereRaw('LEFT(name, 2) = ?', [substr($infos['season_phase'], 0, 2)])
+            //     ->first();
+            $seasons_phase = $get_datas['seasons_phases']
+                ->first(function ($item) use ($infos) {
+                    return substr($item->name, 0, 2) === substr($infos['season_phase'], 0, 2);
+                });
             $this->flashMsg($seasons_phase, $infos['season_phase']);
 
-            $category = ProductCategory::where('lookup_id', $department->id)
-                ->where('name', $infos['product_category'])
+            $category = $get_datas['selling_chart_cats']->where('lookup_id', $department->id)->where('name', $infos['product_category'])
                 ->first();
             $this->flashMsg($category, $infos['product_category']);
 
@@ -160,25 +162,25 @@ class SellingChartImport implements ToCollection, WithHeadingRow, WithCalculated
             $this->flashMsg($mini_category, $infos['product']);
 
             $initialRepeatValue = $this->intRepNormalize($infos['initial_repeat_order']);
-            $initialRepeat = LookupName::where('type_id', 8)
-                ->where('name', $initialRepeatValue)
-                ->select('id', 'name')
-                ->whereStatus(1)
+            $initialRepeat = $get_datas['initialRepeats']->where('name', $initialRepeatValue)
                 ->first();
             $this->flashMsg($initialRepeat, $infos['initial_repeat_order']);
 
-            $fabrication = LookupName::where('type_id', 5)
-                ->where('name', $infos['fabrication'])
-                ->select('id', 'name')
-                ->whereStatus(1)
+            $fabrication = $get_datas['fabrics']->where('name', $infos['fabrication'])
                 ->first();
+            $fabrication_id = $fabrication?->id;
+            $fabrication_name = $fabrication?->name;
 
             if (!$fabrication) {
-                $fabrication = LookupName::create([
-                    'type_id' => 5,
-                    'name' => $infos['fabrication'],
+                $payload = [
+                    'name'   => $infos['fabrication'],
                     'status' => 1,
-                ]);
+                ];
+                /** @var \Illuminate\Http\Client\Response $response */
+                $response = $this->fabricationService->store($payload);
+                $fabrication = collect($response->json('data'));
+                $fabrication_id = $fabrication['id'];
+                $fabrication_name = $fabrication['name'];
             }
 
             if ($department && $season && $seasons_phase && $category && $mini_category) {
@@ -199,8 +201,8 @@ class SellingChartImport implements ToCollection, WithHeadingRow, WithCalculated
                     'product_code' => $infos['product_code'],
                     'design_no' => $infos['design_no'],
                     'product_description' => $infos['product_description'],
-                    'fabrication_id' => $fabrication->id,
-                    'fabrication' => $fabrication->name,
+                    'fabrication_id' => $fabrication_id,
+                    'fabrication' => $fabrication_name,
                     'inspiration_image' => null,
                 ]);
 
@@ -223,11 +225,10 @@ class SellingChartImport implements ToCollection, WithHeadingRow, WithCalculated
             //     ->where('name', $price["size"])
             //     ->first();
             // $this->flashMsg($size, $price["size"]);
+            $lookupData = $this->sellingChartApiService->getLookupResponse([13]);
+            $ranges = collect($lookupData)->map(fn($item) => (object) $item);
+            $range = $ranges->where('name', $price["size_range"])->first();
 
-            $range = LookupName::where('type_id', 13)
-                ->where('name', $price["size_range"])
-                ->first();
-                // dd($price["size_range"]);
             $this->flashMsg($range, $price["size_range"]);
 
             // $sizeId = $size->id;
@@ -240,16 +241,23 @@ class SellingChartImport implements ToCollection, WithHeadingRow, WithCalculated
         $color_code = $price["color_code"];
         // $color_name = $this->colorNormalize($price["color_name"]);
         $color_name = $price["color_name"];
-        $color = ProductColor::select('id', 'lookup_id', 'code')
-            ->with('lookupName:id,name')
-            ->where('status', 1)
-            ->where(function ($query) use ($color_code, $color_name) {
-                $query->whereHas('lookupName', function ($query) use ($color_name) {
-                    $query->where('name', $color_name);
-                })
-                    ->where('code', $color_code);
-            })
-            ->first();
+
+        $color = collect();
+        try {
+            /** @var \Illuminate\Http\Client\Response $response */
+            $response = $this->sellingChartApiService->get(config('enox.endpoints.selling_chart_color_by_search'), [
+                'color_code' => $color_code,
+                'color_name' => $color_name
+            ]);
+            if ($response->failed()) {
+                throw new Exception('API request failed');
+            }
+            $color = collect($response->json('data.colors', []))->first();
+        } catch (Exception $e) {
+            Log::error('Selling_chart Colors API Error', [
+                'message' => $e->getMessage(),
+            ]);
+        }
 
         $color_cn = $color_code . ' or ' . $color_name;
 
@@ -257,9 +265,9 @@ class SellingChartImport implements ToCollection, WithHeadingRow, WithCalculated
 
         SellingChartPrice::create(attributes: [
             'basic_info_id' => $basic_info_id,
-            'color_id' => $color->id,
-            'color_code' => $color->code,
-            'color_name' => $color?->lookupName?->name,
+            'color_id' => $color['id'],
+            'color_code' => $color['code'],
+            'color_name' => $color['lookup_name']['name'],
             'size_id' => $sizeId,
             'size' => $sizeName,
             'range_id' => $rangeId,

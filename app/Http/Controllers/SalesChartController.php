@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\ApiServices\FabricationService;
+use App\ApiServices\SellingChartApiService;
 use App\Exports\SellingChartExport;
 use App\Imports\SellingChartImport;
 use App\Jobs\CloudflareFileDeleteJob;
@@ -22,12 +24,10 @@ use Symfony\Component\HttpFoundation\RedirectResponse;
 
 class SalesChartController extends Controller
 {
-    protected string $baseUrl;
 
-    public function __construct()
-    {
-        $this->baseUrl = config('app.enox_api_base_url') . 'selling-chart/';
-    }
+    public function __construct(
+        protected SellingChartApiService $sellingChartApiService, protected FabricationService $fabricationService
+    ) {}
 
     public function index(Request $request)
     {
@@ -38,7 +38,7 @@ class SalesChartController extends Controller
 
         if ($action == 'bulkEdit') return $this->bulkEdit($request);
 
-        $data = $this->getCommonData();
+        $data = $this->sellingChartApiService->getCommonData();
         // dd($data['departments']->toArray());
 
         // style count calculation start
@@ -120,17 +120,10 @@ class SalesChartController extends Controller
 
         $designNos = $data['chartInfos']->pluck('design_no')->unique()->toArray();
 
-        $response = Http::get($this->baseUrl . 'get-ecom-products', [
+        $ecommerceProducts = $this->sellingChartApiService->getEcomProducts([
             'designNos' => $designNos
         ]);
 
-        $ecommerceProducts = collect();
-
-        if ($response->successful()) {
-            $ecommerceProducts = collect($response->json('data.ecommerceProducts', []));
-        }
-
-        // Key by style name
         $data['ecommerceMap'] = $ecommerceProducts->keyBy(fn($item) => $item['style']['name'] ?? null);
 
         $data['start'] = ($data['chartInfos']->currentPage() - 1) * $data['chartInfos']->perPage() + 1;
@@ -197,98 +190,17 @@ class SalesChartController extends Controller
             return back();
         }
     }
+
     public function create()
     {
-
-        $data = $this->getCommonData();
+        $data = $this->sellingChartApiService->getCommonData();
         $data['expenses'] = SellingChartExpense::where('status', 1)->get();
-
         return view('selling_chart.create', $data);
     }
 
     public function uploadSheet()
     {
-
         return view('selling_chart.import');
-    }
-
-    public function getCommonData(): array
-    {
-        $data = [];
-
-        try {
-            $lookupData = $this->getLookupResponse([1, 5, 8, 10, 11]);
-            // Split by type_id
-            $data['departments'] = collect($lookupData)->where('type_id', 1)->map(fn($item) => (object) $item);
-            $data['fabrics'] = collect($lookupData)->where('type_id', 5)->map(fn($item) => (object) $item);
-            $data['initialRepeats'] = collect($lookupData)->where('type_id', 8)->map(fn($item) => (object) $item);
-            $data['seasons'] = collect($lookupData)->where('type_id', 10)->map(fn($item) => (object) $item);
-            $data['seasons_phases'] = collect($lookupData)->where('type_id', 11)->map(fn($item) => (object) $item);
-
-
-            // 2️⃣ Product Categories
-            $getCategoryData = $this->getCategoryResponse();
-            $data['selling_chart_cats'] = $getCategoryData->map(fn($item) => (object) $item);
-
-            $data['selling_chart_types'] = SellingChartType::get();
-        } catch (Exception $e) {
-            Log::error('getCommonData API call failed', [
-                'message' => $e->getMessage()
-            ]);
-            // fallback empty arrays
-            $data['fabrics'] = [];
-            $data['initialRepeats'] = [];
-            $data['seasons'] = [];
-            $data['seasons_phases'] = [];
-            $data['selling_chart_cats'] = [];
-            $data['selling_chart_types'] = [];
-            $data['departments'] = [];
-        }
-        // $seasonId = 10;
-        // $seasonPhaseId = 11;
-
-        // $data['departments'] = LookupName::getDepartments();
-
-        // $data['seasons'] = LookupName::where('type_id', $seasonId)
-        //     ->select('id', 'name')
-        //     ->whereStatus(1)
-        //     ->get();
-
-        // $data['seasons_phases'] = LookupName::where('type_id', $seasonPhaseId)
-        //     ->select('id', 'name')
-        //     ->whereStatus(1)
-        //     ->get();
-
-        // $data['initialRepeats'] = LookupName::where('type_id', 8)->where('status', 1)->get();
-        // $data['fabrics'] = LookupName::where('type_id', 5)->where('status', 1)->get();
-
-        // $data['selling_chart_cats'] = ProductCategory::get();
-        // $data['selling_chart_types'] = SellingChartType::get();
-        // dd($data['sizes']->toArray()[0]);
-
-        return $data;
-    }
-
-    public function getLookupResponse($typeIds = [])
-    {
-        $lookupResponse = Http::get($this->baseUrl . 'get-lookup-names', [
-            'typeIds' => $typeIds
-        ]);
-        $lookupData = collect();
-        if ($lookupResponse->successful()) {
-            $lookupData = $lookupResponse->json('data.lookupNames', collect());
-        }
-        return $lookupData;
-    }
-
-    public function getCategoryResponse()
-    {
-        $categoriesResponse = Http::get($this->baseUrl . 'get-product-categories');
-        $categoriesData = $categoriesResponse->successful()
-            ? collect($categoriesResponse->json('data.categories', collect()))->map(fn($item) => (object) $item)
-            : collect();
-
-        return $categoriesData;
     }
 
     public function getSizeRange($lookup_id)
@@ -297,19 +209,24 @@ class SalesChartController extends Controller
 
         // $sizes = $this->getSizes($lookup_id);
         $sizes = collect();
-        $lookupData = $this->getLookupResponse([13]);
+        $lookupData = $this->sellingChartApiService->getLookupResponse([13]);
         $ranges = collect($lookupData)->map(fn($item) => (object) $item);
         return view('selling_chart.color-table', compact('sizes', 'ranges', 'department_id'))->render();
     }
 
     public function getColorBySearch($searchTerm)
     {
-        $response = Http::get($this->baseUrl . 'get-color-by-search', [
-            'search' => $searchTerm
-        ]);
-        $productColors = [];
 
-        if ($response->successful()) {
+        $productColors = [];
+        try {
+            /** @var \Illuminate\Http\Client\Response $response */
+            $response = $this->sellingChartApiService->get(config('enox.endpoints.selling_chart_color_by_search'), [
+                'search' => $searchTerm
+            ]);
+            if ($response->failed()) {
+                throw new Exception('API request failed');
+            }
+
             $colors = collect($response->json('data.colors', []));
 
             $productColors = $colors->map(function ($color) {
@@ -319,6 +236,10 @@ class SalesChartController extends Controller
                     'code' => $color['code'],
                 ];
             })->values()->all();
+        } catch (Exception $e) {
+            Log::error('Selling_chart Colors API Error', [
+                'message' => $e->getMessage(),
+            ]);
         }
 
         return view('selling_chart.color-list', compact('productColors'))->render();
@@ -326,7 +247,7 @@ class SalesChartController extends Controller
 
     public function getDepWiseCats(int|string $id)
     {
-        $categories = collect($this->getCategoryResponse())->where('lookup_id', $id)->map(fn($item) => (object) $item);
+        $categories = collect($this->sellingChartApiService->getCategoryResponse())->where('lookup_id', $id)->map(fn($item) => (object) $item);
 
         return response()->json($categories);
     }
@@ -335,20 +256,29 @@ class SalesChartController extends Controller
     {
         if (!($lookup_id == 1928 || $lookup_id == 1929)) $lookup_id = 0;
 
-        $categories = collect($this->getCategoryResponse())
+        $categories = collect($this->sellingChartApiService->getCategoryResponse())
             ->where('type', 1)
             ->where('lookup_id', $lookup_id)
             ->map(fn($item) => (object) $item);
 
         $bgCatIds = $categories->pluck('id')->toArray();
-        $response = Http::post($this->baseUrl . 'get-sizes-by-category', [
-            'category_ids' => $bgCatIds
-        ]);
 
         $sizes = collect();
+        try {
+            /** @var \Illuminate\Http\Client\Response $response */
+            $response = $this->sellingChartApiService->get(config('enox.endpoints.selling_chart_sizes_by_category'), [
+                'category_ids' => $bgCatIds
+            ]);
 
-        if ($response->successful()) {
+            if ($response->failed()) {
+                throw new Exception('API request failed');
+            }
+
             $sizes = $response->json('data.sizes', collect())->map(fn($item) => (object) $item);
+        } catch (Exception $e) {
+            Log::error('Selling_chart sizes API Error', [
+                'message' => $e->getMessage(),
+            ]);
         }
 
         return $sizes;
@@ -367,7 +297,7 @@ class SalesChartController extends Controller
         //     $getCategoryData = $this->getCategoryResponse();
         //     $data['selling_chart_cats'] = $getCategoryData->map(fn($item) => (object) $item);
 
-        $get_datas = $this->getCommonData();
+        $get_datas = $this->sellingChartApiService->getCommonData();
 
         if ($request->department_id) {
             $data['department'] = $get_datas['departments']->where('id', $request->department_id)
@@ -404,7 +334,7 @@ class SalesChartController extends Controller
 
         if ($range_id != null) {
             // $size = LookupName::findOrFail($size_id);
-            $lookupData = $this->getLookupResponse([13]);
+            $lookupData = $this->sellingChartApiService->getLookupResponse([13]);
             $ranges = collect($lookupData)->map(fn($item) => (object) $item);
             $range = $ranges->where('id', $range_id)->firstOrFail();
             // $sizeId = $size->id;
@@ -554,10 +484,10 @@ class SalesChartController extends Controller
     public function edit(string | int $id)
     {
 
-        $data = $this->getCommonData();
+        $data = $this->sellingChartApiService->getCommonData();
         $data['chartInfo'] = SellingChartBasicInfo::withCount('sellingChartPrices')->findOrFail($id);
         // $data['sizes'] = $this->getSizes($data['chartInfo']->department_id);
-        $lookupData = $this->getLookupResponse([13]);
+        $lookupData = $this->sellingChartApiService->getLookupResponse([13]);
         $data['ranges'] = collect($lookupData)->map(fn($item) => (object) $item);
         Session::put('backUrl', url()->previous());
 
@@ -786,7 +716,7 @@ class SalesChartController extends Controller
 
         if (!$data['chartInfos']->isEmpty()) {
             // $data['sizes'] = $this->getSizes($data['chartInfos'][0]['department_id']);
-            $lookupData = $this->getLookupResponse([13]);
+            $lookupData = $this->sellingChartApiService->getLookupResponse([13]);
             $data['ranges'] = collect($lookupData)->map(fn($item) => (object) $item);
         }
 
@@ -865,15 +795,9 @@ class SalesChartController extends Controller
         $data['chartInfo'] = SellingChartBasicInfo::with('sellingChartPrices')->findOrFail($id);
         $designNumber = $data['chartInfo']->design_no;
 
-        $response = Http::get($this->baseUrl . 'get-ecom-products', [
-            'designNos' => $designNumber
+        $ecommerceProducts = $this->sellingChartApiService->getEcomProducts([
+            'designNos' => [$designNumber]
         ]);
-
-        $ecommerceProducts = collect();
-
-        if ($response->successful()) {
-            $ecommerceProducts = collect($response->json('data.ecommerceProducts', []));
-        }
 
         $data['skus'] = $ecommerceProducts->first();
 

@@ -41,11 +41,11 @@
                     <form class="mb-4" action="{{ route('admin.selling_chart.import') }}" method="POST"
                         enctype="multipart/form-data" id="import_form">
                         @csrf
-                        <div class="position-relative form-group new_search row">
+                        <div class="position-relative form-group new_search row mb-3">
                             <label for="name" class="col-12 col-md-4 col-lg-3">Excel Sheet <sup class="text-warning">
                                     (required)</sup></label>
                             <div class="col-12 col-md-8 col-lg-9">
-                                <input class="form-control mb-3" type="file" name="sheet" required
+                                <input class="form-control" type="file" name="sheet" required
                                     style="line-height: 31px;">
                             </div>
                         </div>

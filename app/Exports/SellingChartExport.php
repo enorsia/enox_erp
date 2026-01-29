@@ -2,8 +2,7 @@
 
 namespace App\Exports;
 
-use App\Models\EcommerceProduct;
-use Illuminate\Support\Facades\Http;
+use App\ApiServices\SellingChartApiService;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithEvents;
@@ -17,7 +16,7 @@ class SellingChartExport implements FromCollection, WithHeadings, WithEvents, Sh
 {
     private $items;
     private $endCol = "AF";
-    protected string $baseUrl;
+    private $sellingChartApiService;
 
     public function __construct($items)
     {
@@ -26,8 +25,7 @@ class SellingChartExport implements FromCollection, WithHeadings, WithEvents, Sh
         ini_set('memory_limit', '1024M');
 
         $this->items = $items;
-        $this->baseUrl = config('app.enox_api_base_url') . 'selling-chart/';
-        // dd($this->items);
+        $this->sellingChartApiService = app(SellingChartApiService::class);;
     }
 
     public function startCell(): string
@@ -40,16 +38,10 @@ class SellingChartExport implements FromCollection, WithHeadings, WithEvents, Sh
         $rows = collect();
         $styleNames = collect($this->items)->pluck('design_no')->unique()->toArray();
 
-        $response = Http::get($this->baseUrl . 'get-ecom-products', [
+        $ecommerceProducts = $this->sellingChartApiService->getEcomProducts([
             'designNos' => $styleNames
         ]);
 
-        $ecommerceProducts = collect();
-
-        if ($response->successful()) {
-            $ecommerceProducts = collect($response->json('data.ecommerceProducts', []));
-        }
-        // Key by style name
         $ecomProducts = $ecommerceProducts->keyBy(fn($item) => $item['style']['name'] ?? null);
 
         foreach ($this->items as $itemId => $item) {

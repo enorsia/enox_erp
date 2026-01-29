@@ -37,6 +37,7 @@
                     'admin.selling_chart.index',
                     'admin.selling_chart.create',
                     'admin.selling_chart.edit',
+                    'admin.selling_chart.upload.sheet',
                     'admin.selling_chart.fabrication.index',
                     'admin.selling_chart.fabrication.create',
                     'admin.selling_chart.expense.index',
@@ -56,6 +57,7 @@
                     'admin.selling_chart.index',
                     'admin.selling_chart.create',
                     'admin.selling_chart.edit',
+                    'admin.selling_chart.upload.sheet',
                     'admin.selling_chart.fabrication.index',
                     'admin.selling_chart.fabrication.create',
                     'admin.selling_chart.expense.index',
@@ -66,12 +68,12 @@
                     : '' }}"
                     id="sidebarSellingChart">
                     <ul class="nav sub-navbar-nav">
-                        <li class="sub-nav-item {{ request()->routeIs('admin.selling_chart.index', 'admin.selling_chart.create', 'admin.selling_chart.edit') ? 'active' : '' }}">
-                            <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.index', 'admin.selling_chart.create', 'admin.selling_chart.edit') ? 'active' : '' }}" href="{{ route('admin.selling_chart.index') }}">Manage Selling
+                        <li class="sub-nav-item {{ request()->routeIs('admin.selling_chart.index', 'admin.selling_chart.create', 'admin.selling_chart.edit', 'admin.selling_chart.upload.sheet') ? 'active' : '' }}">
+                            <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.index', 'admin.selling_chart.create', 'admin.selling_chart.edit', 'admin.selling_chart.upload.sheet') ? 'active' : '' }}" href="{{ route('admin.selling_chart.index') }}">Manage Selling
                                 Chart</a>
                         </li>
-                        <li class="sub-nav-item">
-                            <a class="sub-nav-link" href="{{ route('admin.selling_chart.fabrication.index') }}">Selling
+                        <li class="sub-nav-item {{ request()->routeIs('admin.selling_chart.fabrication.index', 'admin.selling_chart.fabrication.create') ? 'active' : '' }}">
+                            <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.fabrication.index', 'admin.selling_chart.fabrication.create') ? 'active' : '' }}" href="{{ route('admin.selling_chart.fabrication.index') }}">Selling
                                 Chart Fabrication</a>
                         </li>
                         <li

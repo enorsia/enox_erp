@@ -6,7 +6,7 @@
             'title' => 'Febrication',
             'icon' => '',
             'sub_title' => [
-                'Selling Chart ' => route('admin.selling_chart.index'),
+                'Manage Selling Chart ' => route('admin.selling_chart.index'),
                 'Febrication' => route('admin.selling_chart.fabrication.index'),
                 'Create' => '',
             ],

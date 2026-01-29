@@ -111,11 +111,10 @@
         });
 
         $('#import_form').validate({
-            rules: {
-                sheet: {
-                    required: true
-                }
-            },
+            ignore: [],
+            errorClass: 'is-invalid',
+            validClass: 'is-valid',
+            errorElement: 'div',
             submitHandler: function(form) {
                 $('.submit-btn').html(loader);
                 $('.submit-btn').attr('disabled', true);

@@ -6,7 +6,7 @@
             'title' => 'Febrication',
             'icon' => '',
             'sub_title' => [
-                'Selling Chart ' => '',
+                'Manage Selling Chart' => '',
                 'Febrication' => route('admin.selling_chart.fabrication.index'),
             ],
         ])
@@ -21,12 +21,12 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-12">
-                        <div class="filter_close_sec">
+                        <div class="filter_close_sec border-bottom">
                             <h4 class="mb-0"><i class="bi bi-sliders"></i>Filter</h4>
                         </div>
                     </div>
 
-                    <div class="col-12 col-md-2">
+                    <div class="col-12 col-md-3">
                         <div class="form-group mb-3 mb-md-0 new_select_field new_same_item d-flex flex-wrap">
                             <input type="text" name="name" id="name" class="form-control" placeholder="Search by name" value="{{request('name')}}" />
                         </div>
@@ -38,10 +38,10 @@
                             <option value="0" {{ request('status') === "0" ? 'selected' : '' }}>Inactive</option>
                         </select>
                     </div>
-                    <div class="col-12 col-md-8 text-end">
+                    <div class="col-12 col-md-7 text-end">
                         <div class="flex-center">
                             <a href="{{ route('admin.selling_chart.fabrication.index') }}"
-                                class="btn btn-outline-secondary flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
+                                class="btn btn-outline-danger flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
                             <button type="submit" class="btn btn-primary mx-1"><i class="fa fa-filter ms-0"
                                     aria-hidden="true"></i>
                                 Search</button>

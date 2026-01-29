@@ -29,7 +29,7 @@
                             <p>Product Category: <span>{{ $chartInfo->category_name }}</span></p>
                             <p>Mini Category: <span>{{ $chartInfo->mini_category_name }}</span></p>
                             <p>Product Code: <span>{{ $chartInfo->product_code }}</span></p>
-                            <p>Ecom Sku: <span>{{ $skus->sku ?? '' }}</span></p>
+                            <p>Ecom Sku: <span>{{ $skus['sku'] ?? '' }}</span></p>
                             <p>Design No: <span>{{ $chartInfo->design_no }}</span></p>
                             <p>Febrication: <span>{{ $chartInfo->fabrication }}</span></p>
                         </div>
