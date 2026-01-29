@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FabricationController;
 use App\Http\Controllers\PlatformController;
+use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SalesChartController;
 use App\Http\Controllers\SellingChartExpenseController;
 use Illuminate\Support\Facades\Auth;
@@ -22,6 +23,7 @@ Route::prefix('admin')->name('admin.')->controller(AuthController::class)->group
 
 Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::resource('roles', RoleController::class);
     Route::resource('platforms', PlatformController::class);
 
     Route::controller(SalesChartController::class)->group(function () {
