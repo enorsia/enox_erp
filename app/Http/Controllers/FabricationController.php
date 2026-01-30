@@ -6,6 +6,7 @@ use App\ApiServices\FabricationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Gate;
 
 class FabricationController extends Controller
 {
@@ -15,6 +16,7 @@ class FabricationController extends Controller
 
     public function index(Request $request)
     {
+         Gate::authorize('general.fabrication.index');
         $data = [
             'lookup_names' => collect(),
             'start' => 0,
@@ -56,6 +58,7 @@ class FabricationController extends Controller
 
     public function create()
     {
+        Gate::authorize('general.fabrication.create');
         return view('selling_chart.fabrication.create');
     }
 

@@ -59,39 +59,46 @@
                                         <td class="text-nowrap text-left"
                                             @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
 
-
-                                            <a class="btn btn-light btn-sm" href="javascript:void(0)"
-                                                onclick="viewChart({{ $chartInfo->id }})">
-                                                <iconify-icon icon="solar:eye-broken"
-                                                    class="align-middle fs-18"></iconify-icon>
-                                            </a>
-                                            @if ($chartInfo->status == 0)
-                                                <a class="btn btn-soft-primary btn-sm mx-1" title="Edit"
-                                                    href="{{ route('admin.selling_chart.edit', $chartInfo->id) }}">
-                                                    <iconify-icon icon="solar:pen-2-broken"
-                                                        class="fs-18"></iconify-icon>
+                                            @can('general.chart.show')
+                                                <a class="btn btn-light btn-sm" href="javascript:void(0)"
+                                                    onclick="viewChart({{ $chartInfo->id }})">
+                                                    <iconify-icon icon="solar:eye-broken"
+                                                        class="align-middle fs-18"></iconify-icon>
                                                 </a>
-                                                <button type="button" onclick="deleteData({{ $chartInfo->id }})"
-                                                    class="btn btn-soft-danger btn-sm delete-btn mx-1">
-                                                    <iconify-icon icon="solar:trash-bin-minimalistic-2-broken"
-                                                        class="fs-18 delete-icon"></iconify-icon>
-                                                </button>
+                                            @endcan
+                                            @if ($chartInfo->status == 0)
+                                                @can('general.chart.edit')
+                                                    <a class="btn btn-soft-primary btn-sm mx-1" title="Edit"
+                                                        href="{{ route('admin.selling_chart.edit', $chartInfo->id) }}">
+                                                        <iconify-icon icon="solar:pen-2-broken"
+                                                            class="fs-18"></iconify-icon>
+                                                    </a>
+                                                @endcan
+                                                @can('general.chart.delete')
+                                                    <button type="button" onclick="deleteData({{ $chartInfo->id }})"
+                                                        class="btn btn-soft-danger btn-sm delete-btn mx-1">
+                                                        <iconify-icon icon="solar:trash-bin-minimalistic-2-broken"
+                                                            class="fs-18 delete-icon"></iconify-icon>
+                                                    </button>
 
-                                                <form id="delete-form-{{ $chartInfo->id }}" method="POST"
-                                                    action="{{ route('admin.selling_chart.destroy', $chartInfo->id) }}"
-                                                    style="display: none;">
-                                                    @csrf
-                                                    @method('DELETE')
-                                                </form>
+                                                    <form id="delete-form-{{ $chartInfo->id }}" method="POST"
+                                                        action="{{ route('admin.selling_chart.destroy', $chartInfo->id) }}"
+                                                        style="display: none;">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                    </form>
+                                                @endcan
                                             @endif
                                         </td>
 
                                         <td class="text-nowrap"
                                             @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
                                             @if ($chartInfo->status == 1)
-                                                <span class="badge bg-success-subtle text-success py-1 px-2">Approved</span>
+                                                <span
+                                                    class="badge bg-success-subtle text-success py-1 px-2">Approved</span>
                                             @elseif($chartInfo->status == 2)
-                                                <span class="badge bg-danger-subtle text-danger px-2 py-1">Rejected</span>
+                                                <span
+                                                    class="badge bg-danger-subtle text-danger px-2 py-1">Rejected</span>
                                             @else
                                                 <span class="badge bg-primary-subtle text-primary py-1 px-2">Not
                                                     Approved</span>

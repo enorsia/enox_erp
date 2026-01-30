@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SellingChartExpense;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -12,6 +13,7 @@ class SellingChartExpenseController extends Controller
 {
     public function index(Request $request)
     {
+        Gate::authorize('general.expense.index');
         $year = $request->input('year');
         $query = SellingChartExpense::query();
 
@@ -27,6 +29,7 @@ class SellingChartExpenseController extends Controller
 
     public function create()
     {
+        Gate::authorize('general.expense.create');
         return view('selling_chart.expense.create');
     }
 
@@ -73,6 +76,7 @@ class SellingChartExpenseController extends Controller
 
     public function edit(int | string $id)
     {
+        Gate::authorize('general.expense.edit');
         Session::put('backUrl', url()->previous());
         $expense = SellingChartExpense::findOrFail($id);
         return view('selling_chart.expense.edit', compact('expense'));
@@ -125,6 +129,7 @@ class SellingChartExpenseController extends Controller
 
     public function destroy(int | string $id): RedirectResponse
     {
+        Gate::authorize('general.expense.delete');
         try {
             SellingChartExpense::findOrFail($id)->delete();
             notify()->success("Expense deleted successfully.", "Success");

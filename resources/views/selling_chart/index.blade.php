@@ -102,12 +102,12 @@
         }
 
         /* .last_col p:nth-child(3), .last_col p:nth-child(4){
-                                                                    width: 175px;
-                                                                } */
+                                                                            width: 175px;
+                                                                        } */
         /* .selling_chart_view_p p span{
 
-                                                                    width: 100px;
-                                                                }*/
+                                                                            width: 100px;
+                                                                        }*/
         .selling_chart_view_p p span {
             margin-top: 7px;
             width: 95%;
@@ -214,13 +214,16 @@
             ],
         ])
         <div class="text-end">
-            <a href="{{ route('admin.selling_chart.upload.sheet') }}" class="btn btn-info rounded-pill me-2">
-                <i class="bi bi-upload me-2"></i> Import Excel</span>
-            </a>
-
-            <a href="{{ route('admin.selling_chart.create') }}" class="btn btn-outline-secondary rounded-pill px-3">
-                Create <span><i class="bi bi-plus-lg me-0"></i></span>
-            </a>
+            @can('general.chart.import')
+                <a href="{{ route('admin.selling_chart.upload.sheet') }}" class="btn btn-info rounded-pill me-2">
+                    <i class="bi bi-upload me-2"></i> Import Excel</span>
+                </a>
+            @endcan
+            @can('general.chart.create')
+                <a href="{{ route('admin.selling_chart.create') }}" class="btn btn-outline-secondary rounded-pill px-3">
+                    Create <span><i class="bi bi-plus-lg me-0"></i></span>
+                </a>
+            @endcan
         </div>
     </div>
 
@@ -229,8 +232,8 @@
     <div class="platform-divider">
         <div class="divider-content">
             <div class="divider-line"></div>
-            <button title="Show Count" class="btn border" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCards"
-                aria-expanded="false" aria-controls="collapseCards">
+            <button title="Show Count" class="btn border" type="button" data-bs-toggle="collapse"
+                data-bs-target="#collapseCards" aria-expanded="false" aria-controls="collapseCards">
                 <iconify-icon icon="solar:double-alt-arrow-down-linear" class="fs-18"></iconify-icon>
             </button>
             <div class="divider-line"></div>

@@ -2,33 +2,36 @@
 
 @section('content')
     <div class="top_title">
-       @include('master.breadcrumb', [
+        @include('master.breadcrumb', [
             'title' => 'Roles',
         ])
-        <div>
-            <a href="{{ route('admin.roles.create') }}" class="btn btn-outline-secondary">
-                Create <span><i class="bi bi-plus-lg me-0"></i></span>
-            </a>
-        </div>
+        @can('authentication.roles.create')
+            <div>
+                <a href="{{ route('admin.roles.create') }}" class="btn btn-outline-secondary">
+                    Create <span><i class="bi bi-plus-lg me-0"></i></span>
+                </a>
+            </div>
+        @endcan
     </div>
     <form method="GET" action="{{ route('admin.roles.index') }}">
         <div class="card" id="filterSection">
             <div class="card-body">
                 <div class="row">
                     <div class="col-12">
-                        <div class="filter_close_sec">
+                        <div class="filter_close_sec border-bottom">
                             <h4 class="mb-0"><i class="bi bi-sliders"></i>Filter</h4>
                         </div>
                     </div>
                     <div class="col-12 col-md-4">
                         <div class="form-group mb-3 mb-md-0 new_select_field new_same_item d-flex flex-wrap">
-                            <input type="text" name="search" id="search" class="form-control" placeholder="Search" value="{{request('search')}}" />
+                            <input type="text" name="search" id="search" class="form-control" placeholder="Search"
+                                value="{{ request('search') }}" />
                         </div>
                     </div>
-                    <div class="col-12 col-md-8 text-end">
+                    <div class="col-12 col-md-8 text-end mt-2 mt-md-0">
                         <div class="flex-center">
-                            <a href="{{ route('admin.roles.index') }}"
-                                class="btn btn-outline-secondary flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
+                            <a href="{{ route('admin.roles.index') }}" class="btn btn-outline-danger flex-center mx-1"><i
+                                    class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
                             <button type="submit" class="btn btn-primary mx-1"><i class="fa fa-filter ms-0"
                                     aria-hidden="true"></i>
                                 Search</button>
@@ -39,7 +42,7 @@
         </div>
     </form>
     <div class="card shadow-sm mt-3" style="overflow: hidden;">
-        <div class="card-body p-0">
+        <div class="card-body px-0 pt-0">
             <div class="table-responsive">
                 <table class="table align-middle mb-0 table-hover table-centered">
                     <thead class="bg-light-subtle">
@@ -54,7 +57,6 @@
                             @foreach ($roles as $role)
                                 <tr>
                                     <td class="fw-semibold text-dark">{{ ucfirst($role->name) }}</td>
-
                                     <td>
                                         @php
                                             $countNested = $role->permissions->groupBy(function ($perm) {
@@ -81,14 +83,14 @@
 
                                     <td class="text-center">
                                         <div class="d-flex gap-2 justify-content-center">
-                                            @can('authentication.role.show')
-                                                 <a href="{{ route('admin.roles.show', $role->id) }}?page={{ request('page') }}"
+                                            @can('authentication.roles.show')
+                                                <a href="{{ route('admin.roles.show', $role->id) }}?page={{ request('page') }}"
                                                     class="btn btn-soft-info btn-sm" title="View">
                                                     <iconify-icon icon="solar:eye-bold" class="fs-18"></iconify-icon>
                                                 </a>
                                             @endcan
 
-                                            @can('authentication.role.edit')
+                                            @can('authentication.roles.edit')
                                                 <a href="{{ route('admin.roles.edit', $role->id) }}?page={{ request('page') }}"
                                                     class="btn btn-soft-primary btn-sm" title="Edit">
                                                     <iconify-icon icon="solar:pen-2-broken"
@@ -96,7 +98,7 @@
                                                 </a>
                                             @endcan
 
-                                            @can('authentication.role.delete')
+                                            @can('authentication.roles.delete')
                                                 <button type="button" class="btn btn-soft-danger btn-sm delete-btn"
                                                     data-role-id="{{ $role->id }}" title="Delete">
                                                     <iconify-icon icon="solar:trash-bin-minimalistic-2-broken"
@@ -136,7 +138,7 @@
 
 @push('js')
     <script>
-         $(function() {
+        $(function() {
             $('.delete-btn').on('click', function(e) {
                 e.preventDefault();
 

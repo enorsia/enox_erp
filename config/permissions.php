@@ -7,67 +7,46 @@ return [
 
     // Permission map
     'map' => [
-        // USERS MODULE
-        'users' => [
-            'customers' => [
-                'guard' => 'web',
-                'actions' => ['index', 'show', 'status'],
-            ]
-        ],
-        // INVENTORY MODULE
-        'inventory' => [
-            'attribute' => [
-                'guard' => 'web',
-                'actions' => ['index', 'create', 'edit', 'show', 'delete', 'status'],
-            ],
-            'category' => [
-                'guard' => 'web',
-                'actions' => ['index', 'create', 'edit', 'show', 'delete', 'status'],
-            ],
-            'product' => [
-                'guard' => 'web',
-                'actions' => ['index', 'create', 'edit', 'show', 'delete', 'export', 'status'],
-            ],
-            'inventory' => [
-                'guard' => 'web',
-                'actions' => ['index', 'edit', 'export'],
-            ],
-        ],
 
         // AUTHENTICATION MODULE
         'authentication' => [
-            'web' => [
+            'users' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'status'],
+            ],
+            'roles' => [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'show', 'delete'],
-            ],
-            'role' => [
-                'guard' => 'web',
-                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
-            ],
+            ]
 
         ],
 
-        // ORDER MODULE
-        'order' => [
-            'order' => [
+        // GENERAL MODULE
+        'general' => [
+            'dashboard' => [
                 'guard' => 'web',
-                'actions' => ['index', 'show', 'edit', 'status', 'payment', 'case'],
+                'actions' => ['index'],
+            ],
+            'chart' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'delete', 'approve', 'import', 'bulk_edit', 'export'],
+            ],
+            'fabrication' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create'],
+            ],
+            'expense' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'delete'],
             ],
         ],
-        // SUPPORT MODULE
-        'support' => [
-            'notification' => [
+
+        // SETTINGS MODULE
+        'settings' => [
+            'platforms' => [
                 'guard' => 'web',
-                'actions' => ['index', 'show', 'delete', 'update'],
-            ],
-            'messages' => [
-                'guard' => 'web',
-                'actions' => ['index'],
-            ],
-            'order_messages' => [
-                'guard' => 'web',
-                'actions' => ['index'],
-            ],
+                'actions' => ['index', 'create', 'edit', 'delete'],
+            ]
         ],
 
     ],

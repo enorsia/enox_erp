@@ -16,6 +16,7 @@ use Exception;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
@@ -26,11 +27,13 @@ class SalesChartController extends Controller
 {
 
     public function __construct(
-        protected SellingChartApiService $sellingChartApiService, protected FabricationService $fabricationService
+        protected SellingChartApiService $sellingChartApiService,
+        protected FabricationService $fabricationService
     ) {}
 
     public function index(Request $request)
     {
+        Gate::authorize('general.chart.index');
 
         $action = $request->input('action');
 
@@ -133,6 +136,7 @@ class SalesChartController extends Controller
 
     public function approve(Request $request, int | string $id)
     {
+        Gate::authorize('general.chart.approve');
         try {
             if (empty($request->action_type)) {
                 notify()->error("Action is not selected", "Error");
@@ -158,6 +162,7 @@ class SalesChartController extends Controller
 
     public function exportReport(Request $request)
     {
+        Gate::authorize('general.chart.export');
         $chartInfos = SellingChartBasicInfo::filter($request)
             ->with(['sellingChartPrices'])
             ->get();
@@ -166,6 +171,7 @@ class SalesChartController extends Controller
 
     public function import(Request $request)
     {
+        Gate::authorize('general.chart.import');
 
         $request->validate([
             'sheet' => 'required|mimes:xlsx,csv,xls',
@@ -193,6 +199,7 @@ class SalesChartController extends Controller
 
     public function create()
     {
+        Gate::authorize('general.chart.create');
         $data = $this->sellingChartApiService->getCommonData();
         $data['expenses'] = SellingChartExpense::where('status', 1)->get();
         return view('selling_chart.create', $data);
@@ -200,6 +207,7 @@ class SalesChartController extends Controller
 
     public function uploadSheet()
     {
+        Gate::authorize('general.chart.import');
         return view('selling_chart.import');
     }
 
@@ -483,7 +491,7 @@ class SalesChartController extends Controller
 
     public function edit(string | int $id)
     {
-
+        Gate::authorize('general.chart.edit');
         $data = $this->sellingChartApiService->getCommonData();
         $data['chartInfo'] = SellingChartBasicInfo::withCount('sellingChartPrices')->findOrFail($id);
         // $data['sizes'] = $this->getSizes($data['chartInfo']->department_id);
@@ -648,7 +656,7 @@ class SalesChartController extends Controller
 
     public function destroy(string | int $id)
     {
-
+        Gate::authorize('general.chart.delete');
         try {
             DB::beginTransaction();
             $basic_info = SellingChartBasicInfo::with('sellingChartPrices')->find($id);
@@ -702,6 +710,7 @@ class SalesChartController extends Controller
 
     public function bulkEdit(Request $request): RedirectResponse|View
     {
+        Gate::authorize('general.chart.bulk_edit');
         if (!$request->department_id) {
             notify()->error("Please select department.", "Error");
             return redirect()->back();

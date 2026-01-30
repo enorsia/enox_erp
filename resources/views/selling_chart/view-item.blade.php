@@ -3,7 +3,7 @@
     <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down" role="document"
         style="max-width: 1400px;">
         <div class="modal-content">
-             <div class="modal-header">
+            <div class="modal-header">
                 <h5 class="modal-title fs-18" id="exampleModalLabel">DETAILS</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -106,26 +106,28 @@
                                     </thead>
                                 </table>
                             </div>
-                            @if ($chartInfo->status == 0 || $chartInfo->status == 2)
-                                <button type="button" onclick="approveData({{ $chartInfo->id }})"
-                                    class="btn btn-primary mx-2 btn-sm float-end" title="Approve">
-                                    <i class="bi bi-check"></i>
-                                    <span>Approve</span>
-                                </button>
-                                @if ($chartInfo->status != 2)
-                                    <button type="button" onclick='approveData("{{ $chartInfo->id }}", "reject")'
-                                        class="btn btn-danger btn-sm float-end mr-2" title="Reject">
-                                        <i class="bi bi-trash"></i>
-                                        <span>Reject</span>
+                            @can('general.chart.approve')
+                                @if ($chartInfo->status == 0 || $chartInfo->status == 2)
+                                    <button type="button" onclick="approveData({{ $chartInfo->id }})"
+                                        class="btn btn-primary mx-2 btn-sm float-end" title="Approve">
+                                        <i class="bi bi-check"></i>
+                                        <span>Approve</span>
                                     </button>
+                                    @if ($chartInfo->status != 2)
+                                        <button type="button" onclick='approveData("{{ $chartInfo->id }}", "reject")'
+                                            class="btn btn-danger btn-sm float-end mr-2" title="Reject">
+                                            <i class="bi bi-trash"></i>
+                                            <span>Reject</span>
+                                        </button>
+                                    @endif
+                                    <form id="approve-form-{{ $chartInfo->id }}" method="POST"
+                                        action="{{ route('admin.selling_chart.approve', $chartInfo->id) }}"
+                                        style="display: none;">
+                                        @csrf
+                                        <input type="hidden" name="user_id" value="{{ auth()->id() }}">
+                                    </form>
                                 @endif
-                                <form id="approve-form-{{ $chartInfo->id }}" method="POST"
-                                    action="{{ route('admin.selling_chart.approve', $chartInfo->id) }}"
-                                    style="display: none;">
-                                    @csrf
-                                    <input type="hidden" name="user_id" value="{{ auth()->id() }}">
-                                </form>
-                            @endif
+                            @endcan
                         </div>
 
                     </div>

@@ -10,11 +10,13 @@
                 'Selling Chart Expense' => route('admin.selling_chart.expense.index'),
             ],
         ])
-        <div>
-            <a href="{{ route('admin.selling_chart.expense.create') }}" class="btn btn-outline-secondary">
-                Create <span><i class="bi bi-plus-lg me-0"></i></span>
-            </a>
-        </div>
+        @can('general.expense.create')
+            <div>
+                <a href="{{ route('admin.selling_chart.expense.create') }}" class="btn btn-outline-secondary">
+                    Create <span><i class="bi bi-plus-lg me-0"></i></span>
+                </a>
+            </div>
+        @endcan
     </div>
     <form method="GET" action="{{ route('admin.selling_chart.expense.index') }}">
         <div class="card" id="filterSection">
@@ -39,7 +41,8 @@
                     <div class="col-12 col-md-8 text-end mt-2 mt-md-0">
                         <div class="flex-center">
                             <a href="{{ route('admin.selling_chart.expense.index') }}"
-                                class="btn btn-outline-danger flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
+                                class="btn btn-outline-danger flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i>
+                                Reset</a>
                             <button type="submit" class="btn btn-primary mx-1"><i class="fa fa-filter ms-0"
                                     aria-hidden="true"></i>
                                 Search</button>
@@ -70,7 +73,7 @@
                         @if (!$expenses->isEmpty())
                             @foreach ($expenses as $data)
                                 <tr>
-                                    <td >{{ $start + $loop->index }}</td>
+                                    <td>{{ $start + $loop->index }}</td>
                                     <td>{{ $data->year }}</td>
                                     <td>£ {{ $data->conversion_rate }}</td>
                                     <td>£ {{ $data->commercial_expense }}</td>
@@ -86,22 +89,25 @@
                                     </td>
                                     <td>
                                         <div class="d-inline-flex text-center text-md-start text-nowrap">
-                                            <a class="btn btn-soft-primary btn-sm mx-1" title="Edit"
-                                                href="{{ route('admin.selling_chart.expense.edit', $data->id) }}">
-                                                <iconify-icon icon="solar:pen-2-broken" class="fs-18"></iconify-icon>
-                                            </a>
-
-                                            <button class="btn btn-soft-danger btn-sm delete-btn mx-1" type="button"
-                                                onclick="deleteData({{ $data->id }})" data-id="{{ $data->id }}">
-                                                <iconify-icon icon="solar:trash-bin-minimalistic-2-broken"
-                                                    class="fs-18 delete-icon"></iconify-icon>
-                                            </button>
-                                            <form id="delete-form-{{ $data->id }}" method="POST"
-                                                action="{{ route('admin.selling_chart.expense.destroy', $data->id) }}"
-                                                style="display: none;">
-                                                @csrf
-                                                @method('DELETE')
-                                            </form>
+                                            @can('general.expense.edit')
+                                                <a class="btn btn-soft-primary btn-sm mx-1" title="Edit"
+                                                    href="{{ route('admin.selling_chart.expense.edit', $data->id) }}">
+                                                    <iconify-icon icon="solar:pen-2-broken" class="fs-18"></iconify-icon>
+                                                </a>
+                                            @endcan
+                                            @can('general.expense.delete')
+                                                <button class="btn btn-soft-danger btn-sm delete-btn mx-1" type="button"
+                                                    onclick="deleteData({{ $data->id }})" data-id="{{ $data->id }}">
+                                                    <iconify-icon icon="solar:trash-bin-minimalistic-2-broken"
+                                                        class="fs-18 delete-icon"></iconify-icon>
+                                                </button>
+                                                <form id="delete-form-{{ $data->id }}" method="POST"
+                                                    action="{{ route('admin.selling_chart.expense.destroy', $data->id) }}"
+                                                    style="display: none;">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                </form>
+                                            @endcan
                                         </div>
                                     </td>
                                 </tr>

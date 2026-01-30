@@ -2,7 +2,7 @@
 
 @section('content')
     <div class="top_title">
-       @include('master.breadcrumb', [
+        @include('master.breadcrumb', [
             'title' => 'Febrication',
             'icon' => '',
             'sub_title' => [
@@ -10,11 +10,13 @@
                 'Febrication' => route('admin.selling_chart.fabrication.index'),
             ],
         ])
-        <div>
-            <a href="{{ route('admin.selling_chart.fabrication.create') }}" class="btn btn-outline-secondary">
-                Create <span><i class="bi bi-plus-lg me-0"></i></span>
-            </a>
-        </div>
+        @can('general.fabrication.create')
+            <div>
+                <a href="{{ route('admin.selling_chart.fabrication.create') }}" class="btn btn-outline-secondary">
+                    Create <span><i class="bi bi-plus-lg me-0"></i></span>
+                </a>
+            </div>
+        @endcan
     </div>
     <form method="GET" action="{{ route('admin.selling_chart.fabrication.index') }}">
         <div class="card" id="filterSection">
@@ -28,20 +30,22 @@
 
                     <div class="col-12 col-md-3">
                         <div class="form-group mb-3 mb-md-0 new_select_field new_same_item d-flex flex-wrap">
-                            <input type="text" name="name" id="name" class="form-control" placeholder="Search by name" value="{{request('name')}}" />
+                            <input type="text" name="name" id="name" class="form-control"
+                                placeholder="Search by name" value="{{ request('name') }}" />
                         </div>
                     </div>
                     <div class="col-12 col-md-2">
                         <select name="status" class="form-select" data-choices>
                             <option value="">Status</option>
-                            <option value="1" {{ request('status') === "1" ? 'selected' : '' }}>Active</option>
-                            <option value="0" {{ request('status') === "0" ? 'selected' : '' }}>Inactive</option>
+                            <option value="1" {{ request('status') === '1' ? 'selected' : '' }}>Active</option>
+                            <option value="0" {{ request('status') === '0' ? 'selected' : '' }}>Inactive</option>
                         </select>
                     </div>
                     <div class="col-12 col-md-7 text-end mt-2 mt-md-0">
                         <div class="flex-center">
                             <a href="{{ route('admin.selling_chart.fabrication.index') }}"
-                                class="btn btn-outline-danger flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i> Reset</a>
+                                class="btn btn-outline-danger flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i>
+                                Reset</a>
                             <button type="submit" class="btn btn-primary mx-1"><i class="fa fa-filter ms-0"
                                     aria-hidden="true"></i>
                                 Search</button>

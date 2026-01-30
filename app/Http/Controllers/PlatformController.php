@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Platform;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 
 class PlatformController extends Controller
@@ -13,6 +14,7 @@ class PlatformController extends Controller
      */
     public function index(Request $request)
     {
+        Gate::authorize('settings.platforms.index');
         $q = $request->q;
         $data['platforms'] = Platform::query()
             ->when($q, function ($query) use ($q) {
@@ -30,6 +32,7 @@ class PlatformController extends Controller
      */
     public function create()
     {
+        Gate::authorize('settings.platforms.create');
         return view('platforms.create');
     }
 
@@ -64,6 +67,7 @@ class PlatformController extends Controller
      */
     public function show(Platform $platform)
     {
+        Gate::authorize('settings.platforms.index');
         return view('platforms.show', compact('platform'));
     }
 
@@ -72,6 +76,7 @@ class PlatformController extends Controller
      */
     public function edit(Platform $platform)
     {
+        Gate::authorize('settings.platforms.edit');
         return view('platforms.edit', compact('platform'));
     }
 
@@ -102,6 +107,7 @@ class PlatformController extends Controller
      */
     public function destroy(Platform $platform)
     {
+        Gate::authorize('settings.platforms.delete');
         try {
             $platform->delete();
             notify()->success('Expense deleted successfully', 'Success');

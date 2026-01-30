@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -17,6 +18,7 @@ class RoleController extends Controller
      */
     public function index(Request $request)
     {
+        Gate::authorize('authentication.roles.index');
         $roles = Role::select('id', 'name')
             ->with([
                 'permissions:id,name',
@@ -33,6 +35,7 @@ class RoleController extends Controller
      */
     public function create()
     {
+        Gate::authorize('authentication.roles.create');
         $permissions = Permission::all();
 
         $nested = [];
@@ -99,6 +102,7 @@ class RoleController extends Controller
      */
     public function show(string $id)
     {
+        Gate::authorize('authentication.roles.show');
         $role = Role::with('permissions')->findOrFail($id);
 
         $permissions = $role->permissions;
@@ -131,6 +135,7 @@ class RoleController extends Controller
      */
     public function edit(Role $role)
     {
+        Gate::authorize('authentication.roles.edit');
         $rolePermissions = $role->permissions->pluck('id')->toArray();
 
         $permissions = Permission::all();
@@ -198,6 +203,7 @@ class RoleController extends Controller
      */
     public function destroy(Role $role)
     {
+        Gate::authorize('authentication.roles.delete');
         $page = request('page');
         try {
             $role->delete();
