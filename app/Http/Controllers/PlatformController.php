@@ -23,6 +23,7 @@ class PlatformController extends Controller
             ->latest()
             ->paginate($this->perPage)
             ->withQueryString();
+
         $data['start'] = ($data['platforms']->currentPage() - 1) * $data['platforms']->perPage() + 1;
         return view('platforms.index', $data);
     }
@@ -44,22 +45,25 @@ class PlatformController extends Controller
         $validated = $request->validate([
             'platform_name' => 'required|string|max:255|unique:platforms,name',
             'shipping_charge' => 'nullable|numeric|min:0',
+            'min_profit' => 'required|numeric',
+            'code' => 'required|string|max:255|unique:platforms,code',
             'note' => 'nullable|string',
         ]);
-        try{
+        try {
             Platform::create([
                 'name' => $validated['platform_name'],
+                'code' => $validated['code'],
                 'shipping_charge' => $validated['shipping_charge'] ?? 0,
+                'min_profit' => $validated['min_profit'],
                 'note' => $validated['note'],
             ]);
-            notify()->success('Expense created successfully', 'Success');
+            notify()->success('Platform created successfully', 'Success');
             return redirect()->route('admin.platforms.index');
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             Log::error($e->getMessage());
             notify()->error('Something went wrong', 'Error');
             return back();
         }
-
     }
 
     /**
@@ -86,16 +90,16 @@ class PlatformController extends Controller
     public function update(Request $request, Platform $platform)
     {
         $validated = $request->validate([
-            'platform_name' => 'required|string|max:255|unique:platforms,name,' . $platform->id,
             'shipping_charge' => 'nullable|numeric|min:0',
+            'min_profit' => 'required|numeric',
             'note' => 'nullable|string',
         ]);
 
-        try{
+        try {
             $platform->update($validated);
             notify()->success('Platform updated successfully', 'Success');
             return redirect()->route('admin.platforms.index');
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             Log::error($e->getMessage());
             notify()->error('Something went wrong', 'Error');
             return back();
@@ -110,10 +114,9 @@ class PlatformController extends Controller
         Gate::authorize('settings.platforms.delete');
         try {
             $platform->delete();
-            notify()->success('Expense deleted successfully', 'Success');
+            notify()->success('Platform deleted successfully', 'Success');
             return redirect()->back();
-
-        }catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error($e->getMessage());
             notify()->error($e->getMessage(), 'Error');
             return back();

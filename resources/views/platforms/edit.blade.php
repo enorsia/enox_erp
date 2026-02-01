@@ -20,12 +20,10 @@
                         @csrf
 
                         <div class="position-relative form-group mb-2 new_search row">
-                            <label for="platform_name" class="col-12 col-md-4 col-lg-3">Platform Name <sup
-                                    class="text-warning">
-                                    (unique & required)</sup></label>
+                            <label for="platform_name" class="col-12 col-md-4 col-lg-3">Platform name</label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <input type="text" name="platform_name" id="platform_name" class="form-control @error('platform_name') is-invalid @enderror"
-                                    value="{{ old('platform_name', $platform->name) }}" required>
+                                    value="{{ old('platform_name', $platform->name) }}" disabled>
 
                                 @error('platform_name')
                                     <span class="text-danger" role="alert">
@@ -35,12 +33,27 @@
                             </div>
                         </div>
                         <div class="position-relative form-group mb-2 new_search row">
-                            <label for="shipping_charge" class="col-12 col-md-4 col-lg-3">Shipping Charge </label>
+                            <label for="shipping_charge" class="col-12 col-md-4 col-lg-3">Shipping charge </label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <input type="number" name="shipping_charge" id="shipping_charge" class="form-control @error('shipping_charge') is-invalid @enderror"
                                     value="{{ old('shipping_charge', $platform->shipping_charge) }}">
 
                                 @error('shipping_charge')
+                                    <span class="text-danger" role="alert">
+                                        <strong>{{ $message }}</strong>
+                                    </span>
+                                @enderror
+                            </div>
+                        </div>
+                        <div class="position-relative form-group mb-2 new_search row">
+                            <label for="min_profit" class="col-12 col-md-4 col-lg-3">Min profit <sup
+                                    class="text-warning">
+                                    (required)</sup></label>
+                            <div class="col-12 col-md-8 col-lg-9">
+                                <input type="number" name="min_profit" id="min_profit" class="form-control @error('min_profit') is-invalid @enderror"
+                                    value="{{ old('min_profit', $platform->min_profit) }}" required>
+
+                                @error('min_profit')
                                     <span class="text-danger" role="alert">
                                         <strong>{{ $message }}</strong>
                                     </span>

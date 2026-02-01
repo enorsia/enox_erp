@@ -9,13 +9,13 @@
                 'Enox ERP Platforms' => '',
             ],
         ])
-        @can('settings.platforms.create')
+        {{-- @can('settings.platforms.create')
             <div>
                 <a href="{{ route('admin.platforms.create') }}" class="btn btn-outline-secondary">
                     Create <span><i class="bi bi-plus-lg me-0"></i></span>
                 </a>
             </div>
-        @endcan
+        @endcan --}}
     </div>
     <form method="GET" action="{{ route('admin.platforms.index') }}">
         <div class="card" id="filterSection">
@@ -54,6 +54,7 @@
                         <tr>
                             <th width="10">#SL</th>
                             <th width="15">Platform</th>
+                            <th width="6">Min Profit</th>
                             <th width="6">Shipping</th>
                             <th width="150">Create / Update</th>
                             <th width="300">Note</th>
@@ -66,6 +67,7 @@
                                 <tr>
                                     <td>{{ $start + $loop->index }}</td>
                                     <td>{{ $data->name }}</td>
+                                    <td>@price($data->min_profit)</td>
                                     <td>@price($data->shipping_charge)</td>
                                     <td>
                                         CA: {{ $data->created_at }} <br />

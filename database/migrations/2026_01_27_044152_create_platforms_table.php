@@ -14,8 +14,10 @@ return new class extends Migration
         Schema::create('platforms', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->string('code')->unique();
             $table->decimal('shipping_charge', 10, 2)->default(0);
             $table->text('note')->nullable();
+            $table->decimal('min_profit', 10, 2)->default(0);
             $table->timestamps();
         });
     }

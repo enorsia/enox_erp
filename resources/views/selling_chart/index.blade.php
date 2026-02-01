@@ -100,14 +100,6 @@
             justify-content: flex-start;
             align-items: center;
         }
-
-        /* .last_col p:nth-child(3), .last_col p:nth-child(4){
-                                                                            width: 175px;
-                                                                        } */
-        /* .selling_chart_view_p p span{
-
-                                                                            width: 100px;
-                                                                        }*/
         .selling_chart_view_p p span {
             margin-top: 7px;
             width: 95%;

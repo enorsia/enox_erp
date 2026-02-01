@@ -23,9 +23,19 @@
             @canany(Cache::get('permissions.available')['prefix']['authentication_'])
                 <li class="menu-title">Authentication</li>
             @endcanany
+            @can('authentication.users.index')
+                <li class="nav-item {{ Request::is('admin/users/*') ? 'active' : '' }}">
+                    <a class="nav-link {{ Request::is('admin/users/*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
+                        <span class="nav-icon">
+                            <iconify-icon icon="solar:user-circle-broken"></iconify-icon>
+                        </span>
+                        <span class="nav-text"> Users </span>
+                    </a>
+                </li>
+            @endcan
             @can('authentication.roles.index')
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ route('admin.roles.index') }}">
+                <li class="nav-item {{ Request::is('admin/roles/*') ? 'active' : '' }}">
+                    <a class="nav-link {{ Request::is('admin/roles/*') ? 'active' : '' }}" href="{{ route('admin.roles.index') }}">
                         <span class="nav-icon">
                             <iconify-icon icon="solar:shield-user-broken"></iconify-icon>
                         </span>
@@ -54,17 +64,7 @@
                 ...array_keys(Cache::get('permissions.available')['grouped']['general_expense'])])
 
                 <li class="nav-item">
-                    <a class="nav-link menu-arrow {{ request()->routeIs(
-                        'admin.selling_chart.index',
-                        'admin.selling_chart.create',
-                        'admin.selling_chart.edit',
-                        'admin.selling_chart.upload.sheet',
-                        'admin.selling_chart.fabrication.index',
-                        'admin.selling_chart.fabrication.create',
-                        'admin.selling_chart.expense.index',
-                        'admin.selling_chart.expense.create',
-                        'admin.selling_chart.expense.edit',
-                    )
+                    <a class="nav-link menu-arrow {{ Request::is('admin/selling-chart/*')
                         ? 'active'
                         : '' }}"
                         href="#sidebarSellingChart" data-bs-toggle="collapse" role="button" aria-expanded="false"
@@ -74,41 +74,31 @@
                         </span>
                         <span class="nav-text">Selling Chart </span>
                     </a>
-                    <div class="collapse {{ request()->routeIs(
-                        'admin.selling_chart.index',
-                        'admin.selling_chart.create',
-                        'admin.selling_chart.edit',
-                        'admin.selling_chart.upload.sheet',
-                        'admin.selling_chart.fabrication.index',
-                        'admin.selling_chart.fabrication.create',
-                        'admin.selling_chart.expense.index',
-                        'admin.selling_chart.expense.create',
-                        'admin.selling_chart.expense.edit',
-                    )
+                    <div class="collapse {{ Request::is('admin/selling-chart/*')
                         ? 'show'
                         : '' }}"
                         id="sidebarSellingChart">
                         <ul class="nav sub-navbar-nav">
                             @can('general.chart.index')
                                 <li
-                                    class="sub-nav-item {{ request()->routeIs('admin.selling_chart.index', 'admin.selling_chart.create', 'admin.selling_chart.edit', 'admin.selling_chart.upload.sheet') ? 'active' : '' }}">
-                                    <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.index', 'admin.selling_chart.create', 'admin.selling_chart.edit', 'admin.selling_chart.upload.sheet') ? 'active' : '' }}"
+                                    class="sub-nav-item {{ Request::is('admin/selling-chart/manage/*') ? 'active' : '' }}">
+                                    <a class="sub-nav-link {{ Request::is('admin/selling-chart/manage/*') ? 'active' : '' }}"
                                         href="{{ route('admin.selling_chart.index') }}">
                                         Chart</a>
                                 </li>
                             @endcan
                             @can('general.fabrication.index')
                                 <li
-                                    class="sub-nav-item {{ request()->routeIs('admin.selling_chart.fabrication.index', 'admin.selling_chart.fabrication.create') ? 'active' : '' }}">
-                                    <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.fabrication.index', 'admin.selling_chart.fabrication.create') ? 'active' : '' }}"
+                                    class="sub-nav-item {{ Request::is('admin/selling-chart/fabrication/*') ? 'active' : '' }}">
+                                    <a class="sub-nav-link {{ Request::is('admin/selling-chart/fabrication/*') ? 'active' : '' }}"
                                         href="{{ route('admin.selling_chart.fabrication.index') }}">
                                         Fabrication</a>
                                 </li>
                             @endcan
                             @can('general.expense.index')
                                 <li
-                                    class="sub-nav-item {{ request()->routeIs('admin.selling_chart.expense.index', 'admin.selling_chart.expense.create', 'admin.selling_chart.expense.edit') ? 'active' : '' }}">
-                                    <a class="sub-nav-link {{ request()->routeIs('admin.selling_chart.expense.index', 'admin.selling_chart.expense.create', 'admin.selling_chart.expense.edit') ? 'active' : '' }}"
+                                    class="sub-nav-item {{ Request::is('admin/selling-chart/expense/*') ? 'active' : '' }}">
+                                    <a class="sub-nav-link {{ Request::is('admin/selling-chart/expense/*') ? 'active' : '' }}"
                                         href="{{ route('admin.selling_chart.expense.index') }}">Expense</a>
                                 </li>
                             @endcan
@@ -123,13 +113,13 @@
 
             @can('settings.platforms.index')
                 <li
-                    class="nav-item {{ request()->routeIs('admin.platforms.index', 'admin.platforms.create', 'admin.platforms.edit') ? 'active' : '' }}">
-                    <a class="nav-link {{ request()->routeIs('admin.platforms.index', 'admin.platforms.create', 'admin.platforms.edit') ? 'active' : '' }}"
+                    class="nav-item {{ Request::is('admin/platforms/*') ? 'active' : '' }}">
+                    <a class="nav-link {{ Request::is('admin/platforms/*') ? 'active' : '' }}"
                         href="{{ route('admin.platforms.index') }}">
                         <span class="nav-icon">
                             <iconify-icon icon="solar:shop-bold-duotone"></iconify-icon>
                         </span>
-                        <span class="nav-text"> Platforms </span>
+                        <span class="nav-text">Platforms</span>
                     </a>
                 </li>
             @endcan

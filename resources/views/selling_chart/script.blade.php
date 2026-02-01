@@ -3,41 +3,6 @@
     const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
     const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
 
-    /**** Image preview*******/
-    // const imageInput = document.getElementById('imageInput');
-    // const imagePreview = document.getElementById('imagePreview');
-
-    // if (imageInput && imagePreview) {
-    //     imageInput.addEventListener('change', function() {
-    //         const file = this.files[0];
-    //         if (file) {
-    //             const reader = new FileReader();
-    //             reader.onload = function(e) {
-    //                 imagePreview.src = e.target.result;
-    //                 imagePreview.style.display = "block";
-    //             }
-    //             reader.readAsDataURL(file);
-    //         } else {
-    //             imagePreview.style.display = "none";
-    //         }
-    //     });
-    // }
-
-    $(document).on('change', '.image-input', function() {
-        const file = this.files[0];
-        const preview = $(this).siblings('.image-preview'); // Find the related preview image
-
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                preview.attr('src', e.target.result).removeClass('d-none').show();
-            };
-            reader.readAsDataURL(file);
-        } else {
-            preview.addClass('d-none').hide();
-        }
-    });
-
 
     $(document).ready(function() {
 

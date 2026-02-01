@@ -52,9 +52,9 @@
             line-height: 16px !important;
         }
 
-        .selling_chart_form .image-preview {
+        .image-preview {
             width: 150px;
-            height: 150px;
+            /* height: 150px; */
             display: none;
             margin-top: 10px;
         }
@@ -106,6 +106,16 @@
             #selling_chart_table .create_selling_chart_tbl {
                 width: 100% !important;
             }
+        }
+
+        /* 🌞 Light theme */
+        html[data-bs-theme="dark"] .logo-box .logo-dark {
+            display: none;
+        }
+
+        /* 🌙 Dark theme */
+        html[data-bs-theme="dark"] .logo-box .logo-light {
+            display: block;
         }
     </style>
     @stack('css')
@@ -197,6 +207,20 @@
                 }
             });
         }
+        $(document).on('change', '.image-input', function() {
+            const file = this.files[0];
+            const preview = $(this).siblings('.image-preview'); // Find the related preview image
+
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.attr('src', e.target.result).removeClass('d-none').show();
+                };
+                reader.readAsDataURL(file);
+            } else {
+                preview.addClass('d-none').hide();
+            }
+        });
     </script>
     @stack('js')
 </body>

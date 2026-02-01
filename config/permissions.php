@@ -12,7 +12,7 @@ return [
         'authentication' => [
             'users' => [
                 'guard' => 'web',
-                'actions' => ['index', 'create', 'edit', 'show', 'status'],
+                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
             ],
             'roles' => [
                 'guard' => 'web',
