@@ -8,6 +8,7 @@ use App\Exports\SellingChartExport;
 use App\Imports\SellingChartImport;
 use App\Jobs\CloudflareFileDeleteJob;
 use App\Jobs\CloudflareFileUploadJob;
+use App\Models\Platform;
 use App\Models\SellingChartBasicInfo;
 use App\Models\SellingChartExpense;
 use App\Models\SellingChartPrice;
@@ -41,8 +42,26 @@ class SalesChartController extends Controller
 
         if ($action == 'bulkEdit') return $this->bulkEdit($request);
 
+        $data = $this->getChartData($request);
+
+        return view('selling_chart.index', $data);
+    }
+
+    public function forecasting(Request $request)
+    {
+        Gate::authorize('general.forecasting.index');
+
+        $data = $this->getChartData($request);
+        $data["platform_ncs"] = Platform::selectedPlatforms();
+        $data["platforms"] = Platform::all()->keyBy('code');
+
+        return view('selling_chart.forecasting', $data);
+    }
+
+
+    public function getChartData($request)
+    {
         $data = $this->sellingChartApiService->getCommonData();
-        // dd($data['departments']->toArray());
 
         // style count calculation start
         $data['mini_total_styles'] = SellingChartBasicInfo::filter($request)
@@ -131,7 +150,7 @@ class SalesChartController extends Controller
 
         $data['start'] = ($data['chartInfos']->currentPage() - 1) * $data['chartInfos']->perPage() + 1;
 
-        return view('selling_chart.index', $data);
+        return $data;
     }
 
     public function approve(Request $request, int | string $id)
@@ -799,7 +818,7 @@ class SalesChartController extends Controller
         }
     }
 
-    public function viewSingleChart($id)
+    public function viewSingleChart(Request $request,$id)
     {
         $data['chartInfo'] = SellingChartBasicInfo::with('sellingChartPrices')->findOrFail($id);
         $designNumber = $data['chartInfo']->design_no;
@@ -812,8 +831,11 @@ class SalesChartController extends Controller
 
         $data['approveBtnAccess'] = SellingChartBasicInfo::sellingApprovedBtnAccess();
 
+        $data["platform_ncs"] = Platform::selectedPlatforms();
+        $data["platforms"] = Platform::all()->keyBy('code');
 
-        $html = view('selling_chart.view-item', $data)->render();
+
+        $html = $request->page == 1 ? view('selling_chart.view-item', $data)->render() : view('selling_chart.forecast-view-item', $data)->render();
         return response()->json(['status' => true, 'data' => $html]);
     }
 }

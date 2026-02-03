@@ -88,6 +88,7 @@ class SellingChartApiService
 
     public function getCommonData(): array
     {
+        // Cache::forget('common_data_v1');
         return Cache::remember('common_data_v1', now()->addHours(2), function () {
             $data = [];
             try {

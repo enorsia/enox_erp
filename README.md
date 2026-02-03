@@ -47,6 +47,11 @@ Follow these steps to set up EnoX ERP on your local machine:
    php artisan db:seed
 ```
 
+6. **Permissions sync**
+```bash
+   php artisan permissions:sync
+```
+
 7. **Start the development server**
 ```bash
    php artisan serve

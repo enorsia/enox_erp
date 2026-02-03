@@ -39,6 +39,10 @@ return [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'delete'],
             ],
+            'forecasting' => [
+                'guard' => 'web',
+                'actions' => ['index', 'show'],
+            ],
         ],
 
         // SETTINGS MODULE

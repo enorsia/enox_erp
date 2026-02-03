@@ -44,6 +44,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
         Route::post('selling-chart/manage/bulk-update', 'bulkUpdate')->name('selling_chart.bulk.update');
         Route::post('selling-chart/manage/approve/{id}', 'approve')->name('selling_chart.approve');
         Route::get('selling-chart/manage/view/{id}', 'viewSingleChart')->name('selling_chart.view.single.chart');
+        Route::get('selling-chart/forecasting', 'forecasting')->name('selling_chart.forecasting');
     });
     Route::controller(FabricationController::class)->group(function () {
         Route::get('selling-chart/fabrication', 'index')->name('selling_chart.fabrication.index');

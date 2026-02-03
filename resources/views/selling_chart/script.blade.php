@@ -3,6 +3,19 @@
     const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
     const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
 
+    document.addEventListener('DOMContentLoaded', function() {
+        const advanceInput = document.getElementById('advance_search');
+        const collapseEl = document.getElementById('collapseAdvance');
+        if (advanceInput) {
+            collapseEl.addEventListener('shown.bs.collapse', function() {
+                advanceInput.value = 1;
+            });
+
+            collapseEl.addEventListener('hidden.bs.collapse', function() {
+                advanceInput.value = 0;
+            });
+        }
+    });
 
     $(document).ready(function() {
 
@@ -208,6 +221,7 @@
     }
 
     let productCategoryChoices = null;
+
     function initProductCategoryChoices() {
         const select = document.querySelector('#product_category');
         if (!select) return;
@@ -396,12 +410,15 @@
 
 
 
-    function viewChart(id) {
+    function viewChart(id, page = 1) {
         let url = "{{ route('admin.selling_chart.view.single.chart', ':id') }}";
         url = url.replace(':id', id);
         $.ajax({
             type: 'GET',
             url: url,
+            data: {
+                page: page
+            },
             success: function(response) {
                 if (response.status == true) {
                     $('#viewSellingChartItemModal').remove();
@@ -415,4 +432,8 @@
             }
         });
     }
+    $(document).on('change', '.toggle-column', function() {
+        const target = $(this).val();
+        $('.' + target).toggle(this.checked);
+    });
 </script>

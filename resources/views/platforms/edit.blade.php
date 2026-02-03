@@ -22,7 +22,8 @@
                         <div class="position-relative form-group mb-2 new_search row">
                             <label for="platform_name" class="col-12 col-md-4 col-lg-3">Platform name</label>
                             <div class="col-12 col-md-8 col-lg-9">
-                                <input type="text" name="platform_name" id="platform_name" class="form-control @error('platform_name') is-invalid @enderror"
+                                <input type="text" name="platform_name" id="platform_name"
+                                    class="form-control @error('platform_name') is-invalid @enderror"
                                     value="{{ old('platform_name', $platform->name) }}" disabled>
 
                                 @error('platform_name')
@@ -35,7 +36,8 @@
                         <div class="position-relative form-group mb-2 new_search row">
                             <label for="shipping_charge" class="col-12 col-md-4 col-lg-3">Shipping charge </label>
                             <div class="col-12 col-md-8 col-lg-9">
-                                <input type="number" name="shipping_charge" id="shipping_charge" class="form-control @error('shipping_charge') is-invalid @enderror"
+                                <input type="number" name="shipping_charge" id="shipping_charge"
+                                    class="form-control @error('shipping_charge') is-invalid @enderror"
                                     value="{{ old('shipping_charge', $platform->shipping_charge) }}">
 
                                 @error('shipping_charge')
@@ -46,11 +48,11 @@
                             </div>
                         </div>
                         <div class="position-relative form-group mb-2 new_search row">
-                            <label for="min_profit" class="col-12 col-md-4 col-lg-3">Min profit <sup
-                                    class="text-warning">
+                            <label for="min_profit" class="col-12 col-md-4 col-lg-3">Min profit <sup class="text-warning">
                                     (required)</sup></label>
                             <div class="col-12 col-md-8 col-lg-9">
-                                <input type="number" name="min_profit" id="min_profit" class="form-control @error('min_profit') is-invalid @enderror"
+                                <input type="number" name="min_profit" id="min_profit"
+                                    class="form-control @error('min_profit') is-invalid @enderror"
                                     value="{{ old('min_profit', $platform->min_profit) }}" required>
 
                                 @error('min_profit')
@@ -61,16 +63,40 @@
                             </div>
                         </div>
                         <div class="position-relative form-group mb-2 new_search row">
+                            <label for="commission" class="col-12 col-md-4 col-lg-3">Commission <sup class="text-warning">
+                                    (required)</sup></label>
+                            <div class="col-12 col-md-8 col-lg-9">
+                                <input type="number" name="commission" id="commission"
+                                    class="form-control @error('commission') is-invalid @enderror"
+                                    value="{{ old('commission', $platform->commission) }}" required>
+
+                                @error('commission')
+                                    <span class="text-danger" role="alert">
+                                        <strong>{{ $message }}</strong>
+                                    </span>
+                                @enderror
+                            </div>
+                        </div>
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="note" class="col-12 col-md-4 col-lg-3">Note</label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <textarea name="note" id="note" class="form-control @error('note') is-invalid @enderror"
-                                    value="{{old('note', $platform->note)}}" rows="3">{{old('note', $platform->note)}}</textarea>
+                                    value="{{ old('note', $platform->note) }}" rows="3">{{ old('note', $platform->note) }}</textarea>
 
                                 @error('note')
                                     <span class="text-danger" role="alert">
                                         <strong>{{ $message }}</strong>
                                     </span>
                                 @enderror
+                            </div>
+                        </div>
+                        <div class="position-relative form-group mb-2 new_search row pb-0 mb-0">
+                            <label class="col-12 col-md-4 col-lg-3">Status</label>
+                            <div class="col-12 col-md-8 col-lg-9">
+                                <div class="custom-control custom-switch" style="padding: 0px;">
+                                    <input type="checkbox" class="custom-control-input" name="status" id="status"
+                                        {{ @$platform->status == true ? 'checked' : '' }}>
+                                </div>
                             </div>
                         </div>
                         <div class="text-end">
@@ -83,4 +109,3 @@
         </div>
     </div>
 @endsection
-

@@ -3,7 +3,7 @@
         <div class="new_search" id="selling_chart_table">
             <div class="selling_table_body new_table m-0">
                 <div class="table-responsive">
-                    <table class="table table-bordered" style="width: max-content !important;">
+                    <table class="table table-bordered mb-2" style="width: max-content !important;">
                         <thead>
                             <tr>
                                 <th class="text-nowrap" scope="col" style="width: 50px !important;">#SL</th>

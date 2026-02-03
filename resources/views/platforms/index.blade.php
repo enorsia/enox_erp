@@ -53,10 +53,11 @@
                     <thead class="bg-light-subtle">
                         <tr>
                             <th width="10">#SL</th>
-                            <th width="15">Platform</th>
+                            <th width="15">Name (code)</th>
                             <th width="6">Min Profit</th>
                             <th width="6">Shipping</th>
-                            <th width="150">Create / Update</th>
+                            <th width="6">Commission</th>
+                            {{-- <th width="150">Create / Update</th> --}}
                             <th width="300">Note</th>
                             <th width="30" class="text-center">Action</th>
                         </tr>
@@ -66,13 +67,14 @@
                             @foreach ($platforms as $data)
                                 <tr>
                                     <td>{{ $start + $loop->index }}</td>
-                                    <td>{{ $data->name }}</td>
+                                    <td>{{ $data->name }} ({{$data->code}})</td>
                                     <td>@price($data->min_profit)</td>
                                     <td>@price($data->shipping_charge)</td>
-                                    <td>
+                                    <td>@price($data->commission)</td>
+                                    {{-- <td>
                                         CA: {{ $data->created_at }} <br />
                                         UA: {{ $data->updated_at }}
-                                    </td>
+                                    </td> --}}
                                     <td>{{ $data->note }}</td>
                                     <td class="text-center">
                                         <div class="d-inline-flex text-center text-md-start text-nowrap">

@@ -16,6 +16,14 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-css/iziToast.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-css/select2-v5.min.css" />
     <style>
+        :root {
+            --bs-main-nav-width-sm: 60px;
+        }
+
+        html[data-menu-size="sm-hover"] .main-nav:not(:hover) .nav-item .nav-link {
+            padding: 10px;
+        }
+
         .top_title {
             display: flex;
             justify-content: space-between;
@@ -68,6 +76,8 @@
         #selling_chart_table .new_table table tr th,
         #selling_chart_table .new_table table tr td {
             text-align: center;
+            vertical-align: middle;
+            padding: 5px;
         }
 
         #selling_chart_table .new_table table tbody tr td input,
@@ -209,7 +219,7 @@
         }
         $(document).on('change', '.image-input', function() {
             const file = this.files[0];
-            const preview = $(this).siblings('.image-preview'); // Find the related preview image
+            const preview = $(this).siblings('.image-preview');
 
             if (file) {
                 const reader = new FileReader();

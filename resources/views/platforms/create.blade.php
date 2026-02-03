@@ -79,6 +79,21 @@
                             </div>
                         </div>
                         <div class="position-relative form-group mb-2 new_search row">
+                            <label for="commission" class="col-12 col-md-4 col-lg-3">Commission <sup class="text-warning">
+                                    (required)</sup></label>
+                            <div class="col-12 col-md-8 col-lg-9">
+                                <input type="number" name="commission" id="commission"
+                                    class="form-control @error('commission') is-invalid @enderror"
+                                    value="{{ old('commission') }}" required>
+
+                                @error('commission')
+                                    <span class="text-danger" role="alert">
+                                        <strong>{{ $message }}</strong>
+                                    </span>
+                                @enderror
+                            </div>
+                        </div>
+                        <div class="position-relative form-group mb-2 new_search row">
                             <label for="note" class="col-12 col-md-4 col-lg-3">Note</label>
                             <div class="col-12 col-md-8 col-lg-9">
                                 <textarea name="note" id="note" class="form-control @error('note') is-invalid @enderror"

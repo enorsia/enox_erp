@@ -18,6 +18,8 @@ return new class extends Migration
             $table->decimal('shipping_charge', 10, 2)->default(0);
             $table->text('note')->nullable();
             $table->decimal('min_profit', 10, 2)->default(0);
+            $table->decimal('commission', 10, 3)->default(0);
+            $table->tinyInteger('status')->default(1);
             $table->timestamps();
         });
     }

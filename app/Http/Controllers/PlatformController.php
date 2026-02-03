@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Platform;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 
@@ -20,7 +21,7 @@ class PlatformController extends Controller
             ->when($q, function ($query) use ($q) {
                 $query->where('name', 'like', '%' . $q . '%');
             })
-            ->latest()
+            // ->latest()
             ->paginate($this->perPage)
             ->withQueryString();
 
@@ -47,6 +48,7 @@ class PlatformController extends Controller
             'shipping_charge' => 'nullable|numeric|min:0',
             'min_profit' => 'required|numeric',
             'code' => 'required|string|max:255|unique:platforms,code',
+            'commission' => 'required|numeric',
             'note' => 'nullable|string',
         ]);
         try {
@@ -55,6 +57,7 @@ class PlatformController extends Controller
                 'code' => $validated['code'],
                 'shipping_charge' => $validated['shipping_charge'] ?? 0,
                 'min_profit' => $validated['min_profit'],
+                'commission' => $validated['commission'],
                 'note' => $validated['note'],
             ]);
             notify()->success('Platform created successfully', 'Success');
@@ -92,11 +95,15 @@ class PlatformController extends Controller
         $validated = $request->validate([
             'shipping_charge' => 'nullable|numeric|min:0',
             'min_profit' => 'required|numeric',
+            'commission' => 'required|numeric',
+            'status'     => 'nullable',
             'note' => 'nullable|string',
         ]);
 
         try {
+            $validated['status'] = $request->has('status') ? 1 : 0;
             $platform->update($validated);
+            Cache::forget('platforms_by_code');
             notify()->success('Platform updated successfully', 'Success');
             return redirect()->route('admin.platforms.index');
         } catch (\Exception $e) {
