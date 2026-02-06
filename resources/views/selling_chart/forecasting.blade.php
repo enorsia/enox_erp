@@ -114,9 +114,9 @@
                         <table class="table table-bordered mb-2" style="width: max-content !important; min-width: 100%;">
                             <thead>
                                 <tr>
-                                    <th class="text-nowrap" scope="col" style="width: 40px !important;">#SL</th>
-                                    <th class="text-nowrap" scope="col" style="width: 60px !important;">Action</th>
-                                    <th class="text-nowrap" scope="col">Department</th>
+                                    <th class="text-nowrap" scope="col" style="width: 40px;">#SL</th>
+                                    <th class="text-nowrap" scope="col" style="width: 60px;">Action</th>
+                                    <th class="text-nowrap" scope="col" style="width: 95px;">Department</th>
                                     <th class="text-nowrap" scope="col">Category</th>
                                     <th class="text-nowrap" scope="col" style="width: 110px;">Mini Category</th>
                                     <th class="text-nowrap" scope="col">Ecom Sku</th>
@@ -186,9 +186,11 @@
                                                     @foreach ($platform_ncs as $p_code => $p_name)
                                                         @php
                                                             $platform = $platforms->get($p_code);
+                                                            $cal_val = calculatePlatformProfit($ch_price, $platform);
                                                         @endphp
                                                         <td class="text-nowrap">
-                                                            {{ calculatePlatformProfit($ch_price, $platform)['can_sell'] }}
+                                                            <span
+                                                                class="badge {{ $cal_val['can_sell'] == 'No' ? 'bg-danger' : 'bg-success' }}">{{ $cal_val['can_sell'] }}</span>
                                                         </td>
                                                     @endforeach
                                                 @endforeach
@@ -214,9 +216,11 @@
                                                     @foreach ($platform_ncs as $p_code => $p_name)
                                                         @php
                                                             $platform = $platforms->get($p_code);
+                                                            $cal_val = calculatePlatformProfit($ch_price, $platform);
                                                         @endphp
                                                         <td class="text-nowrap">
-                                                            {{ calculatePlatformProfit($ch_price, $platform)['can_sell'] }}
+                                                            <span
+                                                                class="badge {{ $cal_val['can_sell'] == 'No' ? 'bg-danger' : 'bg-success' }}">{{ $cal_val['can_sell'] }}</span>
                                                         </td>
                                                     @endforeach
                                                 </tr>
