@@ -42,13 +42,15 @@ class SellingChartApiService
         return $ecommerceProducts;
     }
 
-    public function getLookupResponse($typeIds = [])
+    public function getLookupResponse($typeIds = [], $names = [])
     {
         $lookupData = collect();
+
         try {
             /** @var \Illuminate\Http\Client\Response $response */
             $response = $this->get(config('enox.endpoints.selling_chart_lookup_names'), [
-                'typeIds' => $typeIds
+                'typeIds' => $typeIds,
+                'names' => $names,
             ]);
             if ($response->failed()) {
                 throw new Exception('API request failed');
@@ -63,6 +65,29 @@ class SellingChartApiService
             ]);
         }
         return $lookupData;
+    }
+
+    public function getPoHistoryResponse($styleIds = [])
+    {
+        $data = collect();
+        try {
+            /** @var \Illuminate\Http\Client\Response $response */
+            $response = $this->get(config('enox.endpoints.selling_chart_po_histories'), [
+                'styleIds' => $styleIds,
+            ]);
+            if ($response->failed()) {
+                throw new Exception('API request failed');
+            }
+
+            if ($response->successful()) {
+                $data = $response->json('data.poHistories', collect());
+            }
+        } catch (Exception $e) {
+            Log::error('Selling_chart po histories API Error', [
+                'message' => $e->getMessage(),
+            ]);
+        }
+        return $data;
     }
 
     public function getCategoryResponse()

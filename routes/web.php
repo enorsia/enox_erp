@@ -3,6 +3,7 @@
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FabricationController;
 use App\Http\Controllers\PlatformController;
@@ -58,5 +59,13 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
         Route::get('selling-chart/expense/{id}/edit', 'edit')->name('selling_chart.expense.edit');
         Route::put('selling-chart/expense/{id}', 'update')->name('selling_chart.expense.update');
         Route::delete('selling-chart/expense/{id}', 'destroy')->name('selling_chart.expense.destroy');
+    });
+    Route::controller(ProfileController::class)->group(function () {
+        /*~~~~~~~~~~~~~~ PROFILE AND PASSWORD MANAGE ~~~~~~~~~~~~~~*/
+        Route::get('profile',  'index')->name('profile');
+        // Route::get('profile/edit', 'edit')->name('profile.edit');
+        // Route::post('profile/update', 'update')->name('profile.update');
+        Route::get('change-password', 'changePassword')->name('change.password');
+        Route::post('password/update', 'passwordUpdate')->name('password.update.post');
     });
 });

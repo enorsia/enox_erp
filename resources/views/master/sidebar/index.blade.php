@@ -27,9 +27,9 @@
                         <a class="nav-link {{ Request::is('admin/users/*') ? 'active' : '' }}"
                             href="{{ route('admin.users.index') }}">
                             <span class="nav-icon">
-                                <iconify-icon icon="solar:user-circle-broken"></iconify-icon>
+                                <iconify-icon icon="solar:user-broken"></iconify-icon>
                             </span>
-                            <span class="nav-text"> Users </span>
+                            <span class="nav-text"> Admins </span>
                         </a>
                     </li>
                 @endcan
@@ -38,7 +38,7 @@
                         <a class="nav-link {{ Request::is('admin/roles/*') ? 'active' : '' }}"
                             href="{{ route('admin.roles.index') }}">
                             <span class="nav-icon">
-                                <iconify-icon icon="solar:shield-user-broken"></iconify-icon>
+                                <iconify-icon icon="solar:shield-check-broken"></iconify-icon>
                             </span>
                             <span class="nav-text"> Roles </span>
                         </a>

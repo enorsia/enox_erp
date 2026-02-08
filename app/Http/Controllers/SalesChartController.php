@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\ApiServices\FabricationService;
 use App\ApiServices\SellingChartApiService;
 use App\Exports\SellingChartExport;
+use App\Exports\SellingChartMismatchExport;
 use App\Imports\SellingChartImport;
 use App\Jobs\CloudflareFileDeleteJob;
 use App\Jobs\CloudflareFileUploadJob;
@@ -41,6 +42,7 @@ class SalesChartController extends Controller
         if ($action == 'excel') return $this->exportReport($request);
 
         if ($action == 'bulkEdit') return $this->bulkEdit($request);
+        if ($action == 'mismatch_excel') return $this->exportMismatchReport($request);
 
         $data = $this->getChartData($request);
 
@@ -186,6 +188,14 @@ class SalesChartController extends Controller
             ->with(['sellingChartPrices'])
             ->get();
         return Excel::download(new SellingChartExport($chartInfos), 'selling_chart_reports.xlsx');
+    }
+
+    public function exportMismatchReport(Request $request)
+    {
+        $chartInfos = SellingChartBasicInfo::filter($request)
+            ->with(['sellingChartPrices'])
+            ->get();
+        return Excel::download(new SellingChartMismatchExport($chartInfos), 'Price_Mismatch_Reports.xlsx');
     }
 
     public function import(Request $request)

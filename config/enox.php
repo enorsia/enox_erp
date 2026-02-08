@@ -17,5 +17,6 @@ return [
         'selling_chart_product_categories' => 'selling-chart/get-product-categories',
         'selling_chart_color_by_search' => 'selling-chart/get-color-by-search',
         'selling_chart_sizes_by_category' => 'selling-chart/get-sizes-by-category',
+        'selling_chart_po_histories' => 'selling-chart/get-po-histories',
     ]
 ];

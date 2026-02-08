@@ -141,12 +141,16 @@
                     <div class="mt-2" id="filter_dropdown">
                         @can('general.chart.bulk_edit')
                             <button type="submit" value="bulkEdit" name="action"
-                                class="btn btn-soft-secondary me-2 mb-1 mb-md-0"><i class="bi bi-pencil-square ms-0"></i>
+                                class="btn btn-soft-secondary me-1 me-md-2 mb-1 mb-md-0"><i class="bi bi-pencil-square ms-0"></i>
                                 Bulk Edit</button>
                         @endcan
                         @can('general.chart.export')
-                            <button type="submit" class="btn btn-soft-info export_button mb-1 mb-md-0" value="excel"
+                            <button type="submit" class="btn btn-soft-info export_button me-1 me-md-2 mb-1 mb-md-0" value="excel"
                                 name="action"><i class="bi bi-download"></i> Export Excel</button>
+                        @endcan
+                        @can('general.chart.export')
+                            <button type="submit" class="btn btn-soft-danger export_button mb-1 mb-md-0" value="mismatch_excel"
+                                name="action"><i class="bi bi-download"></i> Price Mismatch RPT</button>
                         @endcan
                     </div>
                 </div>
