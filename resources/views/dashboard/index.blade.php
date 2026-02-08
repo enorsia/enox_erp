@@ -16,7 +16,7 @@
                     </div>
                 </div>
                 <div class="mt-3">
-                    <h1 class="text-center">Welcome to EnoxSuite</h1>
+                    <h1 class="text-center">Welcome to {{config('app.name')}}</h1>
                 </div>
             </div>
         </div>

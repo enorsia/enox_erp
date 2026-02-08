@@ -39,7 +39,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Users Create',
+            'title' => 'Admin Create',
             'icon' => 'bi bi-people',
             'sub_title' => [
                 'Access Controller' => '',

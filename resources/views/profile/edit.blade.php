@@ -1,45 +1,12 @@
 @extends('master.app')
 
 @push('css')
-    <style>
-        .dropify-message p {
-            font-size: 18px;
-        }
-
-        .select2-container--default .select2-selection--single .select2-selection__rendered {
-            line-height: 40px;
-        }
-
-        .select2-container .select2-selection--single {
-            height: 43px;
-        }
-
-        .custom-control-label::before {
-            background-color: #374151;
-        }
-
-        .dropify-wrapper {
-            background-color: #374151;
-            border: 1px solid #4f5154;
-        }
-
-        .dropify-wrapper .dropify-preview {
-            background-color: #374151;
-        }
-
-        #avatar-error {
-            color: #d1474f;
-            margin-top: 92px;
-            margin-bottom: 0;
-            font-weight: bold;
-        }
-    </style>
 @endpush
 
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Admin Edit',
+            'title' => 'Profile Edit',
             'icon' => 'bi bi-people',
             'sub_title' => [
                 'Access Controller' => '',

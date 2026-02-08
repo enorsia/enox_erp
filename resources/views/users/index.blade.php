@@ -3,7 +3,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Users',
+            'title' => 'Admins',
             'icon' => 'bi bi-people',
             'sub_title' => [
                 'Admin User' => '',

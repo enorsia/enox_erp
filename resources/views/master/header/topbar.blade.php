@@ -12,7 +12,7 @@
 
                 <!-- Menu Toggle Button -->
                 <div class="topbar-item">
-                    <h4 class="fw-bold topbar-button pe-none text-uppercase mb-0">Welcome</h4>
+                    <h4 class="fw-bold topbar-button pe-none text-uppercase mb-0">Hi, {{ Auth::user()->name }}</h4>
                 </div>
             </div>
 
@@ -42,21 +42,11 @@
                     <div class="dropdown-menu dropdown-menu-end">
                         <!-- item-->
                         <h6 class="dropdown-header">Welcome {{Str::limit(Auth::user()->name, 10)}}!</h6>
-                        <a class="dropdown-item" href="pages-profile.html">
+                        <a class="dropdown-item" href="{{route('admin.profile')}}">
                                 <i class="bx bx-user-circle text-muted fs-18 align-middle me-1"></i><span class="align-middle">Profile</span>
                         </a>
-                        <a class="dropdown-item" href="apps-chat.html">
-                                <i class="bx bx-message-dots text-muted fs-18 align-middle me-1"></i><span class="align-middle">Messages</span>
-                        </a>
-
-                        <a class="dropdown-item" href="pages-pricing.html">
-                                <i class="bx bx-wallet text-muted fs-18 align-middle me-1"></i><span class="align-middle">Pricing</span>
-                        </a>
-                        <a class="dropdown-item" href="pages-faqs.html">
-                                <i class="bx bx-help-circle text-muted fs-18 align-middle me-1"></i><span class="align-middle">Help</span>
-                        </a>
-                        <a class="dropdown-item" href="auth-lock-screen.html">
-                                <i class="bx bx-lock text-muted fs-18 align-middle me-1"></i><span class="align-middle">Lock screen</span>
+                        <a class="dropdown-item" href="{{route('admin.change.password')}}">
+                                <i class="bx bx-lock text-muted fs-18 align-middle me-1"></i><span class="align-middle">Password Change</span>
                         </a>
 
                         <div class="dropdown-divider my-1"></div>

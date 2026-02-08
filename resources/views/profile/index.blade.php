@@ -1,10 +1,6 @@
 @extends('master.app')
 @push('css')
     <style>
-        .table-dark {
-            background-color: #1f2937;
-        }
-
         .profile {
             font-size: 15px;
         }
@@ -17,7 +13,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Admin Details',
+            'title' => 'Profile Details',
             'icon' => 'bi bi-people',
             'sub_title' => [
                 'Access Controller' => '',
