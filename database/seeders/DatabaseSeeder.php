@@ -18,8 +18,9 @@ class DatabaseSeeder extends Seeder
         // User::factory(10)->create();
 
         User::factory()->create([
-            'name' => 'Admin',
-            'email' => 'admin@example.com',
+            'name' => 'SUPER ADMIN',
+            'email' => config('enoxsuite.super_admin_username') ?? 'admin@example.com',
+            'password' => bcrypt(config('enoxsuite.super_admin_password')),
         ]);
     }
 }
