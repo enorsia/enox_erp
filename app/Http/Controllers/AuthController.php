@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Helpers\Helper;
 
 class AuthController extends Controller
 {
@@ -23,6 +24,7 @@ class AuthController extends Controller
         $rememberMe = $request->has('remember_me') ? true : false;
         if (Auth::attempt($request->only('email', 'password'), $rememberMe)) {
             $request->session()->regenerate();
+            avaiablePermissions();
             return redirect()->route('admin.dashboard');
         }
 

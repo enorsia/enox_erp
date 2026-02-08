@@ -53,6 +53,7 @@ return [
     */
 
     'url' => env('APP_URL', 'http://localhost'),
+    'enox_api_base_url' => env('ENOX_API_BASE_URL', 'http://10.31.12.36:8000/api/'),
 
     /*
     |--------------------------------------------------------------------------

@@ -15,6 +15,7 @@
 /node_modules
 /public/build
 /public/hot
+/public/upload
 /public/storage
 /storage/*.key
 /storage/pail
@@ -23,3 +24,5 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /deployments/*
+composer.lock
+package-lock.json
