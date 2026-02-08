@@ -109,10 +109,10 @@ class SyncPermissions extends Command
     {
         try {
             $admin = User::firstOrCreate(
-                ['email' => env('ADMIN_DEFAULT_EMAIL', 'admin@gmail.com')],
+                ['email' => env('ADMIN_DEFAULT_EMAIL', config('enoxsuite.super_admin_username'))],
                 [
                     'name' => env('ADMIN_DEFAULT_NAME', 'SUPER ADMIN'),
-                    'password' => Hash::make(env('ADMIN_DEFAULT_PASSWORD', '123456')),
+                    'password' => Hash::make(config('enoxsuite.super_admin_password')),
                 ]
             );
 
