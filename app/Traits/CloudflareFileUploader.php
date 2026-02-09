@@ -1,51 +1,72 @@
 <?php
 namespace App\Traits;
 
-use App\Models\EcommerceProduct;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
+
 
 trait CloudflareFileUploader {
 
     public function uploadImage(string $path) : array
     {
-        $authToken = config('cloudflare.auth_token');
-        $accountId = config('cloudflare.account_id');
+        try {
 
-        $dirName = pathinfo($path)['dirname'];
-        $path = public_path($path);
-        $imageInfo = pathinfo($path);
-        $fullImageName = $imageInfo['basename'];
-        $fileExtension = $imageInfo['extension'];
-        $contentType =  mime_content_type($path);
+            $authToken = config('cloudflare.auth_token');
+            $accountId = config('cloudflare.account_id');
+            $publicPath = public_path($path);
 
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer '.$authToken,
-        ])->attach(
-            'file', file_get_contents($path), $fullImageName, [
-                'Content-Type' => $contentType,
-            ]
-        )->post("https://api.cloudflare.com/client/v4/accounts/$accountId/images/v1", [
-            'id' => $fullImageName
-        ]);
-
-        if($response->successful()){
-            $result = $response->json();
-            if($result['success'] == true){
+            if (!file_exists($publicPath)) {
+                Log::warning('CLOUDFLARE: Image upload skipped - file not found', [
+                    'path' => $path,
+                ]);
                 return [
-                    'success' => true,
-                    'imageId' => $result['result']['id'],
-                    'original_name' => $fullImageName,
-                    'original_path' => $dirName == '.' ? null : $dirName
+                    'success' => false,
+                    'message' => 'CLAUDFLARE: Image upload skipped - file not found',
                 ];
             }
-        }else{
-            $error = $response->json();
+
+            $imageInfo = pathinfo($publicPath);
+            $dirName   = $imageInfo['dirname'] ?? null;
+            $fileName  = $imageInfo['basename'];
+            $mimeType  = mime_content_type($publicPath) ?: 'application/octet-stream';
+
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$authToken,
+            ])->attach(
+                'file', file_get_contents($publicPath), $fileName, [
+                    'Content-Type' => $mimeType,
+                ]
+            )->post("https://api.cloudflare.com/client/v4/accounts/$accountId/images/v1", [
+                'id' => $fileName
+            ]);
+
+            if ($response->successful()) {
+                $json = $response->json();
+
+                if (!empty($json['success']) && !empty($json['result']['id'])) {
+                    return [
+                        'success'        => true,
+                        'imageId'        => $json['result']['id'],
+                        'original_name'  => $fileName,
+                        'original_path'  => $dirName === '.' ? null : str_replace(public_path(), '', $dirName),
+                    ];
+                }
+            }
             return [
                 'success' => false,
-                'message' => $error['errors'][0]['message']
+                'message' => $response->json('errors.0.message')
+                    ?? 'CLOUDFLARE: Image upload failed',
+            ];
+
+        }catch(\Throwable $e){
+            Log::error('CLOUDFLARE: Image upload API request failed', [
+                'path'      => $path,
+                'exception' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'CLOUDFLARE: Image upload API request failed',
             ];
         }
 
@@ -53,111 +74,125 @@ trait CloudflareFileUploader {
 
     public function deleteCfImage( string $imageName ) : array
     {
-        $authToken = config('cloudflare.auth_token');
-        $accountId = config('cloudflare.account_id');
+        try {
+            $authToken = config('cloudflare.auth_token');
+            $accountId = config('cloudflare.account_id');
 
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer '.$authToken,
-        ])->delete("https://api.cloudflare.com/client/v4/accounts/$accountId/images/v1/" . $imageName);
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$authToken,
+            ])->delete("https://api.cloudflare.com/client/v4/accounts/$accountId/images/v1/" . $imageName);
 
-        if($response->successful()){
-            $result = $response->json();
-            return ['success' => true];
-        }else{
-            $result = $response->json();
+            if($response->successful()){
+                return ['success' => true];
+            }
             return [
                 'success' => false,
-                'message' => $result['errors'][0]['message']
+                'message' => $response->json('errors.0.message') ?? 'CLOUDFLARE: Image delete API request failed',
+            ];
+        }catch(\Throwable $e){
+            Log::error('CLOUDFLARE: Image delete API request failed', [
+                'image_id' => $imageName,
+                'exception' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'CLOUDFLARE: Image delete API request failed',
             ];
         }
-
     }
 
     public function uploadCfVideo( string $path ) : array
     {
-        $authToken = config('cloudflare.auth_token');
-        $accountId = config('cloudflare.account_id');
+        try{
+            $authToken = config('cloudflare.auth_token');
+            $accountId = config('cloudflare.account_id');
+            $publicPath = public_path($path);
 
-        $dirName = pathinfo($path)['dirname'];
-        $path = public_path($path);
-        $imageInfo = pathinfo($path);
-        $fullImageName = $imageInfo['basename'];
-        $fileExtension = $imageInfo['extension'];
-        $contentType =  mime_content_type($path);
-
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer '.$authToken,
-        ])->attach(
-            'file', file_get_contents($path), $fullImageName, [
-                'Content-Type' => $contentType,
-            ]
-        )->post("https://api.cloudflare.com/client/v4/accounts/$accountId/stream", [
-            'uid' => $fullImageName
-        ]);
-
-        if($response->successful()){
-            $result = $response->json();
-            if($result['success'] == true){
+            if (!file_exists($publicPath)) {
+                Log::warning('CLOUDFLARE: Video upload skipped: file not found', [
+                    'path' => $path,
+                ]);
                 return [
-                    'success' => true,
-                    'uid' => $result['result']['uid'],
-                    'original_name' => $fullImageName,
-                    'original_path' => $dirName == '.' ? null : $dirName
+                    'success' => false,
+                    'message' => 'CLOUDFLARE: Video upload skipped: file not found',
                 ];
             }
-        }else{
-            $error = $response->json();
+
+            $imageInfo = pathinfo($publicPath);
+            $dirName   = $imageInfo['dirname'] ?? null;
+            $fileName  = $imageInfo['basename'];
+            $mimeType  = mime_content_type($publicPath) ?: 'application/octet-stream';
+
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$authToken,
+            ])->attach(
+                'file', file_get_contents($publicPath), $fileName, [
+                    'Content-Type' => $mimeType,
+                ]
+            )->post("https://api.cloudflare.com/client/v4/accounts/$accountId/stream", [
+                'uid' => $fileName
+            ]);
+
+            if ($response->successful()) {
+                $json = $response->json();
+                if (!empty($json['success']) && !empty($json['result']['uid'])) {
+                    return [
+                        'success' => true,
+                        'uid' => $json['result']['uid'],
+                        'original_name' => $fileName,
+                        'original_path' => $dirName == '.' ? null : $dirName
+                    ];
+                }
+            }
             return [
                 'success' => false,
-                'message' => $error['errors'][0]['message']
+                'message' => $response->json('errors.0.message')
+                    ?? 'CLOUDFLARE: Video upload failed',
+            ];
+
+        }catch(\Throwable $e){
+            Log::error('CLOUDFLARE: Video upload request failed', [
+                'video_name' => $publicPath,
+                'exception' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'CLOUDFLARE: Video upload request failed',
             ];
         }
     }
 
     public function deleteCfVideo( string $uid ) : array
     {
-        $authToken = config('cloudflare.auth_token');
-        $accountId = config('cloudflare.account_id');
+        try{
+            $authToken = config('cloudflare.auth_token');
+            $accountId = config('cloudflare.account_id');
 
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer '.$authToken,
-        ])->delete("https://api.cloudflare.com/client/v4/accounts/$accountId/stream/" . $uid);
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$authToken,
+            ])->delete("https://api.cloudflare.com/client/v4/accounts/$accountId/stream/" . $uid);
 
-        if($response->successful()){
-            $result = $response->json();
-            return ['success' => true];
-        }else{
-            $result = $response->json();
+            if($response->successful()){
+                return ['success' => true];
+            }
+
             return [
                 'success' => false,
-                'message' => $result['errors'][0]['message']
+                'message' => $response->json('errors.0.message')
+                    ?? 'CLOUDFLARE: Video delete failed',
+            ];
+
+        }catch(\Throwable $e){
+            Log::error('CLOUDFLARE: Video delete API request failed', [
+                'video_id' => $uid,
+                'exception' => $e->getMessage(),
+            ]);
+            return [
+                'success' => false,
+                'message' => 'CLOUDFLARE: Video delete API request failed',
             ];
         }
     }
-
-
-    public function uploadExistingImageToCloudFlare() : array
-    {
-        $files = [];
-        $directory = 'upload';
-        $basePath = $directory . '/';
-        $directoryPath = public_path($directory);
-        $contents = File::allFiles($directoryPath);
-
-        foreach ($contents as $file) {
-            $relativePath = Str::replaceFirst($directoryPath, '', $file);
-            if (is_dir($file)) {
-                $subDirectory = $basePath . $relativePath;
-                $files = array_merge($files, listImageAndGifFiles($relativePath, $subDirectory));
-            } else {
-                $extension = pathinfo($file, PATHINFO_EXTENSION);
-                if (in_array(strtolower($extension), ['jpg', 'jpeg', 'png', 'gif'])) {
-                    $files[] = $basePath . ltrim(str_replace('\\', '/', $relativePath), '/');
-                }
-            }
-        }
-        return $files;
-    }
-
-
 }
