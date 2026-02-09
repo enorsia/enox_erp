@@ -70,7 +70,7 @@
                                     <td>{{ $data->name }} ({{$data->code}})</td>
                                     <td>@price($data->min_profit)</td>
                                     <td>@price($data->shipping_charge)</td>
-                                    <td>@price($data->commission)</td>
+                                    <td>@pricews($data->commission)%</td>
                                     {{-- <td>
                                         CA: {{ $data->created_at }} <br />
                                         UA: {{ $data->updated_at }}
