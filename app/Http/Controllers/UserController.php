@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\CloudFlareFileDeleteJob;
-use App\Jobs\CloudFlareFileUploadJob;
+use App\Jobs\CloudflareFileDeleteJob;
+use App\Jobs\CloudflareFileUploadJob;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
