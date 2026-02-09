@@ -31,23 +31,23 @@
                         <img src="{{ $user->avatar ? cloudflareImage($user->avatar, 200) : cloudflareImage('eca4fbfc-baba-4ac2-0966-e8a13d097700', 200) }}"
                             class="rounded mx-auto d-block img-thumbnail" style="width: 200px;height:200px;" alt="User Avatar">
                         <h3 class=" border-gray pb-2 mb-0 profile">Profile :</h3>
-                        <div class="media pt-3">
-                            <div class="media-body pb-3 mb-0 lh-125  border-gray">
+                        <div class="media pt-1">
+                            <div class="media-body mb-0  border-gray">
                                 <h6>Name : {{ $user->name ?? '' }}</h6>
                             </div>
                         </div>
-                        <div class="media pt-3">
-                            <div class="media-body pb-3 mb-0 lh-125  border-gray">
+                        <div class="media pt-1">
+                            <div class="media-body mb-0  border-gray">
                                 <h6>E-mail : {{ $user->email ?? '' }}</h6>
                             </div>
                         </div>
-                        <div class="media pt-3">
-                            <div class="media-body pb-3 mb-0 lh-125  border-gray">
+                        <div class="media pt-1">
+                            <div class="media-body mb-0  border-gray">
                                 <h6>Designation : {{ $user->designation ?? 'N/A' }}</h6>
                             </div>
                         </div>
-                        <div class="media pt-3">
-                            <div class="media-body pb-3 mb-0 lh-125  border-gray">
+                        <div class="media pt-1">
+                            <div class="media-body mb-0  border-gray">
                                 <h6>Role :
                                     @if ($user?->roles?->isNotEmpty())
                                         <span class="badge bg-primary">
@@ -61,8 +61,8 @@
                                 </h6>
                             </div>
                         </div>
-                        <div class="media pt-3">
-                            <div class="media-body pb-3 mb-0 lh-125 border-gray">
+                        <div class="media pt-1">
+                            <div class="media-body mb-0 border-gray">
                                 <h6>Status :
                                     @if ($user->status == true)
                                         <span class="badge bg-success">Active</span>
