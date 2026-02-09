@@ -10,30 +10,42 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Traits\CloudflareFileUploader;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CloudflareVideoUploadJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, CloudflareFileUploader;
 
-    public $tries = 3;
-
+    public $tries = 1;
+    public $maxExceptions = 1;
     public $timeout = 1680;
+    public $failOnTimeout = true;
+    public $backoff = 10;
 
     public function __construct(public string $id, public string $path){}
 
     public function handle()
     {
-        $result = $this->uploadCfVideo($this->path);
-        if($result['success'] == true){
-            $this->jobSuccessRecord([
-                'uid' => $result['uid'],
-                'product_id' => $this->id,
+
+        try{
+            $result = $this->uploadCfVideo($this->path);
+
+            if (!empty($result['success'])) {
+                $this->jobSuccessRecord([
+                    'uid' => $result['uid'],
+                    'product_id' => $this->id,
+                ]);
+                return;
+            }
+            Log::warning('CLOUDFLARE: Video upload failed', [
+                'path'    => $this->path,
+                'message' => $result['message'] ?? 'Unknown error',
             ]);
-        }else{
-            $this->fail($result['message']);
-        }
-        if ($this->attempts() % 5 === 0) {
-            $this->release(2);
+        }catch (\Throwable $e) {
+            Log::critical('CLOUDFLARE: Video upload job crashed', [
+                'path'      => $this->path,
+                'exception' => $e->getMessage(),
+            ]);
         }
     }
 
