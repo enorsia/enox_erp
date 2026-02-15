@@ -76,6 +76,15 @@ class FabricationController extends Controller
         try {
             /** @var \Illuminate\Http\Client\Response $response */
             $response = $this->service->store($payload);
+
+            activity()
+                ->causedBy(auth()->user())
+                ->withProperties([
+                    'fabrication_name' => $request->name,
+                    'status' => $request->has('status') ? 'Active' : 'Inactive'
+                ])
+                ->log('Created new fabrication: ' . $request->name . ' (Status: ' . ($request->has('status') ? 'Active' : 'Inactive') . ')');
+
             notify()->success('Febrication created successfully', 'Success');
             return redirect()->route('admin.selling_chart.fabrication.index');
 

@@ -52,7 +52,7 @@ class SellingChartExpenseController extends Controller
                 return redirect()->route('admin.selling_chart.expense.index');
             }
 
-            SellingChartExpense::create([
+            $expense = SellingChartExpense::create([
                 'year' => $request->year,
                 'conversion_rate' => $request->conversion_rate,
                 'commercial_expense' => $request->commercial_expense,
@@ -61,6 +61,15 @@ class SellingChartExpenseController extends Controller
                 'shipping_cost' => $request->shipping_cost,
                 'status' => $request->filled('status'),
             ]);
+
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($expense)
+                ->withProperties([
+                    'year' => $expense->year,
+                    'conversion_rate' => $expense->conversion_rate
+                ])
+                ->log('Created expense configuration for year ' . $expense->year . ' (Conversion Rate: ' . $expense->conversion_rate . ')');
 
             notify()->success('Expense created successfully', 'Success');
             return redirect()->route('admin.selling_chart.expense.index');
@@ -103,7 +112,20 @@ class SellingChartExpenseController extends Controller
                 return back();
             }
 
-            SellingChartExpense::findOrFail($id)->update([
+            $expense = SellingChartExpense::findOrFail($id);
+
+            // Capture old values
+            $oldValues = [
+                'year' => $expense->year,
+                'conversion_rate' => $expense->conversion_rate,
+                'commercial_expense' => $expense->commercial_expense,
+                'enorsia_expense_bd' => $expense->enorsia_expense_bd,
+                'enorsia_expense_uk' => $expense->enorsia_expense_uk,
+                'shipping_cost' => $expense->shipping_cost,
+                'status' => $expense->status,
+            ];
+
+            $expense->update([
                 'year' => $request->year,
                 'conversion_rate' => $request->conversion_rate,
                 'commercial_expense' => $request->commercial_expense,
@@ -112,6 +134,40 @@ class SellingChartExpenseController extends Controller
                 'shipping_cost' => $request->shipping_cost,
                 'status' => $request->filled('status'),
             ]);
+
+            // Capture new values
+            $expense->refresh();
+            $newValues = [
+                'year' => $expense->year,
+                'conversion_rate' => $expense->conversion_rate,
+                'commercial_expense' => $expense->commercial_expense,
+                'enorsia_expense_bd' => $expense->enorsia_expense_bd,
+                'enorsia_expense_uk' => $expense->enorsia_expense_uk,
+                'shipping_cost' => $expense->shipping_cost,
+                'status' => $expense->status,
+            ];
+
+            // Detect changes
+            $changes = [];
+            foreach ($oldValues as $key => $oldValue) {
+                if ($oldValue != $newValues[$key]) {
+                    $changes[$key] = [
+                        'old' => $oldValue,
+                        'new' => $newValues[$key]
+                    ];
+                }
+            }
+
+            if (count($changes) > 0) {
+                $changedFields = array_keys($changes);
+                $description = 'Updated expense settings for year ' . $expense->year . ' (Changed: ' . implode(', ', array_map(fn($f) => ucwords(str_replace('_', ' ', $f)), $changedFields)) . ')';
+
+                activity()
+                    ->causedBy(auth()->user())
+                    ->performedOn($expense)
+                    ->withProperties(['old' => $oldValues, 'attributes' => $newValues])
+                    ->log($description);
+            }
 
             notify()->success('Expense updated successfully', 'Success');
             return redirect(session('backUrl'));
@@ -131,7 +187,18 @@ class SellingChartExpenseController extends Controller
     {
         Gate::authorize('general.expense.delete');
         try {
-            SellingChartExpense::findOrFail($id)->delete();
+            $expense = SellingChartExpense::findOrFail($id);
+
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($expense)
+                ->withProperties([
+                    'year' => $expense->year,
+                    'conversion_rate' => $expense->conversion_rate
+                ])
+                ->log('Deleted expense configuration for year ' . $expense->year);
+
+            $expense->delete();
             notify()->success("Expense deleted successfully.", "Success");
             return back();
         } catch (\Throwable $th) {

@@ -17,6 +17,10 @@ return [
             'roles' => [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'show', 'delete'],
+            ],
+            'activity_logs' => [
+                'guard' => 'web',
+                'actions' => ['index', 'show'],
             ]
 
         ],

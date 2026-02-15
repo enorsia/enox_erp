@@ -75,6 +75,12 @@ class UserController extends Controller
 
             $user->assignRole($request->role);
 
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($user)
+                ->withProperties(['attributes' => $user->toArray()])
+                ->log('Created new user account for ' . $user->name . ' (' . $user->email . ')');
+
             notify()->success("User created successfully.", "Success");
             return redirect()->route('admin.users.index');
         } catch (\Exception $e) {
@@ -117,6 +123,14 @@ class UserController extends Controller
         ]);
 
         try {
+            // Capture old values before update
+            $oldValues = [
+                'name' => $user->name,
+                'email' => $user->email,
+                'designation' => $user->designation,
+                'status' => $user->status,
+            ];
+
             $filePath = public_path('upload/user_images/' . $user->avatar);
             $fileUrl = null;
             $user->update([
@@ -154,6 +168,50 @@ class UserController extends Controller
                 ]);
             }
 
+            // Capture new values after update
+            $user->refresh();
+            $newValues = [
+                'name' => $user->name,
+                'email' => $user->email,
+                'designation' => $user->designation,
+                'status' => $user->status,
+            ];
+
+            // Detect actual changes
+            $changes = [];
+            foreach ($oldValues as $key => $oldValue) {
+                if ($oldValue != $newValues[$key]) {
+                    $changes[$key] = [
+                        'old' => $oldValue,
+                        'new' => $newValues[$key]
+                    ];
+                }
+            }
+
+            // Build readable description
+            $changedFields = array_keys($changes);
+            $description = 'Updated user profile for ' . $user->name;
+            if (count($changedFields) > 0) {
+                $description .= ' (Changed: ' . implode(', ', array_map(fn($f) => ucfirst($f), $changedFields)) . ')';
+            }
+
+            // Log only if there are actual changes
+            if (count($changes) > 0 || $request->filled('password') || $request->hasFile('avatar')) {
+                $properties = ['old' => $oldValues, 'attributes' => $newValues];
+                if ($request->filled('password')) {
+                    $description .= ' (Password updated)';
+                }
+                if ($request->hasFile('avatar')) {
+                    $description .= ' (Avatar updated)';
+                }
+
+                activity()
+                    ->causedBy(auth()->user())
+                    ->performedOn($user)
+                    ->withProperties($properties)
+                    ->log($description);
+            }
+
 
             notify()->success("User updated successfully.", "Success");
             return redirect()->route('admin.users.index');
@@ -186,6 +244,12 @@ class UserController extends Controller
                     CloudflareFileDeleteJob::dispatch(basename($fileUrl));
                 }
             }
+
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($user)
+                ->withProperties(['deleted_user' => $user->name, 'email' => $user->email])
+                ->log('Deleted user account: ' . $user->name . ' (' . $user->email . ')');
 
             $user->delete();
 

@@ -52,7 +52,7 @@ class PlatformController extends Controller
             'note' => 'nullable|string',
         ]);
         try {
-            Platform::create([
+            $platform = Platform::create([
                 'name' => $validated['platform_name'],
                 'code' => $validated['code'],
                 'shipping_charge' => $validated['shipping_charge'] ?? 0,
@@ -60,6 +60,17 @@ class PlatformController extends Controller
                 'commission' => $validated['commission'],
                 'note' => $validated['note'],
             ]);
+
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($platform)
+                ->withProperties([
+                    'platform_name' => $platform->name,
+                    'code' => $platform->code,
+                    'commission' => $platform->commission . '%'
+                ])
+                ->log('Created new platform: ' . $platform->name . ' (Code: ' . $platform->code . ')');
+
             notify()->success('Platform created successfully', 'Success');
             return redirect()->route('admin.platforms.index');
         } catch (\Exception $e) {
@@ -101,9 +112,51 @@ class PlatformController extends Controller
         ]);
 
         try {
+            // Capture old values
+            $oldValues = [
+                'shipping_charge' => $platform->shipping_charge,
+                'min_profit' => $platform->min_profit,
+                'commission' => $platform->commission,
+                'status' => $platform->status,
+                'note' => $platform->note,
+            ];
+
             $validated['status'] = $request->has('status') ? 1 : 0;
             $platform->update($validated);
             Cache::forget('platforms_by_code');
+
+            // Capture new values
+            $platform->refresh();
+            $newValues = [
+                'shipping_charge' => $platform->shipping_charge,
+                'min_profit' => $platform->min_profit,
+                'commission' => $platform->commission,
+                'status' => $platform->status,
+                'note' => $platform->note,
+            ];
+
+            // Detect changes
+            $changes = [];
+            foreach ($oldValues as $key => $oldValue) {
+                if ($oldValue != $newValues[$key]) {
+                    $changes[$key] = [
+                        'old' => $oldValue,
+                        'new' => $newValues[$key]
+                    ];
+                }
+            }
+
+            if (count($changes) > 0) {
+                $changedFields = array_keys($changes);
+                $description = 'Updated platform: ' . $platform->name . ' (Changed: ' . implode(', ', array_map(fn($f) => ucwords(str_replace('_', ' ', $f)), $changedFields)) . ')';
+
+                activity()
+                    ->causedBy(auth()->user())
+                    ->performedOn($platform)
+                    ->withProperties(['old' => $oldValues, 'attributes' => $newValues])
+                    ->log($description);
+            }
+
             notify()->success('Platform updated successfully', 'Success');
             return redirect()->route('admin.platforms.index');
         } catch (\Exception $e) {
@@ -120,6 +173,15 @@ class PlatformController extends Controller
     {
         Gate::authorize('settings.platforms.delete');
         try {
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($platform)
+                ->withProperties([
+                    'platform_name' => $platform->name,
+                    'code' => $platform->code
+                ])
+                ->log('Deleted platform: ' . $platform->name . ' (Code: ' . $platform->code . ')');
+
             $platform->delete();
             notify()->success('Platform deleted successfully', 'Success');
             return redirect()->back();
