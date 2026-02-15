@@ -35,6 +35,17 @@ class ProfileController extends Controller
         try {
             $user = User::findOrFail(Auth::id());
 
+            // Capture old values
+            $oldValues = [
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'gender' => $user->gender,
+                'address' => $user->address,
+            ];
+
+            $avatarUpdated = false;
+
             if ($request->hasFile('avatar')) {
                 $file = $request->file('avatar');
                 @unlink(public_path('upload/user_images/' . $user->avatar));
@@ -45,6 +56,7 @@ class ProfileController extends Controller
                 $user->update([
                     "avatar" => $filename,
                 ]);
+                $avatarUpdated = true;
             }
 
             $user->update([
@@ -54,6 +66,42 @@ class ProfileController extends Controller
                 'gender'  => $request->gender,
                 'address'  => $request->address
             ]);
+
+            // Capture new values
+            $user->refresh();
+            $newValues = [
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'gender' => $user->gender,
+                'address' => $user->address,
+            ];
+
+            // Detect changes
+            $changes = [];
+            foreach ($oldValues as $key => $oldValue) {
+                if ($oldValue != $newValues[$key]) {
+                    $changes[] = ucfirst($key);
+                }
+            }
+
+            if ($avatarUpdated) {
+                $changes[] = 'Profile picture';
+            }
+
+            // Log only if there are changes
+            if (count($changes) > 0) {
+                $description = $user->name . ' updated their profile';
+                if (count($changes) > 0) {
+                    $description .= ' (Changed: ' . implode(', ', $changes) . ')';
+                }
+
+                activity()
+                    ->causedBy(auth()->user())
+                    ->performedOn($user)
+                    ->withProperties(['old' => $oldValues, 'attributes' => $newValues])
+                    ->log($description);
+            }
 
             notify()->success('User Updated Successfully', 'success');
             return redirect()->back();
@@ -84,6 +132,13 @@ class ProfileController extends Controller
                 $user->update([
                     'password' => Hash::make($request->password)
                 ]);
+
+                activity()
+                    ->causedBy(auth()->user())
+                    ->performedOn($user)
+                    ->withProperties(['user_name' => $user->name, 'email' => $user->email])
+                    ->log($user->name . ' changed their password successfully');
+
                 Auth::logout();
                 return redirect()->route('admin.login');
             }else{

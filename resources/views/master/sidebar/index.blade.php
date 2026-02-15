@@ -44,6 +44,17 @@
                         </a>
                     </li>
                 @endcan
+                @can('authentication.activity_logs.index')
+                    <li class="nav-item {{ Request::is('admin/activity-logs*') ? 'active' : '' }}">
+                        <a class="nav-link {{ Request::is('admin/activity-logs*') ? 'active' : '' }}"
+                            href="{{ route('admin.activity-logs.index') }}">
+                            <span class="nav-icon">
+                                <iconify-icon icon="solar:clock-circle-broken"></iconify-icon>
+                            </span>
+                            <span class="nav-text"> Activity Logs </span>
+                        </a>
+                    </li>
+                @endcan
 
             @endcanany
 

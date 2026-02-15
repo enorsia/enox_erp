@@ -83,6 +83,16 @@ class RoleController extends Controller
                 $permissions = Permission::whereIn('id', $formData['permissions'])->pluck('name')->toArray();
                 $role->syncPermissions($permissions);
             }
+
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($role)
+                ->withProperties([
+                    'role_name' => $role->name,
+                    'permissions_count' => count($permissions ?? [])
+                ])
+                ->log('Created new role: ' . $role->name . ' with ' . count($permissions ?? []) . ' permission(s)');
+
             notify()->success('Role added successfully', 'Success');
             return redirect()->route('admin.roles.index');
 
@@ -177,11 +187,49 @@ class RoleController extends Controller
         try {
             $role = Role::findOrFail($id);
 
+            // Capture old values
+            $oldName = $role->name;
+            $oldPermissions = $role->permissions->pluck('name')->toArray();
+
             $role->name = $formData['name'];
             $role->save();
 
             $permissions = Permission::whereIn('id', $formData['permissions'] ?? [])->pluck('name')->toArray();
             $role->syncPermissions($permissions);
+
+            // Detect changes
+            $changes = [];
+            if ($oldName !== $role->name) {
+                $changes[] = "name from '{$oldName}' to '{$role->name}'";
+            }
+
+            $addedPermissions = array_diff($permissions, $oldPermissions);
+            $removedPermissions = array_diff($oldPermissions, $permissions);
+
+            if (count($addedPermissions) > 0) {
+                $changes[] = count($addedPermissions) . ' permission(s) added';
+            }
+            if (count($removedPermissions) > 0) {
+                $changes[] = count($removedPermissions) . ' permission(s) removed';
+            }
+
+            $description = 'Updated role: ' . $role->name;
+            if (count($changes) > 0) {
+                $description .= ' (Changed: ' . implode(', ', $changes) . ')';
+            }
+
+            if (count($changes) > 0) {
+                activity()
+                    ->causedBy(auth()->user())
+                    ->performedOn($role)
+                    ->withProperties([
+                        'old' => ['name' => $oldName, 'permissions_count' => count($oldPermissions)],
+                        'attributes' => ['name' => $role->name, 'permissions_count' => count($permissions)],
+                        'added_permissions' => array_values($addedPermissions),
+                        'removed_permissions' => array_values($removedPermissions)
+                    ])
+                    ->log($description);
+            }
 
             notify()->success('Role updated successfully', 'Success');
 
@@ -206,6 +254,17 @@ class RoleController extends Controller
         Gate::authorize('authentication.roles.delete');
         $page = request('page');
         try {
+            $permissionCount = $role->permissions()->count();
+
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($role)
+                ->withProperties([
+                    'role_name' => $role->name,
+                    'permissions_count' => $permissionCount
+                ])
+                ->log('Deleted role: ' . $role->name . ' (had ' . $permissionCount . ' permission(s))');
+
             $role->delete();
             notify()->success('Role deleted successfully', 'Success');
             return redirect()->route('admin.roles.index', ['page' => $page]);

@@ -10,6 +10,7 @@ use App\Http\Controllers\PlatformController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SalesChartController;
 use App\Http\Controllers\SellingChartExpenseController;
+use App\Http\Controllers\ActivityLogController;
 use Illuminate\Support\Facades\Auth;
 
 
@@ -28,6 +29,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('users', UserController::class);
     Route::resource('roles', RoleController::class);
     Route::resource('platforms', PlatformController::class);
+    Route::resource('activity-logs', ActivityLogController::class)->only(['index', 'show']);
 
     Route::controller(SalesChartController::class)->group(function () {
         Route::get('selling-chart/manage', 'index')->name('selling_chart.index');

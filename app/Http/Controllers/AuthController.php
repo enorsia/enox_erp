@@ -25,6 +25,16 @@ class AuthController extends Controller
         if (Auth::attempt($request->only('email', 'password'), $rememberMe)) {
             $request->session()->regenerate();
             avaiablePermissions();
+
+            activity()
+                ->causedBy(auth()->user())
+                ->withProperties([
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'email' => auth()->user()->email
+                ])
+                ->log(auth()->user()->name . ' logged in successfully from IP: ' . $request->ip());
+
             return redirect()->route('admin.dashboard');
         }
 
@@ -35,6 +45,13 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
+        $userName = auth()->user()->name;
+
+        activity()
+            ->causedBy(auth()->user())
+            ->withProperties(['ip' => $request->ip()])
+            ->log($userName . ' logged out from IP: ' . $request->ip());
+
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

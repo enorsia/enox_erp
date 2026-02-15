@@ -506,6 +506,18 @@ class SalesChartController extends Controller
             }
 
             DB::commit();
+
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($basic_info)
+                ->withProperties([
+                    'design_no' => $basic_info->design_no,
+                    'product_code' => $basic_info->product_code,
+                    'product_description' => $basic_info->product_description,
+                    'colors_count' => count($request->color_code)
+                ])
+                ->log('Created selling chart: ' . $basic_info->design_no . ' (' . $basic_info->product_description . ') with ' . count($request->color_code) . ' color(s)');
+
             notify()->success("Selling chart created successfully.", "Success");
             return redirect()->route('admin.selling_chart.index');
         } catch (\Throwable $th) {
@@ -561,6 +573,13 @@ class SalesChartController extends Controller
             $fileUrl2 = null;
             $storeCommonData = $this->storeCommonData($request);
             $basic_info = SellingChartBasicInfo::findOrFail($id);
+
+            // Capture old values for important fields
+            $oldDesignNo = $basic_info->design_no;
+            $oldProductCode = $basic_info->product_code;
+            $oldDescription = $basic_info->product_description;
+            $oldColorCount = $basic_info->sellingChartPrices()->count();
+
             $filePath = public_path('upload/selling_images/' . $basic_info->inspiration_image);
             $filePath2 = public_path('upload/selling_design_images/' . $basic_info->design_image);
             $paths = [];
@@ -671,6 +690,47 @@ class SalesChartController extends Controller
             }
 
             DB::commit();
+
+            // Detect changes and build description
+            $changes = [];
+            if ($oldDesignNo !== $basic_info->design_no) {
+                $changes[] = "design no from '{$oldDesignNo}' to '{$basic_info->design_no}'";
+            }
+            if ($oldProductCode !== $basic_info->product_code) {
+                $changes[] = "product code from '{$oldProductCode}' to '{$basic_info->product_code}'";
+            }
+            if ($oldDescription !== $basic_info->product_description) {
+                $changes[] = "description";
+            }
+
+            $newColorCount = count($request->price_id);
+            if ($oldColorCount !== $newColorCount) {
+                $changes[] = "colors from {$oldColorCount} to {$newColorCount}";
+            }
+
+            if ($request->hasFile('image')) {
+                $changes[] = "inspiration image";
+            }
+            if ($request->hasFile('design_image')) {
+                $changes[] = "design image";
+            }
+
+            $description = 'Updated selling chart: ' . $basic_info->design_no . ' (' . $basic_info->product_description . ')';
+            if (count($changes) > 0) {
+                $description .= ' (Changed: ' . implode(', ', $changes) . ')';
+            }
+
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($basic_info)
+                ->withProperties([
+                    'design_no' => $basic_info->design_no,
+                    'product_code' => $basic_info->product_code,
+                    'colors_count' => $newColorCount,
+                    'changes' => $changes
+                ])
+                ->log($description);
+
             notify()->success("Selling chart updated successfully.", "Success");
             return redirect(session('backUrl'));
         } catch (\Throwable $th) {
@@ -721,6 +781,19 @@ class SalesChartController extends Controller
                     CloudflareFileDeleteJob::dispatch(basename($fileUrl2));
                 }
             }
+
+            $colorCount = $basic_info->sellingChartPrices()->count();
+
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($basic_info)
+                ->withProperties([
+                    'design_no' => $basic_info->design_no,
+                    'product_code' => $basic_info->product_code,
+                    'product_description' => $basic_info->product_description,
+                    'colors_count' => $colorCount
+                ])
+                ->log('Deleted selling chart: ' . $basic_info->design_no . ' (' . $basic_info->product_description . ') with ' . $colorCount . ' color variant(s)');
 
             $basic_info->delete();
 
