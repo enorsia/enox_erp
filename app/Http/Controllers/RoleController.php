@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Spatie\Permission\Models\Permission;
@@ -85,7 +86,7 @@ class RoleController extends Controller
             }
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($role)
                 ->withProperties([
                     'role_name' => $role->name,
@@ -220,7 +221,7 @@ class RoleController extends Controller
 
             if (count($changes) > 0) {
                 activity()
-                    ->causedBy(auth()->user())
+                    ->causedBy(Auth::user())
                     ->performedOn($role)
                     ->withProperties([
                         'old' => ['name' => $oldName, 'permissions_count' => count($oldPermissions)],
@@ -257,7 +258,7 @@ class RoleController extends Controller
             $permissionCount = $role->permissions()->count();
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($role)
                 ->withProperties([
                     'role_name' => $role->name,

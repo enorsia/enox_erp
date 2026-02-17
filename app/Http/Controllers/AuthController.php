@@ -27,13 +27,13 @@ class AuthController extends Controller
             avaiablePermissions();
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->withProperties([
                     'ip' => $request->ip(),
                     'user_agent' => $request->userAgent(),
-                    'email' => auth()->user()->email
+                    'email' => Auth::user()->email
                 ])
-                ->log(auth()->user()->name . ' logged in successfully from IP: ' . $request->ip());
+                ->log(Auth::user()->name . ' logged in successfully from IP: ' . $request->ip());
 
             return redirect()->route('admin.dashboard');
         }
@@ -45,10 +45,10 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $userName = auth()->user()->name;
+        $userName = Auth::user()->name;
 
         activity()
-            ->causedBy(auth()->user())
+            ->causedBy(Auth::user())
             ->withProperties(['ip' => $request->ip()])
             ->log($userName . ' logged out from IP: ' . $request->ip());
 

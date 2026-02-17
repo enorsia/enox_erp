@@ -39,4 +39,9 @@ class SellingChartPrice extends Model
     {
         return $this->belongsTo(SellingChartBasicInfo::class, 'basic_info_id', "id");
     }
+
+    public function discounts()
+    {
+        return $this->hasMany(SellingChartDiscount::class);
+    }
 }

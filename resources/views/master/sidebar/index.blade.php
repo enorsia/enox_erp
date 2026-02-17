@@ -51,7 +51,7 @@
                             <span class="nav-icon">
                                 <iconify-icon icon="solar:clock-circle-broken"></iconify-icon>
                             </span>
-                            <span class="nav-text"> Activity Logs </span>
+                            <span class="nav-text"> Activities </span>
                         </a>
                     </li>
                 @endcan
@@ -100,6 +100,14 @@
                                         <a class="sub-nav-link {{ Request::is('admin/selling-chart/forecasting/*') ? 'active' : '' }}"
                                             href="{{ route('admin.selling_chart.forecasting') }}">
                                             Forecasting</a>
+                                    </li>
+                                @endcan
+                                @can('general.discounts.index')
+                                    <li
+                                        class="sub-nav-item {{ Request::is('admin/selling-chart/discounts/*') ? 'active' : '' }}">
+                                        <a class="sub-nav-link {{ Request::is('admin/selling-chart/discounts/*') ? 'active' : '' }}"
+                                            href="{{ route('admin.selling_chart.discounts') }}">
+                                            Discounts</a>
                                     </li>
                                 @endcan
                                 @can('general.fabrication.index')

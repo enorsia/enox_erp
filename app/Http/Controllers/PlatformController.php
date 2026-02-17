@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Platform;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
@@ -62,7 +63,7 @@ class PlatformController extends Controller
             ]);
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($platform)
                 ->withProperties([
                     'platform_name' => $platform->name,
@@ -151,7 +152,7 @@ class PlatformController extends Controller
                 $description = 'Updated platform: ' . $platform->name . ' (Changed: ' . implode(', ', array_map(fn($f) => ucwords(str_replace('_', ' ', $f)), $changedFields)) . ')';
 
                 activity()
-                    ->causedBy(auth()->user())
+                    ->causedBy(Auth::user())
                     ->performedOn($platform)
                     ->withProperties(['old' => $oldValues, 'attributes' => $newValues])
                     ->log($description);
@@ -174,7 +175,7 @@ class PlatformController extends Controller
         Gate::authorize('settings.platforms.delete');
         try {
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($platform)
                 ->withProperties([
                     'platform_name' => $platform->name,

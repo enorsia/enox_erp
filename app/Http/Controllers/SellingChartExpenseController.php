@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SellingChartExpense;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
@@ -63,7 +64,7 @@ class SellingChartExpenseController extends Controller
             ]);
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($expense)
                 ->withProperties([
                     'year' => $expense->year,
@@ -163,7 +164,7 @@ class SellingChartExpenseController extends Controller
                 $description = 'Updated expense settings for year ' . $expense->year . ' (Changed: ' . implode(', ', array_map(fn($f) => ucwords(str_replace('_', ' ', $f)), $changedFields)) . ')';
 
                 activity()
-                    ->causedBy(auth()->user())
+                    ->causedBy(Auth::user())
                     ->performedOn($expense)
                     ->withProperties(['old' => $oldValues, 'attributes' => $newValues])
                     ->log($description);
@@ -190,7 +191,7 @@ class SellingChartExpenseController extends Controller
             $expense = SellingChartExpense::findOrFail($id);
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($expense)
                 ->withProperties([
                     'year' => $expense->year,

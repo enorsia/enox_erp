@@ -97,7 +97,9 @@
                                     <thead>
                                         <tr>
                                             <th class="text-center">Color Name (code)</th>
-                                            <th>Size Range</th>
+                                            @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
+                                                <th>Size Range</th>
+                                            @endif
                                             <th>PO Qty</th>
                                             <th class="text-center">price $(FOB)</th>
                                             <th class="text-center">Unit Price</th>
@@ -109,7 +111,8 @@
                                             <th class="text-center">Net Profit</th>
                                             <th class="text-center toogle-item discount">Discount %</th>
                                             <th class="text-center toogle-item discount">Discount Selling Price</th>
-                                            <th class="text-center toogle-item discount">20% Selling Vat Dedact Price</th>
+                                            <th class="text-center toogle-item discount">20% Selling Vat Dedact Price
+                                            </th>
                                             <th class="text-center toogle-item discount">Discount Vat Value £</th>
                                             <th class="text-center">Discount Profit Margin %</th>
                                             <th class="text-center">Discount Net Profit</th>
@@ -118,22 +121,29 @@
                                         @foreach ($chartInfo->sellingChartPrices as $ch_price)
                                             <tr>
                                                 <td>{{ $ch_price->color_name }} ({{ $ch_price->color_code }})</td>
-                                                <td class="text-center">{{ $ch_price->range }}</td>
+                                                @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
+                                                    <td class="text-center">{{ $ch_price->range }}</td>
+                                                @endif
                                                 <td class="text-center">{{ $ch_price->po_order_qty }}</td>
                                                 <td class="text-center">${{ $ch_price->price_fob }}</td>
                                                 <td class="text-center">£{{ $ch_price->unit_price }}</td>
                                                 <td class="text-center">
                                                     £{{ $ch_price->confirm_selling_price ?? '0.00' }}</td>
-                                                <td class="text-center toogle-item vat">£{{ $ch_price->vat_price ?? '0.00' }}</td>
-                                                <td class="text-center toogle-item vat">£{{ $ch_price->vat_value ?? '0.00' }}</td>
+                                                <td class="text-center toogle-item vat">
+                                                    £{{ $ch_price->vat_price ?? '0.00' }}</td>
+                                                <td class="text-center toogle-item vat">
+                                                    £{{ $ch_price->vat_value ?? '0.00' }}</td>
                                                 <td class="text-center">{{ $ch_price->profit_margin ?? '0.00' }}%</td>
                                                 <td class="text-center">£{{ $ch_price->net_profit ?? '0.00' }}</td>
-                                                <td class=" toogle-item discount">{{ $ch_price->discount ?? '0.00' }}%</td>
+                                                <td class=" toogle-item discount">{{ $ch_price->discount ?? '0.00' }}%
+                                                </td>
                                                 <td class=" toogle-item discount">
                                                     £{{ $ch_price->discount_selling_price ?? '0.00' }}</td>
-                                                <td class=" toogle-item discount">£{{ $ch_price->discount_vat_price ?? '0.00' }}
+                                                <td class=" toogle-item discount">
+                                                    £{{ $ch_price->discount_vat_price ?? '0.00' }}
                                                 </td>
-                                                <td class=" toogle-item discount">£{{ $ch_price->discount_vat_value ?? '0.00' }}
+                                                <td class=" toogle-item discount">
+                                                    £{{ $ch_price->discount_vat_value ?? '0.00' }}
                                                 </td>
                                                 <td class="text-center">
                                                     {{ $ch_price->discount_profit_margin ?? '0.00' }}%</td>

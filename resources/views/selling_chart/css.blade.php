@@ -106,6 +106,15 @@
         font-size: 14px;
     }
 
+    .table>:not(caption)>*>* {
+        padding: 8px;
+    }
+
+    td,
+    th {
+        vertical-align: middle;
+    }
+
 
     @media (max-width: 991px) {
         .bottom_cards {

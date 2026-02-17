@@ -97,7 +97,7 @@ class ProfileController extends Controller
                 }
 
                 activity()
-                    ->causedBy(auth()->user())
+                    ->causedBy(Auth::user())
                     ->performedOn($user)
                     ->withProperties(['old' => $oldValues, 'attributes' => $newValues])
                     ->log($description);
@@ -134,7 +134,7 @@ class ProfileController extends Controller
                 ]);
 
                 activity()
-                    ->causedBy(auth()->user())
+                    ->causedBy(Auth::user())
                     ->performedOn($user)
                     ->withProperties(['user_name' => $user->name, 'email' => $user->email])
                     ->log($user->name . ' changed their password successfully');

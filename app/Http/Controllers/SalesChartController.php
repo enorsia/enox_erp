@@ -9,18 +9,22 @@ use App\Exports\SellingChartMismatchExport;
 use App\Imports\SellingChartImport;
 use App\Jobs\CloudflareFileDeleteJob;
 use App\Jobs\CloudflareFileUploadJob;
+use App\Mail\SellingChartDiscountMail;
 use App\Models\Platform;
 use App\Models\SellingChartBasicInfo;
+use App\Models\SellingChartDiscount;
 use App\Models\SellingChartExpense;
 use App\Models\SellingChartPrice;
 use App\Models\SellingChartType;
+use Carbon\Carbon;
 use Exception;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Session;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -57,7 +61,18 @@ class SalesChartController extends Controller
         $data["platform_ncs"] = Platform::selectedPlatforms();
         $data["platforms"] = Platform::all()->keyBy('code');
 
-        return view('selling_chart.forecasting', $data);
+        return view('selling_chart.forecasting.index', $data);
+    }
+
+    public function discounts(Request $request)
+    {
+        Gate::authorize('general.forecasting.index');
+
+        $data = $this->getChartData($request);
+        $data["platform_ncs"] = Platform::selectedPlatforms();
+        $data["platforms"] = Platform::all()->keyBy('code');
+
+        return view('selling_chart.discounts.index', $data);
     }
 
 
@@ -137,7 +152,7 @@ class SalesChartController extends Controller
         // colors count calculation end
 
         $data['chartInfos'] = SellingChartBasicInfo::filter($request)
-            ->with(['sellingChartPrices'])
+            ->with(['sellingChartPrices.discounts'])
             ->withCount(['sellingChartPrices'])
             ->orderByDesc('id')
             ->paginate(30);
@@ -508,7 +523,7 @@ class SalesChartController extends Controller
             DB::commit();
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($basic_info)
                 ->withProperties([
                     'design_no' => $basic_info->design_no,
@@ -721,7 +736,7 @@ class SalesChartController extends Controller
             }
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($basic_info)
                 ->withProperties([
                     'design_no' => $basic_info->design_no,
@@ -785,7 +800,7 @@ class SalesChartController extends Controller
             $colorCount = $basic_info->sellingChartPrices()->count();
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($basic_info)
                 ->withProperties([
                     'design_no' => $basic_info->design_no,
@@ -889,6 +904,17 @@ class SalesChartController extends Controller
             }
 
             DB::commit();
+
+            activity()
+                ->causedBy(Auth::user())
+                ->performedOn($sellingChartPrice)
+                ->withProperties([
+                    'color' => $sellingChartPrice->color_name,
+                    'range' => $sellingChartPrice->range,
+                ])
+                ->log('Selling chart bulk updated: Last Color' . $sellingChartPrice->color_name . ' Last Range' . $sellingChartPrice->range);
+
+
             notify()->success("Selling prices Updated Successfully.", "Success");
             return redirect(session('backUrl'));
         } catch (\Throwable $th) {
@@ -901,9 +927,9 @@ class SalesChartController extends Controller
         }
     }
 
-    public function viewSingleChart(Request $request,$id)
+    public function viewSingleChart(Request $request, $id)
     {
-        $data['chartInfo'] = SellingChartBasicInfo::with('sellingChartPrices')->findOrFail($id);
+        $data['chartInfo'] = SellingChartBasicInfo::with('sellingChartPrices.discounts')->findOrFail($id);
         $designNumber = $data['chartInfo']->design_no;
 
         $ecommerceProducts = $this->sellingChartApiService->getEcomProducts([
@@ -917,8 +943,173 @@ class SalesChartController extends Controller
         $data["platform_ncs"] = Platform::selectedPlatforms();
         $data["platforms"] = Platform::all()->keyBy('code');
 
-
-        $html = $request->page == 1 ? view('selling_chart.view-item', $data)->render() : view('selling_chart.forecast-view-item', $data)->render();
+        if ($request->page == 1) {
+            $html = view('selling_chart.view-item', $data)->render();
+        } elseif ($request->page == 2) {
+            $html = view('selling_chart.forecasting.view-item', $data)->render();
+        } else {
+            $html = view('selling_chart.discounts.view-item', $data)->render();
+        }
         return response()->json(['status' => true, 'data' => $html]);
+    }
+
+    public function calculateProfit(Request $request)
+    {
+        $platform = Platform::find($request->platform_id);
+        $price = SellingChartPrice::find($request->ch_price_id);
+        $price->confirm_selling_price = (float)$request->discount_price;
+
+        $profit_cal = calculatePlatformProfit(
+            $price,
+            $platform
+        );
+
+        return response()->json($profit_cal);
+    }
+
+    public function savePlatformDiscountPrice(Request $request)
+    {
+
+        try {
+            $request->validate([
+                'platform_id' => ['required', 'integer', 'exists:platforms,id'],
+                'department_id' => ['required', 'integer'],
+
+                'sl_price_id' => ['nullable', 'array'],
+                'sl_price_id.*' => ['integer', 'exists:selling_chart_prices,id'],
+
+                'ch_price_id' => ['nullable', 'array'],
+                'ch_price_id.*' => ['integer', 'exists:selling_chart_prices,id'],
+
+                'discount_price' => ['nullable', 'array'],
+                'discount_price.*' => ['nullable', 'numeric', 'min:0'],
+            ], [
+                'platform_id.required' => 'Platform is required.',
+                'platform_id.exists' => 'Selected platform is invalid.',
+                'sl_price_id.*.exists' => 'Invalid selling chart price selected.',
+                'discount_price.*.numeric' => 'Discount price must be a number.',
+                'discount_price.*.min' => 'Discount price must be greater than or equal to 0.',
+            ]);
+
+            $platform_id = $request->platform_id;
+            $sl_price_ids = $request->sl_price_id;
+            $ch_price_ids = $request->ch_price_id;
+            $department_id = $request->department_id;
+            $statuses = $request->statuses;
+
+            if (!$sl_price_ids) {
+                throw new Exception("Don't select any item.");
+            }
+
+            DB::beginTransaction();
+
+            if ($department_id == 1926 || $department_id == 1927) {
+                $sl_price_ids = $ch_price_ids;
+            }
+
+            $platform = Platform::findOrFail($platform_id);
+            $sldIds = [];
+
+            foreach ($sl_price_ids as $sl_price_id) {
+                $sl_price = SellingChartPrice::findOrFail($sl_price_id);
+                $scd = SellingChartDiscount::where('selling_chart_price_id', $sl_price_id)
+                    ->where('platform_id', $platform_id)
+                    ->first();
+
+                if ($department_id == 1926 || $department_id == 1927) {
+                    $price = $request->discount_price[$request->sl_price_id[0]];
+                    $status = isset($statuses) && $statuses[$request->sl_price_id[0]] ? 1 : 0;
+                } else {
+                    $price = $request->discount_price[$sl_price_id];
+                    $status = isset($statuses) && $statuses[$sl_price_id] ? 1 : 0;
+                }
+
+                if ($scd) {
+                    if ($price) {
+                        if ($price > $sl_price->confirm_selling_price) {
+                            throw new Exception("Discount must be less than confirm selling price.");
+                        }
+                        $scd->price =  $price;
+                        $scd->status =  $status;
+                        $scd->save();
+                    } else {
+                        $scd->delete();
+                    }
+                } else {
+                    if (!$price) {
+                        throw new Exception("Discount must be greater than 0 to create.");
+                    }
+                    if ($price > $sl_price->confirm_selling_price) {
+                        throw new Exception("Discount must be less than confirm selling price.");
+                    }
+                    $scd = SellingChartDiscount::create([
+                        "selling_chart_price_id" => $sl_price_id,
+                        "platform_id" => $platform_id,
+                        "price" => $price,
+                    ]);
+                }
+
+                $sldIds[] = $scd->id;
+            }
+
+            DB::commit();
+
+            $save_type = $request->save_type;
+
+            $delayMinutes = 0;
+            if ($save_type == 2) {
+                $approval_emails = SellingChartDiscount::approvalEmails();
+                $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
+                    ->whereIn('id', $sldIds)
+                    ->where('status', 0)
+                    ->get();
+                if ($sl_discounts->isNotEmpty()) {
+                    foreach ($approval_emails as $email) {
+                        Mail::to($email)
+                            ->queue(
+                                (new SellingChartDiscountMail($sl_discounts, 'approval'))
+                                    ->delay(now()->addMinutes($delayMinutes))
+                            );
+                        $delayMinutes += 2;
+                    }
+                }
+            } elseif ($save_type == 3) {
+                $worker_emails = SellingChartDiscount::workerEmails();
+                $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
+                    ->whereIn('id', $sldIds)
+                    ->where('status', 1)
+                    ->get();
+                if ($sl_discounts->isNotEmpty()) {
+                    foreach ($worker_emails as $email) {
+                        Mail::to($email)
+                            ->queue(
+                                (new SellingChartDiscountMail($sl_discounts, 'worker'))
+                                    ->delay(now()->addMinutes($delayMinutes))
+                            );
+                        $delayMinutes += 2;
+                    }
+                }
+            }
+
+            activity()
+                ->causedBy(Auth::user())
+                ->performedOn($scd)
+                ->withProperties([
+                    'Price Id' => $scd->selling_chart_price_id,
+                    'Discount Price' => $scd->price,
+                    'Platform' => $platform->name,
+                ])
+                ->log('Selling chart discount updated: Last price Id: ' . $scd->selling_chart_price_id . ' Discount Price: ' . $scd->price . ' Platform: ' . $platform->name);
+
+            notify()->success("Discount prices updated Successfully.", "Success");
+            return back();
+        } catch (\Throwable $th) {
+            DB::rollback();
+            notify()->error($th->getMessage(), "Error");
+            Log::error('Discount prices update failed', [
+                'message'   => $th->getMessage()
+            ]);
+            return back();
+        }
     }
 }
