@@ -1030,7 +1030,9 @@ class SalesChartController extends Controller
                             throw new Exception("Discount must be less than confirm selling price.");
                         }
                         $scd->price =  $price;
-                        $scd->status =  $status;
+                        if (Auth::user()?->can('general.discounts.approve')) {
+                            $scd->status =  $status;
+                        }
                         $scd->save();
                     } else {
                         $scd->delete();
@@ -1074,16 +1076,16 @@ class SalesChartController extends Controller
                     }
                 }
             } elseif ($save_type == 3) {
-                $worker_emails = SellingChartDiscount::workerEmails();
+                $executor_emails = SellingChartDiscount::executorEmails();
                 $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
                     ->whereIn('id', $sldIds)
                     ->where('status', 1)
                     ->get();
                 if ($sl_discounts->isNotEmpty()) {
-                    foreach ($worker_emails as $email) {
+                    foreach ($executor_emails as $email) {
                         Mail::to($email)
                             ->queue(
-                                (new SellingChartDiscountMail($sl_discounts, 'worker'))
+                                (new SellingChartDiscountMail($sl_discounts, 'executor'))
                                     ->delay(now()->addMinutes($delayMinutes))
                             );
                         $delayMinutes += 2;

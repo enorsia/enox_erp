@@ -25,8 +25,8 @@ class SellingChartDiscountMail extends Mailable implements ShouldQueue
     public function build()
     {
         $subject = $this->type == 'approval'
-            ? 'Selling Chart Discount Approval Request'
-            : 'Selling Chart Discount Assigned to Worker';
+            ? config('app.name') . ' - Selling Chart Discount Approval Request'
+            : config('app.name') . ' - Discount Assigned for '. $this->discounts->first()?->platform?->name;
 
         return $this->subject($subject)
             ->view('selling_chart.discounts.email_body');

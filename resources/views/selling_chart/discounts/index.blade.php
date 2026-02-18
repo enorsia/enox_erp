@@ -125,17 +125,11 @@
                             <thead>
                                 <tr>
                                     <th class="text-nowrap" scope="col" style="width: 40px;">#SL</th>
-                                    <th class="text-nowrap" scope="col" style="width: 60px;">Action</th>
-                                    <th class="text-nowrap" scope="col" style="width: 95px;">Department</th>
-                                    <th class="text-nowrap" scope="col">Category</th>
-                                    <th class="text-nowrap" scope="col" style="width: 110px;">Mini Category</th>
-                                    <th class="text-nowrap" scope="col">Ecom Sku</th>
-                                    <th class="text-nowrap" scope="col">Design No</th>
-                                    <th class="text-nowrap" scope="col" style="width: 105px;">Design Image</th>
+                                    <th class="text-nowrap" scope="col" style="width: 280px;">Product Info</th>
 
-                                    <th class="text-nowrap" scope="col">Color Name</th>
+                                    <th class="text-nowrap" scope="col">Color / Range</th>
                                     @foreach ($platform_ncs as $p_code => $p_name)
-                                        <th class="text-nowrap" scope="col">{{ $p_name }}</th>
+                                        <th class="text-nowrap text-start" scope="col">{{ $p_name }}</th>
                                     @endforeach
                                 </tr>
                             </thead>
@@ -150,39 +144,36 @@
                                                 @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
                                                 {{ $start + $loop->index }}</td>
 
-                                            <td class="text-nowrap text-left"
+                                            <td class="text-nowrap text-start info-td"
                                                 @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
-
-                                                @can('general.discounts.show')
-                                                    <a class="btn btn-light btn-sm" href="javascript:void(0)"
-                                                        onclick="viewChart({{ $chartInfo->id }}, 3)">
-                                                        <iconify-icon icon="solar:eye-broken"
-                                                            class="align-middle fs-18"></iconify-icon>
-                                                    </a>
-                                                @endcan
-                                            </td>
-                                            <td class="text-nowrap"
-                                                @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
-                                                {{ $chartInfo->department_name }}</td>
-                                            <td class="text-nowrap"
-                                                @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
-                                                {{ $chartInfo->category_name }}</td>
-                                            <td class="text-nowrap"
-                                                @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
-                                                {{ $chartInfo->mini_category_name }}</td>
-                                            <td class="text-nowrap"
-                                                @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
-                                                {{ $ecommerceProduct['sku'] ?? '' }}</td>
-                                            <td class="text-nowrap"
-                                                @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
-                                                {{ $chartInfo->design_no }}</td>
-                                            <td class="text-nowrap"
-                                                @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
-                                                @if ($chartInfo->design_image)
-                                                    <img class="img-fluid"
-                                                        src="{{ $chartInfo->design_image ? cloudflareImage($chartInfo->design_image, 50) : cloudflareImage('099de045-63a0-407d-75ca-8e22f95b8700', 50) }}"
-                                                        alt="Design Image" width="50" height="50">
-                                                @endif
+                                                <div class="d-flex align-items-center">
+                                                    @if ($chartInfo->design_image)
+                                                        <img class="img-fluid mb-1"
+                                                            src="{{ $chartInfo->design_image ? cloudflareImage($chartInfo->design_image, 120) : cloudflareImage('099de045-63a0-407d-75ca-8e22f95b8700', 50) }}"
+                                                            alt="Design Image" width="120">
+                                                    @endif
+                                                    <div class="ps-2">
+                                                        <p class="mb-0">Design No:</p>
+                                                        <h6>
+                                                            @can('general.discounts.show')
+                                                                <a href="javascript:void(0)"
+                                                                    onclick="viewChart({{ $chartInfo->id }}, 3)">
+                                                                    {{ $chartInfo->design_no }}
+                                                                </a>
+                                                            @else
+                                                                {{ $chartInfo->design_no }}
+                                                            @endcan
+                                                        </h6>
+                                                        <p class="mb-0">Ecom Sku:</p>
+                                                        <h6>{{ $ecommerceProduct['sku'] ?? '' }}</h6>
+                                                        <p class="mb-0">Department:</p>
+                                                        <h6>{{ $chartInfo->department_name }}</h6>
+                                                        <p class="mb-0">Category:</p>
+                                                        <h6>{{ $chartInfo->category_name }}</h6>
+                                                        <p class="mb-0">Mini Category:</p>
+                                                        <h6>{{ $chartInfo->mini_category_name }}</h6>
+                                                    </div>
+                                                </div>
                                             </td>
 
 
@@ -192,7 +183,13 @@
                                                     @if ($loop->index == 1)
                                                         @break
                                                     @endif
-                                                    <td class="text-nowrap">{{ $ch_price->color_name }}</td>
+                                                    <td class="text-nowrap">
+                                                        {{ $ch_price->color_name }}
+                                                        @if ($ch_price->range)
+                                                            <br>
+                                                            {{ $ch_price->range }}
+                                                        @endif
+                                                    </td>
                                                     @foreach ($platform_ncs as $p_code => $p_name)
                                                         @php
                                                             $platform = $platforms->get($p_code);
@@ -200,30 +197,37 @@
                                                                 ->where('status', 1)
                                                                 ->where('platform_id', $platform->id)
                                                                 ->first();
-                                                            if ($d_price) {
-                                                                $ch_price->confirm_selling_price = $d_price->price;
-                                                            }
                                                             $cal_val = calculatePlatformProfit($ch_price, $platform);
+                                                            if ($d_price) {
+                                                                $dch_price = clone $ch_price;
+                                                                $dch_price->confirm_selling_price = $d_price->price;
+                                                                $dis_val = calculatePlatformProfit(
+                                                                    $dch_price,
+                                                                    $platform,
+                                                                );
+                                                            }
                                                         @endphp
                                                         <td class="text-nowrap text-start">
+                                                            <b class="text-info">Orginal Price:</b><br>
+                                                            <span title="Selling Price"><b>SP:</b> @price($cal_val['selling_price'])</span>
+                                                            <br>
+                                                            <span title="Profit Margin"><b>PM:</b> @pricews($cal_val['profit_margin'])%
+                                                            </span> <br>
+                                                            <span title="Net Profit"><b>NP:</b> @price($cal_val['net_profit']) </span>
+                                                            <br>
                                                             @if ($d_price)
                                                                 <b class="text-primary">Discount Price:</b><br>
-                                                            @else
-                                                                <b class="text-info">Orginal Price:</b><br>
+                                                                <span title="Selling Price"><b>SP:</b>
+                                                                    @price($dis_val['selling_price'])</span> <br>
+                                                                <span title="Profit Margin"><b>PM:</b> @pricews($dis_val['profit_margin'])%
+                                                                </span> <br>
+                                                                <span title="Net Profit"><b>NP:</b> @price($dis_val['net_profit'])
+                                                                </span> <br>
                                                             @endif
-                                                            <b>SP:</b> @price($cal_val['selling_price']) <br>
-                                                            <b>PM:</b> @pricews($cal_val['profit_margin'])% <br>
-                                                            <b>NP:</b> @price($cal_val['net_profit']) <br>
                                                         </td>
                                                     @endforeach
                                                 @endforeach
                                             @else
-                                                <td class="text-nowrap">0</td>
-                                                <td class="text-nowrap">0</td>
-                                                <td class="text-nowrap">0</td>
-                                                <td class="text-nowrap">0</td>
-                                                <td class="text-nowrap">0</td>
-                                                <td class="text-nowrap">0</td>
                                                 <td class="text-nowrap">0</td>
                                                 <td class="text-nowrap">0</td>
                                             @endif
@@ -235,7 +239,12 @@
                                                     @continue
                                                 @endif
                                                 <tr>
-                                                    <td class="text-nowrap">{{ $ch_price->color_name }}</td>
+                                                    <td class="text-nowrap">{{ $ch_price->color_name }}
+                                                        @if ($ch_price->range)
+                                                            <br>
+                                                            {{ $ch_price->range }}
+                                                        @endif
+                                                    </td>
                                                     @foreach ($platform_ncs as $p_code => $p_name)
                                                         @php
                                                             $platform = $platforms->get($p_code);
@@ -243,20 +252,34 @@
                                                                 ->where('status', 1)
                                                                 ->where('platform_id', $platform->id)
                                                                 ->first();
-                                                            if ($d_price) {
-                                                                $ch_price->confirm_selling_price = $d_price->price;
-                                                            }
                                                             $cal_val = calculatePlatformProfit($ch_price, $platform);
+
+                                                            if ($d_price) {
+                                                                $dch_price = clone $ch_price;
+                                                                $dch_price->confirm_selling_price = $d_price->price;
+                                                                $dis_val = calculatePlatformProfit(
+                                                                    $dch_price,
+                                                                    $platform,
+                                                                );
+                                                            }
                                                         @endphp
                                                         <td class="text-nowrap text-start">
+                                                            <b class="text-info">Orginal Price:</b><br>
+                                                            <span title="Selling Price"><b>SP:</b> @price($cal_val['selling_price'])</span>
+                                                            <br>
+                                                            <span title="Profit Margin"><b>PM:</b> @pricews($cal_val['profit_margin'])%
+                                                            </span> <br>
+                                                            <span title="Net Profit"><b>NP:</b> @price($cal_val['net_profit']) </span>
+                                                            <br>
                                                             @if ($d_price)
                                                                 <b class="text-primary">Discount Price:</b><br>
-                                                            @else
-                                                                <b class="text-info">Orginal Price:</b><br>
+                                                                <span title="Selling Price"><b>SP:</b>
+                                                                    @price($dis_val['selling_price'])</span> <br>
+                                                                <span title="Profit Margin"><b>PM:</b> @pricews($dis_val['profit_margin'])%
+                                                                </span> <br>
+                                                                <span title="Net Profit"><b>NP:</b> @price($dis_val['net_profit'])
+                                                                </span> <br>
                                                             @endif
-                                                            <b>SP:</b> @price($cal_val['selling_price']) <br>
-                                                            <b>PM:</b> @pricews($cal_val['profit_margin'])% <br>
-                                                            <b>NP:</b> @price($cal_val['net_profit']) <br>
                                                         </td>
                                                     @endforeach
                                                 </tr>

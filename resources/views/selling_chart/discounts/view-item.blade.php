@@ -211,6 +211,17 @@
                                                                                         {{ $d_price?->status ? 'checked' : '' }}>
                                                                                 </div>
                                                                             @endif
+                                                                        @else
+                                                                            @if ($d_price)
+                                                                                @if ($d_price->status == 1)
+                                                                                    <span
+                                                                                        class="badge bg-success-subtle text-success py-1 px-2">Approved</span>
+                                                                                @else
+                                                                                    <span
+                                                                                        class="badge bg-danger-subtle text-danger py-1 px-2">Not
+                                                                                        Approve</span>
+                                                                                @endif
+                                                                            @endif
                                                                         @endcan
                                                                     </td>
                                                                 @else
@@ -247,6 +258,17 @@
                                                                                             name="statuses[{{ $ch_price->id }}]"
                                                                                             {{ $d_price?->status ? 'checked' : '' }}>
                                                                                     </div>
+                                                                                @endif
+                                                                            @else
+                                                                                @if ($d_price)
+                                                                                    @if ($d_price->status == 1)
+                                                                                        <span
+                                                                                            class="badge bg-success-subtle text-success py-1 px-2">Approved</span>
+                                                                                    @else
+                                                                                        <span
+                                                                                            class="badge bg-danger-subtle text-danger py-1 px-2">Not
+                                                                                            Approve</span>
+                                                                                    @endif
                                                                                 @endif
                                                                             @endcan
                                                                         </td>
@@ -291,7 +313,7 @@
                                                                                         ->where('status', 1)
                                                                                         ->first(),
 
-                                                                                    'worker_price' => $price->discounts
+                                                                                    'executor_price' => $price->discounts
                                                                                         ->where(
                                                                                             'platform_id',
                                                                                             $platform->id,
@@ -306,21 +328,21 @@
                                                                             fn($item) => $item['approval_price'] !=
                                                                                 null,
                                                                         );
-                                                                        $hasWorker = $mappedPrices->contains(
-                                                                            fn($item) => $item['worker_price'] != null,
+                                                                        $hasExecutor = $mappedPrices->contains(
+                                                                            fn($item) => $item['executor_price'] != null,
                                                                         );
                                                                     @endphp
                                                                     <td class="text-center"
                                                                         rowspan="{{ count($chartInfo->sellingChartPrices) }}">
                                                                         <select name="save_type" class="form-control">
-                                                                            <option value="1">Only save</option>
+                                                                            <option value="1">Save</option>
                                                                             @can('general.discounts.sent_mail')
-                                                                                @if ($hasWorker)
-                                                                                    <option value="2">Save & Sent to
+                                                                                @if ($hasExecutor)
+                                                                                    <option value="2">Save & Sent for
                                                                                         Approval</option>
                                                                                 @endif
                                                                                 @if ($hasApproval)
-                                                                                    <option value="3">Sent to Worker
+                                                                                    <option value="3">Save & Sent to Executor
                                                                                     </option>
                                                                                 @endif
                                                                             @endcan

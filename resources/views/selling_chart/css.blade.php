@@ -19,6 +19,11 @@
     #selling_chart_table .new_table table tr td {
         text-align: center;
     }
+    #selling_chart_table .new_table table tr td,
+    #selling_chart_table .new_table table tr th {
+        padding: 5px 12px;
+    }
+
 
 
 
@@ -113,6 +118,15 @@
     td,
     th {
         vertical-align: middle;
+    }
+
+    .info-td a {
+        text-decoration: underline;
+        color: var(--bs-heading-color);
+    }
+
+    .info-td h6 {
+        margin-bottom: 2px;
     }
 
 

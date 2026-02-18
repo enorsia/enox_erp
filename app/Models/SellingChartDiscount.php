@@ -28,7 +28,7 @@ class SellingChartDiscount extends Model
         return ["admin@gmail.com"];
     }
 
-    public static function workerEmails(): array
+    public static function executorEmails(): array
     {
         return ["admin@gmail.com"];
     }
