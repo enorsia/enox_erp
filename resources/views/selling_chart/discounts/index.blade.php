@@ -1,6 +1,12 @@
 @extends('master.app')
 @push('css')
     @include('selling_chart.css')
+    <style>
+        #selling_chart_table .new_table table tr td,
+        #selling_chart_table .new_table table tr th {
+            padding: 5px 12px;
+        }
+    </style>
 @endpush
 
 @section('content')

@@ -19,14 +19,6 @@
     #selling_chart_table .new_table table tr td {
         text-align: center;
     }
-    #selling_chart_table .new_table table tr td,
-    #selling_chart_table .new_table table tr th {
-        padding: 5px 12px;
-    }
-
-
-
-
     .bottom_cards {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
