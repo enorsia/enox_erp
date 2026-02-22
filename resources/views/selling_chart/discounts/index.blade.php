@@ -96,13 +96,13 @@
                                 placeholder="Search here.. " value="{{ request('name') }}">
                         </div>
                     </div>
-                    <div class="col-6 col-sm-7 col-md-8 text-end mt-2 mt-sm-0">
+                    <div class="col-12 col-sm-7 col-md-8 text-end mt-2 mt-sm-0">
                         <div class="flex-center">
                             <a href="{{ route('admin.selling_chart.discounts') }}"
                                 class="btn btn-outline-danger flex-center mx-1 mb-1 mb-md-0"><i
                                     class="bi bi-arrow-clockwise ms-0"></i>
                                 Reset</a>
-                            <button type="submit" class="btn btn-primary mx-1 mb-1 mb-md-0"><i class="fa fa-filter ms-0"
+                            <button type="submit" class="btn btn-primary ms-1 mb-1 mb-md-0"><i class="fa fa-filter ms-0"
                                     aria-hidden="true"></i>
                                 Search</button>
                         </div>
@@ -154,7 +154,7 @@
                                                 @if ($chartInfo->selling_chart_prices_count) rowspan="{{ $chartInfo->selling_chart_prices_count }}" @endif>
                                                 <div class="d-flex align-items-center">
                                                     @if ($chartInfo->design_image)
-                                                        <img class="img-fluid mb-1"
+                                                        <img class="img-fluid"
                                                             src="{{ $chartInfo->design_image ? cloudflareImage($chartInfo->design_image, 120) : cloudflareImage('099de045-63a0-407d-75ca-8e22f95b8700', 50) }}"
                                                             alt="Design Image" width="120">
                                                     @endif
