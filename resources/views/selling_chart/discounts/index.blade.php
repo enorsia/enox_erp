@@ -215,7 +215,7 @@
                                                         @endphp
                                                         <td class="text-nowrap text-start">
                                                             <b class="text-info">Orginal Price:</b><br>
-                                                            <span title="Selling Price"><b>SP:</b> @price($cal_val['selling_price'])</span>
+                                                            <span title="Confirm Selling Price"><b>CSP:</b> @price($ch_price->confirm_selling_price)</span>
                                                             <br>
                                                             <span title="Profit Margin"><b>PM:</b> @pricews($cal_val['profit_margin'])%
                                                             </span> <br>
@@ -223,8 +223,8 @@
                                                             <br>
                                                             @if ($d_price)
                                                                 <b class="text-primary">Discount Price:</b><br>
-                                                                <span title="Selling Price"><b>SP:</b>
-                                                                    @price($dis_val['selling_price'])</span> <br>
+                                                                <span title="Confirm Selling Price"><b>CSP:</b>
+                                                                    @price($d_price->price)</span> <br>
                                                                 <span title="Profit Margin"><b>PM:</b> @pricews($dis_val['profit_margin'])%
                                                                 </span> <br>
                                                                 <span title="Net Profit"><b>NP:</b> @price($dis_val['net_profit'])
@@ -271,7 +271,7 @@
                                                         @endphp
                                                         <td class="text-nowrap text-start">
                                                             <b class="text-info">Orginal Price:</b><br>
-                                                            <span title="Selling Price"><b>SP:</b> @price($cal_val['selling_price'])</span>
+                                                            <span title="Confirm Selling Price"><b>CSP:</b> @price($ch_price->confirm_selling_price)</span>
                                                             <br>
                                                             <span title="Profit Margin"><b>PM:</b> @pricews($cal_val['profit_margin'])%
                                                             </span> <br>
@@ -279,8 +279,8 @@
                                                             <br>
                                                             @if ($d_price)
                                                                 <b class="text-primary">Discount Price:</b><br>
-                                                                <span title="Selling Price"><b>SP:</b>
-                                                                    @price($dis_val['selling_price'])</span> <br>
+                                                                <span title="Confirm Selling Price"><b>CSP:</b>
+                                                                    @price($d_price->price)</span> <br>
                                                                 <span title="Profit Margin"><b>PM:</b> @pricews($dis_val['profit_margin'])%
                                                                 </span> <br>
                                                                 <span title="Net Profit"><b>NP:</b> @price($dis_val['net_profit'])
