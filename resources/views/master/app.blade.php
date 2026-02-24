@@ -36,7 +36,6 @@
         }
 
         .filter_close_sec {
-            border-bottom-width: 2px !important;
             padding-bottom: 8px;
             margin-bottom: 12px;
         }
