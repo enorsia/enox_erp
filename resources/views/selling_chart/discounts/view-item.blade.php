@@ -197,7 +197,7 @@
                                                                             name="discount_price[{{ $ch_price->id }}]"
                                                                             data-price-id="{{ $ch_price->id }}"
                                                                             data-csp="{{ $ch_price->confirm_selling_price }}"
-                                                                            class="form-control p-1 text-center discount_price rounded-0 text-danger"
+                                                                            class="form-control p-1 text-center discount_price rounded-0 text-danger discount_price{{ $ch_price->id }}"
                                                                             style="font-size: 13px;"
                                                                             value="{{ $d_price?->price ?? '' }}">
                                                                     </td>
@@ -205,7 +205,7 @@
                                                                         @can('general.discounts.approve')
                                                                             @if ($d_price)
                                                                                 <div class="form-check form-switch">
-                                                                                    <input class="form-check-input"
+                                                                                    <input class="form-check-input status{{ $ch_price->id }}"
                                                                                         type="checkbox" role="switch"
                                                                                         name="statuses[{{ $ch_price->id }}]"
                                                                                         {{ $d_price?->status ? 'checked' : '' }}>
@@ -244,7 +244,7 @@
                                                                                 name="discount_price[{{ $ch_price->id }}]"
                                                                                 data-price-id="{{ $ch_price->id }}"
                                                                                 data-csp="{{ $ch_price->confirm_selling_price }}"
-                                                                                class="form-control p-1 text-center discount_price rounded-0 text-danger"
+                                                                                class="form-control p-1 text-center discount_price rounded-0 text-danger discount_price{{ $ch_price->id }}"
                                                                                 style="font-size: 13px;"
                                                                                 value="{{ $d_price?->price ?? '' }}">
                                                                         </td>
@@ -253,7 +253,7 @@
                                                                             @can('general.discounts.approve')
                                                                                 @if ($d_price)
                                                                                     <div class="form-check form-switch">
-                                                                                        <input class="form-check-input"
+                                                                                        <input class="form-check-input status{{ $ch_price->id }}"
                                                                                             type="checkbox" role="switch"
                                                                                             name="statuses[{{ $ch_price->id }}]"
                                                                                             {{ $d_price?->status ? 'checked' : '' }}>
@@ -300,7 +300,7 @@
                                                                 </td>
                                                                 <td class="text-center np">@price($profit_cal['net_profit'])</td>
                                                                 @if ($loop->index == 0)
-                                                                    @php
+                                                                    {{-- @php
                                                                         $mappedPrices = $chartInfo->sellingChartPrices->map(
                                                                             function ($price) use ($platform) {
                                                                                 return [
@@ -331,20 +331,17 @@
                                                                         $hasExecutor = $mappedPrices->contains(
                                                                             fn($item) => $item['executor_price'] != null,
                                                                         );
-                                                                    @endphp
+                                                                    @endphp --}}
                                                                     <td class="text-center"
                                                                         rowspan="{{ count($chartInfo->sellingChartPrices) }}">
-                                                                        <select name="save_type" class="form-control">
+                                                                        <select name="save_type" class="form-control save_type">
                                                                             <option value="1">Save</option>
                                                                             @can('general.discounts.sent_mail')
-                                                                                @if ($hasExecutor)
-                                                                                    <option value="2">Save & Sent for
-                                                                                        Approval</option>
-                                                                                @endif
-                                                                                @if ($hasApproval)
-                                                                                    <option value="3">Save & Sent to Executor
-                                                                                    </option>
-                                                                                @endif
+                                                                                <option value="2">Save & Sent for
+                                                                                    Approval</option>
+                                                                                <option value="3">Save & Sent to
+                                                                                    Executor
+                                                                                </option>
                                                                             @endcan
                                                                         </select>
                                                                     </td>

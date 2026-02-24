@@ -25,11 +25,18 @@ class SellingChartDiscount extends Model
 
     public static function approvalEmails(): array
     {
-        return ["admin@gmail.com"];
+        return [
+            "tanvir@enorsia.com",
+            "sabbir@enorsia.com",
+        ];
     }
 
     public static function executorEmails(): array
     {
-        return ["admin@gmail.com"];
+        return [
+            "abid.ict@enorsia.com",
+            "mijan.ict@enorsia.com",
+            "sakib.ict@enorsia.com"
+        ];
     }
 }

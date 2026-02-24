@@ -211,10 +211,44 @@
             e.preventDefault();
             $form.find('.discount_price').removeClass('is-invalid');
 
+            let saveType = $form.find('.save_type').val();
+            let invalidStatus = false;
+            let hasError = false;
+            $form.find('.discount_price')
+                .removeClass('is-invalid')
+                .next('.custom-error')
+                .remove();
+
             $form.find('input[name="sl_price_id[]"]:checked').each(function() {
                 anyChecked = true;
+
+                let chVal = $(this).val();
+                let isChecked = $form.find('.status' + chVal).prop('checked');
+
+                if (saveType == 2 && isChecked) {
+                    invalidStatus = true;
+                }
+
+                if (saveType == 3 && !isChecked) {
+                    invalidStatus = true;
+                }
+
+                let $discountInput = $form.find('.discount_price' + chVal);
+                if (!$discountInput.val().trim()) {
+
+                    hasError = true;
+
+                    $discountInput.addClass('is-invalid');
+
+                    // 🔥 create error message dynamically
+                    $('<div class="custom-error text-danger text-start mt-1" style="font-size:12px;">This field is required.</div>')
+                        .insertAfter($discountInput);
+                }
+
+
             });
 
+            // ❌ No checkbox selected
             if (!anyChecked) {
                 e.preventDefault();
                 Swal.fire({
@@ -225,6 +259,27 @@
                 return false;
             }
 
+            if (hasError) {
+                return false;
+            }
+
+            // ❌ Status condition failed
+            if (invalidStatus) {
+
+                let message = saveType == 2 ?
+                    "All selected items must have Status OFF for Approval." :
+                    "All selected items must have Status ON for Executor.";
+
+                Swal.fire({
+                    title: 'Invalid Status',
+                    text: message,
+                    icon: 'error'
+                });
+
+                return false;
+            }
+
+            // ✅ Confirmation
             Swal.fire({
                 title: 'Are you sure?',
                 text: "Do you want to save this discount?",

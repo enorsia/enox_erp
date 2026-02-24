@@ -1058,7 +1058,7 @@ class SalesChartController extends Controller
 
             $save_type = $request->save_type;
 
-            $delayMinutes = 0;
+            $delay = 0;
             if ($save_type == 2) {
                 $approval_emails = SellingChartDiscount::approvalEmails();
                 $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
@@ -1070,9 +1070,9 @@ class SalesChartController extends Controller
                         Mail::to($email)
                             ->queue(
                                 (new SellingChartDiscountMail($sl_discounts, 'approval'))
-                                    ->delay(now()->addMinutes($delayMinutes))
+                                    ->delay(now()->addSeconds($delay))
                             );
-                        $delayMinutes += 2;
+                        $delay += 10;
                     }
                 }
             } elseif ($save_type == 3) {
@@ -1086,9 +1086,9 @@ class SalesChartController extends Controller
                         Mail::to($email)
                             ->queue(
                                 (new SellingChartDiscountMail($sl_discounts, 'executor'))
-                                    ->delay(now()->addMinutes($delayMinutes))
+                                    ->delay(now()->addSeconds($delay))
                             );
-                        $delayMinutes += 2;
+                        $delay += 10;
                     }
                 }
             }
