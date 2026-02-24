@@ -19,9 +19,6 @@
     #selling_chart_table .new_table table tr td {
         text-align: center;
     }
-
-
-
     .bottom_cards {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -104,6 +101,24 @@
     .form-check label {
         cursor: pointer;
         font-size: 14px;
+    }
+
+    .table>:not(caption)>*>* {
+        padding: 8px;
+    }
+
+    td,
+    th {
+        vertical-align: middle;
+    }
+
+    .info-td a {
+        text-decoration: underline;
+        color: var(--bs-heading-color);
+    }
+
+    .info-td h6 {
+        margin-bottom: 2px;
     }
 
 

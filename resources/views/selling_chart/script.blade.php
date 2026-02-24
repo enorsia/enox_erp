@@ -139,6 +139,118 @@
 
             }
         });
+
+        $(document).on('change keyup', '.discount_price', function() {
+            let input = $(this);
+            let form = input.closest('form');
+            let platform_id = form.find('.platform_id').val();
+            let department_id = form.find('.department_id').val();
+            let ch_price_id = input.data('price-id');
+            let csp = parseFloat(input.data('csp')) || 0;
+            let tr = (department_id == 1928 || department_id == 1929) ? input.parents('tr') : form;
+
+            let rawValue = input.val().trim();
+            if (rawValue !== '' && isNaN(rawValue)) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid Input',
+                    text: 'Please enter a numeric value only.'
+                });
+
+                input.val('');
+                input.focus();
+                return;
+            }
+            let discount_price = parseFloat(rawValue) || 0;
+
+
+            if (discount_price > csp) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid Discount',
+                    text: 'Discount cannot exceed confirm selling price (£' + csp.toFixed(2) +
+                        ')'
+                });
+                input.val(csp.toFixed(2));
+                input.focus();
+            }
+
+            $.ajax({
+                url: "{{ route('admin.selling_chart.calculate.platform.profit') }}",
+                type: "POST",
+                data: {
+                    platform_id: platform_id,
+                    discount_price: discount_price,
+                    ch_price_id: ch_price_id,
+                    _token: "{{ csrf_token() }}"
+                },
+                success: function(response) {
+                    // console.log(response);
+                    tr.find(".com").text('£' + response.commission.toFixed(2));
+                    tr.find(".com-vat").text('£' + response.commission_vat.toFixed(2));
+                    tr.find(".sp").text('£' + response.selling_price.toFixed(2));
+                    tr.find(".sl-vat").text('£' + response.selling_vat.toFixed(2));
+                    tr.find(".vat-val").text('£' + response.vat_value.toFixed(2));
+                    tr.find(".sp-vat").text('£' + response.selling_price_and_vat.toFixed(
+                        2));
+                    tr.find(".pm").text(response.profit_margin.toFixed(2) + '%');
+                    tr.find(".np").text('£' + response.net_profit.toFixed(2));
+                }
+            });
+
+        });
+
+        $(document).on('submit', '.pp-form', function(e) {
+            let $form = $(this);
+            let anyChecked = false;
+
+            if ($form.hasClass('confirmed')) {
+                return true;
+            }
+
+            e.preventDefault();
+            $form.find('.discount_price').removeClass('is-invalid');
+
+            $form.find('input[name="sl_price_id[]"]:checked').each(function() {
+                anyChecked = true;
+            });
+
+            if (!anyChecked) {
+                e.preventDefault();
+                Swal.fire({
+                    title: 'No Option Selected',
+                    text: "Please select at least one price option before submitting.",
+                    icon: 'warning'
+                });
+                return false;
+            }
+
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "Do you want to save this discount?",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Save it!',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33'
+            }).then((result) => {
+
+                if (result.isConfirmed) {
+                    $form.addClass('confirmed');
+
+                    $form.find('.submit-btn')
+                        .html(loader)
+                        .prop('disabled', true);
+
+                    $form.submit();
+
+                }
+
+            });
+
+        });
+
     });
 
     function checkRequiredAfterSubmit() {

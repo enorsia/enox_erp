@@ -117,14 +117,18 @@
                                                 <thead>
                                                     <tr>
                                                         <th class="text-center">Color Name (code)</th>
-                                                        <th>Size Range</th>
+                                                        @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
+                                                            <th>Size Range</th>
+                                                        @endif
                                                         <th class="text-center">price $(FOB)</th>
                                                         <th class="text-center">Unit Price</th>
                                                         <th class="text-center">Confirm Selling Price</th>
 
                                                         <th class="text-center toogle-item commission">Commission</th>
-                                                        <th class="text-center toogle-item commission">Commission Vat</th>
-                                                        <th class="text-center toogle-item commission">Selling Price</th>
+                                                        <th class="text-center toogle-item commission">Commission Vat
+                                                        </th>
+                                                        <th class="text-center toogle-item commission">Selling Price
+                                                        </th>
                                                         <th class="text-center toogle-item vat">20% Selling VAT</th>
                                                         <th class="text-center toogle-item vat">Vat Value £</th>
                                                         <th class="text-center toogle-item vat">Selling Price + Vat</th>
@@ -142,20 +146,28 @@
                                                             <td>{{ $ch_price->color_name }}
                                                                 ({{ $ch_price->color_code }})
                                                             </td>
-                                                            <td class="text-center">{{ $ch_price->range }}</td>
+                                                            @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
+                                                                <td class="text-center">{{ $ch_price->range }}</td>
+                                                            @endif
                                                             <td class="text-center">$ @pricews($ch_price->price_fob)</td>
                                                             <td class="text-center">@price($ch_price->unit_price)</td>
-                                                            <td class="text-center">@price($ch_price->confirm_selling_price)</td>
-                                                            <td class="text-center toogle-item commission">@price($profit_cal['commission'])</td>
-                                                            <td class="text-center toogle-item commission">@price($profit_cal['commission_vat'])</td>
-                                                            <td class="text-center toogle-item commission">@price($profit_cal['selling_price'])</td>
-                                                            <td class="text-center toogle-item vat">@price($profit_cal['selling_vat'])</td>
-                                                            <td class="text-center toogle-item vat">@price($profit_cal['vat_value'])</td>
-                                                            <td class="text-center toogle-item vat">@price($profit_cal['selling_price_and_vat'])</td>
-                                                            <td class="text-center">
+                                                            <td class="text-center cm-sp">@price($ch_price->confirm_selling_price)</td>
+                                                            <td class="text-center toogle-item commission com">
+                                                                @price($profit_cal['commission'])</td>
+                                                            <td class="text-center toogle-item commission com-vat">
+                                                                @price($profit_cal['commission_vat'])</td>
+                                                            <td class="text-center toogle-item commission sp">
+                                                                @price($profit_cal['selling_price'])</td>
+                                                            <td class="text-center toogle-item vat sl-vat">@price($profit_cal['selling_vat'])
+                                                            </td>
+                                                            <td class="text-center toogle-item vat vat-val">@price($profit_cal['vat_value'])
+                                                            </td>
+                                                            <td class="text-center toogle-item vat sp-vat">@price($profit_cal['selling_price_and_vat'])
+                                                            </td>
+                                                            <td class="text-center pm">
                                                                 @pricews($profit_cal['profit_margin']) %
                                                             </td>
-                                                            <td class="text-center">@price($profit_cal['net_profit'])</td>
+                                                            <td class="text-center np">@price($profit_cal['net_profit'])</td>
                                                         </tr>
                                                     @endforeach
                                                 </tbody>

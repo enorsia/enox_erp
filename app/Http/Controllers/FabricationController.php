@@ -6,6 +6,7 @@ use App\ApiServices\FabricationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 
 class FabricationController extends Controller
@@ -78,7 +79,7 @@ class FabricationController extends Controller
             $response = $this->service->store($payload);
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->withProperties([
                     'fabrication_name' => $request->name,
                     'status' => $request->has('status') ? 'Active' : 'Inactive'

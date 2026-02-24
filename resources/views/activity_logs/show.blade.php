@@ -3,18 +3,13 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Activity Log Details',
+            'title' => 'Activity Details',
             'icon' => 'bi bi-clock-history',
             'sub_title' => [
                 'Activity Logs' => route('admin.activity-logs.index'),
                 'Details' => '',
             ],
         ])
-        <div>
-            <a href="{{ route('admin.activity-logs.index') }}" class="btn btn-outline-secondary rounded-pill px-3">
-                <i class="bi bi-arrow-left"></i> Back
-            </a>
-        </div>
     </div>
 
     <div class="row">

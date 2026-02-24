@@ -3,7 +3,7 @@
 @section('content')
     <div class="top_title">
         @include('master.breadcrumb', [
-            'title' => 'Activity Logs',
+            'title' => 'Activities',
             'icon' => 'bi bi-clock-history',
             'sub_title' => [
                 'Activity Logs' => '',

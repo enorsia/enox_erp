@@ -47,6 +47,10 @@ return [
                 'guard' => 'web',
                 'actions' => ['index', 'show'],
             ],
+            'discounts' => [
+                'guard' => 'web',
+                'actions' => ['index', 'show', 'update', 'approve', 'sent_mail'],
+            ],
         ],
 
         // SETTINGS MODULE

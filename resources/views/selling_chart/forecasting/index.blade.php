@@ -123,7 +123,7 @@
                                     <th class="text-nowrap" scope="col">Design No</th>
                                     <th class="text-nowrap" scope="col" style="width: 105px;">Design Image</th>
 
-                                    <th class="text-nowrap" scope="col">Color Name</th>
+                                    <th class="text-nowrap" scope="col">Color / Range</th>
                                     @foreach ($platform_ncs as $p_code => $p_name)
                                         <th class="text-nowrap" scope="col">{{ $p_name }}</th>
                                     @endforeach
@@ -182,7 +182,12 @@
                                                     @if ($loop->index == 1)
                                                         @break
                                                     @endif
-                                                    <td class="text-nowrap">{{ $ch_price->color_name }}</td>
+                                                    <td class="text-nowrap">{{ $ch_price->color_name }}
+                                                        @if ($ch_price->range)
+                                                            <br>
+                                                            {{ $ch_price->range }}
+                                                        @endif
+                                                    </td>
                                                     @foreach ($platform_ncs as $p_code => $p_name)
                                                         @php
                                                             $platform = $platforms->get($p_code);
@@ -212,7 +217,12 @@
                                                     @continue
                                                 @endif
                                                 <tr>
-                                                    <td class="text-nowrap">{{ $ch_price->color_name }}</td>
+                                                    <td class="text-nowrap">{{ $ch_price->color_name }}
+                                                        @if ($ch_price->range)
+                                                            <br>
+                                                            {{ $ch_price->range }}
+                                                        @endif
+                                                    </td>
                                                     @foreach ($platform_ncs as $p_code => $p_name)
                                                         @php
                                                             $platform = $platforms->get($p_code);

@@ -7,6 +7,7 @@ use App\Jobs\CloudflareFileDeleteJob;
 use App\Jobs\CloudflareFileUploadJob;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -76,7 +77,7 @@ class UserController extends Controller
             $user->assignRole($request->role);
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($user)
                 ->withProperties(['attributes' => $user->toArray()])
                 ->log('Created new user account for ' . $user->name . ' (' . $user->email . ')');
@@ -206,7 +207,7 @@ class UserController extends Controller
                 }
 
                 activity()
-                    ->causedBy(auth()->user())
+                    ->causedBy(Auth::user())
                     ->performedOn($user)
                     ->withProperties($properties)
                     ->log($description);
@@ -246,7 +247,7 @@ class UserController extends Controller
             }
 
             activity()
-                ->causedBy(auth()->user())
+                ->causedBy(Auth::user())
                 ->performedOn($user)
                 ->withProperties(['deleted_user' => $user->name, 'email' => $user->email])
                 ->log('Deleted user account: ' . $user->name . ' (' . $user->email . ')');
