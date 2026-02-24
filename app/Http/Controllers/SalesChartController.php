@@ -57,7 +57,8 @@ class SalesChartController extends Controller
     {
         Gate::authorize('general.forecasting.index');
 
-        $data = $this->getChartData($request);
+        $data = $this->getChartPaginateData($request);
+
         $data["platform_ncs"] = Platform::selectedPlatforms();
         $data["platforms"] = Platform::all()->keyBy('code');
 
@@ -68,7 +69,10 @@ class SalesChartController extends Controller
     {
         Gate::authorize('general.forecasting.index');
 
-        $data = $this->getChartData($request);
+        $request->merge(['page' => 'discounts']);
+
+        $data = $this->getChartPaginateData($request);
+
         $data["platform_ncs"] = Platform::selectedPlatforms();
         $data["platforms"] = Platform::all()->keyBy('code');
 
@@ -91,15 +95,6 @@ class SalesChartController extends Controller
         // Step 1: Get all distinct mini categories
         $miniCategories = SellingChartType::orderBy('id', 'asc')->pluck('name', 'id');
 
-        // Step 2: Get counts grouped by department and mini category
-        // $counts = SellingChartBasicInfo::filter($request)
-        //     ->leftJoin('selling_chart_prices', 'selling_chart_basic_infos.id', '=', 'selling_chart_prices.basic_info_id')
-        //     ->select('department_id', 'department_name', 'mini_category')
-        //     ->selectRaw('COUNT(selling_chart_prices.id) as count')
-        //     ->selectRaw('SUM(selling_chart_prices.po_order_qty) as total_quantity')
-        //     ->groupBy('department_id', 'department_name', 'mini_category')
-        //     ->with(['miniCategory'])
-        //     ->get();
         $counts = SellingChartBasicInfo::filter($request)
             ->select('department_id', 'department_name', 'mini_category')
             ->leftJoin('selling_chart_prices', 'selling_chart_basic_infos.id', '=', 'selling_chart_prices.basic_info_id')
@@ -150,6 +145,29 @@ class SalesChartController extends Controller
 
         $data['deparment_total_colors'] = array_values($finalResults);
         // colors count calculation end
+
+        $data['chartInfos'] = SellingChartBasicInfo::filter($request)
+            ->with(['sellingChartPrices.discounts'])
+            ->withCount(['sellingChartPrices'])
+            ->orderByDesc('id')
+            ->paginate(30);
+
+        $designNos = $data['chartInfos']->pluck('design_no')->unique()->toArray();
+
+        $ecommerceProducts = $this->sellingChartApiService->getEcomProducts([
+            'designNos' => $designNos
+        ]);
+
+        $data['ecommerceMap'] = $ecommerceProducts->keyBy(fn($item) => $item['style']['name'] ?? null);
+
+        $data['start'] = ($data['chartInfos']->currentPage() - 1) * $data['chartInfos']->perPage() + 1;
+
+        return $data;
+    }
+
+    public function getChartPaginateData($request)
+    {
+        $data = $this->sellingChartApiService->getCommonData();
 
         $data['chartInfos'] = SellingChartBasicInfo::filter($request)
             ->with(['sellingChartPrices.discounts'])
@@ -1018,10 +1036,10 @@ class SalesChartController extends Controller
 
                 if ($department_id == 1926 || $department_id == 1927) {
                     $price = $request->discount_price[$request->sl_price_id[0]];
-                    $status = isset($statuses) && $statuses[$request->sl_price_id[0]] ? 1 : 0;
+                    $status = isset($statuses[$request->sl_price_id[0]]) && $statuses[$request->sl_price_id[0]] ? 1 : 0;
                 } else {
                     $price = $request->discount_price[$sl_price_id];
-                    $status = isset($statuses) && $statuses[$sl_price_id] ? 1 : 0;
+                    $status = isset($statuses[$sl_price_id]) && $statuses[$sl_price_id] ? 1 : 0;
                 }
 
                 if ($scd) {

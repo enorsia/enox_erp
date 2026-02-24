@@ -44,4 +44,9 @@ class SellingChartPrice extends Model
     {
         return $this->hasMany(SellingChartDiscount::class);
     }
+
+    public function approveDiscounts()
+    {
+        return $this->hasMany(SellingChartDiscount::class)->where('status', 1);
+    }
 }
