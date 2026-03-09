@@ -69,7 +69,7 @@ class SalesChartController extends Controller
     {
         Gate::authorize('general.forecasting.index');
 
-        $request->merge(['page' => 'discounts']);
+        $request->merge(['page_name' => 'discounts']);
 
         $data = $this->getChartPaginateData($request);
 

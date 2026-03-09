@@ -523,7 +523,7 @@
 
             let unitPrice = 0;
             unitPrice = (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense +
-                (shippingCost ? shippingCost : expenseShippingCost));
+                (shippingCost ?? expenseShippingCost));
             $row.find('.unit_price').val(unitPrice.toFixed(2));
 
             const confirmSellingPrice = parseFloat($row.find('.confirm_selling_price').val()) || 0;
