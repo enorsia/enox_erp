@@ -125,7 +125,9 @@
 
                                     <th class="text-nowrap" scope="col">Color / Range</th>
                                     @foreach ($platform_ncs as $p_code => $p_name)
-                                        <th class="text-nowrap" scope="col">{{ $p_name }}</th>
+                                        @can('general.forecasting.' . $p_code)
+                                            <th class="text-nowrap" scope="col">{{ $p_name }}</th>
+                                        @endcan
                                     @endforeach
                                 </tr>
                             </thead>
@@ -189,14 +191,16 @@
                                                         @endif
                                                     </td>
                                                     @foreach ($platform_ncs as $p_code => $p_name)
-                                                        @php
-                                                            $platform = $platforms->get($p_code);
-                                                            $cal_val = calculatePlatformProfit($ch_price, $platform);
-                                                        @endphp
-                                                        <td class="text-nowrap">
-                                                            <span
-                                                                class="badge {{ $cal_val['can_sell'] == 'No' ? 'bg-danger' : 'bg-success' }}">{{ $cal_val['can_sell'] }}</span>
-                                                        </td>
+                                                        @can('general.forecasting.' . $p_code)
+                                                            @php
+                                                                $platform = $platforms->get($p_code);
+                                                                $cal_val = calculatePlatformProfit($ch_price, $platform);
+                                                            @endphp
+                                                            <td class="text-nowrap">
+                                                                <span
+                                                                    class="badge {{ $cal_val['can_sell'] == 'No' ? 'bg-danger' : 'bg-success' }}">{{ $cal_val['can_sell'] }}</span>
+                                                            </td>
+                                                        @endcan
                                                     @endforeach
                                                 @endforeach
                                             @else
@@ -224,14 +228,16 @@
                                                         @endif
                                                     </td>
                                                     @foreach ($platform_ncs as $p_code => $p_name)
-                                                        @php
-                                                            $platform = $platforms->get($p_code);
-                                                            $cal_val = calculatePlatformProfit($ch_price, $platform);
-                                                        @endphp
-                                                        <td class="text-nowrap">
-                                                            <span
-                                                                class="badge {{ $cal_val['can_sell'] == 'No' ? 'bg-danger' : 'bg-success' }}">{{ $cal_val['can_sell'] }}</span>
-                                                        </td>
+                                                        @can('general.forecasting.' . $p_code)
+                                                            @php
+                                                                $platform = $platforms->get($p_code);
+                                                                $cal_val = calculatePlatformProfit($ch_price, $platform);
+                                                            @endphp
+                                                            <td class="text-nowrap">
+                                                                <span
+                                                                    class="badge {{ $cal_val['can_sell'] == 'No' ? 'bg-danger' : 'bg-success' }}">{{ $cal_val['can_sell'] }}</span>
+                                                            </td>
+                                                        @endcan
                                                     @endforeach
                                                 </tr>
                                             @endforeach

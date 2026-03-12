@@ -74,7 +74,10 @@
 
                 @canany([...array_keys(Cache::get('permissions.available')['grouped']['general_chart']),
                     ...array_keys(Cache::get('permissions.available')['grouped']['general_fabrication']),
-                    ...array_keys(Cache::get('permissions.available')['grouped']['general_expense'])])
+                    ...array_keys(Cache::get('permissions.available')['grouped']['general_expense']),
+                    ...array_keys(Cache::get('permissions.available')['grouped']['general_forecasting']),
+                    ...array_keys(Cache::get('permissions.available')['grouped']['general_discounts'])
+                    ])
                     <li class="nav-item">
                         <a class="nav-link menu-arrow {{ Request::is('admin/selling-chart/*') ? 'active' : '' }}"
                             href="#sidebarSellingChart" data-bs-toggle="collapse" role="button" aria-expanded="false"

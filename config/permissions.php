@@ -45,7 +45,7 @@ return [
             ],
             'forecasting' => [
                 'guard' => 'web',
-                'actions' => ['index', 'show'],
+                'actions' => ['index', 'show','enox', 'dbz','amz_uk','rkm','spr_uk'],
             ],
             'discounts' => [
                 'guard' => 'web',
