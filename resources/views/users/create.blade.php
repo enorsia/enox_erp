@@ -186,5 +186,5 @@
 @endsection
 
 @push('js')
-    @include('users.script')
+    @vite('resources/js/pages/users/script.js')
 @endpush

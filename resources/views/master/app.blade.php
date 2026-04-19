@@ -9,125 +9,22 @@
 
     <link rel="shortcut icon" href="{{ asset('assets/images/favicon.ico') }}">
 
+    {{--
+        Vendor CSS loaded directly from public/assets/css/
+        (font paths like ../fonts/boxicons.ttf resolve correctly from here)
+    --}}
     <link href="{{ asset('assets/css/vendor.min.css') }}" rel="stylesheet">
     <link href="{{ asset('assets/css/icons.min.css') }}" rel="stylesheet">
     <link href="{{ asset('assets/css/app.min.css') }}" rel="stylesheet">
+    <link href="{{ asset('assets/css/iziToast.min.css') }}" rel="stylesheet">
+    <link href="{{ asset('assets/css/select2-v5.min.css') }}" rel="stylesheet">
+
+    {{-- Template config — must run before vendor.js & app.js --}}
     <script src="{{ asset('assets/js/config.js') }}"></script>
-    <link rel="stylesheet" href="{{ asset('assets/css/iziToast.min.css') }}" />
-    <link rel="stylesheet" href="{{ asset('assets/css/select2-v5.min.css') }}" />
 
-    <style>
-        :root {
-            --bs-main-nav-width-sm: 60px;
-        }
+    {{-- Vite: compiles Tailwind CSS + custom.css only --}}
+    @vite('resources/js/app.js')
 
-        html[data-menu-size="sm-hover"] .main-nav:not(:hover) .nav-item .nav-link {
-            padding: 10px;
-        }
-
-        .top_title {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        #filterSection .card-body {
-            padding-top: 15px;
-        }
-
-        .filter_close_sec {
-            padding-bottom: 8px;
-            margin-bottom: 12px;
-        }
-
-        .filter_close_sec .advance-btn {
-            min-height: 43px;
-        }
-
-        .choices {
-            width: 100%;
-            margin-bottom: 0;
-        }
-
-        .is-invalid {
-            color: #ef5f5f;
-        }
-
-        .iziToast-title,
-        .iziToast-message {
-            font-size: 16px !important;
-            line-height: 16px !important;
-        }
-
-        .image-preview {
-            width: 150px;
-            /* height: 150px; */
-            display: none;
-            margin-top: 10px;
-        }
-
-        #input_with_preview input[type="file"] {
-            cursor: pointer;
-            line-height: 31px;
-
-        }
-
-        #selling_chart_table .new_table table tr th,
-        #selling_chart_table .new_table table tr td {
-            text-align: center;
-            vertical-align: middle;
-            padding: 5px;
-        }
-
-        #selling_chart_table .new_table table tbody tr td input,
-        #selling_chart_table .new_table table tbody tr td select {
-            width: 100% !important;
-        }
-
-        .choices__placeholder,
-        input::placeholder {
-            opacity: 0.4 !important;
-        }
-
-        .table_pagination .pagination {
-            display: flex;
-            flex-direction: row;
-            flex-wrap: wrap;
-        }
-
-        .color-box {
-            position: absolute;
-            top: 27px;
-            left: 0;
-            width: 100%;
-            max-height: 120px;
-            z-index: 9;
-            overflow-y: auto;
-        }
-
-        .color-box .list-group-item {
-            padding: 5px 10px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-
-        @media (min-width: 768px) {
-            #selling_chart_table .create_selling_chart_tbl {
-                width: 100% !important;
-            }
-        }
-
-        /* 🌞 Light theme */
-        html[data-bs-theme="dark"] .logo-box .logo-dark {
-            display: none;
-        }
-
-        /* 🌙 Dark theme */
-        html[data-bs-theme="dark"] .logo-box .logo-light {
-            display: block;
-        }
-    </style>
     @stack('css')
 </head>
 
@@ -155,7 +52,16 @@
 
     </div>
     <!-- END Wrapper -->
-    <script src="{{ asset('assets/js/jquery-3.7.1.min.js')}}"></script>
+
+    {{--
+        Template & Library JS — loaded as regular scripts (need global scope).
+        Must come AFTER the DOM. Order matters:
+        1. jQuery (must be first — plugins depend on it)
+        2. vendor.js (Bootstrap, SimpleBar, Iconify, etc.)
+        3. app.js (ThemeLayout — sidebar toggle, menu, config)
+        4. Plugins (Select2, validate, iziToast, SweetAlert2)
+    --}}
+    <script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}"></script>
     <script src="{{ asset('assets/js/vendor.js') }}"></script>
     <script src="{{ asset('assets/js/app.js') }}"></script>
     <script src="{{ asset('assets/js/select2-v4.min.js') }}"></script>
@@ -163,10 +69,15 @@
     <script src="{{ asset('assets/js/iziToast.min.js') }}"></script>
     <script src="{{ asset('assets/js/sweetalert2@11.min.js') }}"></script>
     <script src="{{ asset('assets/js/customSweetalert2.min.js') }}"></script>
+
+    {{-- iziToast flash messages --}}
     @include('master.lara-izitoast')
+
+    {{-- Common functions (loader, deleteData, approveData, validate-form, image-preview) --}}
     <script>
         var loader = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-    <span class="">Loading...</span>`;
+            <span class="">Loading...</span>`;
+
         $('.validate-form').validate({
             ignore: [],
             errorClass: 'is-invalid',
@@ -217,10 +128,10 @@
                 }
             });
         }
+
         $(document).on('change', '.image-input', function() {
             const file = this.files[0];
             const preview = $(this).siblings('.image-preview');
-
             if (file) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
@@ -232,6 +143,7 @@
             }
         });
     </script>
+
     @stack('js')
 </body>
 

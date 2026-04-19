@@ -1,3 +1,7 @@
+/* ── Custom Application Styles ── */
+@import './custom.css';
+
+/* ── Tailwind CSS ── */
 @import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
