@@ -93,7 +93,9 @@
                     </tbody>
                 </table>
             </div>
-            {!! optional($lookup_names)->links('master.custom-paginator') !!}
+            @if(count($lookup_names) > 0)
+                {!! optional($lookup_names)->links('master.custom-paginator') !!}
+            @endif
         </div>
     </div>
 
