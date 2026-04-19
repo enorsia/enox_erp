@@ -1,6 +1,50 @@
-import { defineConfig } from 'vite';
+import { defineConfig, createLogger } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
+
+// Suppress known harmless warnings from pre-built vendor CSS files
+const logger = createLogger();
+const originalWarn = logger.warn.bind(logger);
+logger.warn = (msg, options) => {
+    // Suppress: absolute public paths in pre-built CSS that can't be resolved at build time
+    // but resolve correctly at runtime from the public/ directory
+    if (msg.includes("didn't resolve at build time")) return;
+    originalWarn(msg, options);
+};
+
+/**
+ * legacyCss plugin:
+ * Fixes pre-built minified CSS files before Vite processes them:
+ *  1. app.min.css: strips `@charset` and Google Fonts `@import` (served via <link> in blade instead)
+ *  2. Rewrites `url(../images/users/` → `url(/assets/images/users/` so runtime paths resolve correctly
+ */
+function legacyCss() {
+    return {
+        name: 'legacy-css',
+        // Resolve absolute CSS asset paths to the public/ directory so Vite can find them
+        resolveId(id) {
+            if (id.startsWith('/assets/images/')) {
+                const path = new URL(`../public${id}`, import.meta.url).pathname;
+                return { id: path, external: true };
+            }
+        },
+        transform(code, id) {
+            if (!id.endsWith('.css')) return;
+            // Fix 1: strip @charset and Google Fonts @import from pre-built CSS files
+            if (id.includes('app.min.css') || id.includes('theme.css')) {
+                code = code.replace(/@charset\s+["']UTF-8["'];?\s*/g, '');
+                code = code.replace(/@import\s+url\([^)]*googleapis\.com[^)]*\);?\s*/g, '');
+            }
+            // Fix 2: rewrite relative image paths that won't resolve in build output
+            // Add ?static query to prevent Vite from trying to resolve/hash the asset
+            code = code.replace(/url\((['"]?)\.\.\/images\/users\//g, "url($1/assets/images/users/");
+            // Prevent Vite from trying to process these absolute public-dir image URLs
+            code = code.replace(/url\((['"]?)\/assets\/images\/users\/([^)'"]+)\1\)/g,
+                (_, q, file) => `url(${q || ''}/assets/images/users/${file}?static${q || ''})`);
+            return { code, map: null };
+        },
+    };
+}
 
 /**
  * legacyLibs plugin:
@@ -47,7 +91,9 @@ function legacyLibs() {
 }
 
 export default defineConfig({
+    customLogger: logger,
     plugins: [
+        legacyCss(),
         laravel({
             input: [
                 'resources/css/app.css',
@@ -64,6 +110,17 @@ export default defineConfig({
         tailwindcss(),
         legacyLibs(),
     ],
+    build: {
+        chunkSizeWarningLimit: 2500,
+        rollupOptions: {
+            onwarn(warning, warn) {
+                // Suppress Vite's "asset not resolved at build time" for CSS URLs that
+                // are intentionally absolute paths served from the public/ directory.
+                if (warning.message && warning.message.includes("didn't resolve at build time")) return;
+                warn(warning);
+            },
+        },
+    },
     server: {
         watch: {
             ignored: ['**/storage/framework/views/**'],

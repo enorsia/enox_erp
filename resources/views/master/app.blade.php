@@ -8,6 +8,11 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
+    {{-- Google Fonts (loaded here so CSS @import is not needed inside bundled CSS) --}}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,100..900;1,100..900&family=Play:wght@400;700&display=swap">
+
     <link rel="shortcut icon" href="{{ asset('assets/images/favicon.ico') }}">
 
     {{-- Inline theme config — MUST run synchronously before first paint to prevent blink --}}

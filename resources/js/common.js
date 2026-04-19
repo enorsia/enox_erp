@@ -1,8 +1,3 @@
-/**
- * Common functions used across all pages.
- * Imported via app.js through Vite.
- */
-
 var loader = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
     <span class="">Loading...</span>`;
 window.loader = loader;

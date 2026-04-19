@@ -1,8 +1,3 @@
-/**
-* Theme: Larkon - Responsive Bootstrap 5 Admin Dashboard
-* Author: Techzaa
-* Module/App: Main Js
-*/
 
 // Components
 class Components {
@@ -696,13 +691,6 @@ document.addEventListener('DOMContentLoaded', function (e) {
     new SwiperSlider().init();
     new ToastNotification().init();
 });
-
-
-/**
-* Theme: Larkon - Responsive Bootstrap 5 Admin Dashboard
-* Author: Techzaa
-* Module/App: Theme Layout Customizer Js
-*/
 
 class ThemeLayout {
 

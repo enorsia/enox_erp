@@ -1,7 +1,3 @@
-/**
- * Library JS - Third party library imports
- * All external/vendor libraries are imported here
- */
 
 import './lib/jquery.min.js';
 import './lib/select2.min.js';

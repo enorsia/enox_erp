@@ -31,10 +31,27 @@ html[data-menu-size="sm-hover"] .main-nav:not(:hover) .nav-item .nav-link {
     min-height: 43px;
 }
 
+/* ── Fix: Select2 / Choices.js dropdown overflow ── */
+/* Prevent dropdown from extending outside its container on the left */
+.select2-container {
+    max-width: 100%;
+}
+.select2-dropdown {
+    min-width: 0;
+}
+.choices__list--dropdown,
+.choices__list[aria-expanded] {
+    overflow-x: hidden;
+    left: 0 !important;
+    right: auto;
+    z-index: 9999;
+}
 .choices {
     width: 100%;
     margin-bottom: 0;
+    overflow: visible;
 }
+
 
 .is-invalid {
     color: #ef5f5f;
@@ -125,3 +142,6 @@ html[data-bs-theme="dark"] .logo-box .logo-light {
     display: block;
 }
 
+.choices__list--dropdown, .choices__list[aria-expanded] {
+    padding-left: 20px;
+}
