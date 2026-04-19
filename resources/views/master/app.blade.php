@@ -13,8 +13,9 @@
     <link href="{{ asset('assets/css/icons.min.css') }}" rel="stylesheet">
     <link href="{{ asset('assets/css/app.min.css') }}" rel="stylesheet">
     <script src="{{ asset('assets/js/config.js') }}"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-css/iziToast.min.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-css/select2-v5.min.css" />
+    <link rel="stylesheet" href="{{ asset('assets/css/iziToast.min.css') }}" />
+    <link rel="stylesheet" href="{{ asset('assets/css/select2-v5.min.css') }}" />
+
     <style>
         :root {
             --bs-main-nav-width-sm: 60px;
@@ -154,14 +155,14 @@
 
     </div>
     <!-- END Wrapper -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="{{ asset('assets/js/jquery-3.7.1.min.js')}}"></script>
     <script src="{{ asset('assets/js/vendor.js') }}"></script>
     <script src="{{ asset('assets/js/app.js') }}"></script>
-    <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/select2-v4.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.0/jquery.validate.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/iziToast.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/sweetalert2@11.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/enorsia/assets-new/admin/admin-js/customSweetalert2.min.js"></script>
+    <script src="{{ asset('assets/js/select2-v4.min.js') }}"></script>
+    <script src="{{ asset('assets/js/jquery.validate.min.js') }}"></script>
+    <script src="{{ asset('assets/js/iziToast.min.js') }}"></script>
+    <script src="{{ asset('assets/js/sweetalert2@11.min.js') }}"></script>
+    <script src="{{ asset('assets/js/customSweetalert2.min.js') }}"></script>
     @include('master.lara-izitoast')
     <script>
         var loader = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
