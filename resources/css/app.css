@@ -1,11 +1,36 @@
+/* ── Google Fonts (must be first) ── */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
+
+/* ── Select2 ── */
+@import 'select2/dist/css/select2.min.css';
+
+/* ── Tailwind v4 ── */
 @import 'tailwindcss';
 
+/* ── Source paths ── */
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
 @source '../**/*.js';
 
+/* ── Dark mode: class strategy ── */
+@variant dark (&:where(.dark, .dark *));
+
+/* ── Custom theme tokens ── */
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    /* Fonts */
+    --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'DM Mono', ui-monospace, monospace;
+
+    /* Accent palette */
+    --color-accent-50:  #E1F5EE;
+    --color-accent-100: #9FE1CB;
+    --color-accent-200: #5DCAA5;
+    --color-accent-400: #1D9E75;
+    --color-accent-600: #0F6E56;
+    --color-accent-800: #085041;
+    --color-accent-900: #04342C;
 }
+
+/* ── Common shared styles ── */
+@import './common.css';

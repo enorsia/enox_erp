@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="light">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{{ config('app.name') }} | @yield('title', 'Admin')</title>
+
+    <link rel="shortcut icon" href="{{ asset('assets/images/favicon.ico') }}">
+
+    <!-- Vite CSS and JS -->
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+    @stack('css')
+</head>
+
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors duration-200">
+<div class="flex h-screen overflow-hidden">
+
+    @include('layouts.sidebar.index')
+
+    <!-- ═══════ MAIN AREA ═══════ -->
+    <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+
+        @include('layouts.header.topbar')
+
+        <!-- ── PAGE CONTENT (scrollable) ── -->
+        <main class="flex-1 overflow-y-auto">
+            @yield('content')
+        </main>
+    </div>
+</div>
+
+<!-- Mobile sidebar backdrop -->
+<div id="sidebarBackdrop" onclick="closeSidebar()" class="hidden fixed inset-0 bg-black/40 z-[200] lg:hidden"></div>
+
+<!-- Third-party scripts (if you still need them) -->
+<script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}"></script>
+<script src="{{ asset('assets/js/jquery.validate.min.js') }}"></script>
+<script src="{{ asset('assets/js/sweetalert2@11.min.js') }}"></script>
+
+@include('layouts.footer.index')
+@stack('js')
+</body>
+</html>

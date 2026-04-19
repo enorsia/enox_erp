@@ -1,4 +1,4 @@
-@extends('master.app')
+@extends('layouts.app')
 
 @section('content')
     <div class="top_title">

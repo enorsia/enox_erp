@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enorsia Admin – Create Order</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['DM Sans','sans-serif'], mono: ['DM Mono','monospace'] },
+          colors: {
+            accent: { 50:'#E1F5EE',100:'#9FE1CB',200:'#5DCAA5',400:'#1D9E75',600:'#0F6E56',800:'#085041',900:'#04342C' },
+          },
+        },
+      },
+    }
+  </script>
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;font-family:'DM Sans',sans-serif}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+    .dark ::-webkit-scrollbar-thumb{background:#334155}
+    .sidebar-scroll::-webkit-scrollbar{width:3px}
+    .sidebar-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1)}
+    .nav-active{border-right:2px solid #1D9E75!important}
+    .nav-link{border-right:2px solid transparent;transition:background 150ms,color 150ms}
+    input[type=range]{accent-color:#1D9E75;cursor:pointer}
+    input[type=checkbox]{accent-color:#1D9E75;cursor:pointer}
+    input[type=radio]{accent-color:#1D9E75;cursor:pointer}
+    .custom-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:32px!important}
+    .dark .custom-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}
+    @media(max-width:1023px){#sidebar{transform:translateX(-100%);transition:transform 250ms cubic-bezier(0.4,0,0.2,1);position:fixed;z-index:300;top:0;bottom:0;left:0}#sidebar.mobile-open{transform:translateX(0)}}
+    /* input base */
+    .f-input{width:100%;padding:0.5rem 0.75rem;font-size:0.8125rem;border:1px solid #e2e8f0;border-radius:0.5rem;background:#f8fafc;color:#1e293b;outline:none;transition:border-color 200ms,background 200ms;font-family:'DM Sans',sans-serif}
+    .f-input:focus{border-color:#1D9E75;background:#fff}
+    .dark .f-input{border-color:#475569;background:#1e293b;color:#e2e8f0}
+    .dark .f-input:focus{border-color:#1D9E75;background:#1e293b}
+    .f-input::placeholder{color:#94a3b8}
+    .f-label{display:block;font-size:0.75rem;font-weight:500;color:#475569;margin-bottom:0.375rem}
+    .dark .f-label{color:#94a3b8}
+    .f-hint{font-size:0.6875rem;color:#94a3b8;margin-top:0.25rem}
+    .f-error{font-size:0.6875rem;color:#ef4444;margin-top:0.25rem;display:none}
+    .f-required{color:#ef4444;margin-left:2px}
+    /* section card */
+    .section-card{background:#fff;border:1px solid #e2e8f0;border-radius:0.875rem;padding:1.5rem;margin-bottom:1.25rem}
+    .dark .section-card{background:#1e293b;border-color:#334155}
+    .section-title{font-size:0.875rem;font-weight:600;color:#1e293b;display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem}
+    .dark .section-title{color:#f1f5f9}
+    .section-desc{font-size:0.75rem;color:#94a3b8;margin-bottom:1.25rem}
+    .section-divider{border:none;border-top:1px solid #e2e8f0;margin:1.25rem 0}
+    .dark .section-divider{border-color:#334155}
+    /* tag input */
+    .tag-pill{display:inline-flex;align-items:center;gap:4px;background:#E1F5EE;color:#0F6E56;font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px}
+    .dark .tag-pill{background:rgba(29,158,117,0.2);color:#5DCAA5}
+    /* image upload zone */
+    .upload-zone{border:2px dashed #e2e8f0;border-radius:0.75rem;padding:2rem 1rem;text-align:center;transition:border-color 200ms,background 200ms;cursor:pointer}
+    .upload-zone:hover{border-color:#1D9E75;background:#f0fdf9}
+    .dark .upload-zone{border-color:#334155}
+    .dark .upload-zone:hover{border-color:#1D9E75;background:rgba(29,158,117,0.05)}
+    /* color swatch */
+    .color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color 150ms,transform 150ms}
+    .color-swatch.selected,.color-swatch:hover{border-color:#1D9E75;transform:scale(1.15)}
+    /* size chip */
+    .size-chip{min-width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:all 150ms;color:#475569;background:#f8fafc}
+    .dark .size-chip{border-color:#475569;color:#94a3b8;background:#1e293b}
+    .size-chip.selected{border-color:#1D9E75;background:#E1F5EE;color:#0F6E56}
+    .dark .size-chip.selected{background:rgba(29,158,117,0.2);color:#5DCAA5;border-color:#1D9E75}
+    /* toggle switch */
+    .toggle-track{width:40px;height:22px;background:#e2e8f0;border-radius:11px;position:relative;cursor:pointer;transition:background 200ms;flex-shrink:0}
+    .toggle-track.on{background:#1D9E75}
+    .toggle-thumb{width:16px;height:16px;background:#fff;border-radius:50%;position:absolute;top:3px;left:3px;transition:left 200ms}
+    .toggle-track.on .toggle-thumb{left:21px}
+    /* step indicator */
+    .step-dot{width:8px;height:8px;border-radius:50%;background:#e2e8f0;transition:background 200ms}
+    .dark .step-dot{background:#334155}
+    .step-dot.active{background:#1D9E75}
+    /* sticky footer */
+    .sticky-footer{position:sticky;bottom:0;background:#fff;border-top:1px solid #e2e8f0;padding:1rem 1.5rem;z-index:50}
+    .dark .sticky-footer{background:#0f172a;border-color:#334155}
+    /* character counter */
+    .char-count{font-size:11px;color:#94a3b8;float:right}
+  </style>
+</head>
+
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors duration-200">
+<div class="flex h-screen overflow-hidden">
+
+  <!-- ═══════ SIDEBAR ═══════ -->
+  <aside id="sidebar" class="w-[230px] min-w-[230px] bg-[#0c1521] flex flex-col overflow-y-auto sidebar-scroll z-50 lg:relative lg:translate-x-0">
+    <div class="px-[18px] py-5 border-b border-white/[0.07] flex-shrink-0">
+      <div class="text-white font-semibold tracking-[2.5px] text-[15px]">ENORSIA</div>
+      <div class="text-[10px] tracking-[1.2px] text-white/30 mt-0.5">Admin Panel</div>
+    </div>
+    <nav class="flex-1 py-2">
+      <div class="pt-4 pb-1">
+        <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Access</p>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Admin Users</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>Role &amp; Permissions</a>
+      </div>
+      <div class="pt-4 pb-1">
+        <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Main</p>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 17l4-8 4 4 4-8 4 5"/></svg>Selling Chart</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4"/></svg>Manage Products</a>
+        <a href="#" class="nav-link nav-active flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-accent-200 bg-accent-400/20"><svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Manage Orders</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>Manage Packages</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 10h16M4 14h8"/></svg>Manage Lookups</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 18l4-12 4 6 4-9 4 6"/><path stroke-linecap="round" d="M3 18h18"/></svg>Manage Reports</a>
+      </div>
+      <div class="pt-4 pb-1">
+        <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Warehouse</p>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1v-9.5z"/></svg>Manage WHM</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M2 11h20"/></svg>Manage Stock</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>Manage Package</a>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- ═══════ MAIN ═══════ -->
+  <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+
+    <!-- TOPBAR -->
+    <header class="h-14 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-5 flex-shrink-0 gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <button onclick="toggleSidebar()" class="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="text-xs text-slate-400 dark:text-slate-500 hidden sm:flex items-center gap-1.5">
+          online store <span class="text-slate-300 dark:text-slate-600">›</span>
+          <a href="#" class="hover:text-accent-400 transition-colors">manage orders</a>
+          <span class="text-slate-300 dark:text-slate-600">›</span>
+          <span class="text-slate-700 dark:text-slate-200 font-medium">create order</span>
+        </div>
+        <div class="sm:hidden text-sm font-medium text-slate-700 dark:text-slate-200">Create Order</div>
+      </div>
+      <div class="flex items-center gap-2.5 flex-shrink-0">
+        <button onclick="toggleDark()" id="darkBtn" class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+          <svg id="iconSun" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path stroke-linecap="round" d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <svg id="iconMoon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        </button>
+        <div class="w-8 h-8 rounded-full bg-accent-400 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">AD</div>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <main class="flex-1 overflow-y-auto">
+      <div class="max-w-5xl mx-auto px-5 py-6 pb-28">
+
+        <!-- PAGE HEADER -->
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+          <div>
+            <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Create New Order</h1>
+            <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Fill in the details below to create a new order</p>
+          </div>
+          <!-- Progress steps -->
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1.5">
+              <div class="w-6 h-6 rounded-full bg-accent-400 text-white text-[11px] font-semibold flex items-center justify-center">1</div>
+              <span class="text-[12px] font-medium text-accent-400 hidden sm:block">Details</span>
+            </div>
+            <div class="w-6 h-px bg-slate-200 dark:bg-slate-700"></div>
+            <div class="flex items-center gap-1.5">
+              <div class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-[11px] font-semibold flex items-center justify-center">2</div>
+              <span class="text-[12px] text-slate-400 hidden sm:block">Review</span>
+            </div>
+            <div class="w-6 h-px bg-slate-200 dark:bg-slate-700"></div>
+            <div class="flex items-center gap-1.5">
+              <div class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-[11px] font-semibold flex items-center justify-center">3</div>
+              <span class="text-[12px] text-slate-400 hidden sm:block">Confirm</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- TWO COLUMN LAYOUT -->
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
+
+          <!-- LEFT COLUMN -->
+          <div class="space-y-5">
+
+            <!-- ── SECTION 1: Customer Information ── -->
+            <div class="section-card">
+              <div class="section-title">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                Customer Information
+              </div>
+              <p class="section-desc">Search for an existing customer or add a new guest.</p>
+
+              <!-- Customer type -->
+              <div class="mb-4">
+                <label class="f-label">Customer type</label>
+                <div class="flex gap-3 flex-wrap">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="cust_type" value="existing" checked class="w-4 h-4" />
+                    <span class="text-sm text-slate-600 dark:text-slate-300">Existing customer</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="cust_type" value="guest" class="w-4 h-4" />
+                    <span class="text-sm text-slate-600 dark:text-slate-300">Guest</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="cust_type" value="new" class="w-4 h-4" />
+                    <span class="text-sm text-slate-600 dark:text-slate-300">New customer</span>
+                  </label>
+                </div>
+              </div>
+
+              <hr class="section-divider" />
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- First name -->
+                <div>
+                  <label class="f-label">First name <span class="f-required">*</span></label>
+                  <input type="text" class="f-input" placeholder="e.g. Jane" />
+                </div>
+                <!-- Last name -->
+                <div>
+                  <label class="f-label">Last name <span class="f-required">*</span></label>
+                  <input type="text" class="f-input" placeholder="e.g. Smith" />
+                </div>
+                <!-- Email -->
+                <div>
+                  <label class="f-label">Email address <span class="f-required">*</span></label>
+                  <input type="email" class="f-input" placeholder="jane@example.com" />
+                </div>
+                <!-- Phone -->
+                <div>
+                  <label class="f-label">Phone number</label>
+                  <input type="tel" class="f-input" placeholder="+44 7700 000000" />
+                </div>
+                <!-- DOB -->
+                <div>
+                  <label class="f-label">Date of birth</label>
+                  <input type="date" class="f-input" />
+                </div>
+                <!-- Gender -->
+                <div>
+                  <label class="f-label">Gender</label>
+                  <select class="f-input custom-select">
+                    <option value="">Select gender</option>
+                    <option>Male</option>
+                    <option>Female</option>
+                    <option>Non-binary</option>
+                    <option>Prefer not to say</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── SECTION 2: Shipping Address ── -->
+            <div class="section-card">
+              <div class="section-title">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><circle cx="12" cy="11" r="3"/></svg>
+                Shipping Address
+              </div>
+              <p class="section-desc">Where should this order be delivered?</p>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="sm:col-span-2">
+                  <label class="f-label">Address line 1 <span class="f-required">*</span></label>
+                  <input type="text" class="f-input" placeholder="House number and street name" />
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="f-label">Address line 2</label>
+                  <input type="text" class="f-input" placeholder="Apartment, suite, unit, building, floor etc." />
+                </div>
+                <div>
+                  <label class="f-label">City <span class="f-required">*</span></label>
+                  <input type="text" class="f-input" placeholder="e.g. Manchester" />
+                </div>
+                <div>
+                  <label class="f-label">County / State</label>
+                  <input type="text" class="f-input" placeholder="e.g. Greater Manchester" />
+                </div>
+                <div>
+                  <label class="f-label">Postcode / ZIP <span class="f-required">*</span></label>
+                  <input type="text" class="f-input" placeholder="e.g. M9 8QH" />
+                </div>
+                <div>
+                  <label class="f-label">Country <span class="f-required">*</span></label>
+                  <select class="f-input custom-select">
+                    <option value="">Select country</option>
+                    <option selected>United Kingdom</option>
+                    <option>United States</option>
+                    <option>Ireland</option>
+                    <option>Australia</option>
+                    <option>Canada</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Same as billing -->
+              <label class="flex items-center gap-2 mt-4 cursor-pointer">
+                <input type="checkbox" class="w-4 h-4 rounded" />
+                <span class="text-sm text-slate-600 dark:text-slate-300">Billing address same as shipping</span>
+              </label>
+            </div>
+
+            <!-- ── SECTION 3: Product(s) ── -->
+            <div class="section-card">
+              <div class="section-title">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+                Products
+              </div>
+              <p class="section-desc">Search and add products to this order.</p>
+
+              <!-- Product search -->
+              <div class="relative mb-4">
+                <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+                <input type="text" class="f-input" style="padding-left:2.25rem" placeholder="Search product by name or SKU..." />
+              </div>
+
+              <!-- Product rows -->
+              <div class="space-y-3" id="productRows">
+                <!-- Product row 1 -->
+                <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50 dark:bg-slate-900/50">
+                  <div class="flex items-start gap-3">
+                    <div class="w-12 h-12 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 flex-shrink-0">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" d="M21 15l-5-5L5 21"/></svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">Mens Navy Classic Print Stripe Sweatshirt</p>
+                      <p class="text-xs text-slate-400 font-mono mt-0.5">SKU: MS3444328</p>
+                      <div class="flex items-center gap-3 mt-2 flex-wrap">
+                        <!-- Size -->
+                        <div>
+                          <label class="f-label text-[10px]">Size</label>
+                          <select class="f-input custom-select text-[12px]" style="padding:4px 28px 4px 8px;height:30px">
+                            <option>XS</option><option>S</option><option selected>M</option><option>L</option><option>XL</option><option>XXL</option>
+                          </select>
+                        </div>
+                        <!-- Color -->
+                        <div>
+                          <label class="f-label text-[10px]">Color</label>
+                          <select class="f-input custom-select text-[12px]" style="padding:4px 28px 4px 8px;height:30px">
+                            <option>Navy</option><option>Black</option><option>White</option>
+                          </select>
+                        </div>
+                        <!-- Qty -->
+                        <div>
+                          <label class="f-label text-[10px]">Qty</label>
+                          <input type="number" min="1" value="1" class="f-input text-[12px]" style="width:70px;padding:4px 8px;height:30px" />
+                        </div>
+                        <!-- Unit price -->
+                        <div>
+                          <label class="f-label text-[10px]">Unit price</label>
+                          <input type="text" value="£22.50" class="f-input text-[12px]" style="width:80px;padding:4px 8px;height:30px" readonly />
+                        </div>
+                      </div>
+                    </div>
+                    <button class="text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors mt-1">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <button class="mt-3 flex items-center gap-2 text-[13px] text-accent-400 hover:text-accent-600 transition-colors font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+                Add another product
+              </button>
+            </div>
+
+            <!-- ── SECTION 4: Order Notes & Special Instructions ── -->
+            <div class="section-card">
+              <div class="section-title">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M7 8h10M7 12h6m-6 4h4M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                Notes &amp; Instructions
+              </div>
+              <p class="section-desc">Internal notes and special handling instructions.</p>
+
+              <div class="space-y-4">
+                <!-- Order notes -->
+                <div>
+                  <label class="f-label">Order notes (internal) <span class="char-count" id="notesCount">0/500</span></label>
+                  <textarea class="f-input" rows="3" placeholder="Private notes visible only to staff..."
+                    oninput="document.getElementById('notesCount').textContent=this.value.length+'/500'"
+                    style="resize:vertical;min-height:80px"></textarea>
+                  <p class="f-hint">Not visible to the customer.</p>
+                </div>
+                <!-- Customer message -->
+                <div>
+                  <label class="f-label">Customer-facing message <span class="char-count" id="msgCount">0/200</span></label>
+                  <textarea class="f-input" rows="2" placeholder="e.g. Thank you for your order! We'll dispatch soon."
+                    oninput="document.getElementById('msgCount').textContent=this.value.length+'/200'"
+                    style="resize:vertical;min-height:64px"></textarea>
+                  <p class="f-hint">Included in the order confirmation email.</p>
+                </div>
+                <!-- Gift message -->
+                <div>
+                  <label class="flex items-center gap-2 cursor-pointer mb-2">
+                    <div class="toggle-track" id="giftToggle" onclick="toggleSwitch('giftToggle')"><div class="toggle-thumb"></div></div>
+                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">This is a gift order</span>
+                  </label>
+                  <div id="giftSection" class="hidden">
+                    <input type="text" class="f-input" placeholder="Gift message for recipient..." />
+                    <label class="flex items-center gap-2 cursor-pointer mt-2">
+                      <input type="checkbox" class="w-4 h-4 rounded" />
+                      <span class="text-sm text-slate-600 dark:text-slate-300">Include gift receipt (hide prices)</span>
+                    </label>
+                  </div>
+                </div>
+                <!-- Priority -->
+                <div>
+                  <label class="f-label">Order priority</label>
+                  <div class="flex gap-2 flex-wrap">
+                    <label class="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-accent-200 transition-colors">
+                      <input type="radio" name="priority" value="normal" checked class="w-4 h-4" />
+                      <span class="text-sm text-slate-600 dark:text-slate-300">Normal</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-amber-200 transition-colors">
+                      <input type="radio" name="priority" value="high" class="w-4 h-4" />
+                      <span class="text-sm text-slate-600 dark:text-slate-300">High</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-lg border border-red-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-red-200 transition-colors">
+                      <input type="radio" name="priority" value="urgent" class="w-4 h-4" />
+                      <span class="text-sm text-slate-600 dark:text-slate-300">Urgent</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── SECTION 5: Attachments / Images ── -->
+            <div class="section-card">
+              <div class="section-title">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                Attachments
+              </div>
+              <p class="section-desc">Upload supporting documents or product images.</p>
+
+              <!-- Upload zone -->
+              <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+                <svg class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+                <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">Click to upload or drag &amp; drop</p>
+                <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">PNG, JPG, PDF up to 10MB each</p>
+                <input type="file" id="fileInput" class="hidden" multiple accept="image/*,.pdf" />
+              </div>
+
+              <!-- File range (max items) -->
+              <div class="mt-4">
+                <label class="f-label">Max attachments: <span id="maxAttachOut" class="text-accent-400 font-semibold">5</span></label>
+                <input type="range" min="1" max="10" value="5" class="w-full mt-1"
+                  oninput="document.getElementById('maxAttachOut').textContent=this.value" />
+                <div class="flex justify-between text-[10px] text-slate-400 mt-1"><span>1</span><span>10</span></div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- RIGHT COLUMN -->
+          <div class="space-y-5">
+
+            <!-- ── ORDER SETTINGS ── -->
+            <div class="section-card">
+              <div class="section-title">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z"/><circle cx="12" cy="12" r="3"/></svg>
+                Order Settings
+              </div>
+
+              <div class="space-y-4">
+                <!-- Status -->
+                <div>
+                  <label class="f-label">Initial status <span class="f-required">*</span></label>
+                  <select class="f-input custom-select">
+                    <option>Pending</option>
+                    <option>Processing</option>
+                    <option>On hold</option>
+                  </select>
+                </div>
+                <!-- Channel -->
+                <div>
+                  <label class="f-label">Sales channel</label>
+                  <select class="f-input custom-select">
+                    <option>Online Store</option>
+                    <option>Phone</option>
+                    <option>In-store</option>
+                    <option>Marketplace</option>
+                  </select>
+                </div>
+                <!-- Order date -->
+                <div>
+                  <label class="f-label">Order date <span class="f-required">*</span></label>
+                  <input type="date" class="f-input" value="2026-04-06" />
+                </div>
+                <!-- Warehouse -->
+                <div>
+                  <label class="f-label">Dispatch warehouse</label>
+                  <select class="f-input custom-select">
+                    <option>Main Warehouse</option>
+                    <option>North Hub</option>
+                    <option>South Hub</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── DELIVERY ── -->
+            <div class="section-card">
+              <div class="section-title">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8l-4-4H8z"/><path stroke-linecap="round" d="M14 4v4h4M12 11v6M9 14h6"/></svg>
+                Delivery
+              </div>
+
+              <div class="space-y-4">
+                <!-- Delivery method -->
+                <div>
+                  <label class="f-label">Delivery method <span class="f-required">*</span></label>
+                  <div class="grid grid-cols-1 gap-2">
+                    <label class="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-accent-200 transition-colors bg-white dark:bg-slate-800">
+                      <input type="radio" name="delivery" value="standard" checked class="w-4 h-4 flex-shrink-0" />
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-slate-700 dark:text-slate-200">Standard</p>
+                        <p class="text-xs text-slate-400">3–5 business days · Free</p>
+                      </div>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-accent-200 transition-colors bg-white dark:bg-slate-800">
+                      <input type="radio" name="delivery" value="express" class="w-4 h-4 flex-shrink-0" />
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-slate-700 dark:text-slate-200">Express</p>
+                        <p class="text-xs text-slate-400">1–2 business days · £4.99</p>
+                      </div>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-accent-200 transition-colors bg-white dark:bg-slate-800">
+                      <input type="radio" name="delivery" value="ndd" class="w-4 h-4 flex-shrink-0" />
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-slate-700 dark:text-slate-200">Next-day delivery</p>
+                        <p class="text-xs text-slate-400">Order by 3 PM · £7.99</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+                <!-- Estimated dispatch -->
+                <div>
+                  <label class="f-label">Estimated dispatch date</label>
+                  <input type="date" class="f-input" />
+                </div>
+                <!-- Tracking number -->
+                <div>
+                  <label class="f-label">Tracking number</label>
+                  <input type="text" class="f-input font-mono" placeholder="e.g. JD000000000000000000" />
+                  <p class="f-hint">Leave blank if not yet available.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── PAYMENT ── -->
+            <div class="section-card">
+              <div class="section-title">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><path stroke-linecap="round" d="M1 10h22"/></svg>
+                Payment
+              </div>
+
+              <div class="space-y-4">
+                <!-- Payment method -->
+                <div>
+                  <label class="f-label">Payment method <span class="f-required">*</span></label>
+                  <select class="f-input custom-select">
+                    <option>Credit / Debit card</option>
+                    <option>PayPal</option>
+                    <option>Bank transfer</option>
+                    <option>Cash on delivery</option>
+                    <option>Gift card</option>
+                    <option>Store credit</option>
+                  </select>
+                </div>
+                <!-- Payment status -->
+                <div>
+                  <label class="f-label">Payment status</label>
+                  <select class="f-input custom-select">
+                    <option>Pending</option>
+                    <option>Authorised</option>
+                    <option>Paid</option>
+                    <option>Failed</option>
+                    <option>Refunded</option>
+                  </select>
+                </div>
+                <!-- Transaction ID -->
+                <div>
+                  <label class="f-label">Transaction ID</label>
+                  <input type="text" class="f-input font-mono" placeholder="e.g. txn_1234ABCD" />
+                </div>
+                <!-- Discount code -->
+                <div>
+                  <label class="f-label">Discount / Coupon code</label>
+                  <div class="flex gap-2">
+                    <input type="text" class="f-input flex-1" placeholder="Enter code" />
+                    <button class="px-3 py-2 text-xs font-medium border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors whitespace-nowrap">Apply</button>
+                  </div>
+                </div>
+                <!-- N.D.D toggle -->
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <div class="toggle-track" id="nddToggle" onclick="toggleSwitch('nddToggle')"><div class="toggle-thumb"></div></div>
+                  <span class="text-sm text-slate-600 dark:text-slate-300">Next-day delivery (N.D.D)</span>
+                </label>
+                <!-- Send confirmation -->
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" class="w-4 h-4 rounded" checked />
+                  <span class="text-sm text-slate-600 dark:text-slate-300">Send order confirmation email</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" class="w-4 h-4 rounded" />
+                  <span class="text-sm text-slate-600 dark:text-slate-300">Send SMS notification</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- ── ORDER SUMMARY ── -->
+            <div class="section-card">
+              <div class="section-title mb-3">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 14l2 2 4-4M7 3a2 2 0 00-2 2v16a2 2 0 002 2h10a2 2 0 002-2V8l-4-4H7z"/></svg>
+                Order Summary
+              </div>
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between text-slate-500 dark:text-slate-400">
+                  <span>Subtotal</span><span class="font-mono text-slate-700 dark:text-slate-200">£22.50</span>
+                </div>
+                <div class="flex justify-between text-slate-500 dark:text-slate-400">
+                  <span>Delivery</span><span class="font-mono text-slate-700 dark:text-slate-200">Free</span>
+                </div>
+                <div class="flex justify-between text-slate-500 dark:text-slate-400">
+                  <span>Discount</span><span class="font-mono text-green-600 dark:text-green-400">–£0.00</span>
+                </div>
+                <div class="flex justify-between text-slate-500 dark:text-slate-400">
+                  <span>VAT (20%)</span><span class="font-mono text-slate-700 dark:text-slate-200">£3.75</span>
+                </div>
+                <hr class="section-divider" style="margin:0.75rem 0" />
+                <div class="flex justify-between font-semibold text-slate-800 dark:text-slate-100">
+                  <span>Total</span><span class="font-mono text-accent-400 text-[15px]">£26.25</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STICKY FOOTER ── -->
+      <div class="sticky-footer">
+        <div class="max-w-5xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+            <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            Fields marked <span class="text-red-400 mx-1">*</span> are required
+          </div>
+          <div class="flex gap-2.5">
+            <button class="px-4 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
+              Save as draft
+            </button>
+            <button class="px-5 py-2.5 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg>
+              Create Order
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Mobile sidebar backdrop -->
+<div id="sidebarBackdrop" onclick="closeSidebar()" class="hidden fixed inset-0 bg-black/40 z-[200] lg:hidden"></div>
+
+<script>
+  var isDark = localStorage.getItem('enorsia-dark') === 'true';
+  applyDark(isDark);
+  function applyDark(dark) {
+    document.documentElement.classList.toggle('dark', dark);
+    document.getElementById('iconSun').classList.toggle('hidden', !dark);
+    document.getElementById('iconMoon').classList.toggle('hidden', dark);
+  }
+  function toggleDark() { isDark = !isDark; localStorage.setItem('enorsia-dark', isDark); applyDark(isDark); }
+  function toggleSidebar() {
+    var s = document.getElementById('sidebar'), b = document.getElementById('sidebarBackdrop');
+    var open = s.classList.contains('mobile-open');
+    s.classList.toggle('mobile-open', !open); b.classList.toggle('hidden', open);
+  }
+  function closeSidebar() { document.getElementById('sidebar').classList.remove('mobile-open'); document.getElementById('sidebarBackdrop').classList.add('hidden'); }
+
+  function toggleSwitch(id) {
+    var t = document.getElementById(id);
+    t.classList.toggle('on');
+    if (id === 'giftToggle') {
+      var s = document.getElementById('giftSection');
+      s.classList.toggle('hidden', !t.classList.contains('on'));
+    }
+  }
+</script>
+</body>
+</html>
