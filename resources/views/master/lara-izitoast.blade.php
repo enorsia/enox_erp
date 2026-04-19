@@ -1,4 +1,5 @@
 <script>
+    document.addEventListener('DOMContentLoaded', function () {
             @foreach( session('toasts', collect())->toArray() as $toast)
     var options = {
             title: '{{ $toast['title'] }}',
@@ -36,6 +37,7 @@
         }
 
     }
+    }); // end DOMContentLoaded
 </script>
 
 {{ session()->forget('toasts') }}

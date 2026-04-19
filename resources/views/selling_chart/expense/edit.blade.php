@@ -135,5 +135,5 @@
 
 @push('js')
     {{-- @include('backend.partials.validation-script') --}}
-    @include('selling_chart.expense.script')
+
 @endpush

@@ -102,5 +102,5 @@
 @endsection
 
 @push('js')
-    @include('selling_chart.expense.script')
+    @vite('resources/js/pages/selling-chart/fabrication.js')
 @endpush

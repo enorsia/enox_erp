@@ -118,5 +118,4 @@
 @endsection
 
 @push('js')
-    @include('selling_chart.expense.script')
 @endpush

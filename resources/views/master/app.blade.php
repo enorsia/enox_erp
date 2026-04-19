@@ -6,24 +6,34 @@
     <title>{{config('app.name')}} | @yield('title', 'Admin')</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <link rel="shortcut icon" href="{{ asset('assets/images/favicon.ico') }}">
 
-    {{--
-        Vendor CSS loaded directly from public/assets/css/
-        (font paths like ../fonts/boxicons.ttf resolve correctly from here)
-    --}}
-    <link href="{{ asset('assets/css/vendor.min.css') }}" rel="stylesheet">
-    <link href="{{ asset('assets/css/icons.min.css') }}" rel="stylesheet">
-    <link href="{{ asset('assets/css/app.min.css') }}" rel="stylesheet">
-    <link href="{{ asset('assets/css/iziToast.min.css') }}" rel="stylesheet">
-    <link href="{{ asset('assets/css/select2-v5.min.css') }}" rel="stylesheet">
+    {{-- Inline theme config — MUST run synchronously before first paint to prevent blink --}}
+    <script>
+        (function(){
+            var html = document.documentElement;
+            var saved = sessionStorage.getItem("__LARKON_CONFIG__");
+            var def = { theme:"light", topbar:{color:"light"}, menu:{size:"sm-hover-active",color:"dark"} };
+            var c = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(def));
+            if(!saved){
+                c.theme = html.getAttribute('data-bs-theme') || def.theme;
+                c.topbar.color = html.getAttribute('data-topbar-color') || def.topbar.color;
+                c.menu.color = html.getAttribute('data-menu-color') || def.menu.color;
+                c.menu.size = html.getAttribute('data-menu-size') || def.menu.size;
+            }
+            window.defaultConfig = JSON.parse(JSON.stringify(def));
+            window.config = c;
+            html.setAttribute("data-bs-theme", c.theme);
+            html.setAttribute("data-topbar-color", c.topbar.color);
+            html.setAttribute("data-menu-color", c.menu.color);
+            html.setAttribute("data-menu-size", window.innerWidth <= 1140 ? "hidden" : c.menu.size);
+        })();
+    </script>
 
-    {{-- Template config — must run before vendor.js & app.js --}}
-    <script src="{{ asset('assets/js/config.js') }}"></script>
-
-    {{-- Vite: compiles Tailwind CSS + custom.css only --}}
-    @vite('resources/js/app.js')
+    {{-- CSS loaded as <link> (not via JS module) so it applies immediately — fixes dev mode blink --}}
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 
     @stack('css')
 </head>
@@ -53,95 +63,51 @@
     </div>
     <!-- END Wrapper -->
 
-    {{--
-        Template & Library JS — loaded as regular scripts (need global scope).
-        Must come AFTER the DOM. Order matters:
-        1. jQuery (must be first — plugins depend on it)
-        2. vendor.js (Bootstrap, SimpleBar, Iconify, etc.)
-        3. app.js (ThemeLayout — sidebar toggle, menu, config)
-        4. Plugins (Select2, validate, iziToast, SweetAlert2)
-    --}}
-    <script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}"></script>
-    <script src="{{ asset('assets/js/vendor.js') }}"></script>
-    <script src="{{ asset('assets/js/app.js') }}"></script>
-    <script src="{{ asset('assets/js/select2-v4.min.js') }}"></script>
-    <script src="{{ asset('assets/js/jquery.validate.min.js') }}"></script>
-    <script src="{{ asset('assets/js/iziToast.min.js') }}"></script>
-    <script src="{{ asset('assets/js/sweetalert2@11.min.js') }}"></script>
-    <script src="{{ asset('assets/js/customSweetalert2.min.js') }}"></script>
 
     {{-- iziToast flash messages --}}
     @include('master.lara-izitoast')
 
-    {{-- Common functions (loader, deleteData, approveData, validate-form, image-preview) --}}
+
+    {{--
+        jQuery shim: Vite loads app.js as type="module" (deferred), so it executes AFTER
+        inline @stack('js') scripts. This shim makes window.$ available immediately by
+        queuing all calls. When DOMContentLoaded fires (after all modules finish), real
+        jQuery replaces the shim and replays queued calls.
+    --}}
     <script>
-        var loader = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-            <span class="">Loading...</span>`;
-
-        $('.validate-form').validate({
-            ignore: [],
-            errorClass: 'is-invalid',
-            validClass: 'is-valid',
-            errorElement: 'div',
-            errorPlacement: function(error, element) {
-                if (element.hasClass('choices__input')) {
-                    error.insertAfter(element.closest('.choices'));
-                } else {
-                    error.insertAfter(element);
-                }
-            },
-            submitHandler: function(form) {
-                const $btn = $('.validate-btn');
-                $btn.prop('disabled', true).html(loader);
-                form.submit();
-            }
-        });
-
-        function deleteData(id) {
-            Swal.fire({
-                title: 'Are you sure?',
-                text: "You won't be able to revert this!",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Yes, delete it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    document.getElementById('delete-form-' + id).submit();
-                }
-            });
-        }
-
-        function approveData(id) {
-            Swal.fire({
-                title: 'Are you sure?',
-                text: "You won't be able to revert this!",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Yes, approve it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    document.getElementById('approve-form-' + id).submit();
-                }
-            });
-        }
-
-        $(document).on('change', '.image-input', function() {
-            const file = this.files[0];
-            const preview = $(this).siblings('.image-preview');
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    preview.attr('src', e.target.result).removeClass('d-none').show();
+    (function () {
+        if (typeof window.jQuery !== 'undefined') return;
+        var queue = [];
+        function makeChain(selector) {
+            var chain = {};
+            ['ready','on','off','click','change','keyup','keydown','submit','each',
+             'find','val','text','html','attr','data','trigger','prop','addClass',
+             'removeClass','toggleClass','css','show','hide','append','prepend',
+             'closest','parents','siblings','next','prev','children','parent',
+             'serialize','serializeArray','empty','remove'].forEach(function (m) {
+                chain[m] = function () {
+                    var args = Array.from(arguments);
+                    queue.push(function () {
+                        try { var el = jQuery(selector); el[m].apply(el, args); } catch (e) {}
+                    });
+                    return chain;
                 };
-                reader.readAsDataURL(file);
-            } else {
-                preview.addClass('d-none').hide();
-            }
+            });
+            return chain;
+        }
+        function jqShim(arg) {
+            if (typeof arg === 'function') { queue.push(arg); return; }
+            return makeChain(arg);
+        }
+        jqShim.fn = {};
+        jqShim.ajax = function (opts) { queue.push(function () { jQuery.ajax(opts); }); };
+        jqShim.extend = function () {};
+        window.$ = window.jQuery = jqShim;
+        document.addEventListener('DOMContentLoaded', function () {
+            window.$ = window.jQuery = jQuery;
+            queue.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } });
         });
+    })();
     </script>
 
     @stack('js')

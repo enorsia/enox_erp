@@ -9,10 +9,7 @@
 
     <link rel="shortcut icon" href="{{ asset('assets/images/favicon.ico') }}">
 
-    <link href="{{ asset('assets/css/vendor.min.css') }}" rel="stylesheet">
-    <link href="{{ asset('assets/css/icons.min.css') }}" rel="stylesheet">
-    <link href="{{ asset('assets/css/app.min.css') }}" rel="stylesheet">
-    <script src="{{ asset('assets/js/config.js') }}"></script>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 
 <body class="h-100">
@@ -72,9 +69,6 @@
             </div>
         </div>
     </div>
-
-    <script src="{{ asset('assets/js/vendor.js') }}"></script>
-    <script src="{{ asset('assets/js/app.js') }}"></script>
 </body>
 </html>
 
