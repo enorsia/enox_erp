@@ -6,16 +6,13 @@
 @import './select2-v5.min.css';
 @import 'choices.js/public/assets/styles/choices.min.css';
 
-/* ── Custom Application Styles ── */
 @import './custom.css';
 
-/* ── Page-specific Styles ── */
 @import './pages/selling-chart.css';
 @import './pages/selling-chart-bulk-edit.css';
 @import './pages/users-form.css';
 @import './pages/profile.css';
 
-/* ── Tailwind CSS ── */
 @import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -28,8 +25,6 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
-/* ── Fix: Tailwind v4 .collapse conflicts with Bootstrap .collapse ── */
-/* Tailwind sets visibility:collapse — Bootstrap needs display:none toggle */
 .collapse {
     visibility: visible;
 }

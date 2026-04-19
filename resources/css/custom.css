@@ -1,7 +1,3 @@
-/**
- * Custom CSS - Application-specific styles
- * Extracted from master/app.blade.php inline styles
- */
 
 :root {
     --bs-main-nav-width-sm: 60px;
@@ -31,8 +27,6 @@ html[data-menu-size="sm-hover"] .main-nav:not(:hover) .nav-item .nav-link {
     min-height: 43px;
 }
 
-/* ── Fix: Select2 / Choices.js dropdown overflow ── */
-/* Prevent dropdown from extending outside its container on the left */
 .select2-container {
     max-width: 100%;
 }
