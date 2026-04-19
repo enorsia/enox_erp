@@ -1,6 +1,7 @@
 @extends('master.app')
 
 @section('content')
+    <div id="enox_selling_chart_fabrication_index" hidden></div>
     <div class="top_title">
         @include('master.breadcrumb', [
             'title' => 'Febrication',
@@ -101,6 +102,4 @@
 
 @endsection
 
-@push('js')
-    @vite('resources/js/pages/selling-chart/fabrication.js')
-@endpush
+

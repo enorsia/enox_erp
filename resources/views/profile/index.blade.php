@@ -1,16 +1,6 @@
 @extends('master.app')
-@push('css')
-    <style>
-        .profile {
-            font-size: 15px;
-        }
-
-        .media-body h6 {
-            font-size: 13px;
-        }
-    </style>
-@endpush
 @section('content')
+    <div id="enox_profile_index" hidden></div>
     <div class="top_title">
         @include('master.breadcrumb', [
             'title' => 'Profile Details',

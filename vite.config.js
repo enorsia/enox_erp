@@ -71,12 +71,6 @@ export default defineConfig({
             input: [
                 'resources/css/app.css',
                 'resources/js/app.js',
-                'resources/js/pages/roles/index.js',
-                'resources/js/pages/roles/create.js',
-                'resources/js/pages/roles/edit.js',
-                'resources/js/pages/users/script.js',
-                'resources/js/pages/selling-chart/script.js',
-                'resources/js/pages/selling-chart/fabrication.js',
             ],
             refresh: true,
         }),

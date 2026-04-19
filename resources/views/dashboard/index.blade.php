@@ -1,6 +1,7 @@
 @extends('master.app')
 
 @section('content')
+    <div id="enox_dashboard" hidden></div>
     <div class="card shadow-sm border-0">
         <div class="card-body">
             <div class="d-flex justify-content-center align-items-center flex-column" style="min-height: 60vh;">

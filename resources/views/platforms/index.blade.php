@@ -1,6 +1,7 @@
 @extends('master.app')
 
 @section('content')
+    <div id="enox_platforms_index" hidden></div>
     <div class="top_title">
         @include('master.breadcrumb', [
             'title' => 'Platforms',
@@ -117,5 +118,3 @@
 
 @endsection
 
-@push('js')
-@endpush

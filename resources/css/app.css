@@ -9,6 +9,12 @@
 /* ── Custom Application Styles ── */
 @import './custom.css';
 
+/* ── Page-specific Styles ── */
+@import './pages/selling-chart.css';
+@import './pages/selling-chart-bulk-edit.css';
+@import './pages/users-form.css';
+@import './pages/profile.css';
+
 /* ── Tailwind CSS ── */
 @import 'tailwindcss';
 

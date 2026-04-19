@@ -1,14 +1,24 @@
 /**
  * Selling Chart — shared page script
- * Requires window.sellingChartRoutes to be set in the blade template:
- *   window.sellingChartRoutes = {
- *     calculateProfit: "...",
- *     sizeRange:       "...",
- *     depWiseCats:     "...",
- *     colorSearch:     "...",
- *     viewChart:       "...",  // with ':id' placeholder
- *   };
+ * Routes are read from data-* attributes on the page identifier element:
+ *   <div class="enox-selling-chart-page"
+ *        data-calculate-profit="..."
+ *        data-size-range="..."
+ *        data-dep-wise-cats="..."
+ *        data-color-search="..."
+ *        data-view-chart="...">
+ *   </div>
  */
+
+// Read routes from page element data attributes
+const _pageEl = document.querySelector('.enox-selling-chart-page');
+const sellingChartRoutes = _pageEl ? {
+    calculateProfit: _pageEl.dataset.calculateProfit || '',
+    sizeRange:       _pageEl.dataset.sizeRange       || '',
+    depWiseCats:     _pageEl.dataset.depWiseCats      || '',
+    colorSearch:     _pageEl.dataset.colorSearch      || '',
+    viewChart:       _pageEl.dataset.viewChart        || '',
+} : {};
 
 /*************** Bootstrap tooltips ************/
 const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
@@ -147,9 +157,9 @@ $(document).ready(function () {
             input.focus();
         }
 
-        const routes = window.sellingChartRoutes || {};
+        
         $.ajax({
-            url: routes.calculateProfit || '',
+            url: sellingChartRoutes.calculateProfit || '',
             type: "POST",
             data: {
                 platform_id: platform_id,
@@ -256,10 +266,10 @@ $(document).on('input', '.color', function () {
     let val = $(this).val();
     let colorBox = $(this).parent().find('.color-box');
     if (val) {
-        const routes = window.sellingChartRoutes || {};
+        
         $.ajax({
             type: 'GET',
-            url: (routes.colorSearch || '') + '/' + val,
+            url: (sellingChartRoutes.colorSearch || '') + '/' + val,
             success: function (data) { colorBox.html(data); },
             error: function () { console.log('Color search failed.'); }
         });
@@ -319,9 +329,9 @@ window.initProductCategoryChoices();
 
 $('#department_select').change(function () {
     const id = $(this).val();
-    const routes = window.sellingChartRoutes || {};
-    let url = (routes.sizeRange || '') + '/' + id;
-    let cat_url = (routes.depWiseCats || '') + '/' + id;
+    
+    let url = (sellingChartRoutes.sizeRange || '') + '/' + id;
+    let cat_url = (sellingChartRoutes.depWiseCats || '') + '/' + id;
 
     $.ajax({
         type: 'GET',
@@ -449,8 +459,8 @@ $('.selling_chart_edit_table tbody').on('input', '.price_fob, .shipping_cost, .c
 
 window.viewChart = function (id, page) {
     page = page || 1;
-    const routes = window.sellingChartRoutes || {};
-    let url = (routes.viewChart || '').replace(':id', id);
+    
+    let url = (sellingChartRoutes.viewChart || '').replace(':id', id);
     $.ajax({
         type: 'GET',
         url: url,

@@ -1,9 +1,7 @@
 @extends('master.app')
 
-@push('css')
-@endpush
-
 @section('content')
+    <div id="enox_profile_edit" hidden></div>
     <div class="top_title">
         @include('master.breadcrumb', [
             'title' => 'Profile Edit',
@@ -150,6 +148,4 @@
     </form>
 @endsection
 
-@push('js')
-    @vite('resources/js/pages/users/script.js')
-@endpush
+

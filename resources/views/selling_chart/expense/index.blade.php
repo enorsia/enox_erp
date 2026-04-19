@@ -1,6 +1,7 @@
 @extends('master.app')
 
 @section('content')
+    <div id="enox_selling_chart_expense_index" hidden></div>
     <div class="top_title">
         @include('master.breadcrumb', [
             'title' => 'Expense',
@@ -127,7 +128,3 @@
     </div>
 
 @endsection
-
-@push('js')
-
-@endpush

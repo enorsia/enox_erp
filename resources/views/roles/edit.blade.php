@@ -1,6 +1,7 @@
 @extends('master.app')
 
 @section('content')
+    <div id="enox_roles_edit" hidden></div>
     <div class="top_title">
         @include('master.breadcrumb', [
             'title' => 'Edit Role',
@@ -120,7 +121,5 @@
         </div>
     </div>
 @endsection
-  @push('js')
-    @vite('resources/js/pages/roles/edit.js')
-@endpush
+  
 

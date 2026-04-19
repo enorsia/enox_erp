@@ -1,20 +1,6 @@
 @extends('master.app')
-@push('css')
-    <style>
-        .table-dark {
-            background-color: #1f2937;
-        }
-
-        .profile {
-            font-size: 15px;
-        }
-
-        .media-body h6 {
-            font-size: 13px;
-        }
-    </style>
-@endpush
 @section('content')
+    <div id="enox_users_show" hidden></div>
     <div class="top_title">
         @include('master.breadcrumb', [
             'title' => 'Admin Details',

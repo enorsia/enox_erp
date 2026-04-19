@@ -1,6 +1,7 @@
 @extends('master.app')
 
 @section('content')
+    <div id="enox_users_index" hidden></div>
     <div class="top_title">
         @include('master.breadcrumb', [
             'title' => 'Admins',
@@ -168,5 +169,3 @@
         </div>
     </div>
 @endsection
-@push('js')
-@endpush

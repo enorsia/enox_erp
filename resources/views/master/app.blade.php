@@ -37,7 +37,6 @@
         })();
     </script>
 
-    {{-- CSS loaded as <link> (not via JS module) so it applies immediately — fixes dev mode blink --}}
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
     @stack('css')
@@ -69,16 +68,9 @@
     <!-- END Wrapper -->
 
 
-    {{-- iziToast flash messages --}}
     @include('master.lara-izitoast')
 
 
-    {{--
-        jQuery shim: Vite loads app.js as type="module" (deferred), so it executes AFTER
-        inline @stack('js') scripts. This shim makes window.$ available immediately by
-        queuing all calls. When DOMContentLoaded fires (after all modules finish), real
-        jQuery replaces the shim and replays queued calls.
-    --}}
     <script>
     (function () {
         if (typeof window.jQuery !== 'undefined') return;

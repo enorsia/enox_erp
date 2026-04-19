@@ -1,47 +1,7 @@
-@extends('master.app')
-@push('css')
-    <style>
-        .warning-text .swal2-title {
-            font-size: 1.5em !important;
-            color: #bb2727 !important;
-        }
+@extends("master.app")
 
-        .error {
-            margin-top: 5px;
-            font-size: 12px;
-        }
-
-        .selling_chart_form input[type="checkbox"]:checked::after {
-            content: "";
-        }
-
-        #selling_chart_table .new_table table tbody tr td input {
-            width: 80px !important;
-            text-align: center;
-        }
-
-        #selling_chart_table .new_table table tbody tr td input,
-        #selling_chart_table .new_table table tbody tr td select {
-            width: 100px !important;
-        }
-
-        .sticky-table {
-            max-height: 80vh;
-            overflow: auto;
-        }
-
-        .sticky-table thead th{
-            position: sticky;
-            top: -1px;
-            z-index: 10;
-            background: #fff;
-        }
-       html[data-bs-theme="dark"]  .sticky-table thead th {
-            background: #282F36;
-        }
-    </style>
-@endpush
 @section('content')
+    @include('selling_chart.page-id', ['pageId' => 'enox_selling_chart_bulk_edit'])
     <div class="top_title">
         @include('master.breadcrumb', [
             'title' => 'Chart Bult Edit',
@@ -274,15 +234,3 @@
         </div>
     </div>
 @endsection
-@push('js')
-    <script>
-    window.sellingChartRoutes = {
-        calculateProfit: "{{ route('admin.selling_chart.calculate.platform.profit') }}",
-        sizeRange:       "{{ url('/admin/selling-chart/get-size-range') }}",
-        depWiseCats:     "{{ url('admin/selling-chart/get-dep-wise-cats') }}",
-        colorSearch:     "{{ url('/admin/selling-chart/get-color-by-search') }}",
-        viewChart:       "{{ route('admin.selling_chart.view.single.chart', ':id') }}"
-    };
-    </script>
-    @vite('resources/js/pages/selling-chart/script.js')
-@endpush

@@ -1,6 +1,7 @@
 @extends('master.app')
 
 @section('content')
+    @include('selling_chart.page-id', ['pageId' => 'enox_selling_chart_import'])
     <div class="top_title">
         @include('master.breadcrumb', [
             'title' => 'Chart Import',
@@ -64,15 +65,3 @@
         </div>
     </div>
 @endsection
-@push('js')
-    <script>
-    window.sellingChartRoutes = {
-        calculateProfit: "{{ route('admin.selling_chart.calculate.platform.profit') }}",
-        sizeRange:       "{{ url('/admin/selling-chart/get-size-range') }}",
-        depWiseCats:     "{{ url('admin/selling-chart/get-dep-wise-cats') }}",
-        colorSearch:     "{{ url('/admin/selling-chart/get-color-by-search') }}",
-        viewChart:       "{{ route('admin.selling_chart.view.single.chart', ':id') }}"
-    };
-    </script>
-    @vite('resources/js/pages/selling-chart/script.js')
-@endpush

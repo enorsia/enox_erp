@@ -1,0 +1,41 @@
+/* ── Selling Chart — Bulk Edit page styles ── */
+.warning-text .swal2-title {
+    font-size: 1.5em !important;
+    color: #bb2727 !important;
+}
+
+.error {
+    margin-top: 5px;
+    font-size: 12px;
+}
+
+.selling_chart_form input[type="checkbox"]:checked::after {
+    content: "";
+}
+
+#selling_chart_table .new_table table tbody tr td input {
+    width: 80px !important;
+    text-align: center;
+}
+
+#selling_chart_table .new_table table tbody tr td input,
+#selling_chart_table .new_table table tbody tr td select {
+    width: 100px !important;
+}
+
+.sticky-table {
+    max-height: 80vh;
+    overflow: auto;
+}
+
+.sticky-table thead th {
+    position: sticky;
+    top: -1px;
+    z-index: 10;
+    background: #fff;
+}
+
+html[data-bs-theme="dark"] .sticky-table thead th {
+    background: #282F36;
+}
+
