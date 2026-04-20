@@ -3,13 +3,13 @@
 import $ from 'jquery';
 window.$ = window.jQuery = $;
 
-// ── Select2 ──
-import 'select2';
+import TomSelect from 'tom-select';
+import 'tom-select/dist/css/tom-select.css';
+window.TomSelect = TomSelect;
+
 
 // ── SweetAlert2 ──
 import Swal from 'sweetalert2';
 window.Swal = Swal;
 
-// ── Common module ──
 import './common';
-

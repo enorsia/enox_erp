@@ -34,11 +34,6 @@
 <!-- Mobile sidebar backdrop -->
 <div id="sidebarBackdrop" onclick="closeSidebar()" class="hidden fixed inset-0 bg-black/40 z-[200] lg:hidden"></div>
 
-<!-- Third-party scripts (if you still need them) -->
-<script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}"></script>
-<script src="{{ asset('assets/js/jquery.validate.min.js') }}"></script>
-<script src="{{ asset('assets/js/sweetalert2@11.min.js') }}"></script>
-
 @include('layouts.footer.index')
 @stack('js')
 </body>

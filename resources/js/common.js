@@ -1,8 +1,4 @@
-/**
- * ENORSIA ADMIN – COMMON JS
- * All shared scripts used across the full project.
- * Page-specific scripts go in resources/js/pages/*.js
- */
+import $ from '$';
 
 /* ══════════════════════════════════════
    DARK / LIGHT MODE
@@ -113,14 +109,27 @@ $(document).on('change', '.image-input', function () {
    SELECT2 GLOBAL INIT
   Initialise any element with .select2-input
 ══════════════════════════════════════ */
-$(document).ready(function () {
-    if ($.fn.select2) {
-        $('.select2-input').select2({
-            theme: 'default',
-            width: '100%',
-        });
+
+document.addEventListener('DOMContentLoaded', function() {
+    function initTomSelect() {
+        if (typeof TomSelect !== 'undefined') {
+            document.querySelectorAll('.tom-select').forEach(element => {
+                new TomSelect(element, {
+                    create: false,
+                    searchField: 'text',
+                    sortField: 'text',
+                    placeholder: element.dataset.placeholder || 'Select an option',
+                    maxOptions: 50,
+                });
+            });
+        } else {
+            setTimeout(initTomSelect, 100);
+        }
     }
+
+    initTomSelect();
 });
+
 
 /* ══════════════════════════════════════
    SESSION FLASH (SweetAlert toasts)

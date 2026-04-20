@@ -6,16 +6,6 @@
 
 @section('title', 'Admin Users')
 
-@section('breadcrumb')
-    Admin Panel
-    <span class="mx-1.5 text-slate-300 dark:text-slate-600">›</span>
-    Access
-    <span class="mx-1.5 text-slate-300 dark:text-slate-600">›</span>
-    <span class="text-slate-700 dark:text-slate-200 font-medium">Admin Users</span>
-@endsection
-
-@section('page_title', 'Admin Users')
-
 @section('content')
     <div class="p-5 lg:p-6">
 
@@ -53,15 +43,16 @@
                 </div>
 
                 <!-- Role filter -->
-                <select name="role_id"
-                        class="f-input custom-select" style="width: auto; min-width: 160px;">
-                    <option value="">Select Role</option>
-                    @foreach ($roles as $role)
-                        <option value="{{ $role->id }}" {{ request('role_id') == $role->id ? 'selected' : '' }}>
-                            {{ $role->name ?? '' }}
-                        </option>
-                    @endforeach
-                </select>
+                <div class="relative min-w-[240px]">
+                    <select name="role_id" class="tom-select" data-placeholder="Select Role">
+                        <option value="">Select Role</option>
+                        @foreach ($roles as $role)
+                            <option value="{{ $role->id }}" {{ request('role_id') == $role->id ? 'selected' : '' }}>
+                                {{ $role->name ?? '' }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
                 <!-- Search button -->
                 <button type="submit"

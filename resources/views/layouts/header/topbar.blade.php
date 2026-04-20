@@ -9,14 +9,6 @@
                 <path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
         </button>
-        <!-- Breadcrumb (desktop) -->
-        <div class="text-xs text-slate-400 dark:text-slate-500 hidden sm:flex items-center gap-1">
-            @yield('breadcrumb', 'Admin Panel')
-        </div>
-        <!-- Page title (mobile) -->
-        <div class="sm:hidden text-sm font-medium text-slate-700 dark:text-slate-200">
-            @yield('page_title', 'Dashboard')
-        </div>
     </div>
 
     <!-- Right: dark mode toggle + notification + avatar -->
