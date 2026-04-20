@@ -1,24 +1,10 @@
 @extends('layouts.app')
 
-@push('page_vite')
-    @vite(['resources/js/pages/users.js'])
-@endpush
-
 @section('title', 'View Admin User')
 
-@section('breadcrumb')
-    admin panel
-    <span class="mx-1.5 text-slate-300 dark:text-slate-600">›</span>
-    <a href="{{ route('admin.users.index') }}" class="hover:text-accent-400 transition-colors">admin users</a>
-    <span class="mx-1.5 text-slate-300 dark:text-slate-600">›</span>
-    <span class="text-slate-700 dark:text-slate-200 font-medium">{{ $user->name }}</span>
-@endsection
-
-@section('page_title', $user->name)
-
 @section('content')
+    <div id="user-page-content"></div>
     <div class="max-w-6xl mx-auto px-5 py-6">
-
         <!-- PAGE HEADER -->
         <div class="flex items-start justify-between gap-4 mb-5 flex-wrap">
             <div>

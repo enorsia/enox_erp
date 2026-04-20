@@ -1,14 +1,4 @@
-/**
- * USERS PAGE – Page-specific JS
- * Loaded only on the users module (create / edit pages).
- */
-
-// Ensure jQuery is available in this entry chunk. Some build setups load
-// page-specific entry scripts before the global `app.js`, which causes
-// "$ is not defined" runtime errors. Importing and exposing jQuery here
-// guarantees `$` is defined when this file runs.
-import $ from 'jquery';
-window.$ = window.jQuery = $;
+import $ from '$';
 
 $(document).ready(function () {
 

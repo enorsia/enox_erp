@@ -6,6 +6,9 @@
     background: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
 }
+button {
+    cursor: pointer;
+}
 
 /* ── Navigation active state ── */
 .nav-active {
@@ -259,6 +262,108 @@
 .dark .sticky-footer {
     background: #0f172a;
     border-color: #334155;
+}
+
+/* ── Tom-Select: match search-input style ── */
+.ts-wrapper {
+    width: 100%;
+}
+
+.ts-wrapper .ts-control {
+    min-height: unset !important;
+    height: auto !important;
+    padding: 0.4rem 0.75rem !important;
+    font-size: 0.8125rem !important;
+    line-height: 1.25rem !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid #e2e8f0 !important;
+    background: #fff !important;
+    color: #334155 !important;
+    box-shadow: none !important;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+}
+
+.ts-wrapper .ts-control input {
+    font-size: 0.8125rem !important;
+    line-height: 1.25rem !important;
+    color: #334155 !important;
+    padding: 0 !important;
+    min-height: unset !important;
+    height: auto !important;
+}
+
+.ts-wrapper .ts-control input::placeholder {
+    color: #94a3b8 !important;
+}
+
+.ts-wrapper.focus .ts-control,
+.ts-wrapper .ts-control:focus-within {
+    border-color: var(--color-accent-400) !important;
+    outline: none !important;
+}
+
+/* Dropdown */
+.ts-wrapper .ts-dropdown {
+    border-radius: 0.5rem !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+    font-size: 0.8125rem !important;
+    margin-top: 4px !important;
+    overflow: hidden;
+}
+
+.ts-wrapper .ts-dropdown .ts-dropdown-content .option {
+    padding: 8px 12px !important;
+    color: #334155 !important;
+    cursor: pointer;
+}
+
+.ts-wrapper .ts-dropdown .ts-dropdown-content .option:hover,
+.ts-wrapper .ts-dropdown .ts-dropdown-content .option.active {
+    background: #E1F5EE !important;
+    color: #0F6E56 !important;
+}
+
+.ts-wrapper .ts-dropdown .ts-dropdown-content .option.selected {
+    background: var(--color-accent-400) !important;
+    color: #fff !important;
+}
+
+/* Dark mode */
+.dark .ts-wrapper .ts-control {
+    border-color: #475569 !important;
+    background: #1e293b !important;
+    color: #e2e8f0 !important;
+}
+
+.dark .ts-wrapper .ts-control input {
+    color: #e2e8f0 !important;
+    background: transparent !important;
+}
+
+.dark .ts-wrapper.focus .ts-control,
+.dark .ts-wrapper .ts-control:focus-within {
+    border-color: var(--color-accent-400) !important;
+}
+
+.dark .ts-wrapper .ts-dropdown {
+    border-color: #334155 !important;
+    background: #1e293b !important;
+}
+
+.dark .ts-wrapper .ts-dropdown .ts-dropdown-content .option {
+    color: #e2e8f0 !important;
+}
+
+.dark .ts-wrapper .ts-dropdown .ts-dropdown-content .option:hover,
+.dark .ts-wrapper .ts-dropdown .ts-dropdown-content .option.active {
+    background: rgba(29, 158, 117, 0.2) !important;
+    color: #5DCAA5 !important;
 }
 
 /* ── Order Card Hover ── */

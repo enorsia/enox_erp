@@ -1,14 +1,10 @@
 @extends('layouts.app')
 
-@push('page_vite')
-    @vite(['resources/js/pages/users.js'])
-@endpush
-
 @section('title', 'Admin Users')
 
 @section('content')
+    <div id="user-page-content"></div>
     <div class="p-5 lg:p-6">
-
         <!-- ── PAGE HEADER ── -->
         <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
             <div>
@@ -18,7 +14,7 @@
             </div>
             @can('authentication.users.create')
                 <a href="{{ route('admin.users.create') }}"
-                   class="flex items-center gap-2 px-4 py-2.5 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
+                   class="flex items-center gap-2 px-4 py-2 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" d="M12 5v14M5 12h14"/>
                     </svg>
@@ -30,28 +26,35 @@
         <!-- ── FILTER TOOLBAR ── -->
         <form method="get" action="{{ route('admin.users.index') }}">
             <div class="flex flex-wrap items-center gap-2.5 mb-5">
-                <!-- Search -->
-                <div class="relative flex-1 min-w-[180px]">
-                    <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-                         fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <circle cx="11" cy="11" r="7"/>
-                        <path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
-                    </svg>
-                    <input type="text" name="search" placeholder="Search by name or email..."
-                           value="{{ request('search') }}"
-                           class="w-full pl-9 pr-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-accent-400 dark:focus:border-accent-400 transition-colors"/>
-                </div>
 
-                <!-- Role filter -->
-                <div class="relative min-w-[240px]">
-                    <select name="role_id" class="tom-select" data-placeholder="Select Role">
-                        <option value="">Select Role</option>
-                        @foreach ($roles as $role)
-                            <option value="{{ $role->id }}" {{ request('role_id') == $role->id ? 'selected' : '' }}>
-                                {{ $role->name ?? '' }}
-                            </option>
-                        @endforeach
-                    </select>
+                <!-- Left 50/50 wrapper -->
+                <div class="flex flex-1 gap-2.5 min-w-0">
+
+                    <!-- Search (50%) -->
+                    <div class="relative w-1/2">
+                        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                             fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <circle cx="11" cy="11" r="7"/>
+                            <path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+                        </svg>
+                        <input type="text" name="search" placeholder="Search by name or email..."
+                               value="{{ request('search') }}"
+                               class="w-full pl-9 pr-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-accent-400 dark:focus:border-accent-400 transition-colors"/>
+
+                    </div>
+
+                    <!-- Role filter (50%) -->
+                    <div class="w-1/2">
+                        <select name="role_id" class="tom-select w-full" data-placeholder="Select Role">
+                            <option value="">Select Role</option>
+                            @foreach ($roles as $role)
+                                <option value="{{ $role->id }}" {{ request('role_id') == $role->id ? 'selected' : '' }}>
+                                    {{ $role->name ?? '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
                 </div>
 
                 <!-- Search button -->

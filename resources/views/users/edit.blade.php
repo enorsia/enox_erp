@@ -1,22 +1,9 @@
 @extends('layouts.app')
 
-@push('page_vite')
-    @vite(['resources/js/pages/users.js'])
-@endpush
-
 @section('title', 'Edit Admin User')
 
-@section('breadcrumb')
-    admin panel
-    <span class="mx-1.5 text-slate-300 dark:text-slate-600">›</span>
-    <a href="{{ route('admin.users.index') }}" class="hover:text-accent-400 transition-colors">admin users</a>
-    <span class="mx-1.5 text-slate-300 dark:text-slate-600">›</span>
-    <span class="text-slate-700 dark:text-slate-200 font-medium">edit</span>
-@endsection
-
-@section('page_title', 'Edit User')
-
 @section('content')
+    <div id="user-page-content"></div>
     <div class="max-w-5xl mx-auto px-5 py-6 pb-28">
 
         <!-- PAGE HEADER -->
