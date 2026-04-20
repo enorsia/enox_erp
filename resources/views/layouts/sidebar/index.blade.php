@@ -63,12 +63,55 @@
                 ...array_keys(Cache::get('permissions.available', [])['grouped']['general_forecasting'] ?? []),
                 ...array_keys(Cache::get('permissions.available', [])['grouped']['general_discounts'] ?? [])
             ])
-            <a href="{{ route('admin.selling_chart.index') }}"
-               class="nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/selling-chart/*') ? 'nav-active text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
-                <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4"/></svg>
-                Selling Chart
-                <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
-            </a>
+            <!-- Selling Chart Dropdown -->
+            <div x-data="{ open: {{ Request::is('admin/selling-chart/*') ? 'true' : 'false' }} }">
+                <button @click="open = !open"
+                        class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/selling-chart/*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                    <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4"/></svg>
+                    <span class="flex-1 text-left">Selling Chart</span>
+                    <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+
+                <!-- Sub-menu -->
+                <div x-show="open" x-collapse>
+                    <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
+                        @can('general.chart.index')
+                        <a href="{{ route('admin.selling_chart.index') }}"
+                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/manage/*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                            Chart
+                        </a>
+                        @endcan
+
+                        @can('general.forecasting.index')
+                        <a href="{{ route('admin.selling_chart.forecasting') }}"
+                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/forecasting/*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                            Forecasting
+                        </a>
+                        @endcan
+
+                        @can('general.discounts.index')
+                        <a href="{{ route('admin.selling_chart.discounts') }}"
+                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/discounts/*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                            Discounts
+                        </a>
+                        @endcan
+
+                        @can('general.fabrication.index')
+                        <a href="{{ route('admin.selling_chart.fabrication.index') }}"
+                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/fabrication/*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                            Fabrication
+                        </a>
+                        @endcan
+
+                        @can('general.expense.index')
+                        <a href="{{ route('admin.selling_chart.expense.index') }}"
+                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/expense/*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                            Expense
+                        </a>
+                        @endcan
+                    </div>
+                </div>
+            </div>
             @endcanany
         </div>
         @endcanany
@@ -90,4 +133,3 @@
 
     </nav>
 </aside>
-
