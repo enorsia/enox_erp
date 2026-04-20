@@ -1,179 +1,183 @@
-@extends('master.app')
+@extends('layouts.app')
+
+@section('title', 'Activity Logs')
 
 @section('content')
-    <div class="top_title">
-        @include('master.breadcrumb', [
-            'title' => 'Activities',
-            'icon' => 'bi bi-clock-history',
-            'sub_title' => [
-                'Activity Logs' => '',
-            ],
-        ])
-    </div>
+    <div class="p-5 lg:p-6">
 
-    <form method="get" action="{{ route('admin.activity-logs.index') }}">
-        <div class="card" id="filterSection">
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-12">
-                        <div class="filter_close_sec border-bottom">
-                            <h4 class="mb-0"><i class="bi bi-sliders"></i>Filter</h4>
+        <!-- ── PAGE HEADER ── -->
+        <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+            <div>
+                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Activity Logs</h1>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Track all user actions and system events
+                </p>
+            </div>
+        </div>
+
+        <!-- ── FILTER TOOLBAR ── -->
+        <form method="GET" action="{{ route('admin.activity-logs.index') }}">
+            <div class="flex flex-wrap items-center gap-2.5 mb-5">
+
+                <!-- Search -->
+                <div class="relative flex-1 min-w-[180px]">
+                    <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                         fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    <input type="text" name="search" placeholder="Search description..."
+                           value="{{ request('search') }}"
+                           class="w-full pl-9 pr-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-accent-400 dark:focus:border-accent-400 transition-colors"/>
+                </div>
+
+                <!-- User filter -->
+                <div class="min-w-[160px]">
+                    <select name="user_id" class="tom-select w-full" data-placeholder="All Users">
+                        <option value="">All Users</option>
+                        @foreach ($users as $user)
+                            <option value="{{ $user->id }}" {{ request('user_id') == $user->id ? 'selected' : '' }}>
+                                {{ $user->name ?? '' }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <!-- Date From -->
+                <input type="date" name="date_from" value="{{ request('date_from') }}"
+                       class="py-2 px-3 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors"/>
+
+                <!-- Date To -->
+                <input type="date" name="date_to" value="{{ request('date_to') }}"
+                       class="py-2 px-3 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors"/>
+
+                <!-- Search button -->
+                <button type="submit"
+                        class="flex items-center gap-2 px-3.5 py-2 text-[13px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    Search
+                </button>
+
+                <!-- Reset -->
+                <a href="{{ route('admin.activity-logs.index') }}"
+                   class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Reset
+                </a>
+            </div>
+        </form>
+
+        <!-- ── ACTIVITY LOG CARDS ── -->
+        <div class="flex flex-col gap-3">
+            @if (!$activities->isEmpty())
+                @foreach ($activities as $key => $activity)
+                    @php
+                        $eventColor = match($activity->event ?? '') {
+                            'created' => 'badge-green',
+                            'updated' => 'badge-blue',
+                            'deleted' => 'badge-red',
+                            default   => 'badge-amber',
+                        };
+                    @endphp
+                    <div class="order-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+
+                            <!-- Info -->
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                                    <span class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate max-w-[400px]">
+                                        {{ $activity->description ?? 'N/A' }}
+                                    </span>
+                                    @if($activity->event)
+                                        <span class="badge-custom {{ $eventColor }}">{{ ucfirst($activity->event) }}</span>
+                                    @endif
+                                    @if($activity->subject)
+                                        <span class="badge-custom badge-blue">{{ class_basename($activity->subject_type) }}</span>
+                                    @endif
+                                </div>
+
+                                <!-- Causer -->
+                                @if($activity->causer)
+                                    <div class="flex items-center gap-2 mt-1.5">
+                                        <div class="w-6 h-6 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700 flex-shrink-0">
+                                            <img class="w-full h-full object-cover"
+                                                 src="{{ $activity->causer->avatar ? cloudflareImage($activity->causer->avatar, 32) : cloudflareImage('eca4fbfc-baba-4ac2-0966-e8a13d097700', 32) }}"
+                                                 alt="Avatar">
+                                        </div>
+                                        <div>
+                                            <span class="text-[12px] font-medium text-slate-700 dark:text-slate-200">{{ $activity->causer->name ?? '' }}</span>
+                                            <span class="text-[11px] text-slate-400 dark:text-slate-500 ml-1.5">{{ $activity->causer->email ?? '' }}</span>
+                                        </div>
+                                    </div>
+                                @else
+                                    <p class="text-[12px] text-slate-400 dark:text-slate-500 mt-1">System</p>
+                                @endif
+
+                                <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                                    {{ $activity->created_at ? $activity->created_at->format('d M Y, h:i A') : '' }}
+                                    <span class="ml-1">({{ $activity->created_at ? $activity->created_at->diffForHumans() : '' }})</span>
+                                </p>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="flex gap-1 flex-shrink-0">
+                                @can('authentication.activity_logs.show')
+                                    <a href="{{ route('admin.activity-logs.show', $activity->id) }}"
+                                       class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+                                       title="View">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2"
+                                             viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                            <path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                        </svg>
+                                    </a>
+                                @endcan
+                            </div>
                         </div>
                     </div>
-                    <div class="col-12 col-md-3">
-                        <div class="form-group new_search new_same_item mb-sm-0 mb-3">
-                            <input class="form-control" type="text" name="search" placeholder="Search description"
-                                value="{{ request('search') }}">
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-3">
-                        <div class="form-group new_select_field new_same_item mb-sm-0 mb-3">
-                            <select class="select2 form-control" name="user_id" data-choices>
-                                <option value="">All Users</option>
-                                @foreach ($users as $user)
-                                    <option value="{{ $user->id }}"
-                                        {{ request('user_id') == $user->id ? 'selected' : '' }}>
-                                        {{ $user->name ?? '' }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-2">
-                        <div class="form-group new_same_item mb-sm-0 mb-3">
-                            <input class="form-control" type="date" name="date_from" placeholder="Date From"
-                                value="{{ request('date_from') }}">
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-2">
-                        <div class="form-group new_same_item mb-sm-0 mb-3">
-                            <input class="form-control" type="date" name="date_to" placeholder="Date To"
-                                value="{{ request('date_to') }}">
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-2 text-end mt-2 mt-md-0">
-                        <div class="flex-center">
-                            <a href="{{ route('admin.activity-logs.index') }}" class="btn btn-outline-danger flex-center mx-1">
-                                <i class="bi bi-arrow-clockwise ms-0"></i> Reset
-                            </a>
-                            <button type="submit" class="btn btn-primary mx-1">
-                                <i class="fa fa-filter ms-0" aria-hidden="true"></i> Search
-                            </button>
-                        </div>
-                    </div>
+                @endforeach
+            @else
+                <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center">
+                    <p class="text-sm text-slate-400 dark:text-slate-500">No activity logs found.</p>
+                </div>
+            @endif
+        </div>
+
+        <!-- ── PAGINATION ── -->
+        @if($activities->hasPages())
+            <div class="mt-5 flex justify-center">
+                <div class="flex items-center gap-1">
+                    @if($activities->onFirstPage())
+                        <span class="px-3 py-2 text-[13px] text-slate-300 dark:text-slate-600 cursor-not-allowed">← Prev
+                        </span>
+                    @else
+                        <a href="{{ $activities->previousPageUrl() }}"
+                           class="px-3 py-2 text-[13px] text-slate-600 dark:text-slate-300 hover:text-accent-400 transition-colors">← Prev</a>
+                    @endif
+
+                    @foreach ($activities->getUrlRange(1, $activities->lastPage()) as $page => $url)
+                        @if ($page == $activities->currentPage())
+                            <span class="w-8 h-8 flex items-center justify-center rounded-lg bg-accent-400 text-white text-[13px] font-semibold">{{ $page }}</span>
+                        @else
+                            <a href="{{ $url }}"
+                               class="w-8 h-8 flex items-center justify-center rounded-lg text-[13px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">{{ $page }}</a>
+                        @endif
+                    @endforeach
+
+                    @if($activities->hasMorePages())
+                        <a href="{{ $activities->nextPageUrl() }}"
+                           class="px-3 py-2 text-[13px] text-slate-600 dark:text-slate-300 hover:text-accent-400 transition-colors">Next
+                        →</a>
+                    @else
+                        <span class="px-3 py-2 text-[13px] text-slate-300 dark:text-slate-600 cursor-not-allowed">Next
+                        →</span>
+                    @endif
                 </div>
             </div>
-        </div>
-    </form>
+        @endif
 
-    <div class="card shadow-sm mt-3" style="overflow: hidden;">
-        <div class="card-body px-0 pt-0">
-            <div class="table-responsive">
-                <table class="table table-hover table-centered">
-                    <thead>
-                        <tr>
-                            <th class="text-center">#SL</th>
-                            <th>Description</th>
-                            <th>User</th>
-                            <th>Subject</th>
-                            <th class="text-center">Date & Time</th>
-                            <th class="text-center">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (!$activities->isEmpty())
-                            @foreach ($activities as $key => $activity)
-                                @php
-                                    $changedFields = 0;
-                                    $hasOldValues = false;
-
-                                    if ($activity->properties && $activity->properties->has('attributes')) {
-                                        $changedFields = count($activity->properties->get('attributes', []));
-                                    }
-
-                                    if ($activity->properties && $activity->properties->has('old')) {
-                                        $hasOldValues = true;
-                                        $oldCount = count($activity->properties->get('old', []));
-                                        if ($oldCount > 0) {
-                                            $changedFields = $oldCount;
-                                        }
-                                    }
-                                @endphp
-                                <tr>
-                                    <td class="text-center">{{ $start + $loop->index }}</td>
-                                    <td>
-                                        <div class="text-truncate" style="max-width: 300px;">
-                                            {{ $activity->description ?? 'N/A' }}
-                                        </div>
-                                        @if($activity->event)
-                                            <div class="mt-1">
-                                                @if($activity->event == 'created')
-                                                    <span class="badge bg-success">Created</span>
-                                                @elseif($activity->event == 'updated')
-                                                    <span class="badge bg-primary">Updated</span>
-                                                @elseif($activity->event == 'deleted')
-                                                    <span class="badge bg-danger">Deleted</span>
-                                                @else
-                                                    <span class="badge bg-secondary">{{ ucfirst($activity->event) }}</span>
-                                                @endif
-                                            </div>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        @if($activity->causer)
-                                            <div class="d-flex align-items-center">
-                                                <div class="widget-content-left">
-                                                    <img width="32" height="32" class="rounded-circle"
-                                                        src="{{ $activity->causer->avatar ? cloudflareImage($activity->causer->avatar, 32) : cloudflareImage('eca4fbfc-baba-4ac2-0966-e8a13d097700', 32) }}"
-                                                        alt="Avatar">
-                                                </div>
-                                                <div class="ms-2">
-                                                    <div class="widget-heading">{{ $activity->causer->name ?? '' }}</div>
-                                                    <div class="widget-subheading text-muted small">{{ $activity->causer->email ?? '' }}</div>
-                                                </div>
-                                            </div>
-                                        @else
-                                            <span class="text-muted">System</span>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        @if($activity->subject)
-                                            <span class="badge bg-info">
-                                                {{ class_basename($activity->subject_type) }}
-                                            </span>
-                                        @else
-                                            <span class="text-muted">-</span>
-                                        @endif
-                                    </td>
-                                    <td class="text-center">
-                                        <div>{{ $activity->created_at ? $activity->created_at->format('d M Y') : '' }}</div>
-                                        <div class="text-muted small">{{ $activity->created_at ? $activity->created_at->format('h:i A') : '' }}</div>
-                                    </td>
-                                    <td class="text-center">
-                                        @can('authentication.activity_logs.show')
-                                            <a class="btn btn-soft-info btn-sm"
-                                                href="{{ route('admin.activity-logs.show', $activity->id) }}">
-                                                <iconify-icon icon="solar:eye-broken"
-                                                    class="align-middle fs-18"></iconify-icon>
-                                            </a>
-                                        @endcan
-                                    </td>
-                                </tr>
-                            @endforeach
-                        @else
-                            <tr>
-                                <td colspan="7" class="text-center text-danger text-uppercase">No activity logs found.</td>
-                            </tr>
-                        @endif
-                    </tbody>
-                </table>
-            </div>
-
-            {!! $activities->links('master.custom-paginator') !!}
-        </div>
     </div>
 @endsection
-
-@push('js')
-@endpush
 

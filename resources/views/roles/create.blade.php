@@ -1,241 +1,214 @@
-@extends('master.app')
+@extends('layouts.app')
+
+@section('title', 'Create Role')
 
 @section('content')
-    <div class="top_title">
-        @include('master.breadcrumb', [
-            'title' => 'Create Role',
-        ])
-    </div>
-    <div class="row justify-content-center">
-        <div class="col-lg-12">
-            <div class="card-dark main-card mb-3 card">
-                <div class="card-body">
-                    <form id="role-create-form" method="POST" action="{{ route('admin.roles.store') }}" novalidate>
-                        @csrf
+    <div class="max-w-5xl mx-auto px-5 py-6 pb-28">
 
-                        {{-- Role Name --}}
-                        <div class="mb-4">
-                            <label for="name" class="form-label fw-semibold">Role Name</label>
-                            <input id="name" type="text" name="name"
-                                class="form-control @error('name') is-invalid @enderror"
-                                value="{{ old('name') }}" placeholder="Enter role name">
-                            @error('name')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+        <!-- PAGE HEADER -->
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+            <div>
+                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Create New Role</h1>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Define a role name and assign permissions
+                </p>
+            </div>
+        </div>
 
-                        {{-- Permissions --}}
-                        <div class="mb-4">
-                            <h5 class="fw-bold mb-3">Permissions</h5>
+        <form id="role-create-form" method="POST" action="{{ route('admin.roles.store') }}" novalidate>
+            @csrf
 
-                            @if (!empty($nested) && count($nested))
-                                <div class="accordion" id="permissionsAccordion">
-                                    @foreach ($nested as $moduleIndex => $moduleItem)
-                                        @php
-                                            $module = $moduleIndex;
-                                            $models = $moduleItem;
-                                            $collapseId = 'collapseModule' . $moduleIndex;
-                                            $headingId = 'headingModule' . $moduleIndex;
-                                        @endphp
+            <!-- ── Role Name ── -->
+            <div class="section-card mb-5">
+                <div class="section-title">
+                    <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                            d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                    </svg>
+                    Role Details
+                </div>
+                <p class="section-desc">Enter a unique name for this role.</p>
+                <div class="max-w-sm">
+                    <label for="name" class="f-label">Role Name <span class="f-required">*</span></label>
+                    <input id="name" type="text" name="name"
+                        class="f-input @error('name') border-red-400 @enderror"
+                        value="{{ old('name') }}" placeholder="e.g. Editor, Manager" />
+                    @error('name')
+                        <p class="f-error">{{ $message }}</p>
+                    @enderror
+                </div>
+            </div>
 
-                                        <div class="accordion-item">
-                                            <h2 class="accordion-header" id="{{ $headingId }}">
-                                                <button
-                                                    class="accordion-button fw-medium {{ $moduleIndex !== 0 ? 'collapsed' : '' }}"
-                                                    type="button" data-bs-toggle="collapse"
-                                                    data-bs-target="#{{ $collapseId }}"
-                                                    aria-expanded="{{ $moduleIndex === 0 ? 'true' : 'false' }}"
-                                                    aria-controls="{{ $collapseId }}">
-                                                    {{ $module }} Module
-                                                </button>
-                                            </h2>
+            <!-- ── Permissions ── -->
+            <div class="section-card">
+                <div class="section-title">
+                    <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    Permissions
+                </div>
+                <p class="section-desc">Select the permissions to assign to this role.</p>
 
-                                            <div id="{{ $collapseId }}"
-                                                class="accordion-collapse collapse {{ $moduleIndex === 0 ? 'show' : '' }}"
-                                                aria-labelledby="{{ $headingId }}" data-bs-parent="#permissionsAccordion">
-                                                <div class="accordion-body">
-                                                    <div class="row g-3">
-                                                        @foreach ($models as $model => $modelPermissions)
-                                                            <div class="col-lg-6">
-                                                                <div class="border rounded-3 bg-light-subtle p-3 shadow-sm h-100 model-box">
-                                                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                                                        <strong class="text-capitalize text-primary">{{ $model }}</strong>
+                @error('permissions')
+                    <p class="f-error mb-3">{{ $message }}</p>
+                @enderror
+                <p id="permissions-error-client" class="f-error mb-3 hidden">Select at least one permission.</p>
 
-                                                                        {{-- Select all for this model --}}
-                                                                        <div class="form-check form-switch mb-0">
-                                                                            <input type="checkbox"
-                                                                                class="form-check-input select-all-model"
-                                                                                title="Select all">
-                                                                        </div>
-                                                                    </div>
-
-                                                                    <hr class="my-2">
-
-                                                                    @foreach ($modelPermissions as $perm)
-                                                                        @php
-                                                                            $parts = explode('.', $perm->name);
-                                                                            $action = ucfirst(end($parts));
-                                                                        @endphp
-                                                                        <div class="form-check mb-2">
-                                                                            <input class="form-check-input permission-checkbox"
-                                                                                type="checkbox" name="permissions[]"
-                                                                                value="{{ $perm->id }}"
-                                                                                id="perm_{{ $perm->id }}"
-                                                                                {{ is_array(old('permissions')) && in_array($perm->id, old('permissions')) ? 'checked' : '' }}>
-                                                                            <label class="form-check-label small" for="perm_{{ $perm->id }}">{{ $action }}</label>
-                                                                            <small class="text-muted ms-2 d-block">{{ $perm->name }}</small>
-                                                                        </div>
-                                                                    @endforeach
-                                                                </div>
-                                                            </div>
-                                                        @endforeach
-                                                    </div>
-                                                </div>
+                @if (!empty($nested) && count($nested))
+                    <div class="space-y-3">
+                        @foreach ($nested as $moduleIndex => $moduleItem)
+                            @php $colId = 'mod_' . Str::slug($moduleIndex); @endphp
+                            <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                                <!-- Module header -->
+                                <button type="button" onclick="toggleModule('{{ $colId }}')"
+                                    class="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 text-left">
+                                    <span
+                                        class="text-[13px] font-semibold text-slate-700 dark:text-slate-200 capitalize">{{
+                                        $moduleIndex }} Module</span>
+                                    <svg id="{{ $colId }}-icon"
+                                        class="w-4 h-4 text-slate-400 transition-transform duration-200"
+                                        fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                                <!-- Module body -->
+                                <div id="{{ $colId }}"
+                                    class="px-4 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    @foreach ($moduleItem as $model => $modelPermissions)
+                                        <div
+                                            class="border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-white dark:bg-slate-900/40 model-box">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <span
+                                                    class="text-[12px] font-semibold text-accent-400 capitalize">{{ $model }}</span>
+                                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                                    <input type="checkbox"
+                                                        class="select-all-model w-3.5 h-3.5 accent-accent-400"
+                                                        title="Select all" />
+                                                    <span class="text-[10px] text-slate-400">All</span>
+                                                </label>
                                             </div>
+                                            <hr class="border-slate-200 dark:border-slate-700 mb-2" />
+                                            @foreach ($modelPermissions as $perm)
+                                                @php
+                                                    $parts  = explode('.', $perm->name);
+                                                    $action = ucfirst(end($parts));
+                                                @endphp
+                                                <label class="flex items-center gap-2 py-0.5 cursor-pointer group">
+                                                    <input class="permission-checkbox w-3.5 h-3.5 accent-accent-400"
+                                                        type="checkbox" name="permissions[]"
+                                                        value="{{ $perm->id }}"
+                                                        id="perm_{{ $perm->id }}"
+                                                        {{ is_array(old('permissions')) && in_array($perm->id, old('permissions')) ? 'checked' : '' }} />
+                                                    <span
+                                                        class="text-[12px] text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-slate-100">{{
+                                                        $action }}</span>
+                                                    <span
+                                                        class="text-[10px] text-slate-400 dark:text-slate-500 ml-auto font-mono">{{
+                                                        $perm->name }}</span>
+                                                </label>
+                                            @endforeach
                                         </div>
                                     @endforeach
                                 </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="text-sm text-slate-400 dark:text-slate-500">No permissions available.</p>
+                @endif
+            </div>
 
-                                {{-- Server-side error (if any) --}}
-                                @error('permissions')
-                                    <div class="text-danger mt-2 small">{{ $message }}</div>
-                                @enderror
-
-                                {{-- Client-side error placeholder (created/filled by JS if needed) --}}
-                                <div id="permissions-error-client" class="text-danger mt-2 small d-none">Select at least one permission.</div>
-                            @else
-                                <div class="text-muted">No permissions available.</div>
-                            @endif
-                        </div>
-
-                        {{-- Actions --}}
-                        <div class="text-end">
-                            <button type="submit" class="btn btn-primary btn-lg px-4 create-btn" id="createRoleBtn">
-                                <span class="btn-text"><i class="bi bi-check-circle me-1"></i> Create Role</span>
-                                <span class="spinner-border text-light spinner-border-sm ms-2 d-none create-spinner" role="status" aria-hidden="true"></span>
-                            </button>
-                        </div>
-                    </form>
+            <!-- ── STICKY FOOTER ── -->
+            <div class="sticky-footer mt-5 -mx-5 rounded-none">
+                <div class="max-w-5xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+                    <div class="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Fields marked <span class="text-red-400 mx-1">*</span> are required
+                    </div>
+                    <div class="flex gap-2.5">
+                        <a href="{{ route('admin.roles.index') }}"
+                            class="px-4 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
+                            Cancel
+                        </a>
+                        <button type="submit" id="createRoleBtn"
+                            class="px-5 py-2.5 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            Create Role
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </form>
     </div>
 @endsection
 
 @push('js')
     <script>
-        (function ($) {
-            const $form    = $('#role-create-form');
-            const $btn     = $('#createRoleBtn');
-            const $spinner = $('.create-spinner');
+        // Toggle module panel
+        function toggleModule(id) {
+            var panel = document.getElementById(id);
+            var icon = document.getElementById(id + '-icon');
+            var hidden = panel.classList.toggle('hidden');
+            if (icon) icon.style.transform = hidden ? 'rotate(-90deg)' : '';
+        }
 
-            // ===== Model-level "select all" logic =====
-            $('.model-box').each(function() {
-                const $box = $(this);
-                const $selectAll  = $box.find('.select-all-model');
-                const $checkboxes = $box.find('.permission-checkbox');
+        // Model-level select-all
+        document.querySelectorAll('.model-box').forEach(function (box) {
+            var selectAll = box.querySelector('.select-all-model');
+            var checkboxes = box.querySelectorAll('.permission-checkbox');
+            if (!checkboxes.length) { if (selectAll) selectAll.style.display = 'none'; return; }
 
-                if ($checkboxes.length === 0) {
-                    if ($selectAll.length) $selectAll.hide();
-                    return;
-                }
-
-                $selectAll.prop('checked', $checkboxes.toArray().every(cb => cb.checked));
-
-                $selectAll.on('change', function() {
-                    $checkboxes.prop('checked', this.checked).trigger('change');
-                });
-
-                $checkboxes.on('change', function() {
-                    $selectAll.prop('checked', $checkboxes.toArray().every(cb => cb.checked));
+            selectAll.checked = Array.from(checkboxes).every(function (c) { return c.checked; });
+            selectAll.addEventListener('change', function () {
+                checkboxes.forEach(function (c) { c.checked = selectAll.checked; });
+            });
+            checkboxes.forEach(function (c) {
+                c.addEventListener('change', function () {
+                    selectAll.checked = Array.from(checkboxes).every(function (x) { return x.checked; });
                 });
             });
+        });
 
-            // ===== Spinner helpers =====
-            function enableButton()  { $btn.prop('disabled', false); $spinner.addClass('d-none'); }
-            function disableButton() { $btn.prop('disabled', true);  $spinner.removeClass('d-none'); }
-            enableButton();
+        // Form validation
+        document.getElementById('role-create-form').addEventListener('submit', function (e) {
+            var name = document.getElementById('name').value.trim();
+            var perms = document.querySelectorAll('.permission-checkbox:checked');
+            var valid = true;
 
-            // ===== jQuery Validation setup =====
-            // Custom method: ensure at least one permission checkbox is checked
-            $.validator.addMethod('atLeastOnePermission', function() {
-                return $('.permission-checkbox:checked').length > 0;
-            }, 'Select at least one permission.');
+            if (name.length < 3) {
+                document.getElementById('name').classList.add('border-red-400');
+                valid = false;
+            } else {
+                document.getElementById('name').classList.remove('border-red-400');
+            }
+            if (perms.length === 0) {
+                document.getElementById('permissions-error-client').classList.remove('hidden');
+                valid = false;
+            } else {
+                document.getElementById('permissions-error-client').classList.add('hidden');
+            }
+            if (!valid) e.preventDefault();
+            else {
+                var btn = document.getElementById('createRoleBtn');
+                btn.disabled = true;
+                btn.innerHTML = window.loader || 'Saving...';
+            }
+        });
 
-            const validator = $form.validate({
-                ignore: [], // validate hidden fields too if needed
-                rules: {
-                    name: {
-                        required: true,
-                        minlength: 3
-                    },
-                    'permissions[]': {
-                        atLeastOnePermission: true
-                    }
-                },
-                messages: {
-                    name: {
-                        required: 'Role name is required.',
-                        minlength: 'Role name must be at least 3 characters.'
-                    },
-                    'permissions[]': {
-                        atLeastOnePermission: 'Select at least one permission.'
-                    }
-                },
-                errorClass: 'is-invalid',
-                validClass: 'is-valid',
-                errorElement: 'div',
-                highlight: function (element) {
-                    const $el = $(element);
-                    if (!$el.hasClass('permission-checkbox')) {
-                        $el.addClass('is-invalid');
-                    } else {
-                        $('#permissions-error-client').removeClass('d-none');
-                    }
-                },
-                unhighlight: function (element) {
-                    const $el = $(element);
-                    if (!$el.hasClass('permission-checkbox')) {
-                        $el.removeClass('is-invalid');
-                    } else {
-                        if ($('.permission-checkbox:checked').length > 0) {
-                            $('#permissions-error-client').addClass('d-none').text('');
-                        }
-                    }
-                },
-                errorPlacement: function (error, element) {
-                    const $el = $(element);
-
-                    // For the permissions group, route all errors to a single area
-                    if ($el.hasClass('permission-checkbox')) {
-                        const $container = $('#permissions-error-client');
-                        $container.text(error.text()).removeClass('d-none');
-                    } else {
-                        // Standard Bootstrap-friendly placement
-                        error.addClass('invalid-feedback');
-                        if ($el.parent('.input-group').length) {
-                            error.insertAfter($el.parent());
-                        } else {
-                            error.insertAfter($el);
-                        }
-                    }
-                },
-                submitHandler: function (form) {
-                    // Only disable + spin when valid
-                    disableButton();
-                    form.submit();
+        document.querySelectorAll('.permission-checkbox').forEach(function (c) {
+            c.addEventListener('change', function () {
+                if (document.querySelectorAll('.permission-checkbox:checked').length > 0) {
+                    document.getElementById('permissions-error-client').classList.add('hidden');
                 }
             });
-
-            // Live re-check for permissions container visibility
-            $(document).on('change', '.permission-checkbox', function () {
-                if ($('.permission-checkbox:checked').length > 0) {
-                    $('#permissions-error-client').addClass('d-none').text('');
-                } else if ($form.valid() === false) {
-                    $('#permissions-error-client').removeClass('d-none');
-                }
-            });
-        })(jQuery);
+        });
     </script>
 @endpush
-
