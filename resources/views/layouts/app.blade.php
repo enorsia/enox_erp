@@ -36,5 +36,6 @@
 
 @include('layouts.footer.index')
 @stack('js')
+@include('master.lara-izitoast')
 </body>
 </html>

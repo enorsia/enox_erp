@@ -132,19 +132,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 /* ══════════════════════════════════════
-   SESSION FLASH (SweetAlert toasts)
+   SESSION FLASH (iziToast notifications)
 ══════════════════════════════════════ */
 // Flash messages are injected as data attributes on <body>
 document.addEventListener('DOMContentLoaded', () => {
-    const body = document.body;
+    const body    = document.body;
     const success = body.dataset.flashSuccess;
     const error   = body.dataset.flashError;
 
     if (success) {
-        Swal.fire({ icon: 'success', title: 'Success', text: success, timer: 3000, showConfirmButton: false });
+        iziToast.success({
+            title: 'Success',
+            message: success,
+            position: 'topRight',
+            timeout: 30000,
+        });
     }
     if (error) {
-        Swal.fire({ icon: 'error', title: 'Error', text: error, timer: 4000, showConfirmButton: false });
+        iziToast.error({
+            title: 'Error',
+            message: error,
+            position: 'topRight',
+            timeout: 40000,
+        });
     }
 });
 

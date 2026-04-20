@@ -1,1 +1,1 @@
-{{-- Flash notifications are handled by common.js via body data attributes --}}
+{{-- Flash notifications: body data-attributes handled by common.js (iziToast), session toasts handled by master.lara-izitoast --}}

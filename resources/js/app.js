@@ -12,6 +12,11 @@ window.TomSelect = TomSelect;
 import Swal from 'sweetalert2';
 window.Swal = Swal;
 
+// ── iziToast ──
+import iziToast from 'izitoast';
+import 'izitoast/dist/css/iziToast.min.css';
+window.iziToast = iziToast;
+
 import './common';
 
 const has = (sel, byId = false) => byId ? !!document.getElementById(sel) : !!document.querySelector(sel);
