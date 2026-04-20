@@ -77,35 +77,35 @@
                     <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
                         @can('general.chart.index')
                         <a href="{{ route('admin.selling_chart.index') }}"
-                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/manage/*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/manage*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                             Chart
                         </a>
                         @endcan
 
                         @can('general.forecasting.index')
                         <a href="{{ route('admin.selling_chart.forecasting') }}"
-                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/forecasting/*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/forecasting*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                             Forecasting
                         </a>
                         @endcan
 
                         @can('general.discounts.index')
                         <a href="{{ route('admin.selling_chart.discounts') }}"
-                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/discounts/*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/discounts*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                             Discounts
                         </a>
                         @endcan
 
                         @can('general.fabrication.index')
                         <a href="{{ route('admin.selling_chart.fabrication.index') }}"
-                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/fabrication/*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/fabrication*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                             Fabrication
                         </a>
                         @endcan
 
                         @can('general.expense.index')
                         <a href="{{ route('admin.selling_chart.expense.index') }}"
-                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/expense/*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                           class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/expense*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                             Expense
                         </a>
                         @endcan

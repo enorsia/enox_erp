@@ -3,123 +3,210 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Discount Notification</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f0f4f8;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .wrapper {
+            width: 100%;
+            background: #f0f4f8;
+            padding: 30px 16px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 680px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.07);
+        }
+
+        .header {
+            background: #0c1521;
+            padding: 24px 32px;
+            text-align: center;
+        }
+
+        .header h2 {
+            margin: 0;
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .subheader {
+            background: #1a2840;
+            padding: 10px 32px;
+            text-align: center;
+        }
+
+        .subheader p {
+            margin: 0;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.55);
+        }
+
+        .body {
+            padding: 28px 32px;
+        }
+
+        .body p {
+            font-size: 14px;
+            color: #374151;
+            line-height: 1.6;
+            margin: 0 0 20px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .data-table th {
+            background: #f8fafc;
+            color: #6b7280;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            padding: 10px 12px;
+            border: 1px solid #e5e7eb;
+            text-align: left;
+        }
+
+        .data-table td {
+            padding: 10px 12px;
+            border: 1px solid #e5e7eb;
+            color: #374151;
+            vertical-align: middle;
+        }
+
+        .data-table tr:nth-child(even) td {
+            background: #f9fafb;
+        }
+
+        .data-table .num {
+            text-align: right;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .data-table .discount-price {
+            color: #dc2626;
+            font-weight: 700;
+        }
+
+        .notice {
+            margin-top: 24px;
+            font-size: 12px;
+            color: #9ca3af;
+            border-top: 1px solid #f0f0f0;
+            padding-top: 16px;
+        }
+
+        .footer {
+            background: #f8fafc;
+            padding: 16px 32px;
+            text-align: center;
+            font-size: 11px;
+            color: #9ca3af;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .body {
+                padding: 20px 16px;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 8px 8px;
+                font-size: 12px;
+            }
+        }
+    </style>
 </head>
 
-<body style="margin:0; padding:0; background-color:#f4f6f9; font-family: Arial, Helvetica, sans-serif;">
+<body>
+    <div class="wrapper">
+        <div class="container">
 
-    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f6f9; padding:20px 0;">
-        <tr>
-            <td align="center">
+            <!-- Header -->
+            <div class="header">
+                @php $platform = $discounts->first()?->platform; @endphp
+                @if ($type == 'approval')
+                <h2>Selling Chart Discount — Approval Required</h2>
+                @else
+                <h2>Discount Assigned: {{ $platform?->name }}</h2>
+                @endif
+            </div>
 
-                <p style="text-align: center; margin-bottom: 25px;">
-                    <img style="width: 220px;" src="{{ asset('assets/images/logo-dark.png') }}" class="logo-lg" alt="logo dark">
-                </p>
-                <!-- Main Container -->
-                <table width="700" cellpadding="0" cellspacing="0"
-                    style="background:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+            <!-- Sub-header -->
+            <div class="subheader">
+                <p>{{ config('app.name') }} &nbsp;·&nbsp; {{ now()->format('d M Y') }}</p>
+            </div>
 
-                    <!-- Header -->
-                    @php
-                        $platform = $discounts->first()?->platform;
-                    @endphp
-                    <tr>
-                        <td style="background:#2d3748; padding:20px; text-align:center;">
-                            @if ($type == 'approval')
-                                <h2 style="margin:0; color:#ffffff;">
-                                    Selling Chart Discount Notification
-                                </h2>
-                            @else
-                                <h2 style="margin:0; color:#ffffff;">
-                                    Discount for {{ $platform?->name }}
-                                </h2>
-                            @endif
+            <!-- Body -->
+            <div class="body">
+                @if ($type == 'approval')
+                <p>The following discount(s) have been submitted and require <strong>approval for {{ $platform?->name
+                    }}</strong>. Please review and take action.</p>
+                @else
+                <p>The following discount(s) have been <strong>assigned for {{ $platform?->name }}</strong> and are ready
+                    for the executor.</p>
+                @endif
 
-                        </td>
-                    </tr>
-
-                    <!-- Body -->
-                    <tr>
-                        <td style="padding:25px;">
-
-                            @if ($type == 'approval')
-                                <p style="font-size:15px; color:#333;">
-                                    This discount requires <strong>approval for {{ $platform?->name }}</strong>.
-                                </p>
-                            @else
-                                <p style="font-size:15px; color:#333;">
-                                    This discount has been <strong>assigned for {{ $platform?->name }}</strong>.
-                                </p>
-                            @endif
-
-                            <br>
-
-                            <!-- Table -->
-                            <table width="100%" cellpadding="8" cellspacing="0"
-                                style="border-collapse:collapse; font-size:14px;">
-
-                                <thead>
-                                    <tr style="background-color:#edf2f7;">
-                                        <th align="left" style="border:1px solid #ddd;">Design No</th>
-                                        <th align="left" style="border:1px solid #ddd;">Color</th>
-                                        <th align="left" style="border:1px solid #ddd;">Range</th>
-                                        <th align="left" style="border:1px solid #ddd;">Platform</th>
-                                        <th align="right" style="border:1px solid #ddd;">Confirm Selling Price (£)</th>
-                                        <th align="right" style="border:1px solid #ddd;">Discount Price (£)</th>
-                                    </tr>
-                                </thead>
-
-                                <tbody>
-                                    @foreach ($discounts as $discount)
-                                        <tr>
-                                            <td style="border:1px solid #ddd;">
-                                                {{ $discount?->sellingChartPrice?->sellingChartBasicInfo?->design_no }}
-                                            </td>
-                                            <td style="border:1px solid #ddd;">
-                                                {{ $discount?->sellingChartPrice?->color_name }}
-                                                ({{ $discount?->sellingChartPrice?->color_code }})
-                                            </td>
-                                            <td style="border:1px solid #ddd;">
-                                                {{ $discount?->sellingChartPrice?->range }}
-                                            </td>
-                                            <td style="border:1px solid #ddd;">
-                                                {{ $discount?->platform?->name }}
-                                            </td>
-                                            <td align="right" style="border:1px solid #ddd;">
-                                                @price($discount?->sellingChartPrice?->confirm_selling_price)
-                                            </td>
-                                            <td align="right" style="border:1px solid #ddd;">
-                                                @price($discount->price)
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-
-                            </table>
-
-                            <br><br>
-
-                            <p style="font-size:13px; color:#777;">
-                                This is an automated system notification. Please do not reply to this email.
-                            </p>
-
-                        </td>
-                    </tr>
-
-                    <!-- Footer -->
-                    <tr>
-                        <td style="background:#f7fafc; padding:15px; text-align:center; font-size:12px; color:#999;">
-                            © {{ date('Y') }} {{ config('app.name') }}. All rights reserved.
-                        </td>
-                    </tr>
-
+                <!-- Data Table -->
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Design No</th>
+                            <th>Color</th>
+                            <th>Range</th>
+                            <th>Platform</th>
+                            <th style="text-align:right">Orig. Price (£)</th>
+                            <th style="text-align:right">Discount Price (£)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($discounts as $discount)
+                        <tr>
+                            <td><strong>{{ $discount?->sellingChartPrice?->sellingChartBasicInfo?->design_no }}</strong></td>
+                            <td>
+                                {{ $discount?->sellingChartPrice?->color_name }}
+                                @if ($discount?->sellingChartPrice?->color_code)
+                                <span style="color:#9ca3af;">({{ $discount->sellingChartPrice->color_code }})</span>
+                                @endif
+                            </td>
+                            <td>{{ $discount?->sellingChartPrice?->range ?: '—' }}</td>
+                            <td>{{ $discount?->platform?->name }}</td>
+                            <td class="num">@price($discount?->sellingChartPrice?->confirm_selling_price)</td>
+                            <td class="num discount-price">@price($discount->price)</td>
+                        </tr>
+                        @endforeach
+                    </tbody>
                 </table>
-                <!-- End Main Container -->
 
-            </td>
-        </tr>
-    </table>
+                <p class="notice">This is an automated system notification. Please do not reply to this email.</p>
+            </div>
 
+            <!-- Footer -->
+            <div class="footer">
+                &copy; {{ date('Y') }} {{ config('app.name') }}. All rights reserved.
+            </div>
+
+        </div>
+    </div>
 </body>
 
 </html>

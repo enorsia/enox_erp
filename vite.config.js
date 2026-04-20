@@ -10,6 +10,7 @@ export default defineConfig({
                 'resources/css/app.css',
                 'resources/js/app.js',
                 'resources/js/pages/users.js',
+                'resources/js/pages/discounts.js',
             ],
             refresh: true,
         }),
