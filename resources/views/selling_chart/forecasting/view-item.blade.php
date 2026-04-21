@@ -109,11 +109,11 @@
                 <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Show / Hide:</span>
                 <label class="flex items-center gap-1.5 cursor-pointer select-none">
                     <input type="checkbox" class="toggle-column w-3.5 h-3.5 rounded accent-accent-400" value="commission">
-                    <span class="text-[12px] text-slate-600 dark:text-slate-300">Price &amp; Commission</span>
+                    <span class="text-[12px] text-slate-600 dark:text-slate-300">Commission details</span>
                 </label>
                 <label class="flex items-center gap-1.5 cursor-pointer select-none">
                     <input type="checkbox" class="toggle-column w-3.5 h-3.5 rounded accent-accent-400" value="vat">
-                    <span class="text-[12px] text-slate-600 dark:text-slate-300">VAT details</span>
+                    <span class="text-[12px] text-slate-600 dark:text-slate-300">Vat details</span>
                 </label>
             </div>
 
@@ -145,20 +145,20 @@
                             <table class="w-full text-[12px] border-collapse" style="min-width: max-content;">
                                 <thead>
                                     <tr class="bg-slate-50 dark:bg-slate-800/60">
-                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Color (Code)</th>
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Color Name (code)</th>
                                         @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
                                             <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Size Range</th>
                                         @endif
-                                        <th class="toogle-item commission px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Price $(FOB)</th>
-                                        <th class="toogle-item commission px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Unit Price</th>
-                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">CSP</th>
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">price $(FOB)</th>
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Unit Price</th>
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Confirm Selling Price</th>
                                         <th class="toogle-item commission px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Commission</th>
-                                        <th class="toogle-item commission px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Com. VAT</th>
+                                        <th class="toogle-item commission px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Commission Vat</th>
                                         <th class="toogle-item commission px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Selling Price</th>
-                                        <th class="toogle-item vat px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">20% Sel. VAT</th>
-                                        <th class="toogle-item vat px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">VAT Value £</th>
-                                        <th class="toogle-item vat px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">SP + VAT</th>
-                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">PM %</th>
+                                        <th class="toogle-item vat px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">20% Selling VAT</th>
+                                        <th class="toogle-item vat px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Vat Value £</th>
+                                        <th class="toogle-item vat px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Selling Price + Vat</th>
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Profit Margin %</th>
                                         <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Net Profit</th>
                                         <th class="px-3 py-2.5 text-center text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Can Sell</th>
                                     </tr>
@@ -177,9 +177,9 @@
                                             @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
                                                 <td class="px-3 py-2.5 text-slate-500 dark:text-slate-400 whitespace-nowrap">{{ $ch_price->range }}</td>
                                             @endif
-                                            <td class="toogle-item commission px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap" style="display:none">$@pricews($ch_price->price_fob)</td>
-                                            <td class="toogle-item commission px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap" style="display:none">@price($ch_price->unit_price)</td>
-                                            <td class="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">@price($ch_price->confirm_selling_price)</td>
+                                            <td class="px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">$@pricews($ch_price->price_fob)</td>
+                                            <td class="px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">@price($ch_price->unit_price)</td>
+                                            <td class="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap cm-sp">@price($ch_price->confirm_selling_price)</td>
                                             <td class="toogle-item commission px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap com" style="display:none">@price($profit_cal['commission'])</td>
                                             <td class="toogle-item commission px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap com-vat" style="display:none">@price($profit_cal['commission_vat'])</td>
                                             <td class="toogle-item commission px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap sp" style="display:none">@price($profit_cal['selling_price'])</td>
