@@ -27,6 +27,8 @@ import './common';
 
 const has = (sel, byId = false) => byId ? !!document.getElementById(sel) : !!document.querySelector(sel);
 
-if (has('#user-page-content'))           import('./pages/users');
-if (has('#discounts-page-content'))      import('./pages/discounts');
-if (has('#forecasting-page-content'))    import('./pages/forecasting');
+if (has('#user-page-content'))                import('./pages/users');
+if (has('#discounts-page-content'))           import('./pages/discounts');
+if (has('#forecasting-page-content'))         import('./pages/forecasting');
+if (has('#chart-page-content'))               import('./pages/selling-chart');
+if (has('#selling-chart-form-content'))       import('./pages/selling-chart');

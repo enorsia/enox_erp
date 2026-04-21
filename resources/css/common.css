@@ -626,6 +626,81 @@ button {
 .sc-stats b     { font-weight: 600; font-size: inherit; }
 .sc-stats { margin-top: 4px; }
 
+/* ── Sticky scrollable table (bulk-edit & index) ── */
+.sticky-table {
+    max-height: 80vh;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.sticky-table thead th {
+    position: sticky;
+    top: -1px;
+    z-index: 10;
+    background: #f8fafc; /* slate-50 */
+}
+
+.dark .sticky-table thead th {
+    background: #1e2d3d; /* approximate dark slate-700/60 */
+}
+
+/* Sticky first column in index table */
+.sticky-table tbody td.sticky,
+.sticky-table thead th.sticky {
+    position: sticky;
+}
+
+/* ── Table input cells ── */
+.tbl-th {
+    padding: 6px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.dark .tbl-th {
+    color: #94a3b8;
+    border-color: #334155;
+}
+
+.tbl-input {
+    width: 100%;
+    font-size: 12px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #334155;
+    outline: none;
+    min-width: 60px;
+}
+
+.tbl-input:focus {
+    border-color: var(--color-accent-400);
+}
+
+.dark .tbl-input {
+    background: #1e293b;
+    border-color: #475569;
+    color: #e2e8f0;
+}
+
+.tbl-input[readonly] {
+    background: #f1f5f9;
+    color: #94a3b8;
+    cursor: default;
+}
+
+.dark .tbl-input[readonly] {
+    background: #0f172a;
+    color: #64748b;
+}
+
 /* ── SweetAlert2: always above the custom view overlay (z-[9999]) ── */
 .swal2-container { z-index: 100000 !important; }
 .swal2-backdrop  { z-index:  99999 !important; }
