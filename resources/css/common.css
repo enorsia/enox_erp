@@ -474,3 +474,34 @@ button {
     font-size: 16px !important;
     line-height: 16px !important;
 }
+
+/* ── Alpine.js cloak — prevents flash before Alpine inits ── */
+[x-cloak] { display: none !important; }
+
+/* ── Selling Chart: responsive grid & focused font ──
+   This class replaces fixed grid-column utilities for the
+   platform price cards. It uses auto-fit with minmax so the
+   grid automatically fills available width. The font-size
+   scales with viewport but stays within the min/max bounds.
+*/
+.selling-chart-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.5rem; /* ~ gap-2 */
+    font-family: var(--font-sans);
+    /* responsive font scaling for contained text — keeps ratio */
+    font-size: clamp(12px, 1.5vw, 14px);
+}
+
+.selling-chart-grid img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* When viewport is small, reduce the min width so more items can fit */
+@media (max-width: 640px) {
+    .selling-chart-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+}
+

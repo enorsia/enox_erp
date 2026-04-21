@@ -10,13 +10,25 @@ const CSRF      = document.querySelector('meta[name="csrf-token"]')?.content ?? 
 $(document).ready(function () {
 
     /* ══════════════════════════════════════════════════════
-       Product Category — TomSelect (replaces Choices.js)
+       Product Category — TomSelect
+       common.js already initialises ALL .tom-select elements
+       so we just grab the existing instance instead of
+       creating a new one (TomSelect throws if you double-init).
     ══════════════════════════════════════════════════════ */
     let productCategoryTs = null;
 
     function initProductCategorySelect() {
         const el = document.querySelector('#product_category');
-        if (!el || productCategoryTs) return;
+        if (!el) return;
+        if (productCategoryTs) return; // already have a reference
+
+        // Reuse the instance that common.js already created
+        if (el.tomselect) {
+            productCategoryTs = el.tomselect;
+            return;
+        }
+
+        // Fallback: initialise ourselves if common.js missed it
         if (typeof TomSelect === 'undefined') { setTimeout(initProductCategorySelect, 100); return; }
         productCategoryTs = new TomSelect(el, {
             create: false,
@@ -25,7 +37,10 @@ $(document).ready(function () {
             maxOptions: 100,
         });
     }
+
+    // Try immediately; if common.js DOMContentLoaded hasn't fired yet retry shortly
     initProductCategorySelect();
+    if (!productCategoryTs) setTimeout(initProductCategorySelect, 200);
 
     /* ══════════════════════════════════════════════════════
        Department select — reload categories (unchanged logic)

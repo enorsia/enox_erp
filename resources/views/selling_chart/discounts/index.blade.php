@@ -318,6 +318,7 @@
                                             {{-- Color/Range label --}}
                                             <div class="flex items-center gap-1.5 mb-2.5">
                                                 <div class="w-1.5 h-1.5 rounded-full bg-accent-400 flex-shrink-0"></div>
+                                                <b class="text-[14px]">Color/Style : </b>
                                                 <span class="text-[12px] font-semibold text-slate-700 dark:text-slate-200">{{ $ch_price->color_name }}</span>
                                                 @if ($ch_price->range)
                                                     <span class="text-[11px] text-slate-400 dark:text-slate-500">/ {{ $ch_price->range }}</span>
@@ -325,7 +326,7 @@
                                             </div>
 
                                             {{-- Platform price cards --}}
-                                            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+                                            <div class="selling-chart-grid">
                                                 @foreach ($platform_ncs as $p_code => $p_name)
                                                     @php
                                                         $platform  = $platforms->get($p_code);
