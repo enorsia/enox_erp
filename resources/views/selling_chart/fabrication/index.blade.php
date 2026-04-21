@@ -68,46 +68,59 @@
             </div>
         </form>
 
-        <!-- ── FABRICATION TABLE ── -->
-        <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[60px]">#SL</th>
-                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Name</th>
-                            <th class="px-4 py-3 text-center text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[120px]">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
-                        @if (!$lookup_names->isEmpty())
-                            @foreach ($lookup_names as $lookup)
-                                <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                    <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ $start + $loop->index }}</td>
-                                    <td class="px-4 py-3 text-slate-800 dark:text-slate-200 font-medium">{{ $lookup->name }}</td>
-                                    <td class="px-4 py-3 text-center">
-                                        @if ($lookup->status == 1)
-                                            <span class="badge-custom badge-green">Active</span>
-                                        @else
-                                            <span class="badge-custom badge-red">Inactive</span>
-                                        @endif
-                                    </td>
-                                </tr>
-                            @endforeach
-                        @else
-                            <tr>
-                                <td colspan="3" class="px-4 py-8 text-center">
-                                    <p class="text-sm text-slate-400 dark:text-slate-500">No fabrication records found.</p>
-                                </td>
-                            </tr>
-                        @endif
-                    </tbody>
-                </table>
-            </div>
+        <!-- ── FABRICATION LIST (CARD/GRID STYLE) ── -->
+        <div class="flex flex-col gap-3">
+            @if (!$lookup_names->isEmpty())
+                @foreach ($lookup_names as $lookup)
+                    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 grid grid-cols-[1fr_auto] items-center gap-3">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 mb-1">
+                                <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{{ $lookup->name }}</h3>
+                                @if ($lookup->status == 1)
+                                    <span class="badge-custom badge-green">Active</span>
+                                @else
+                                    <span class="badge-custom badge-red">Inactive</span>
+                                @endif
+                            </div>
+                            @if(!empty($lookup->created_at))
+                                <p class="text-[12px] text-slate-400 dark:text-slate-500">Created {{ \Illuminate\Support\Carbon::parse($lookup->created_at)->diffForHumans() }}</p>
+                            @endif
+                        </div>
+
+                        <div class="flex gap-2 items-center">
+                            @can('general.fabrication.edit')
+                                <a href="{{ route('admin.selling_chart.fabrication.edit', $lookup->id) }}" title="Edit"
+                                   class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                    </svg>
+                                </a>
+                            @endcan
+
+                            @can('general.fabrication.delete')
+                                <button onclick="deleteData({{ $lookup->id }})" title="Delete"
+                                        class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-200 transition-colors">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                                <form id="delete-form-{{ $lookup->id }}" method="POST" action="{{ route('admin.selling_chart.fabrication.destroy', $lookup->id) }}" style="display: none;">
+                                    @csrf
+                                    @method('DELETE')
+                                </form>
+                            @endcan
+                        </div>
+                    </div>
+                @endforeach
+            @else
+                <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center">
+                    <p class="text-sm text-slate-400 dark:text-slate-500">No fabrication records found.</p>
+                </div>
+            @endif
         </div>
 
         <!-- ── PAGINATION ── -->
-        @if(count($lookup_names) > 0 && $lookup_names && $lookup_names->hasPages())
+        @if($lookup_names && $lookup_names->hasPages())
             <div class="mt-5 flex justify-center">
                 <div class="flex items-center gap-1">
                     @if($lookup_names->onFirstPage())
