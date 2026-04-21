@@ -1,32 +1,31 @@
 import $ from '$';
 
-// ── Read config from data attributes set in blade ──
 const chartPageEl = document.getElementById('chart-page-content');
-const formPageEl  = document.getElementById('selling-chart-form-content');
+const formPageEl = document.getElementById('selling-chart-form-content');
 
-const DEP_CATS  = (chartPageEl ?? formPageEl)?.dataset.depCatsUrl     ?? '';
-const VIEW_URL  = chartPageEl?.dataset.viewUrl                        ?? '';
-const CALC_URL  = chartPageEl?.dataset.calcUrl                        ?? '';
-const SIZE_URL  = formPageEl?.dataset.sizeRangeUrl                    ?? '';
-const COLOR_URL = formPageEl?.dataset.colorSearchUrl                  ?? '';
-const CSRF      = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+const DEP_CATS = (chartPageEl ?? formPageEl)?.dataset.depCatsUrl ?? '';
+const VIEW_URL = chartPageEl?.dataset.viewUrl ?? '';
+const CALC_URL = chartPageEl?.dataset.calcUrl ?? '';
+const SIZE_URL = formPageEl?.dataset.sizeRangeUrl ?? '';
+const COLOR_URL = formPageEl?.dataset.colorSearchUrl ?? '';
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
 $(document).ready(function () {
 
-    /* ══════════════════════════════════════════════════════
-       Product Category — TomSelect
-       common.js already initialises ALL .tom-select elements,
-       so we grab the existing instance and only create a new
-       one if common.js somehow missed it.
-    ══════════════════════════════════════════════════════ */
     let productCategoryTs = null;
 
     function initProductCategorySelect() {
         const el = document.querySelector('#product_category');
         if (!el) return;
         if (productCategoryTs) return;
-        if (el.tomselect) { productCategoryTs = el.tomselect; return; }
-        if (typeof TomSelect === 'undefined') { setTimeout(initProductCategorySelect, 100); return; }
+        if (el.tomselect) {
+            productCategoryTs = el.tomselect;
+            return;
+        }
+        if (typeof TomSelect === 'undefined') {
+            setTimeout(initProductCategorySelect, 100);
+            return;
+        }
         productCategoryTs = new TomSelect(el, {
             create: false,
             searchField: 'text',
@@ -60,7 +59,9 @@ $(document).ready(function () {
                         productCategoryTs.clear();
                     }
                 },
-                error: function () { console.error('Failed to load categories.'); }
+                error: function () {
+                    console.error('Failed to load categories.');
+                }
             });
         }
 
@@ -77,7 +78,9 @@ $(document).ready(function () {
                         $btnInvisible.addClass('invisible');
                     }
                 },
-                error: function () { console.error('Failed to load size range.'); }
+                error: function () {
+                    console.error('Failed to load size range.');
+                }
             });
         }
     });
@@ -124,14 +127,18 @@ $(document).ready(function () {
     ══════════════════════════════════════════════════════ */
     if (COLOR_URL) {
         $(document).on('input', '.color', function () {
-            const val      = $(this).val();
+            const val = $(this).val();
             const colorBox = $(this).parent().find('.color-box');
             if (val) {
                 $.ajax({
                     type: 'GET',
                     url: COLOR_URL + '/' + val,
-                    success: function (data) { colorBox.html(data); },
-                    error: function () { console.error('Color search failed.'); }
+                    success: function (data) {
+                        colorBox.html(data);
+                    },
+                    error: function () {
+                        console.error('Color search failed.');
+                    }
                 });
             } else {
                 colorBox.html('');
@@ -211,19 +218,19 @@ $(document).ready(function () {
        Discount price change/keyup (inside view-item modal)
     ══════════════════════════════════════════════════════ */
     $(document).on('change keyup', '.discount_price', function () {
-        const input         = $(this);
-        const form          = input.closest('form');
-        const platform_id   = form.find('.platform_id').val();
+        const input = $(this);
+        const form = input.closest('form');
+        const platform_id = form.find('.platform_id').val();
         const department_id = form.find('.department_id').val();
-        const ch_price_id   = input.data('price-id');
-        const csp           = parseFloat(input.data('csp')) || 0;
-        const tr            = (department_id == 1928 || department_id == 1929)
-                                ? input.parents('tr')
-                                : form;
+        const ch_price_id = input.data('price-id');
+        const csp = parseFloat(input.data('csp')) || 0;
+        const tr = (department_id == 1928 || department_id == 1929)
+            ? input.parents('tr')
+            : form;
 
         const rawValue = input.val().trim();
         if (rawValue !== '' && isNaN(rawValue)) {
-            Swal.fire({ icon: 'error', title: 'Invalid Input', text: 'Please enter a numeric value only.' });
+            Swal.fire({icon: 'error', title: 'Invalid Input', text: 'Please enter a numeric value only.'});
             input.val('').focus();
             return;
         }
@@ -242,16 +249,16 @@ $(document).ready(function () {
             $.ajax({
                 url: CALC_URL,
                 type: 'POST',
-                data: { platform_id, discount_price, ch_price_id, _token: CSRF },
+                data: {platform_id, discount_price, ch_price_id, _token: CSRF},
                 success: function (response) {
-                    tr.find('.com').text('£'     + response.commission.toFixed(2));
+                    tr.find('.com').text('£' + response.commission.toFixed(2));
                     tr.find('.com-vat').text('£' + response.commission_vat.toFixed(2));
-                    tr.find('.sp').text('£'      + response.selling_price.toFixed(2));
-                    tr.find('.sl-vat').text('£'  + response.selling_vat.toFixed(2));
+                    tr.find('.sp').text('£' + response.selling_price.toFixed(2));
+                    tr.find('.sl-vat').text('£' + response.selling_vat.toFixed(2));
                     tr.find('.vat-val').text('£' + response.vat_value.toFixed(2));
-                    tr.find('.sp-vat').text('£'  + response.selling_price_and_vat.toFixed(2));
+                    tr.find('.sp-vat').text('£' + response.selling_price_and_vat.toFixed(2));
                     tr.find('.pm').text(response.profit_margin.toFixed(2) + '%');
-                    tr.find('.np').text('£'      + response.net_profit.toFixed(2));
+                    tr.find('.np').text('£' + response.net_profit.toFixed(2));
                 }
             });
         }
@@ -271,14 +278,14 @@ $(document).ready(function () {
 
         const saveType = $form.find('.save_type').val();
         let invalidStatus = false;
-        let hasError      = false;
+        let hasError = false;
 
         $form.find('input[name="sl_price_id[]"]:checked').each(function () {
             anyChecked = true;
-            const chVal     = $(this).val();
+            const chVal = $(this).val();
             const isChecked = $form.find('.status' + chVal).prop('checked');
 
-            if (saveType == 2 && isChecked)  invalidStatus = true;
+            if (saveType == 2 && isChecked) invalidStatus = true;
             if (saveType == 3 && !isChecked) invalidStatus = true;
 
             const $discountInput = $form.find('.discount_price' + chVal);
@@ -291,7 +298,11 @@ $(document).ready(function () {
         });
 
         if (!anyChecked) {
-            Swal.fire({ title: 'No Option Selected', text: 'Please select at least one price option before submitting.', icon: 'warning' });
+            Swal.fire({
+                title: 'No Option Selected',
+                text: 'Please select at least one price option before submitting.',
+                icon: 'warning'
+            });
             return false;
         }
 
@@ -312,11 +323,11 @@ $(document).ready(function () {
             title: 'Are you sure?',
             text: 'Do you want to save this discount?',
             icon: 'question',
-            showCancelButton:   true,
-            confirmButtonText:  'Yes, Save it!',
-            cancelButtonText:   'Cancel',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Save it!',
+            cancelButtonText: 'Cancel',
             confirmButtonColor: '#3085d6',
-            cancelButtonColor:  '#d33'
+            cancelButtonColor: '#d33'
         }).then((result) => {
             if (result.isConfirmed) {
                 $form.addClass('confirmed');
@@ -337,13 +348,13 @@ $(document).ready(function () {
        Create page — price calculation (season-based)
     ══════════════════════════════════════════════════════ */
     function createPriceCal($row) {
-        const selectedVal       = $('#season_select').val();
-        const expInput          = $('.season-exp' + selectedVal);
-        const conversionRate    = parseFloat(expInput.data('conversion-rate'))    || 0;
+        const selectedVal = $('#season_select').val();
+        const expInput = $('.season-exp' + selectedVal);
+        const conversionRate = parseFloat(expInput.data('conversion-rate')) || 0;
         const commercialExpense = parseFloat(expInput.data('commercial-expense')) || 0;
-        const enorsiaBDExpense  = parseFloat(expInput.data('enorsia-bd-expense')) || 0;
-        const enorsiaUKExpense  = parseFloat(expInput.data('enorsia-uk-expense')) || 0;
-        const priceFOB          = parseFloat($row.find('.x_price_fob').val())     || 0;
+        const enorsiaBDExpense = parseFloat(expInput.data('enorsia-bd-expense')) || 0;
+        const enorsiaUKExpense = parseFloat(expInput.data('enorsia-uk-expense')) || 0;
+        const priceFOB = parseFloat($row.find('.x_price_fob').val()) || 0;
 
         const unitPrice = priceFOB
             ? (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense)
@@ -368,8 +379,8 @@ $(document).ready(function () {
         'input',
         '.price_fob, .shipping_cost, .confirm_selling_price, .discount',
         function () {
-            const $row        = $(this).closest('tr');
-            const expInp      = $row.find('.expense_input');
+            const $row = $(this).closest('tr');
+            const expInp = $row.find('.expense_input');
 
             if (!expInp.val()) {
                 Swal.fire({
@@ -381,43 +392,43 @@ $(document).ready(function () {
                 });
             }
 
-            const conversionRate    = parseFloat(expInp.data('conversion-rate'))    || 0;
-            const commercialExpense = parseFloat(expInp.data('commercial-expense'))  || 0;
-            const enorsiaBDExpense  = parseFloat(expInp.data('enorsia-bd-expense'))  || 0;
-            const enorsiaUKExpense  = parseFloat(expInp.data('enorsia-uk-expense'))  || 0;
-            const expShippingCost   = parseFloat(expInp.data('shipping-cost'))       || 0;
-            const department        = parseInt(expInp.data('department'));
+            const conversionRate = parseFloat(expInp.data('conversion-rate')) || 0;
+            const commercialExpense = parseFloat(expInp.data('commercial-expense')) || 0;
+            const enorsiaBDExpense = parseFloat(expInp.data('enorsia-bd-expense')) || 0;
+            const enorsiaUKExpense = parseFloat(expInp.data('enorsia-uk-expense')) || 0;
+            const expShippingCost = parseFloat(expInp.data('shipping-cost')) || 0;
+            const department = parseInt(expInp.data('department'));
 
-            const priceFOB     = parseFloat($row.find('.price_fob').val())     || 0;
+            const priceFOB = parseFloat($row.find('.price_fob').val()) || 0;
             const shippingCost = parseFloat($row.find('.shipping_cost').val()) || 0;
-            const unitPrice    = (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + (shippingCost || expShippingCost));
+            const unitPrice = (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + (shippingCost || expShippingCost));
             $row.find('.unit_price').val(unitPrice.toFixed(2));
 
             const csp = parseFloat($row.find('.confirm_selling_price').val()) || 0;
             let selingVat, selingVatValue;
             if (department == 1926 || department == 1927) {
                 selingVatValue = (csp * 20) / 120;
-                selingVat      = csp - selingVatValue;
+                selingVat = csp - selingVatValue;
             } else {
                 selingVatValue = 0;
-                selingVat      = csp;
+                selingVat = csp;
             }
             $row.find('.seling_vat').val(selingVat.toFixed(2));
             $row.find('.seling_vat_value').val(selingVatValue.toFixed(2));
             $row.find('.profit_margin').val(selingVat ? ((selingVat - unitPrice) / selingVat * 100).toFixed(2) : '0.00');
             $row.find('.net_profit').val((selingVat - unitPrice).toFixed(2));
 
-            const discount             = parseFloat($row.find('.discount').val()) || 0;
+            const discount = parseFloat($row.find('.discount').val()) || 0;
             const discountSellingPrice = csp - (csp * (discount / 100));
             $row.find('.discount_selling_price').val(discountSellingPrice.toFixed(2));
 
             let sellingVatDedactPrice, discountVatValue;
             if (department == 1926 || department == 1927) {
                 sellingVatDedactPrice = (discountSellingPrice / 120) * 100;
-                discountVatValue      = discountSellingPrice - sellingVatDedactPrice;
+                discountVatValue = discountSellingPrice - sellingVatDedactPrice;
             } else {
                 sellingVatDedactPrice = discountSellingPrice;
-                discountVatValue      = 0;
+                discountVatValue = 0;
             }
             $row.find('.selling_vat_dedact_price').val(sellingVatDedactPrice.toFixed(2));
             $row.find('.discount_vat_value').val(discountVatValue.toFixed(2));
@@ -460,8 +471,8 @@ window.viewChart = function (id, page = 1) {
     if (!VIEW_URL) return;
     $.ajax({
         type: 'GET',
-        url:  VIEW_URL.replace(':id', id),
-        data: { page },
+        url: VIEW_URL.replace(':id', id),
+        data: {page},
         success: function (response) {
             if (response.status === true) {
                 $('#viewSellingChartItemModal').remove();
@@ -472,7 +483,9 @@ window.viewChart = function (id, page = 1) {
                 document.body.style.overflow = 'hidden';
             }
         },
-        error: function () { console.error('Failed to load chart view.'); }
+        error: function () {
+            console.error('Failed to load chart view.');
+        }
     });
 };
 
@@ -483,6 +496,14 @@ window.closeDiscountModal = function () {
     $('#viewSellingChartItemModal').remove();
     document.body.style.overflow = '';
 };
+
+$(document).on('click', '[data-large]', function (e) {
+    e.preventDefault();
+    const url = $(this).attr('data-large') || $(this).data('large');
+    if (!url) return;
+    console.debug('selling-chart: data-large clicked, dispatching set-image-popup', url);
+    window.dispatchEvent(new CustomEvent('set-image-popup', {detail: url}));
+});
 
 /* ══════════════════════════════════════════════════════
    setColor — global (called via onclick in color-box rows)
@@ -505,16 +526,16 @@ window.approveData = function (id, action = 'approve') {
         title: 'Are you sure?',
         text: "You won't be able to revert this!",
         icon: 'warning',
-        showCancelButton:   true,
+        showCancelButton: true,
         confirmButtonColor: '#3085d6',
-        cancelButtonColor:  '#d33',
-        confirmButtonText:  'Yes, approve it!'
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, approve it!'
     }).then((result) => {
         if (result.isConfirmed) {
-            const form  = document.getElementById('approve-form-' + id);
+            const form = document.getElementById('approve-form-' + id);
             const input = document.createElement('input');
-            input.type  = 'hidden';
-            input.name  = 'action_type';
+            input.type = 'hidden';
+            input.name = 'action_type';
             input.value = action;
             form.appendChild(input);
             form.submit();

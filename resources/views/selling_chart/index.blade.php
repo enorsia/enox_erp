@@ -7,7 +7,7 @@
          data-view-url="{{ route('admin.selling_chart.view.single.chart', ':id') }}"
          data-calc-url="{{ route('admin.selling_chart.calculate.platform.profit') }}"></div>
 
-    <div x-data="{ drawerOpen: false, imagePopup: null }" @keydown.escape.window="drawerOpen = false; imagePopup = null">
+    <div x-data="{ drawerOpen: false, imagePopup: null }" @keydown.escape.window="drawerOpen = false; imagePopup = null" x-on:set-image-popup.window="imagePopup = $event.detail; console.debug('Alpine received set-image-popup', $event.detail)">
 
         {{-- Image Popup Lightbox --}}
         <div x-show="imagePopup" x-cloak @click="imagePopup = null"
@@ -19,7 +19,7 @@
                     <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
-            <img :src="imagePopup" class="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl object-contain cursor-default" @click.stop>
+            <img x-bind:src="imagePopup" alt="Zoomed image" class="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl object-contain cursor-default" @click.stop>
         </div>
 
         {{-- Drawer Backdrop --}}
@@ -450,13 +450,15 @@
                                             <div class="relative group/img overflow-hidden rounded-lg">
                                                 <img class="w-14 h-14 rounded-lg object-cover border-2 border-slate-200 dark:border-slate-600 cursor-zoom-in transition-all duration-300 group-hover/img:scale-110 group-hover/img:border-accent-400"
                                                     src="{{ cloudflareImage($chartInfo->design_image, 80) }}"
-                                                    @click="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'"
-                                                    alt="Design Image" title="Design Image">
-                                                <div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-300 rounded-lg flex items-center justify-center">
-                                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                    x-on:click.prevent="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'"
+                                                    data-large="{{ cloudflareImage($chartInfo->design_image, 1200) }}"
+                                                    alt="Design Image" title="Design Image" loading="lazy">
+                                                <button type="button" aria-label="Open image" data-large="{{ cloudflareImage($chartInfo->design_image, 1200) }}" x-on:click.prevent="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'"
+                                                    class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-300 rounded-lg flex items-center justify-center text-white">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"/>
                                                     </svg>
-                                                </div>
+                                                </button>
                                             </div>
                                         @else
                                             <div class="w-14 h-14 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 border-2 border-slate-200 dark:border-slate-600 flex items-center justify-center group-hover:border-accent-300 transition-colors duration-300">
@@ -472,13 +474,15 @@
                                             <div class="relative group/img overflow-hidden rounded-lg">
                                                 <img class="w-14 h-14 rounded-lg object-cover border-2 border-slate-200 dark:border-slate-600 cursor-zoom-in transition-all duration-300 group-hover/img:scale-110 group-hover/img:border-purple-400"
                                                     src="{{ cloudflareImage($chartInfo->inspiration_image, 80) }}"
-                                                    @click="imagePopup = '{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}'"
-                                                    alt="Inspiration Image" title="Inspiration Image">
-                                                <div class="absolute inset-0 bg-gradient-to-t from-purple-900/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-300 rounded-lg flex items-center justify-center">
-                                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                    x-on:click.prevent="imagePopup = '{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}'"
+                                                    data-large="{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}"
+                                                    alt="Inspiration Image" title="Inspiration Image" loading="lazy">
+                                                <button type="button" aria-label="Open image" data-large="{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}" x-on:click.prevent="imagePopup = '{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}'"
+                                                    class="absolute inset-0 bg-gradient-to-t from-purple-900/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-300 rounded-lg flex items-center justify-center text-white">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"/>
                                                     </svg>
-                                                </div>
+                                                </button>
                                             </div>
                                             <span class="text-[9px] text-slate-400 dark:text-slate-500 font-medium">Inspiration</span>
                                         </div>
@@ -1025,9 +1029,8 @@
                     </div>
                 </div>
             @endif
-
-        </div>{{-- end p-5 lg:p-6 --}}
-    </div>{{-- end x-data --}}
+        </div>
+    </div>
 
     <div class="setViewSellingChartItemModal"></div>
 @endsection
