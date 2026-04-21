@@ -706,56 +706,60 @@
 
                             {{-- ── Color & Pricing Rows (matches backup: Color Code, Color Name, Range, PO Order Qty + all pricing cols) ── --}}
                             @if ($chartInfo->selling_chart_prices_count)
-                                <div class="border-t border-slate-100 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700/60">
+                                <div class="border-t border-slate-100 dark:border-slate-700 p-4 space-y-4">
                                     @foreach ($chartInfo->sellingChartPrices as $ch_price)
-                                        <div class="p-4 pt-3 bg-gradient-to-br from-slate-50/50 via-white to-slate-50/30 dark:from-slate-800/50 dark:via-slate-800 dark:to-slate-700/30">
+                                        {{-- Color Box: header + body --}}
+                                        <div class="rounded-xl border-2 border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm hover:shadow-md hover:border-accent-300 dark:hover:border-accent-600 transition-all duration-200">
 
-                                            {{-- Color info header --}}
-                                            <div class="flex flex-wrap items-start gap-3 mb-4 p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
+                                            {{-- Color Header (light + dark friendly) --}}
+                                            <div class="flex flex-wrap items-center gap-3 px-4 py-3 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-b-2 border-slate-200 dark:border-slate-600">
                                                 <div class="flex items-center gap-2">
                                                     <div class="relative">
-                                                        <div class="w-3 h-3 rounded-full bg-gradient-to-br from-accent-400 to-accent-600 shadow-lg shadow-accent-400/50 animate-pulse"></div>
+                                                        <div class="w-3 h-3 rounded-full bg-accent-400 shadow-lg shadow-accent-400/50 animate-pulse"></div>
                                                         <div class="absolute inset-0 w-3 h-3 rounded-full bg-accent-400 animate-ping opacity-75"></div>
                                                     </div>
                                                     <div>
-                                                        <span class="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block font-semibold">Color Name</span>
-                                                        <span class="text-[13px] font-bold text-slate-800 dark:text-slate-100">{{ $ch_price->color_name ?: '—' }}</span>
+                                                        <span class="text-[9px] uppercase tracking-wider text-slate-600 dark:text-slate-300 block font-semibold">Color Name</span>
+                                                        <span class="text-[14px] font-extrabold text-slate-800 dark:text-white">{{ $ch_price->color_name ?: '—' }}</span>
                                                     </div>
                                                 </div>
-                                                <div class="flex items-center gap-2 pl-3 border-l-2 border-slate-200 dark:border-slate-600">
-                                                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40 flex items-center justify-center">
-                                                        <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <div class="flex items-center gap-2 pl-3 border-l-2 border-slate-600">
+                                                    <div class="w-7 h-7 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center">
+                                                        <svg class="w-3.5 h-3.5 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
                                                         </svg>
                                                     </div>
                                                     <div>
-                                                        <span class="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block font-semibold">Color Code</span>
-                                                        <span class="text-[11px] font-mono font-bold text-slate-700 dark:text-slate-200">{{ $ch_price->color_code ?: '—' }}</span>
+                                                        <span class="text-[9px] uppercase tracking-wider text-slate-500 dark:text-slate-300 block font-semibold">Color Code</span>
+                                                        <span class="text-[11px] font-mono font-bold text-blue-700 dark:text-blue-200">{{ $ch_price->color_code ?: '—' }}</span>
                                                     </div>
                                                 </div>
-                                                <div class="flex items-center gap-2 pl-3 border-l-2 border-slate-200 dark:border-slate-600">
-                                                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/40 dark:to-purple-800/40 flex items-center justify-center">
-                                                        <svg class="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <div class="flex items-center gap-2 pl-3 border-l-2 border-slate-600">
+                                                    <div class="w-7 h-7 rounded-lg bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center">
+                                                        <svg class="w-3.5 h-3.5 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
                                                         </svg>
                                                     </div>
                                                     <div>
-                                                        <span class="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block font-semibold">Range</span>
-                                                        <span class="text-[11px] font-bold text-slate-700 dark:text-slate-200">{{ $ch_price->range ?: '—' }}</span>
+                                                        <span class="text-[9px] uppercase tracking-wider text-slate-500 dark:text-slate-300 block font-semibold">Range</span>
+                                                        <span class="text-[11px] font-bold text-purple-700 dark:text-purple-200">{{ $ch_price->range ?: '—' }}</span>
                                                     </div>
                                                 </div>
-                                                <div class="flex items-center gap-2 pl-3 border-l-2 border-slate-200 dark:border-slate-600">
-                                                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-900/40 dark:to-emerald-800/40 flex items-center justify-center">
-                                                        <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <div class="flex items-center gap-2 pl-3 border-l-2 border-slate-600">
+                                                    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center">
+                                                        <svg class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
                                                         </svg>
                                                     </div>
                                                     <div>
-                                                        <span class="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block font-semibold">PO Order Qty</span>
-                                                        <span class="text-[11px] font-bold text-slate-700 dark:text-slate-200">{{ $ch_price->po_order_qty ?? 0 }}</span>
+                                                        <span class="text-[9px] uppercase tracking-wider text-slate-500 dark:text-slate-300 block font-semibold">PO Order Qty</span>
+                                                        <span class="text-[11px] font-bold text-emerald-700 dark:text-emerald-200">{{ $ch_price->po_order_qty ?? 0 }}</span>
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {{-- Color Body: Pricing --}}
+                                            <div class="p-4 bg-white dark:bg-slate-800 space-y-4">
 
                                             {{-- Original Pricing (matches backup: Price $(FOB), Unit Price, Confirm Selling Price, 20% Selling VAT, VAT Value £, Profit Margin%, Net Profit) --}}
                                             <div class="mb-4">
@@ -941,7 +945,8 @@
                                                 </div>
                                             </div>
 
-                                        </div>
+                                            </div>{{-- end color body --}}
+                                        </div>{{-- end color box --}}
                                     @endforeach
                                 </div>
                             @endif
