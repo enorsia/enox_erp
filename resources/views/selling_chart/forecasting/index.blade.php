@@ -10,7 +10,23 @@
     ></div>
 
     {{-- ── FILTER DRAWER (Alpine) ── --}}
-    <div x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
+    <div x-data="{ drawerOpen: false, imagePopup: null }" @keydown.escape.window="drawerOpen = false; imagePopup = null">
+
+        {{-- ── Image Lightbox ── --}}
+        <div x-show="imagePopup" x-cloak
+             @click="imagePopup = null"
+             class="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 cursor-zoom-out p-6"
+             style="display:none;">
+            <button @click="imagePopup = null"
+                    class="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+            <img :src="imagePopup"
+                 class="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl object-contain cursor-default"
+                 @click.stop>
+        </div>
 
         {{-- Backdrop --}}
         <div x-show="drawerOpen"
@@ -240,8 +256,10 @@
 
                                 {{-- Design Image --}}
                                 @if ($chartInfo->design_image)
-                                    <img class="w-full aspect-square rounded-xl object-cover border border-slate-100 dark:border-slate-700"
-                                         src="{{ cloudflareImage($chartInfo->design_image, 112) }}" alt="Design">
+                                    <img class="w-full aspect-square rounded-xl object-cover border border-slate-100 dark:border-slate-700 cursor-zoom-in hover:opacity-90 transition-opacity"
+                                         src="{{ cloudflareImage($chartInfo->design_image, 112) }}"
+                                         @click="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'"
+                                         alt="Design">
                                 @else
                                     <div class="w-full aspect-square rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center border border-slate-200 dark:border-slate-600">
                                         <svg class="w-5 h-5 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">

@@ -4,8 +4,25 @@
     — NO Bootstrap needed; uses Tailwind + Alpine.js tabs
 --}}
 <div id="viewSellingChartItemModal"
+     x-data="{ imagePopup: null }"
      onclick="if(event.target===this) window.closeDiscountModal()"
      class="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 overflow-y-auto p-3 sm:p-5">
+
+    {{-- ── Image Lightbox ── --}}
+    <div x-show="imagePopup" x-cloak
+         @click="imagePopup = null"
+         class="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 cursor-zoom-out p-6"
+         style="display:none;">
+        <button @click="imagePopup = null"
+                class="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+        <img :src="imagePopup"
+             class="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl object-contain cursor-default"
+             @click.stop>
+    </div>
 
     <div class="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-[1400px] my-auto shadow-2xl"
          onclick="event.stopPropagation()">
@@ -35,18 +52,18 @@
                 @endphp
 
                 @foreach ([
-                    'Department'       => $chartInfo->department_name,
-                    'Season'           => $chartInfo->season_name,
-                    'Season Phase'     => $chartInfo->phase_name,
-                    'Initial / Repeat' => $chartInfo->initial_repeated_status,
-                    'Launch Month'     => $chartInfo->product_launch_month,
-                    'Description'      => $chartInfo->product_description,
-                    'Product Category' => $chartInfo->category_name,
-                    'Mini Category'    => $chartInfo->mini_category_name,
-                    'Product Code'     => $chartInfo->product_code,
-                    'Ecom SKU'         => ($skus['sku'] ?? ''),
-                    'Design No'        => $chartInfo->design_no,
-                    'Fabrication'      => $chartInfo->fabrication,
+                    'Department'            => $chartInfo->department_name,
+                    'Season'                => $chartInfo->season_name,
+                    'Season Phase'          => $chartInfo->phase_name,
+                    'Initial/ Repeat Order' => $chartInfo->initial_repeated_status,
+                    'Product Launch Month'  => $chartInfo->product_launch_month,
+                    'Product Description'   => $chartInfo->product_description,
+                    'Product Category'      => $chartInfo->category_name,
+                    'Mini Category'         => $chartInfo->mini_category_name,
+                    'Product Code'          => $chartInfo->product_code,
+                    'Ecom Sku'              => ($skus['sku'] ?? ''),
+                    'Design No'             => $chartInfo->design_no,
+                    'Febrication'           => $chartInfo->fabrication,
                 ] as $label => $value)
                     <div>
                         <p class="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-0.5">{{ $label }}</p>
@@ -69,15 +86,19 @@
                     @if ($chartInfo->design_image)
                         <div class="text-center">
                             <p class="text-[10px] font-semibold text-slate-400 uppercase mb-1">Design Image</p>
-                            <img class="w-28 h-28 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
-                                 src="{{ cloudflareImage($chartInfo->design_image, 130) }}" alt="Design">
+                            <img class="w-28 h-28 rounded-xl object-cover border border-slate-200 dark:border-slate-700 cursor-zoom-in hover:opacity-90 transition-opacity"
+                                 src="{{ cloudflareImage($chartInfo->design_image, 130) }}"
+                                 @click="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'"
+                                 alt="Design Image">
                         </div>
                     @endif
                     @if ($chartInfo->inspiration_image)
                         <div class="text-center">
                             <p class="text-[10px] font-semibold text-slate-400 uppercase mb-1">Inspiration Image</p>
-                            <img class="w-28 h-28 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
-                                 src="{{ cloudflareImage($chartInfo->inspiration_image, 130) }}" alt="Inspiration">
+                            <img class="w-28 h-28 rounded-xl object-cover border border-slate-200 dark:border-slate-700 cursor-zoom-in hover:opacity-90 transition-opacity"
+                                 src="{{ cloudflareImage($chartInfo->inspiration_image, 130) }}"
+                                 @click="imagePopup = '{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}'"
+                                 alt="Inspiration Image">
                         </div>
                     @endif
                 </div>
