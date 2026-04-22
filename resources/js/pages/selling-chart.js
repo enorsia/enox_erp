@@ -1,4 +1,5 @@
 import $ from '$';
+import 'jquery-validation';
 
 const chartPageEl = document.getElementById('chart-page-content');
 const formPageEl = document.getElementById('selling-chart-form-content');
