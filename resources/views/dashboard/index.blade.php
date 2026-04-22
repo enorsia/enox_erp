@@ -15,7 +15,7 @@
             <div>
                 <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Welcome to {{ config('app.name') }}</h1>
                 <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">
-                    Hello, <span class="text-slate-700 dark:text-slate-200 font-medium">{{ auth()->user()->name ?? 'Admin' }}</span>! Here's a quick overview of your admin panel.
+                    Hello, <span class="text-slate-700 dark:text-slate-200 font-medium">{{ auth()->user()->name ?? 'Admin' }}</span>! Here's a quick overview of your portal.
                 </p>
             </div>
             <div class="sm:ml-auto text-right flex-shrink-0">

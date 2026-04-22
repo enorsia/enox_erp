@@ -4,8 +4,10 @@
     <!-- Logo -->
     <div class="px-[18px] py-5 border-b border-[rgba(255,255,255,0.07)] flex-shrink-0">
         <a href="{{ route('admin.dashboard') }}" class="block">
-            <div class="text-white font-semibold tracking-[2.5px] text-[15px]">ENORSIA</div>
-            <div class="text-[10px] tracking-[1.2px] text-white/30 mt-0.5">Admin Panel</div>
+            <div class="text-white font-semibold tracking-[2.5px] text-[15px]">{{ config('app.name') }}</div>
+            <div class="text-[10px] tracking-[1.2px] text-white/30 mt-0.5">
+                Know Your Sales
+            </div>
         </a>
     </div>
 
