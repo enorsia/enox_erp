@@ -24,39 +24,39 @@
 
         <!-- ── FILTER TOOLBAR ── -->
         <form method="GET" action="{{ route('admin.selling_chart.expense.index') }}">
-            <div class="flex flex-wrap items-center gap-2.5 mb-5">
-                <div class="flex flex-1 gap-2.5 min-w-0">
-                    <!-- Year filter -->
-                    <div class="w-1/2 max-w-[200px]">
-                        <select name="year" class="tom-select w-full" data-placeholder="Select Year">
-                            <option value="">Select Year</option>
-                            @for ($i = 2020; $i <= 2030; $i++)
-                                <option value="{{ $i }}" {{ request('year') == $i ? 'selected' : '' }}>
-                                    {{ $i }}
-                                </option>
-                            @endfor
-                        </select>
-                    </div>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-5">
+
+                <!-- Year filter -->
+                <div class="w-full sm:w-44">
+                    <select name="year" class="tom-select w-full h-9" data-placeholder="Select Year">
+                        <option value="">All Years</option>
+                        @for ($i = 2020; $i <= 2030; $i++)
+                            <option value="{{ $i }}" {{ request('year') == $i ? 'selected' : '' }}>
+                                {{ $i }}
+                            </option>
+                        @endfor
+                    </select>
                 </div>
 
-                <!-- Search button -->
-                <button type="submit"
-                        class="flex items-center gap-2 px-3.5 py-2 text-[13px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <circle cx="11" cy="11" r="7"/>
-                        <path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
-                    </svg>
-                    Search
-                </button>
+                <!-- Buttons -->
+                <div class="flex items-center gap-2 shrink-0">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1.5 px-3 h-9 text-[13px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors whitespace-nowrap">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <circle cx="11" cy="11" r="7"/>
+                            <path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+                        </svg>
+                        <span>Search</span>
+                    </button>
+                    <a href="{{ route('admin.selling_chart.expense.index') }}"
+                       class="inline-flex items-center gap-1.5 px-3 h-9 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors whitespace-nowrap">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        <span>Reset</span>
+                    </a>
+                </div>
 
-                <!-- Reset -->
-                <a href="{{ route('admin.selling_chart.expense.index') }}"
-                   class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    Reset
-                </a>
             </div>
         </form>
 
