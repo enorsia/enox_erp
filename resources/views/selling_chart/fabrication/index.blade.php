@@ -129,7 +129,7 @@
 
         <!-- ── PAGINATION ── -->
         @if($lookup_names && $lookup_names->hasPages())
-            @include('master.pagination', ['paginator' => $lookup_names])
+            @include('layouts.pagination', ['paginator' => $lookup_names])
         @endif
     </div>
 @endsection

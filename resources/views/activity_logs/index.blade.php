@@ -152,7 +152,7 @@
         </div>
 
         <!-- ── PAGINATION ── -->
-        @include('master.pagination', ['paginator' => $activities])
+        @include('layouts.pagination', ['paginator' => $activities])
 
     </div>
 @endsection

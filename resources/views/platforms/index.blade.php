@@ -127,7 +127,7 @@
         </div>
 
         <!-- ── PAGINATION ── -->
-        @include('master.pagination', ['paginator' => $platforms])
+        @include('layouts.pagination', ['paginator' => $platforms])
 
     </div>
 @endsection

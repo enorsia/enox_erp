@@ -424,7 +424,7 @@
             </div>
 
             {{-- ── PAGINATION ── --}}
-            @include('master.pagination', ['paginator' => $chartInfos])
+            @include('layouts.pagination', ['paginator' => $chartInfos])
 
         </div>{{-- /page content --}}
     </div>{{-- /alpine root --}}

@@ -981,7 +981,7 @@
             </div>{{-- end cards list --}}
 
             {{-- ── Pagination ── --}}
-            @include('master.pagination', ['paginator' => $chartInfos])
+            @include('layouts.pagination', ['paginator' => $chartInfos])
         </div>
     </div>
 

@@ -137,7 +137,7 @@
         </div>
 
         <!-- ── PAGINATION ── -->
-        @include('master.pagination', ['paginator' => $expenses])
+        @include('layouts.pagination', ['paginator' => $expenses])
     </div>
 
 @endsection
