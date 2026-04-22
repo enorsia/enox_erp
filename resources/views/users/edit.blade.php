@@ -1,188 +1,158 @@
-@extends('master.app')
+@extends('layouts.app')
 
-@push('css')
-    <style>
-        .dropify-message p {
-            font-size: 18px;
-        }
-
-        .select2-container--default .select2-selection--single .select2-selection__rendered {
-            line-height: 40px;
-        }
-
-        .select2-container .select2-selection--single {
-            height: 43px;
-        }
-
-        .custom-control-label::before {
-            background-color: #374151;
-        }
-
-        .dropify-wrapper {
-            background-color: #374151;
-            border: 1px solid #4f5154;
-        }
-
-        .dropify-wrapper .dropify-preview {
-            background-color: #374151;
-        }
-
-        #avatar-error {
-            color: #d1474f;
-            margin-top: 92px;
-            margin-bottom: 0;
-            font-weight: bold;
-        }
-    </style>
-@endpush
+@section('title', 'Edit Admin User')
 
 @section('content')
-    <div class="top_title">
-        @include('master.breadcrumb', [
-            'title' => 'Admin Edit',
-            'icon' => 'bi bi-people',
-            'sub_title' => [
-                'Access Controller' => '',
-            ],
-        ])
-    </div>
+    <div id="user-page-content"></div>
+    <div class="max-w-5xl mx-auto px-5 py-6 pb-28">
 
-    <form method="POST" action="{{ route('admin.users.update', $user->id) }}" enctype="multipart/form-data"
-        id="EditValidateForm">
-        @csrf
-        @method('PUT')
-        <div class="card p-0">
-            <div class="card-body">
-                <div class="position-relative form-group mb-2 new_search row">
-                    <label class="col-12 col-md-4 col-lg-3">Name
-                        <sup class="text-warning">(required)</sup>
-                    </label>
-                    <div class="col-12 col-md-8 col-lg-9">
-                        <input id="name" type="text" class="form-control @error('name') is-invalid @enderror"
-                            name="name" value="{{ $user->name ?? old('name') }}" required>
-                        @error('name')
-                            <span class="text-danger" role="alert">
-                                <strong>{{ $message }}</strong>
-                            </span>
-                        @enderror
-                    </div>
-                </div>
-                <div class="position-relative form-group mb-2 new_search row">
-                    <label class="col-12 col-md-4 col-lg-3">Email
-                        <sup class="text-warning">(required)</sup>
-                    </label>
-                    <div class="col-12 col-md-8 col-lg-9">
-                        <input id="email" type="text" class="form-control @error('email') is-invalid @enderror"
-                            name="email" value="{{ $user->email ?? old('email') }}" required>
-                        @error('email')
-                            <span class="text-danger" role="alert">
-                                <strong>{{ $message }}</strong>
-                            </span>
-                        @enderror
-                    </div>
-                </div>
-                <div class="position-relative form-group mb-2 new_search row">
-                    <label class="col-12 col-md-4 col-lg-3">Designation</label>
-                    <div class="col-12 col-md-8 col-lg-9">
-                        <input id="designation" type="text"
-                            class="form-control @error('designation') is-invalid @enderror" name="designation"
-                            value="{{ $user->designation ?? old('designation') }}">
-                        @error('designation')
-                            <span class="text-danger" role="alert">
-                                <strong>{{ $message }}</strong>
-                            </span>
-                        @enderror
-                    </div>
-                </div>
-                <div class="position-relative form-group mb-2 new_search row">
-                    <label class="col-12 col-md-4 col-lg-3">Password</label>
-                    <div class="col-12 col-md-8 col-lg-9">
-                        <input id="password" type="password" class="form-control @error('password') is-invalid @enderror"
-                            name="password">
-                        @error('password')
-                            <span class="text-danger" role="alert">
-                                <strong>{{ $message }}</strong>
-                            </span>
-                        @enderror
-                    </div>
-                </div>
-                <div class="position-relative form-group mb-2 new_search row">
-                    <label class="col-12 col-md-4 col-lg-3">Confirm password</label>
-                    <div class="col-12 col-md-8 col-lg-9">
-                        <input id="confirm_password" type="password"
-                            class="form-control @error('password') is-invalid @enderror" name="password_confirmation">
-                        @error('password')
-                            <span class="text-danger" role="alert">
-                                <strong>{{ $message }}</strong>
-                            </span>
-                        @enderror
-                    </div>
-                </div>
-
-                <div class="position-relative form-group mb-2 new_search row">
-                    <label class="col-12 col-md-4 col-lg-3">Role <sup class="text-warning">
-                            (required)</sup></label>
-                    <div class="col-12 col-md-8 col-lg-9 ">
-                        <div class="new_select_field new_same_item d-flex flex-wrap">
-                            <select id="role" class="form-control select2 @error('role') is-invalid @enderror"
-                                name="role" required data-choices>
-                                <option value="">Select Role</option>
-                                @foreach ($roles as $role)
-                                    <option value="{{ $role->name }}"
-                                        {{ $user?->roles?->first()?->name == $role->name ? 'selected' : '' }}>
-                                        {{ $role->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        @error('role')
-                            <span class="text-danger" role="alert">
-                                <strong>{{ $message }}</strong>
-                            </span>
-                        @enderror
-                    </div>
-                </div>
-                <div class="position-relative form-group mb-2 new_search row">
-                    <label class="col-12 col-md-4 col-lg-3">Avatar</label>
-                    <div class="col-12 col-md-8 col-lg-9">
-                        {{-- <input id="avatar" type="file"
-                            class="form-control dropify @error('avatar') is-invalid @enderror" name="avatar"
-                            data-height="160"
-                            data-default-file="{{ $user->avatar ? route('dropify.image.proxy', basename($user->avatar)) : '' }}"
-                            accept="image/*"> --}}
-                        <input type="file" name="avatar"
-                            class="form-control image-input @error('image') is-invalid @enderror" id="imageInput"
-                            accept="image/*">
-                        <img id="imagePreview" class="image-preview"
-                            @if ($user->avatar) style="display: block;" @endif alt="Image Preview"
-                            src="{{ $user->avatar ? cloudflareImage($user->avatar, 150) : cloudflareImage('099de045-63a0-407d-75ca-8e22f95b8700', 150) }}">
-
-                        @error('avatar')
-                            <span class="text-danger" role="alert">
-                                <strong>{{ $message }}</strong>
-                            </span>
-                        @enderror
-                    </div>
-                </div>
-                <div class="position-relative form-group mb-2 new_search row pb-0 mb-0">
-                    <label class="col-12 col-md-4 col-lg-3">Status</label>
-                    <div class="col-12 col-md-8 col-lg-9">
-                        <div class="custom-control custom-switch" style="padding: 0px;">
-                            <input type="checkbox" class="custom-control-input" name="status" id="status"
-                                {{ $user->status == true ? 'checked' : '' }}>
-                        </div>
-                    </div>
-                </div>
-                <div class="text-end mb-3">
-                    <button type="submit" class="btn btn-lg btn-primary  px-4 submit-btn">
-                        <i class="bi bi-save ms-0"></i> Update
-                    </button>
-                </div>
+        <!-- PAGE HEADER -->
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+            <div>
+                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Edit Admin User</h1>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Update details for {{ $user->name }}</p>
             </div>
         </div>
-    </form>
+
+        <form method="POST" action="{{ route('admin.users.update', $user->id) }}" enctype="multipart/form-data" id="EditValidateForm">
+            @csrf
+            @method('PUT')
+
+            <div class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
+
+                <!-- LEFT COLUMN -->
+                <div class="space-y-5">
+
+                    <!-- ── User Information ── -->
+                    <div class="section-card">
+                        <div class="section-title">
+                            <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                            User Information
+                        </div>
+                        <p class="section-desc">Update the admin user account details.</p>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- Name -->
+                            <div class="sm:col-span-2">
+                                <label class="f-label">Name <span class="f-required">*</span></label>
+                                <input type="text" name="name" class="f-input @error('name') border-red-400 @enderror" value="{{ $user->name ?? old('name') }}" required />
+                                @error('name') <p class="f-error">{{ $message }}</p> @enderror
+                            </div>
+
+                            <!-- Email -->
+                            <div>
+                                <label class="f-label">Email <span class="f-required">*</span></label>
+                                <input type="email" name="email" class="f-input @error('email') border-red-400 @enderror" value="{{ $user->email ?? old('email') }}" required />
+                                @error('email') <p class="f-error">{{ $message }}</p> @enderror
+                            </div>
+
+                            <!-- Designation -->
+                            <div>
+                                <label class="f-label">Designation</label>
+                                <input type="text" name="designation" class="f-input" value="{{ $user->designation ?? old('designation') }}" />
+                                @error('designation') <p class="f-error">{{ $message }}</p> @enderror
+                            </div>
+
+                            <!-- Password -->
+                            <div>
+                                <label class="f-label">Password</label>
+                                <input type="password" name="password" id="password" class="f-input @error('password') border-red-400 @enderror" placeholder="Leave blank to keep current" />
+                                <p class="f-hint">Only fill if you want to change the password.</p>
+                                @error('password') <p class="f-error">{{ $message }}</p> @enderror
+                            </div>
+
+                            <!-- Confirm Password -->
+                            <div>
+                                <label class="f-label">Confirm Password</label>
+                                <input type="password" name="password_confirmation" class="f-input" placeholder="Re-enter new password" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Avatar ── -->
+                    <div class="section-card">
+                        <div class="section-title">
+                            <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                            Avatar
+                        </div>
+                        <p class="section-desc">Update profile picture.</p>
+
+                        <input type="file" name="avatar" class="f-input image-input" accept="image/*" />
+                        <img class="image-preview mt-3 w-[120px] rounded-lg"
+                             @if($user->avatar) style="display: block;" @else style="display:none" @endif
+                             src="{{ $user->avatar ? cloudflareImage($user->avatar, 150) : '' }}" alt="Preview">
+                        @error('avatar') <p class="f-error">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+
+                <!-- RIGHT COLUMN -->
+                <div class="space-y-5">
+
+                    <!-- ── Role & Status ── -->
+                    <div class="section-card">
+                        <div class="section-title">
+                            <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+                            Role & Settings
+                        </div>
+
+                        <div class="space-y-4">
+                            <!-- Role -->
+                            <div>
+                                <label class="f-label">Role <span class="f-required">*</span></label>
+                                <select name="role" class="f-input custom-select @error('role') border-red-400 @enderror" required>
+                                    <option value="">Select Role</option>
+                                    @foreach ($roles as $role)
+                                        <option value="{{ $role->name }}" {{ $user?->roles?->first()?->name == $role->name ? 'selected' : '' }}>
+                                            {{ $role->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @error('role') <p class="f-error">{{ $message }}</p> @enderror
+                            </div>
+
+                            <!-- Status -->
+                            <div>
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <div class="toggle-track {{ $user->status ? 'on' : '' }}" id="statusToggle" onclick="toggleSwitch('statusToggle')">
+                                        <div class="toggle-thumb"></div>
+                                    </div>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">Active status</span>
+                                    <input type="checkbox" name="status" class="hidden" id="statusCheckbox" {{ $user->status ? 'checked' : '' }}>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── STICKY FOOTER ── -->
+            <div class="sticky-footer mt-5 -mx-5 rounded-none">
+                <div class="max-w-5xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+                    <div class="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        Fields marked <span class="text-red-400 mx-1">*</span> are required
+                    </div>
+                    <div class="flex gap-2.5">
+                        <a href="{{ route('admin.users.index') }}"
+                           class="px-4 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
+                            Cancel
+                        </a>
+                        <button type="submit" class="submit-btn px-5 py-2.5 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg>
+                            Update User
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
 @endsection
 
 @push('js')
-    @include('users.script')
+<script>
+    document.getElementById('statusToggle').addEventListener('click', function() {
+        var cb = document.getElementById('statusCheckbox');
+        cb.checked = this.classList.contains('on');
+    });
+</script>
 @endpush

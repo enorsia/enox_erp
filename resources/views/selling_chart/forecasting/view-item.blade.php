@@ -1,186 +1,210 @@
-<div class="modal fade" class="viewSellingChartItemModal" id="viewSellingChartItemModal" tabindex="-1" role="dialog"
-    aria-labelledby="viewSellingChartItemModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down" role="document"
-        style="max-width: 1400px;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title fs-18" id="exampleModalLabel">DETAILS</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" id="Orders_order_id">
-                <div id="order_details_section">
-                    <div class="row selling_chart_view_p">
-                        <div class="col-lg-4 col-12">
-                            <p>Department:</p>
-                            <h6>{{ $chartInfo->department_name }}</h6>
+{{--
+    Forecasting View-Item Modal
+    — Injected via AJAX by viewChart() in forecasting.js
+    — NO Bootstrap needed; uses Tailwind + Alpine.js tabs
+--}}
+<div id="viewSellingChartItemModal"
+     x-data="{ imagePopup: null }"
+     onclick="if(event.target===this) window.closeDiscountModal()"
+     class="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 overflow-y-auto p-3 sm:p-5">
 
-                            <p>Season:</p>
-                            <h6>{{ $chartInfo->season_name }}</h6>
+    {{-- ── Image Lightbox ── --}}
+    <div x-show="imagePopup" x-cloak
+         @click="imagePopup = null"
+         class="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 cursor-zoom-out p-6"
+         style="display:none;">
+        <button @click="imagePopup = null"
+                class="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+        <img :src="imagePopup"
+             class="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl object-contain cursor-default"
+             @click.stop>
+    </div>
 
-                            <p>Season Phase:</p>
-                            <h6>{{ $chartInfo->phase_name }}</h6>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-[1400px] my-auto shadow-2xl"
+         onclick="event.stopPropagation()">
 
-                            <p>Initial/ Repeat Order:</p>
-                            <h6>{{ $chartInfo->initial_repeated_status }}</h6>
+        <!-- ── HEADER ── -->
+        <div class="sticky top-0 z-10 flex items-center justify-between px-5 py-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 rounded-t-2xl">
+            <h5 class="text-base font-semibold text-slate-800 dark:text-slate-100">Product Details</h5>
+            <button onclick="window.closeDiscountModal()"
+                    class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
 
-                            <p>Product Launch Month:</p>
-                            <h6>{{ $chartInfo->product_launch_month }}</h6>
+        <!-- ── BODY ── -->
+        <div class="p-5 space-y-5">
 
-                            <p>Product Description:</p>
-                            <h6>{{ $chartInfo->product_description }}</h6>
+            <!-- Product Info Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-3">
+                @php
+                    $badge = match(true) {
+                        $chartInfo->status == 1 => ['label' => 'Approved',     'cls' => 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'],
+                        $chartInfo->status == 2 => ['label' => 'Rejected',     'cls' => 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'],
+                        default                 => ['label' => 'Not Approved', 'cls' => 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'],
+                    };
+                @endphp
 
-                            <p>Status:</p>
-                            @if ($chartInfo->status == 1)
-                                <span class="badge bg-success text-capitalize px-1">Approved</span>
-                            @elseif($chartInfo->status == 2)
-                                <span class="badge bg-danger text-capitalize px-1">Rejected</span>
-                            @else
-                                <span class="badge bg-warning text-capitalize px-1 ">Not Approved</span>
-                            @endif
-                        </div>
-                        <div class="col-lg-4 col-12">
-                            <p>Product Category:</p>
-                            <h6>{{ $chartInfo->category_name }}</h6>
-
-                            <p>Mini Category:</p>
-                            <h6>{{ $chartInfo->mini_category_name }}</h6>
-
-                            <p>Product Code:</p>
-                            <h6>{{ $chartInfo->product_code }}</h6>
-
-                            <p>Ecom Sku:</p>
-                            <h6>{{ $skus['sku'] ?? '' }}</h6>
-
-                            <p>Design No:</p>
-                            <h6>{{ $chartInfo->design_no }}</h6>
-
-                            <p>Febrication:</p>
-                            <h6>{{ $chartInfo->fabrication }}</h6>
-                        </div>
-                        @if ($chartInfo->design_image || $chartInfo->inspiration_image)
-                            <div class="col-lg-4 col-12 text-center">
-                                @if ($chartInfo->design_image)
-                                    <p>Design Image: </p>
-                                    <h6>
-                                        <img class="img-fluid border rounded p-1"
-                                            src="{{ $chartInfo->design_image ? cloudflareImage($chartInfo->design_image, 130) : cloudflareImage('099de045-63a0-407d-75ca-8e22f95b8700', 130) }}"
-                                            alt="img">
-                                    </h6>
-                                @endif
-                                @if ($chartInfo->inspiration_image)
-                                    <p>Inspiration Image:</p>
-                                    <h6>
-                                        <img class="img-fluid border rounded p-1"
-                                            src="{{ $chartInfo->inspiration_image ? cloudflareImage($chartInfo->inspiration_image, 130) : cloudflareImage('099de045-63a0-407d-75ca-8e22f95b8700', 150) }}"
-                                            alt="img">
-                                    </h6>
-                                @endif
-                            </div>
-                        @endif
-
-                        <div class="col-lg-12 mt-3">
-                            <div class="p-2 mb-2 bg-light" style="background: #F8F9FB; border-radius: 7px;">
-                                <p class="mb-0 d-inline-block me-2 text-uppercase fw-bold">show / hide columns:</p>
-                                <h6 class="form-check form-check-inline mb-0">
-                                    <input type="checkbox" class="form-check-input toggle-column" value="commission"
-                                        id="customCheck3">
-                                    <label class="form-check-label" for="customCheck3">Commission details</label>
-                                </h6>
-                                <h6 class="form-check form-check-inline mb-0">
-                                    <input type="checkbox" class="form-check-input toggle-column" value="vat"
-                                        id="customCheck4">
-                                    <label class="form-check-label" for="customCheck4">Vat details</label>
-                                </h6>
-                            </div>
-
-                            <ul class="nav nav-tabs">
-                                @foreach ($platform_ncs as $p_code => $p_name)
-                                    <li class="nav-item">
-                                        <a href="#{{ $p_code }}" data-bs-toggle="tab"
-                                            aria-expanded="{{ $p_code == 'enox' ? 'true' : 'false' }}"
-                                            class="nav-link {{ $p_code == 'enox' ? 'active' : '' }}">
-                                            <span class="d-block d-sm-none"><i class="bx bx-home"></i></span>
-                                            <span class="d-none d-sm-block">{{ $p_name }}</span>
-                                        </a>
-                                    </li>
-                                @endforeach
-                            </ul>
-                            <div class="tab-content text-muted">
-                                @foreach ($platform_ncs as $p_code => $p_name)
-                                    @php
-                                        $platform = $platforms->get($p_code);
-                                    @endphp
-                                    <div class="tab-pane {{ $p_code == 'enox' ? 'show active' : '' }}"
-                                        id="{{ $p_code }}">
-                                        <div class="new_table table-responsive">
-                                            <table class="table table-bordered mb-2" id="ordered_products_table">
-                                                <thead>
-                                                    <tr>
-                                                        <th class="text-center">Color Name (code)</th>
-                                                        @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
-                                                            <th>Size Range</th>
-                                                        @endif
-                                                        <th class="text-center">price $(FOB)</th>
-                                                        <th class="text-center">Unit Price</th>
-                                                        <th class="text-center">Confirm Selling Price</th>
-
-                                                        <th class="text-center toogle-item commission">Commission</th>
-                                                        <th class="text-center toogle-item commission">Commission Vat
-                                                        </th>
-                                                        <th class="text-center toogle-item commission">Selling Price
-                                                        </th>
-                                                        <th class="text-center toogle-item vat">20% Selling VAT</th>
-                                                        <th class="text-center toogle-item vat">Vat Value £</th>
-                                                        <th class="text-center toogle-item vat">Selling Price + Vat</th>
-                                                        <th class="text-center">Profit Margin %</th>
-                                                        <th class="text-center">Net Profit</th>
-                                                    </tr>
-
-                                                </thead>
-                                                <tbody id="ordered_products">
-                                                    @foreach ($chartInfo->sellingChartPrices as $ch_price)
-                                                        @php
-                                                            $profit_cal = calculatePlatformProfit($ch_price, $platform);
-                                                        @endphp
-                                                        <tr>
-                                                            <td>{{ $ch_price->color_name }}
-                                                                ({{ $ch_price->color_code }})
-                                                            </td>
-                                                            @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
-                                                                <td class="text-center">{{ $ch_price->range }}</td>
-                                                            @endif
-                                                            <td class="text-center">$ @pricews($ch_price->price_fob)</td>
-                                                            <td class="text-center">@price($ch_price->unit_price)</td>
-                                                            <td class="text-center cm-sp">@price($ch_price->confirm_selling_price)</td>
-                                                            <td class="text-center toogle-item commission com">
-                                                                @price($profit_cal['commission'])</td>
-                                                            <td class="text-center toogle-item commission com-vat">
-                                                                @price($profit_cal['commission_vat'])</td>
-                                                            <td class="text-center toogle-item commission sp">
-                                                                @price($profit_cal['selling_price'])</td>
-                                                            <td class="text-center toogle-item vat sl-vat">@price($profit_cal['selling_vat'])
-                                                            </td>
-                                                            <td class="text-center toogle-item vat vat-val">@price($profit_cal['vat_value'])
-                                                            </td>
-                                                            <td class="text-center toogle-item vat sp-vat">@price($profit_cal['selling_price_and_vat'])
-                                                            </td>
-                                                            <td class="text-center pm">
-                                                                @pricews($profit_cal['profit_margin']) %
-                                                            </td>
-                                                            <td class="text-center np">@price($profit_cal['net_profit'])</td>
-                                                        </tr>
-                                                    @endforeach
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-                        </div>
-
+                @foreach ([
+                    'Department'            => $chartInfo->department_name,
+                    'Season'                => $chartInfo->season_name,
+                    'Season Phase'          => $chartInfo->phase_name,
+                    'Initial/ Repeat Order' => $chartInfo->initial_repeated_status,
+                    'Product Launch Month'  => $chartInfo->product_launch_month,
+                    'Product Description'   => $chartInfo->product_description,
+                    'Product Category'      => $chartInfo->category_name,
+                    'Mini Category'         => $chartInfo->mini_category_name,
+                    'Product Code'          => $chartInfo->product_code,
+                    'Ecom Sku'              => ($skus['sku'] ?? ''),
+                    'Design No'             => $chartInfo->design_no,
+                    'Febrication'           => $chartInfo->fabrication,
+                ] as $label => $value)
+                    <div>
+                        <p class="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-0.5">{{ $label }}</p>
+                        <p class="text-[13px] text-slate-800 dark:text-slate-100 font-medium leading-snug">{{ $value ?: '—' }}</p>
                     </div>
+                @endforeach
+
+                <!-- Status badge -->
+                <div>
+                    <p class="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-0.5">Status</p>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold {{ $badge['cls'] }}">
+                        {{ $badge['label'] }}
+                    </span>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
+
+            <!-- Design / Inspiration Images -->
+            @if ($chartInfo->design_image || $chartInfo->inspiration_image)
+                <div class="flex flex-wrap gap-4">
+                    @if ($chartInfo->design_image)
+                        <div class="text-center">
+                            <p class="text-[10px] font-semibold text-slate-400 uppercase mb-1">Design Image</p>
+                            <img class="w-28 h-28 rounded-xl object-cover border border-slate-200 dark:border-slate-700 cursor-zoom-in hover:opacity-90 transition-opacity"
+                                 src="{{ cloudflareImage($chartInfo->design_image, 130) }}"
+                                 @click="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'"
+                                 alt="Design Image">
+                        </div>
+                    @endif
+                    @if ($chartInfo->inspiration_image)
+                        <div class="text-center">
+                            <p class="text-[10px] font-semibold text-slate-400 uppercase mb-1">Inspiration Image</p>
+                            <img class="w-28 h-28 rounded-xl object-cover border border-slate-200 dark:border-slate-700 cursor-zoom-in hover:opacity-90 transition-opacity"
+                                 src="{{ cloudflareImage($chartInfo->inspiration_image, 130) }}"
+                                 @click="imagePopup = '{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}'"
+                                 alt="Inspiration Image">
+                        </div>
+                    @endif
+                </div>
+            @endif
+
+            <!-- Column Toggles -->
+            <div class="flex flex-wrap items-center gap-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl px-4 py-3">
+                <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Show / Hide:</span>
+                <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input type="checkbox" class="toggle-column w-3.5 h-3.5 rounded accent-accent-400" value="commission">
+                    <span class="text-[12px] text-slate-600 dark:text-slate-300">Commission details</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input type="checkbox" class="toggle-column w-3.5 h-3.5 rounded accent-accent-400" value="vat">
+                    <span class="text-[12px] text-slate-600 dark:text-slate-300">Vat details</span>
+                </label>
+            </div>
+
+            <!-- ── PLATFORM TABS (Alpine.js) ── -->
+            @php $firstPlatformCode = array_key_first($platform_ncs); @endphp
+            <div x-data="{ tab: '{{ $firstPlatformCode }}' }">
+
+                <!-- Tab Strip -->
+                <div class="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-700 mb-4 overflow-x-auto pb-px">
+                    @foreach ($platform_ncs as $p_code => $p_name)
+                        <button type="button"
+                                @click="tab = '{{ $p_code }}'"
+                                :class="tab === '{{ $p_code }}'
+                                    ? 'border-accent-400 text-accent-400 bg-accent-400/5'
+                                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
+                                class="px-4 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors">
+                            {{ $p_name }}
+                        </button>
+                    @endforeach
+                </div>
+
+                <!-- Tab Panels -->
+                @foreach ($platform_ncs as $p_code => $p_name)
+                    @php $platform = $platforms->get($p_code); @endphp
+
+                    <div x-show="tab === '{{ $p_code }}'" x-cloak>
+                        <!-- Scrollable Table -->
+                        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                            <table class="w-full text-[12px] border-collapse" style="min-width: max-content;">
+                                <thead>
+                                    <tr class="bg-slate-50 dark:bg-slate-800/60">
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Color Name (code)</th>
+                                        @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
+                                            <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Size Range</th>
+                                        @endif
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">price $(FOB)</th>
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Unit Price</th>
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Confirm Selling Price</th>
+                                        <th class="toogle-item commission px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Commission</th>
+                                        <th class="toogle-item commission px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Commission Vat</th>
+                                        <th class="toogle-item commission px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Selling Price</th>
+                                        <th class="toogle-item vat px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">20% Selling VAT</th>
+                                        <th class="toogle-item vat px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Vat Value £</th>
+                                        <th class="toogle-item vat px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Selling Price + Vat</th>
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Profit Margin %</th>
+                                        <th class="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Net Profit</th>
+                                        <th class="px-3 py-2.5 text-center text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Can Sell</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 dark:divide-slate-700/40">
+                                    @foreach ($chartInfo->sellingChartPrices as $ch_price)
+                                        @php
+                                            $profit_cal = calculatePlatformProfit($ch_price, $platform);
+                                            $canSell    = ($profit_cal['can_sell'] ?? 'No') === 'Yes';
+                                        @endphp
+                                        <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-700/20 transition-colors">
+                                            <td class="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                                                {{ $ch_price->color_name }}
+                                                <span class="text-slate-400 font-normal">({{ $ch_price->color_code }})</span>
+                                            </td>
+                                            @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
+                                                <td class="px-3 py-2.5 text-slate-500 dark:text-slate-400 whitespace-nowrap">{{ $ch_price->range }}</td>
+                                            @endif
+                                            <td class="px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">$@pricews($ch_price->price_fob)</td>
+                                            <td class="px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">@price($ch_price->unit_price)</td>
+                                            <td class="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap cm-sp">@price($ch_price->confirm_selling_price)</td>
+                                            <td class="toogle-item commission px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap com" style="display:none">@price($profit_cal['commission'])</td>
+                                            <td class="toogle-item commission px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap com-vat" style="display:none">@price($profit_cal['commission_vat'])</td>
+                                            <td class="toogle-item commission px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap sp" style="display:none">@price($profit_cal['selling_price'])</td>
+                                            <td class="toogle-item vat px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap sl-vat" style="display:none">@price($profit_cal['selling_vat'])</td>
+                                            <td class="toogle-item vat px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap vat-val" style="display:none">@price($profit_cal['vat_value'])</td>
+                                            <td class="toogle-item vat px-3 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap sp-vat" style="display:none">@price($profit_cal['selling_price_and_vat'])</td>
+                                            <td class="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap pm">@pricews($profit_cal['profit_margin'])%</td>
+                                            <td class="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap np">@price($profit_cal['net_profit'])</td>
+                                            <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                                                <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full
+                                                    {{ $canSell
+                                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' }}">
+                                                    {{ $canSell ? '✓' : '✗' }} {{ $profit_cal['can_sell'] ?? 'No' }}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                @endforeach
+
+            </div>{{-- /Alpine tabs --}}
+        </div>{{-- /body --}}
+    </div>{{-- /panel --}}
+</div>{{-- /overlay --}}

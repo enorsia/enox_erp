@@ -1,324 +1,313 @@
-@extends('master.app')
+@extends('layouts.app')
+
+@section('title', 'Create Selling Chart')
 
 @section('content')
-    <div class="top_title">
-        @include('master.breadcrumb', [
-            'title' => 'Chart Create',
-            'icon' => 'bi bi-graph-up-arrow',
-            'sub_title' => [
-                'Manage Selling Chart ' => '',
-                'Selling Chart' => route('admin.selling_chart.index'),
-                'Create' => '',
-            ],
-        ])
-        {{-- <div>
-            <a href="{{ route('admin.selling_chart.index') }}" class="btn tlt-btn">
-                &lt;
-                Back
+    {{-- Page-level config for selling-chart.js --}}
+    <div id="selling-chart-form-content"
+         data-size-range-url="{{ url('/admin/selling-chart/get-size-range') }}"
+         data-dep-cats-url="{{ url('admin/selling-chart/get-dep-wise-cats') }}"
+         data-color-search-url="{{ url('/admin/selling-chart/get-color-by-search') }}"></div>
+
+    <div class="max-w-5xl mx-auto px-5 py-6 pb-28">
+
+        {{-- PAGE HEADER --}}
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+            <div>
+                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Create Selling Chart</h1>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Add a new selling chart entry</p>
+            </div>
+            <a href="{{ route('admin.selling_chart.index') }}"
+               class="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Back to List
             </a>
-        </div> --}}
-    </div>
-    <div class="row justify-content-center">
-        <div class="col-12">
-            <div class="card main-card mb-3 pb-0">
-                <div class="card-body">
-                    <form action="{{ route('admin.selling_chart.store') }}" method="POST" class="selling_chart_form"
-                        id="selling_chart" enctype="multipart/form-data">
-                        @csrf
-                        <div class="position-relative form-group mb-2 new_search row">
-                            <label for="department_select" class="col-12 col-md-4 col-lg-3">Department <sup
-                                    class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="department_select" name="department_id" data-choices class="form-control"
-                                        required>
-                                        <option value="">Select Department</option>
-                                        @foreach ($departments as $department)
-                                            <option {{ old('department_id') == $department->id ? 'selected' : '' }}
-                                                value="{{ $department->id }}">{{ $department->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
+        </div>
 
-                                @error('department_id')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row">
-                            <label for="product_category" class="col-12 col-md-4 col-lg-3">Product Category<sup
-                                    class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="product_category" name="category_id" data-choices class="form-control"
-                                        required>
-                                        <option value="">Select Category</option>
-                                    </select>
-                                </div>
+        <form action="{{ route('admin.selling_chart.store') }}" method="POST"
+              id="selling_chart" enctype="multipart/form-data">
+            @csrf
 
-                                @error('category_id')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row">
-                            <label for="product_mini_category" class="col-12 col-md-4 col-lg-3">Product Mini Category<sup
-                                    class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="product_mini_category" name="mini_category" data-choices
-                                        class="form-control" required>
-                                        <option value="">Select Mini Category</option>
-                                        @foreach ($selling_chart_types as $selling_chart_type)
-                                            <option {{ old('mini_category') == $selling_chart_type->id ? 'selected' : '' }}
-                                                value="{{ $selling_chart_type->id }}">{{ $selling_chart_type->name }}
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                </div>
+            <div class="space-y-5">
 
-                                @error('mini_category')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row">
-                            @foreach ($seasons as $season)
-                                @php
-                                    $season_name_year = preg_replace('/\D/', '', $season->name);
-                                    $digit_count = strlen($season_name_year);
+                {{-- ── Classification ── --}}
+                <div class="section-card">
+                    <div class="section-title">
+                        <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M4 6h16M4 12h8m-8 6h16"/>
+                        </svg>
+                        Classification
+                    </div>
+                    <p class="section-desc">Department, category and season details.</p>
 
-                                    $current_year = date('Y');
-                                    $current_century = substr($current_year, 0, -$digit_count);
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-                                    $season_year = $current_century . trim($season_name_year);
-                                    $expense = $expenses->where('year', (int) $season_year)->first();
-                                @endphp
+                        {{-- Expense data inputs for JS price calculation --}}
+                        @foreach ($seasons as $season)
+                            @php
+                                $season_name_year = preg_replace('/\D/', '', $season->name);
+                                $digit_count      = strlen($season_name_year);
+                                $current_year     = date('Y');
+                                $current_century  = substr($current_year, 0, -$digit_count);
+                                $season_year      = $current_century . trim($season_name_year);
+                                $expense          = $expenses->where('year', (int) $season_year)->first();
+                            @endphp
+                            <input class="season-exp{{ $season->id }}" type="hidden" value="{{ $season->id }}"
+                                data-conversion-rate="{{ $expense->conversion_rate ?? 0 }}"
+                                data-commercial-expense="{{ $expense->commercial_expense ?? 0 }}"
+                                data-enorsia-bd-expense="{{ $expense->enorsia_expense_bd ?? 0 }}"
+                                data-enorsia-uk-expense="{{ $expense->enorsia_expense_uk ?? 0 }}"
+                                data-shipping-cost="{{ $expense->shipping_cost ?? 0 }}">
+                        @endforeach
 
-                                <input class="season-exp{{ $season->id }}" type="hidden" value="{{ $season->id }}"
-                                    data-conversion-rate="{{ $expense->conversion_rate ?? 0 }}"
-                                    data-commercial-expense="{{ $expense->commercial_expense ?? 0 }}"
-                                    data-enorsia-bd-expense="{{ $expense->enorsia_expense_bd ?? 0 }}"
-                                    data-enorsia-uk-expense="{{ $expense->enorsia_expense_uk ?? 0 }}"
-                                    data-shipping-cost="{{ $expense->shipping_cost ?? 0 }}">
-                            @endforeach
-                            <label for="season_select" class="col-12 col-md-4 col-lg-3">Season <sup class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="season_select" name="season_id" data-choices class="form-control" required>
-                                        <option value="">Select Season</option>
-                                        @foreach ($seasons as $season)
-                                            <option {{ old('season_id') == $season->id ? 'selected' : '' }}
-                                                value="{{ $season->id }}">{{ $season->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
-                                @error('season_id')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row">
-                            <label for="Season_Phase" class="col-12 col-md-4 col-lg-3">Season Phase <sup
-                                    class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="Season_Phase" name="season_phase_id" data-choices class="form-control"
-                                        required>
-                                        <option value="">Select Season Phase</option>
-                                        @foreach ($seasons_phases as $seasons_phase)
-                                            <option {{ old('season_phase_id') == $seasons_phase->id ? 'selected' : '' }}
-                                                value="{{ $seasons_phase->id }}">{{ $seasons_phase->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
-                                @error('season_phase_id')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row">
-                            <label for="Repeat_Order" class="col-12 col-md-4 col-lg-3">Initial/ Repeat Order <sup
-                                    class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="Repeat_Order" name="order_type_id" data-choices class="form-control"
-                                        required>
-                                        <option value="">Select Initial/ Repeat Order</option>
-                                        @foreach ($initialRepeats as $initialRepeat)
-                                            <option value="{{ $initialRepeat->id }}"
-                                                {{ $initialRepeat->id == 2007 ? 'selected' : '' }}>
-                                                {{ $initialRepeat->name }}
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
-                                @error('order_type_id')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row">
-                            <label for="product_launch_month" class="col-12 col-md-4 col-lg-3">Product Launch Month <sup
-                                    class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <input type="text" name="product_launch_month" id="product_launch_month"
-                                    placeholder="Enter Product Launch Month"
-                                    class="form-control @error('product_launch_month') is-invalid @enderror"
-                                    value="{{ old('product_launch_month') }}" required>
-                                @error('product_launch_month')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row">
-                            <label for="product_code" class="col-12 col-md-4 col-lg-3">Product Code <sup
-                                    class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <input type="text" name="product_code" id="product_code"
-                                    placeholder="Enter product code"
-                                    class="form-control @error('product_code') is-invalid @enderror"
-                                    value="{{ old('product_code') }}" required>
-                                @error('product_code')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row">
-                            <label for="design_no" class="col-12 col-md-4 col-lg-3">Design No <sup class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <input type="text" name="design_no" id="design_no" placeholder="Enter design no"
-                                    class="form-control @error('design_no') is-invalid @enderror"
-                                    value="{{ old('design_no') }}" required>
-                                @error('design_no')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row">
-                            <label for="product_design" class="col-12 col-md-4 col-lg-3">Product Description <sup
-                                    class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <input type="text" name="product_description" id="product_design"
-                                    placeholder="Enter Product Description"
-                                    class="form-control @error('product_description') is-invalid @enderror"
-                                    value="{{ old('product_description') }}" required>
-                                @error('product_description')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row">
-                            <label for="" class="col-12 col-md-4 col-lg-3">Fabrication <sup class="text-warning">
-                                    (required)</sup></label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <div class="new_select_field new_same_item d-flex flex-wrap">
-                                    <select id="fabrication" name="fabrication" data-choices class="form-control"
-                                        required>
-                                        <option value="">Select a fabrication</option>
-                                        @foreach ($fabrics as $fabric)
-                                            <option {{ old('fabrication') == $fabric->id ? 'selected' : '' }}
-                                                value="{{ $fabric->id }}">{{ $fabric->name }}
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                                {{-- <input type="text" name="fabrication" id="fabrication"
-                                    placeholder="Enter Fabrication"
-                                    class="form-control @error('fabrication') is-invalid @enderror"
-                                    value="{{ old('fabrication') }}"> --}}
-                                @error('fabrication')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row" id="input_with_preview">
-                            <label for="name" class="col-12 col-md-4 col-lg-3">Inspiration Image</label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <input type="file" name="image"
-                                    class="form-control image-input @error('image') is-invalid @enderror" id="imageInput"
-                                    accept="image/*">
-                                <img id="imagePreview" class="image-preview" alt="Image Preview">
-                                @error('image')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="position-relative form-group mb-2 new_search row" id="input_with_preview">
-                            <label for="name" class="col-12 col-md-4 col-lg-3">Design Image</label>
-                            <div class="col-12 col-md-8 col-lg-9">
-                                <input type="file" name="design_image"
-                                    class="form-control image-input @error('image') is-invalid @enderror" id="imageInput"
-                                    accept="image/*">
-                                <img id="imagePreview" class="image-preview" alt="Image Preview">
-                                @error('design_image')
-                                    <span class="text-danger" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="new_search row" id="selling_chart_table">
-                            <div class="col-12">
-                                <div class="selling_table_body">
-                                    <div class="new_table table-responsive color-table mb-0">
-
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="d-flex flex-row justify-content-between position-relative">
-                            <button type="button"
-                                class="btn btn-lg btn-info fs-6 px-4 add_more_btn btn-invisible invisible"><i
-                                    class="bi bi-plus-lg"></i> Add More </button>
-                            <button type="submit"
-                                class="btn btn-lg btn-primary fs-6 px-4 submit-btn btn-invisible invisible"><i
-                                    class="bi bi-save ms-0"></i> Save </button>
+                        {{-- Department --}}
+                        <div>
+                            <label class="f-label">Department <span class="f-required">*</span></label>
+                            <select id="department_select" name="department_id" required
+                                class="f-input custom-select @error('department_id') border-red-400 @enderror">
+                                <option value="">Select Department</option>
+                                @foreach ($departments as $department)
+                                    <option value="{{ $department->id }}"
+                                        {{ old('department_id') == $department->id ? 'selected' : '' }}>
+                                        {{ $department->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('department_id') <p class="f-error">{{ $message }}</p> @enderror
                         </div>
 
-                    </form>
+                        {{-- Product Category (populated via AJAX) --}}
+                        <div>
+                            <label class="f-label">Product Category <span class="f-required">*</span></label>
+                            <select id="product_category" name="category_id" required
+                                class="f-input custom-select @error('category_id') border-red-400 @enderror">
+                                <option value="">Select Category</option>
+                            </select>
+                            @error('category_id') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                        {{-- Mini Category --}}
+                        <div>
+                            <label class="f-label">Mini Category <span class="f-required">*</span></label>
+                            <select id="product_mini_category" name="mini_category" required
+                                class="f-input custom-select @error('mini_category') border-red-400 @enderror">
+                                <option value="">Select Mini Category</option>
+                                @foreach ($selling_chart_types as $selling_chart_type)
+                                    <option value="{{ $selling_chart_type->id }}"
+                                        {{ old('mini_category') == $selling_chart_type->id ? 'selected' : '' }}>
+                                        {{ $selling_chart_type->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('mini_category') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                        {{-- Season --}}
+                        <div>
+                            <label class="f-label">Season <span class="f-required">*</span></label>
+                            <select id="season_select" name="season_id" required
+                                class="f-input custom-select @error('season_id') border-red-400 @enderror">
+                                <option value="">Select Season</option>
+                                @foreach ($seasons as $season)
+                                    <option value="{{ $season->id }}"
+                                        {{ old('season_id') == $season->id ? 'selected' : '' }}>
+                                        {{ $season->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('season_id') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                        {{-- Season Phase --}}
+                        <div>
+                            <label class="f-label">Season Phase <span class="f-required">*</span></label>
+                            <select id="Season_Phase" name="season_phase_id" required
+                                class="f-input custom-select @error('season_phase_id') border-red-400 @enderror">
+                                <option value="">Select Season Phase</option>
+                                @foreach ($seasons_phases as $seasons_phase)
+                                    <option value="{{ $seasons_phase->id }}"
+                                        {{ old('season_phase_id') == $seasons_phase->id ? 'selected' : '' }}>
+                                        {{ $seasons_phase->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('season_phase_id') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                        {{-- Initial / Repeat Order --}}
+                        <div>
+                            <label class="f-label">Initial / Repeat Order <span class="f-required">*</span></label>
+                            <select id="Repeat_Order" name="order_type_id" required
+                                class="f-input custom-select @error('order_type_id') border-red-400 @enderror">
+                                <option value="">Select Initial / Repeat Order</option>
+                                @foreach ($initialRepeats as $initialRepeat)
+                                    <option value="{{ $initialRepeat->id }}"
+                                        {{ $initialRepeat->id == 2007 ? 'selected' : '' }}>
+                                        {{ $initialRepeat->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('order_type_id') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                    </div>
+                </div>
+
+                {{-- ── Product Details ── --}}
+                <div class="section-card">
+                    <div class="section-title">
+                        <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        Product Details
+                    </div>
+                    <p class="section-desc">Core product information and identifiers.</p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                        {{-- Product Launch Month --}}
+                        <div>
+                            <label class="f-label">Product Launch Month <span class="f-required">*</span></label>
+                            <input type="text" name="product_launch_month" id="product_launch_month"
+                                placeholder="Enter product launch month" required
+                                class="f-input @error('product_launch_month') border-red-400 @enderror"
+                                value="{{ old('product_launch_month') }}">
+                            @error('product_launch_month') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                        {{-- Product Code --}}
+                        <div>
+                            <label class="f-label">Product Code <span class="f-required">*</span></label>
+                            <input type="text" name="product_code" id="product_code"
+                                placeholder="Enter product code" required
+                                class="f-input @error('product_code') border-red-400 @enderror"
+                                value="{{ old('product_code') }}">
+                            @error('product_code') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                        {{-- Design No --}}
+                        <div>
+                            <label class="f-label">Design No <span class="f-required">*</span></label>
+                            <input type="text" name="design_no" id="design_no"
+                                placeholder="Enter design no" required
+                                class="f-input @error('design_no') border-red-400 @enderror"
+                                value="{{ old('design_no') }}">
+                            @error('design_no') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                        {{-- Fabrication --}}
+                        <div>
+                            <label class="f-label">Fabrication <span class="f-required">*</span></label>
+                            <select id="fabrication" name="fabrication" required
+                                class="f-input custom-select @error('fabrication') border-red-400 @enderror">
+                                <option value="">Select a fabrication</option>
+                                @foreach ($fabrics as $fabric)
+                                    <option value="{{ $fabric->id }}"
+                                        {{ old('fabrication') == $fabric->id ? 'selected' : '' }}>
+                                        {{ $fabric->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('fabrication') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                        {{-- Product Description --}}
+                        <div class="sm:col-span-2">
+                            <label class="f-label">Product Description <span class="f-required">*</span></label>
+                            <input type="text" name="product_description" id="product_design"
+                                placeholder="Enter product description" required
+                                class="f-input @error('product_description') border-red-400 @enderror"
+                                value="{{ old('product_description') }}">
+                            @error('product_description') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                    </div>
+                </div>
+
+                {{-- ── Images ── --}}
+                <div class="section-card">
+                    <div class="section-title">
+                        <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                        Images
+                    </div>
+                    <p class="section-desc">Inspiration and design images for this chart entry.</p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                        {{-- Inspiration Image --}}
+                        <div>
+                            <label class="f-label">Inspiration Image</label>
+                            <input type="file" name="image" accept="image/*"
+                                class="f-input image-input @error('image') border-red-400 @enderror">
+                            <img class="image-preview mt-3 w-[120px] rounded-lg" style="display:none;" alt="Inspiration Image Preview">
+                            @error('image') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                        {{-- Design Image --}}
+                        <div>
+                            <label class="f-label">Design Image</label>
+                            <input type="file" name="design_image" accept="image/*"
+                                class="f-input image-input @error('design_image') border-red-400 @enderror">
+                            <img class="image-preview mt-3 w-[120px] rounded-lg" style="display:none;" alt="Design Image Preview">
+                            @error('design_image') <p class="f-error">{{ $message }}</p> @enderror
+                        </div>
+
+                    </div>
+                </div>
+
+                {{-- ── Color / Price Table (loaded via AJAX on department select) ── --}}
+                <div class="section-card overflow-x-auto">
+                    <div class="section-title mb-3">
+                        <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M3 10h18M3 6h18M3 14h18M3 18h18"/>
+                        </svg>
+                        Color &amp; Pricing
+                        <span class="text-[10px] font-normal text-slate-400 ml-1">(select a department to load)</span>
+                    </div>
+                    <div class="color-table mb-0"></div>
+
+                    <div class="mt-3">
+                        <button type="button"
+                            class="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] rounded-lg border border-cyan-200 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500 hover:text-white hover:border-cyan-500 transition-colors font-semibold btn-invisible invisible add_more_btn">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Add More
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            {{-- ── STICKY FOOTER ── --}}
+            <div class="sticky-footer mt-5 -mx-5 rounded-none">
+                <div class="max-w-5xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+                    <div class="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        Fields marked <span class="text-red-400 mx-1">*</span> are required
+                    </div>
+                    <div class="flex gap-2.5">
+                        <a href="{{ route('admin.selling_chart.index') }}"
+                           class="px-4 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
+                            Cancel
+                        </a>
+                        <button type="submit"
+                            class="submit-btn btn-invisible invisible px-5 py-2.5 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            Save Chart
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+
+        </form>
     </div>
 @endsection
-@push('js')
-    @include('selling_chart.script')
-@endpush

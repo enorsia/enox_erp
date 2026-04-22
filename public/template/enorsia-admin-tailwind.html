@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enorsia Admin – Manage Orders</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: DM Sans + DM Mono -->
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['DM Sans', 'sans-serif'],
+            mono: ['DM Mono', 'monospace'],
+          },
+          colors: {
+            accent: {
+              50:  '#E1F5EE',
+              100: '#9FE1CB',
+              200: '#5DCAA5',
+              400: '#1D9E75',
+              600: '#0F6E56',
+              800: '#085041',
+              900: '#04342C',
+            },
+            sidebar: {
+              bg:     '#0c1521',
+              border: 'rgba(255,255,255,0.07)',
+              text:   'rgba(255,255,255,0.55)',
+              muted:  'rgba(255,255,255,0.28)',
+              hover:  'rgba(255,255,255,0.05)',
+              active: 'rgba(29,158,117,0.18)',
+            },
+          },
+          transitionDuration: { 200: '200ms', 250: '250ms' },
+          width: { sidebar: '230px' },
+          minWidth: { sidebar: '230px' },
+          height: { topbar: '56px' },
+        },
+      },
+    }
+  </script>
+
+  <style>
+    /* ── Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'DM Sans', sans-serif; }
+
+    /* ── Custom scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .dark ::-webkit-scrollbar-thumb { background: #334155; }
+
+    /* ── Sidebar scrollbar ultra-thin ── */
+    .sidebar-scroll::-webkit-scrollbar { width: 3px; }
+    .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+
+    /* ── Sidebar nav active bar ── */
+    .nav-active { border-right: 2px solid #1D9E75 !important; }
+
+    /* ── Range input accent ── */
+    input[type=range] { accent-color: #1D9E75; cursor: pointer; }
+
+    /* ── Select arrow ── */
+    .custom-select {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 32px !important;
+    }
+    .dark .custom-select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    }
+
+    /* ── Smooth drawer transition ── */
+    .drawer-transition { transition: transform 250ms cubic-bezier(0.4,0,0.2,1); }
+
+    /* ── Sidebar link ── */
+    .nav-link { border-right: 2px solid transparent; transition: background 150ms, color 150ms; }
+
+    /* ── Mobile sidebar ── */
+    @media (max-width: 1023px) {
+      #sidebar { transform: translateX(-100%); transition: transform 250ms cubic-bezier(0.4,0,0.2,1); position: fixed; z-index: 300; top: 0; bottom: 0; left: 0; }
+      #sidebar.mobile-open { transform: translateX(0); }
+    }
+
+    /* ── Order card hover ── */
+    .order-card { transition: border-color 200ms; }
+    .order-card:hover { border-color: #9FE1CB !important; }
+    .dark .order-card:hover { border-color: #0F6E56 !important; }
+
+    /* ── Chip transition ── */
+    .f-chip { transition: background 150ms, color 150ms, border-color 150ms; cursor: pointer; user-select: none; }
+  </style>
+</head>
+
+<!-- ═══════════════════════════════════════════
+     ROOT  –  toggle `dark` class here
+═══════════════════════════════════════════ -->
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors duration-200">
+
+<!-- ───────── APP SHELL ───────── -->
+<div class="flex h-screen overflow-hidden">
+
+  <!-- ═══════ SIDEBAR ═══════ -->
+  <aside id="sidebar" class="w-[230px] min-w-[230px] bg-[#0c1521] flex flex-col overflow-y-auto sidebar-scroll z-50 lg:relative lg:translate-x-0">
+
+    <!-- Logo -->
+    <div class="px-[18px] py-5 border-b border-[rgba(255,255,255,0.07)] flex-shrink-0">
+      <div class="text-white font-semibold tracking-[2.5px] text-[15px]">ENORSIA</div>
+      <div class="text-[10px] tracking-[1.2px] text-white/30 mt-0.5">Admin Panel</div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 py-2">
+
+      <!-- Access -->
+      <div class="pt-4 pb-1">
+        <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Access</p>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          Admin Users
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+          Role &amp; Permissions
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+      </div>
+
+      <!-- Main -->
+      <div class="pt-4 pb-1">
+        <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Main</p>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 17l4-8 4 4 4-8 4 5"/></svg>
+          Selling Chart
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4"/></svg>
+          Manage Products
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+
+        <!-- ACTIVE -->
+        <a href="#" class="nav-link nav-active flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-accent-200 bg-accent-400/20">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Manage Orders
+        </a>
+
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+          Manage Challan
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+          Manage Packages
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 10h16M4 14h8"/></svg>
+          Manage Lookups
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 3v1m0 16v1M4.22 4.22l.7.7m12.16 12.16l.7.7M3 12h1m16 0h1M4.22 19.78l.7-.7M18.36 5.64l.7-.7"/><circle cx="12" cy="12" r="4"/></svg>
+          Sizes &amp; Colors
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path stroke-linecap="round" d="M12 3v18M3 7l9 4 9-4"/></svg>
+          Categories &amp; Vendor
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 18l4-12 4 6 4-9 4 6"/><path stroke-linecap="round" d="M3 18h18"/></svg>
+          Manage Reports
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="9" cy="9" r="4"/><path stroke-linecap="round" d="M3 20c0-3 2.7-5 6-5s6 2 6 5"/><path stroke-linecap="round" d="M15 5a4 4 0 014 4 4 4 0 01-4 4m0-8h1m0 8c1.5 0 3 .5 4 2"/></svg>
+          Stock Distribute
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+      </div>
+
+      <!-- Warehouse -->
+      <div class="pt-4 pb-1">
+        <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Warehouse</p>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1v-9.5z"/><path stroke-linecap="round" d="M9 21V12h6v9"/></svg>
+          Manage WHM
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M2 11h20M8 7V5a2 2 0 014 0v2"/></svg>
+          Manage Stock
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path stroke-linecap="round" d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
+          Manage Package
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90">
+          <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 18l4-12 4 6 4-9 4 6"/><path stroke-linecap="round" d="M3 18h18"/></svg>
+          Manage Reports
+          <svg class="w-3 h-3 ml-auto opacity-40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+      </div>
+
+    </nav>
+  </aside>
+
+  <!-- ═══════ MAIN AREA ═══════ -->
+  <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+
+    <!-- ── TOPBAR ── -->
+    <header class="h-14 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-5 flex-shrink-0 gap-3">
+
+      <!-- Left: hamburger + breadcrumb -->
+      <div class="flex items-center gap-3 min-w-0">
+        <!-- Mobile hamburger -->
+        <button onclick="toggleSidebar()" class="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="text-xs text-slate-400 dark:text-slate-500 hidden sm:block">
+          online store
+          <span class="mx-1.5 text-slate-300 dark:text-slate-600">›</span>
+          enorsia orders
+          <span class="mx-1.5 text-slate-300 dark:text-slate-600">›</span>
+          <span class="text-slate-700 dark:text-slate-200 font-medium">manage orders</span>
+        </div>
+        <div class="sm:hidden text-sm font-medium text-slate-700 dark:text-slate-200">Manage Orders</div>
+      </div>
+
+      <!-- Right: badge + dark mode + avatar -->
+      <div class="flex items-center gap-2.5 flex-shrink-0">
+        <div class="hidden sm:flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l-3-3m3 3l3-3"/></svg>
+          4 shipped today
+        </div>
+
+        <!-- Dark mode toggle -->
+        <button onclick="toggleDark()" id="darkBtn" class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Toggle dark mode">
+          <svg id="iconSun" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path stroke-linecap="round" d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <svg id="iconMoon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        </button>
+
+        <!-- Notification bell -->
+        <button class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors relative">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+          <span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+        </button>
+
+        <!-- Admin avatar -->
+        <div class="w-8 h-8 rounded-full bg-accent-400 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">AD</div>
+      </div>
+    </header>
+
+    <!-- ── PAGE CONTENT (scrollable) ── -->
+    <main class="flex-1 overflow-y-auto p-5 lg:p-6">
+
+      <!-- ── STAT CARDS ── -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <!-- Stat: Total Orders -->
+        <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mb-1.5">Total orders</p>
+          <p class="text-2xl font-semibold text-slate-800 dark:text-slate-100">128</p>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-accent-400 inline-block"></span>+12 this week
+          </p>
+        </div>
+        <!-- Stat: Revenue -->
+        <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mb-1.5">Revenue</p>
+          <p class="text-2xl font-semibold text-slate-800 dark:text-slate-100">£3,842</p>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-accent-400 inline-block"></span>this month
+          </p>
+        </div>
+        <!-- Stat: Shipped -->
+        <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mb-1.5">Shipped</p>
+          <p class="text-2xl font-semibold text-slate-800 dark:text-slate-100">94</p>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block"></span>73% of total
+          </p>
+        </div>
+        <!-- Stat: Pending -->
+        <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mb-1.5">Pending</p>
+          <p class="text-2xl font-semibold text-slate-800 dark:text-slate-100">8</p>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block"></span>needs action
+          </p>
+        </div>
+      </div>
+
+      <!-- ── TOOLBAR ── -->
+      <div class="flex flex-wrap items-center gap-2.5 mb-3">
+        <!-- Search -->
+        <div class="relative flex-1 min-w-[180px]">
+          <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" placeholder="Search order ID, customer, product..."
+            class="w-full pl-9 pr-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-accent-400 dark:focus:border-accent-400 transition-colors" />
+        </div>
+
+        <!-- Filter button -->
+        <button onclick="openDrawer()" id="filterBtn"
+          class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 4h18M7 8h10M11 12h2"/></svg>
+          Filters
+          <span id="filterBadge" class="hidden bg-accent-400 text-white text-[9px] font-semibold min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">0</span>
+        </button>
+
+        <!-- Export -->
+        <button class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 3v12M8 11l4 4 4-4"/><path stroke-linecap="round" d="M3 18h18"/></svg>
+          Export
+        </button>
+
+        <!-- Track orders -->
+        <button class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><circle cx="12" cy="11" r="3"/></svg>
+          Track orders
+        </button>
+      </div>
+
+      <!-- ── ACTIVE FILTER TAGS ── -->
+      <div id="activeTags" class="flex flex-wrap gap-2 mb-3"></div>
+
+      <!-- ── ORDER CARDS ── -->
+      <div class="flex flex-col gap-3" id="ordersList">
+
+        <!-- ════ ORDER CARD TEMPLATE ════
+             Duplicate this block to add more orders.
+             Change: order-id, status chip class, qty, total,
+                     payment status, products, customer info, date.
+        ════════════════════════════════ -->
+
+        <!-- Order 1 -->
+        <div class="order-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 grid grid-cols-[52px_1fr_auto] sm:grid-cols-[56px_1fr_auto] gap-3 items-start">
+          <!-- Thumb -->
+          <div class="w-[52px] h-[62px] sm:w-14 sm:h-16 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-300 dark:text-slate-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" d="M21 15l-5-5L5 21"/></svg>
+          </div>
+          <!-- Info -->
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <span class="font-mono text-[12px] font-medium text-accent-400">#5555976725</span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200">Shipped</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">Qty: 1</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">· N.D.D: No</span>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">£22.50</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">Authorised</span>
+            </div>
+            <div class="mt-2 space-y-0.5">
+              <div class="flex items-start gap-1.5 text-[11.5px] text-slate-500 dark:text-slate-400">
+                <span class="mt-1.5 w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 flex-shrink-0"></span>
+                Mens Navy Classic Print Stripe Sweatshirt (MS3444328)
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 mt-2 text-[11.5px] text-slate-500 dark:text-slate-400">
+              <div class="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-[8px] font-semibold text-blue-600 dark:text-blue-300 flex-shrink-0">JJ</div>
+              jude jude · 07446284714 · Manchester, M9 8QH
+            </div>
+          </div>
+          <!-- Actions -->
+          <div class="flex flex-col items-end gap-2 flex-shrink-0">
+            <span class="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">Apr 6, 12:33 AM</span>
+            <div class="flex gap-1">
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-900/40 hover:border-accent-200 transition-colors" title="Approve">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg>
+              </button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="View">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              </button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="Edit">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-200 transition-colors" title="Delete">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Order 2 -->
+        <div class="order-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 grid grid-cols-[52px_1fr_auto] sm:grid-cols-[56px_1fr_auto] gap-3 items-start">
+          <div class="w-[52px] h-[62px] sm:w-14 sm:h-16 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-300 dark:text-slate-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" d="M21 15l-5-5L5 21"/></svg>
+          </div>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <span class="font-mono text-[12px] font-medium text-accent-400">#7958515729</span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200">Shipped</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">Qty: 2</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">· N.D.D: No</span>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">£27.52</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">Authorised</span>
+            </div>
+            <div class="mt-2 space-y-0.5">
+              <div class="flex items-start gap-1.5 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="mt-1.5 w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 flex-shrink-0"></span>Womens Blue Zip Hem Leggings (WA3265448)</div>
+              <div class="flex items-start gap-1.5 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="mt-1.5 w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 flex-shrink-0"></span>White Halter Neck Ribbed Cami Vest Top (WS3152140)</div>
+            </div>
+            <div class="flex items-center gap-1.5 mt-2 text-[11.5px] text-slate-500 dark:text-slate-400">
+              <div class="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center text-[8px] font-semibold text-purple-600 dark:text-purple-300 flex-shrink-0">IL</div>
+              Ivelina L · 07494182066 · London, SE9 6BU
+            </div>
+          </div>
+          <div class="flex flex-col items-end gap-2 flex-shrink-0">
+            <span class="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">Apr 5, 11:32 PM</span>
+            <div class="flex gap-1">
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-900/40 hover:border-accent-200 transition-colors" title="Approve"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="View"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="Edit"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-200 transition-colors" title="Delete"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Order 3 -->
+        <div class="order-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 grid grid-cols-[52px_1fr_auto] sm:grid-cols-[56px_1fr_auto] gap-3 items-start">
+          <div class="w-[52px] h-[62px] sm:w-14 sm:h-16 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-300 dark:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" d="M21 15l-5-5L5 21"/></svg></div>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <span class="font-mono text-[12px] font-medium text-accent-400">#5473360077</span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200">Shipped</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">Qty: 1</span>
+            </div>
+            <div class="flex items-baseline gap-2"><span class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">£28.00</span><span class="text-[11px] text-slate-400 dark:text-slate-500">Authorised</span></div>
+            <div class="mt-2"><div class="flex items-start gap-1.5 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="mt-1.5 w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 flex-shrink-0"></span>Blue Band Collar Linen Shirt (MS31252232)</div></div>
+            <div class="flex items-center gap-1.5 mt-2 text-[11.5px] text-slate-500 dark:text-slate-400"><div class="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center text-[8px] font-semibold text-orange-600 dark:text-orange-300 flex-shrink-0">SG</div>Said Guenaoui · 07732942923 · Norwich, NR3 2FE</div>
+          </div>
+          <div class="flex flex-col items-end gap-2 flex-shrink-0">
+            <span class="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">Apr 5, 10:06 PM</span>
+            <div class="flex gap-1">
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-900/40 hover:border-accent-200 transition-colors" title="Approve"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="View"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="Edit"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-200 transition-colors" title="Delete"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Order 4 – PENDING -->
+        <div class="order-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 grid grid-cols-[52px_1fr_auto] sm:grid-cols-[56px_1fr_auto] gap-3 items-start">
+          <div class="w-[52px] h-[62px] sm:w-14 sm:h-16 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-300 dark:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" d="M21 15l-5-5L5 21"/></svg></div>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <span class="font-mono text-[12px] font-medium text-accent-400">#5956056041</span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300">Pending</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">Qty: 2</span>
+            </div>
+            <div class="flex items-baseline gap-2"><span class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">£18.00</span><span class="text-[11px] text-slate-400 dark:text-slate-500">Authorised</span></div>
+            <div class="mt-2 space-y-0.5">
+              <div class="flex items-start gap-1.5 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="mt-1.5 w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 flex-shrink-0"></span>Orange Wave Printed Vest Tank Top (WS3152130)</div>
+              <div class="flex items-start gap-1.5 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="mt-1.5 w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 flex-shrink-0"></span>Pink Wave Printed Vest Tank Top (WS3152130)</div>
+            </div>
+            <div class="flex items-center gap-1.5 mt-2 text-[11.5px] text-slate-500 dark:text-slate-400"><div class="w-5 h-5 rounded-full bg-pink-100 dark:bg-pink-900/50 flex items-center justify-center text-[8px] font-semibold text-pink-600 dark:text-pink-300 flex-shrink-0">KM</div>Kathleen McKay · 07765053966 · Johnstone, PA6 7NN</div>
+          </div>
+          <div class="flex flex-col items-end gap-2 flex-shrink-0">
+            <span class="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">Apr 5, 08:53 AM</span>
+            <div class="flex gap-1">
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-900/40 hover:border-accent-200 transition-colors" title="Approve"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="View"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="Edit"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-200 transition-colors" title="Delete"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Order 5 – CANCELLED -->
+        <div class="order-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 grid grid-cols-[52px_1fr_auto] sm:grid-cols-[56px_1fr_auto] gap-3 items-start">
+          <div class="w-[52px] h-[62px] sm:w-14 sm:h-16 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-300 dark:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" d="M21 15l-5-5L5 21"/></svg></div>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <span class="font-mono text-[12px] font-medium text-accent-400">#6962324408</span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-900/40 text-red-600 dark:text-red-300">Cancelled</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">Qty: 6</span>
+            </div>
+            <div class="flex items-baseline gap-2"><span class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">£118.50</span><span class="text-[11px] text-slate-400 dark:text-slate-500">Authorised</span></div>
+            <div class="mt-2 space-y-0.5">
+              <div class="flex items-start gap-1.5 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="mt-1.5 w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 flex-shrink-0"></span>Men Sky Button Down Collar Long Sleeve Shirt (MS31252246)</div>
+              <div class="flex items-start gap-1.5 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="mt-1.5 w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 flex-shrink-0"></span>Mens Grey Regular Fit Chino Trouser (MS4132I771)</div>
+            </div>
+            <div class="flex items-center gap-1.5 mt-2 text-[11.5px] text-slate-500 dark:text-slate-400"><div class="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-[8px] font-semibold text-indigo-600 dark:text-indigo-300 flex-shrink-0">OA</div>Doris Abiola Adekeye · 07415801039 · Salford, M53U</div>
+          </div>
+          <div class="flex flex-col items-end gap-2 flex-shrink-0">
+            <span class="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">Apr 4, 09:15 PM</span>
+            <div class="flex gap-1">
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-900/40 hover:border-accent-200 transition-colors" title="Approve"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="View"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="Edit"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+              <button class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-200 transition-colors" title="Delete"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /orders-list -->
+    </main>
+  </div><!-- /main-area -->
+</div><!-- /app-shell -->
+
+
+<!-- ══════════════════════════════
+     FILTER DRAWER
+══════════════════════════════ -->
+<!-- Backdrop -->
+<div id="drawerBackdrop" onclick="closeDrawer()" class="hidden fixed inset-0 bg-black/25 dark:bg-black/50 z-[200] transition-opacity"></div>
+
+<!-- Drawer panel -->
+<div id="filterDrawer"
+  class="fixed top-0 right-0 bottom-0 w-full sm:w-[340px] bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col z-[201] drawer-transition translate-x-full">
+
+  <!-- Head -->
+  <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+    <div class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 dark:text-slate-100">
+      <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 4h18M7 8h10M11 12h2"/></svg>
+      Filters
+    </div>
+    <button onclick="closeDrawer()" class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-200 transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <!-- Body (scrollable) -->
+  <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+    <!-- Search -->
+    <div>
+      <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Search</p>
+      <div class="relative">
+        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" placeholder="Order ID, customer name..."
+          class="w-full pl-9 pr-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-accent-400 transition-colors" />
+      </div>
+    </div>
+
+    <hr class="border-slate-200 dark:border-slate-700" />
+
+    <!-- Order Status -->
+    <div>
+      <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Order status</p>
+      <div class="flex flex-wrap gap-2">
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'status')">All</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'status')">Shipped</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'status')">Pending</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'status')">Processing</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'status')">Cancelled</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'status')">Returned</button>
+      </div>
+    </div>
+
+    <hr class="border-slate-200 dark:border-slate-700" />
+
+    <!-- Payment Status -->
+    <div>
+      <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Payment status</p>
+      <div class="flex flex-wrap gap-2">
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'payment')">Any</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'payment')">Authorised</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'payment')">Paid</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'payment')">Refunded</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'payment')">Failed</button>
+      </div>
+    </div>
+
+    <hr class="border-slate-200 dark:border-slate-700" />
+
+    <!-- Date Range -->
+    <div>
+      <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Date range</p>
+      <div class="grid grid-cols-2 gap-2.5">
+        <div>
+          <label class="text-[10px] text-slate-400 dark:text-slate-500 block mb-1">From</label>
+          <input type="date" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" />
+        </div>
+        <div>
+          <label class="text-[10px] text-slate-400 dark:text-slate-500 block mb-1">To</label>
+          <input type="date" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" />
+        </div>
+      </div>
+    </div>
+
+    <hr class="border-slate-200 dark:border-slate-700" />
+
+    <!-- Max Order Total -->
+    <div>
+      <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Max order total</p>
+      <div class="flex items-center gap-3">
+        <span class="text-[12px] text-slate-400 dark:text-slate-500">£0</span>
+        <input type="range" min="0" max="500" value="500" step="10" id="maxRange"
+          oninput="document.getElementById('rangeOut').textContent='£'+this.value"
+          class="flex-1 h-1 rounded-full" />
+        <span class="text-[13px] font-medium text-slate-700 dark:text-slate-200 min-w-[44px] text-right" id="rangeOut">£500</span>
+      </div>
+    </div>
+
+    <hr class="border-slate-200 dark:border-slate-700" />
+
+    <!-- Delivery Type -->
+    <div>
+      <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Delivery type</p>
+      <div class="flex flex-wrap gap-2">
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'delivery')">Any</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'delivery')">Standard</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'delivery')">Express</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'delivery')">Next day</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'delivery')">Click &amp; Collect</button>
+      </div>
+    </div>
+
+    <hr class="border-slate-200 dark:border-slate-700" />
+
+    <!-- Customer Type -->
+    <div>
+      <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Customer type</p>
+      <div class="flex flex-wrap gap-2">
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'customer')">All</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'customer')">Guest</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'customer')">Registered</button>
+      </div>
+    </div>
+
+    <hr class="border-slate-200 dark:border-slate-700" />
+
+    <!-- N.D.D -->
+    <div>
+      <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Next-day delivery (N.D.D)</p>
+      <div class="flex flex-wrap gap-2">
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'ndd')">Any</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'ndd')">Yes</button>
+        <button class="f-chip text-[12px] px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:border-accent-200 hover:text-accent-600 dark:hover:text-accent-200" onclick="toggleChip(this,'ndd')">No</button>
+      </div>
+    </div>
+
+    <hr class="border-slate-200 dark:border-slate-700" />
+
+    <!-- Sort By -->
+    <div>
+      <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Sort by</p>
+      <select class="custom-select w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors">
+        <option>Newest first</option>
+        <option>Oldest first</option>
+        <option>Total: high to low</option>
+        <option>Total: low to high</option>
+        <option>Customer name A–Z</option>
+      </select>
+    </div>
+
+    <hr class="border-slate-200 dark:border-slate-700" />
+
+    <!-- Export & Tools -->
+    <div>
+      <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Export &amp; tools</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button class="flex items-center justify-center gap-2 py-2.5 text-[12px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 3v12M8 11l4 4 4-4"/><path stroke-linecap="round" d="M3 18h18"/></svg>
+          Export Excel
+        </button>
+        <button class="flex items-center justify-center gap-2 py-2.5 text-[12px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><circle cx="12" cy="11" r="3"/></svg>
+          Track orders
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /drawer body -->
+
+  <!-- Footer -->
+  <div class="flex gap-2.5 px-5 py-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
+    <button onclick="resetFilters()"
+      class="flex-1 py-2.5 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors font-medium">
+      Reset all
+    </button>
+    <button onclick="applyFilters()"
+      class="flex-[2] py-2.5 text-[13px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
+      Apply filters
+    </button>
+  </div>
+</div><!-- /filter drawer -->
+
+
+<!-- Mobile sidebar backdrop -->
+<div id="sidebarBackdrop" onclick="closeSidebar()" class="hidden fixed inset-0 bg-black/40 z-[200] lg:hidden"></div>
+
+
+<script>
+  /* ── Dark Mode ── */
+  var isDark = localStorage.getItem('enorsia-dark') === 'true';
+  applyDark(isDark);
+
+  function applyDark(dark) {
+    document.documentElement.classList.toggle('dark', dark);
+    document.getElementById('iconSun').classList.toggle('hidden', !dark);
+    document.getElementById('iconMoon').classList.toggle('hidden', dark);
+  }
+
+  function toggleDark() {
+    isDark = !isDark;
+    localStorage.setItem('enorsia-dark', isDark);
+    applyDark(isDark);
+  }
+
+  /* ── Mobile Sidebar ── */
+  function toggleSidebar() {
+    var s = document.getElementById('sidebar');
+    var b = document.getElementById('sidebarBackdrop');
+    var open = s.classList.contains('mobile-open');
+    s.classList.toggle('mobile-open', !open);
+    b.classList.toggle('hidden', open);
+  }
+  function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('mobile-open');
+    document.getElementById('sidebarBackdrop').classList.add('hidden');
+  }
+
+  /* ── Filter Drawer ── */
+  function openDrawer() {
+    document.getElementById('filterDrawer').classList.remove('translate-x-full');
+    document.getElementById('drawerBackdrop').classList.remove('hidden');
+  }
+  function closeDrawer() {
+    document.getElementById('filterDrawer').classList.add('translate-x-full');
+    document.getElementById('drawerBackdrop').classList.add('hidden');
+  }
+
+  /* ── Filter Logic ── */
+  var activeFilters = {};
+
+  function toggleChip(el, group) {
+    var parent = el.parentElement;
+    var chips = parent.querySelectorAll('.f-chip');
+    var label = el.textContent.trim();
+    var isReset = label === 'All' || label === 'Any';
+
+    if (isReset) {
+      chips.forEach(function(c) { deactivateChip(c); });
+      if (!isChipActive(el)) {
+        activateChip(el);
+        activeFilters[group] = label;
+      } else {
+        delete activeFilters[group];
+      }
+    } else {
+      var resetChip = Array.from(chips).find(function(c) { return c.textContent.trim() === 'All' || c.textContent.trim() === 'Any'; });
+      if (resetChip) deactivateChip(resetChip);
+      if (isChipActive(el)) {
+        deactivateChip(el);
+      } else {
+        activateChip(el);
+      }
+      var sel = Array.from(chips).filter(isChipActive).map(function(c) { return c.textContent.trim(); });
+      if (sel.length) activeFilters[group] = sel.join(', ');
+      else delete activeFilters[group];
+    }
+  }
+
+  function isChipActive(el) {
+    return el.classList.contains('chip-active');
+  }
+
+  function activateChip(el) {
+    el.classList.add('chip-active');
+    el.classList.remove('border-slate-200', 'dark:border-slate-600', 'bg-slate-50', 'dark:bg-slate-700', 'text-slate-500', 'dark:text-slate-400');
+    el.classList.add('border-accent-200', 'bg-accent-50', 'text-accent-600', 'dark:bg-accent-800/40', 'dark:text-accent-200', 'dark:border-accent-600', 'font-medium');
+  }
+
+  function deactivateChip(el) {
+    el.classList.remove('chip-active', 'border-accent-200', 'bg-accent-50', 'text-accent-600', 'dark:bg-accent-800/40', 'dark:text-accent-200', 'dark:border-accent-600', 'font-medium');
+    el.classList.add('border-slate-200', 'dark:border-slate-600', 'bg-slate-50', 'dark:bg-slate-700', 'text-slate-500', 'dark:text-slate-400');
+  }
+
+  function applyFilters() {
+    renderTags();
+    updateBadge();
+    closeDrawer();
+  }
+
+  function renderTags() {
+    var wrap = document.getElementById('activeTags');
+    wrap.innerHTML = '';
+    Object.keys(activeFilters).forEach(function(k) {
+      var tag = document.createElement('div');
+      tag.className = 'flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700';
+      tag.innerHTML = '<span class="font-semibold capitalize">' + k + ':</span> ' + activeFilters[k]
+        + ' <button onclick="removeTag(\'' + k + '\')" class="ml-0.5 text-[13px] leading-none opacity-60 hover:opacity-100">&times;</button>';
+      wrap.appendChild(tag);
+    });
+  }
+
+  function removeTag(k) {
+    delete activeFilters[k];
+    renderTags();
+    updateBadge();
+    document.querySelectorAll('.chip-active').forEach(deactivateChip);
+  }
+
+  function updateBadge() {
+    var n = Object.keys(activeFilters).length;
+    var badge = document.getElementById('filterBadge');
+    badge.classList.toggle('hidden', n === 0);
+    badge.textContent = n;
+    document.getElementById('filterBtn').classList.toggle(
+      'bg-accent-50', n > 0
+    );
+    document.getElementById('filterBtn').classList.toggle(
+      'dark:bg-accent-800/30', n > 0
+    );
+    document.getElementById('filterBtn').classList.toggle(
+      'border-accent-200', n > 0
+    );
+    document.getElementById('filterBtn').classList.toggle(
+      'text-accent-600', n > 0
+    );
+  }
+
+  function resetFilters() {
+    activeFilters = {};
+    document.querySelectorAll('.chip-active').forEach(deactivateChip);
+    document.getElementById('maxRange').value = 500;
+    document.getElementById('rangeOut').textContent = '£500';
+    renderTags();
+    updateBadge();
+  }
+</script>
+</body>
+</html>

@@ -5,11 +5,25 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js'],
+            input: [
+                // ── Core ──
+                'resources/css/app.css',
+                'resources/js/app.js',
+                'resources/js/pages/users.js',
+                'resources/js/pages/discounts.js',
+            ],
             refresh: true,
         }),
         tailwindcss(),
     ],
+    resolve: {
+        alias: {
+            '$': 'jquery',
+            'jQuery': 'jquery',
+            'jquery-validation': 'jquery-validation',
+            'sweetalert2': 'sweetalert2',
+        },
+    },
     server: {
         watch: {
             ignored: ['**/storage/framework/views/**'],

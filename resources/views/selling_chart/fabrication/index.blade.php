@@ -1,104 +1,136 @@
-@extends('master.app')
+@extends('layouts.app')
+
+@section('title', 'Fabrication')
 
 @section('content')
-    <div class="top_title">
-        @include('master.breadcrumb', [
-            'title' => 'Febrication',
-            'icon' => '',
-            'sub_title' => [
-                'Manage Selling Chart' => '',
-                'Febrication' => route('admin.selling_chart.fabrication.index'),
-            ],
-        ])
-        @can('general.fabrication.create')
+    <div class="p-5 lg:p-6">
+        <!-- ── PAGE HEADER ── -->
+        <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
             <div>
-                <a href="{{ route('admin.selling_chart.fabrication.create') }}" class="btn btn-outline-secondary">
-                    Create <span><i class="bi bi-plus-lg me-0"></i></span>
-                </a>
+                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Fabrication</h1>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Manage fabrication lookup names</p>
             </div>
-        @endcan
-    </div>
-    <form method="GET" action="{{ route('admin.selling_chart.fabrication.index') }}">
-        <div class="card" id="filterSection">
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-12">
-                        <div class="filter_close_sec border-bottom">
-                            <h4 class="mb-0"><i class="bi bi-sliders"></i>Filter</h4>
-                        </div>
-                    </div>
+            @can('general.fabrication.create')
+                <a href="{{ route('admin.selling_chart.fabrication.create') }}"
+                   class="flex items-center gap-2 px-4 py-2 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" d="M12 5v14M5 12h14"/>
+                    </svg>
+                    Create Fabrication
+                </a>
+            @endcan
+        </div>
 
-                    <div class="col-12 col-md-3">
-                        <div class="form-group mb-3 mb-md-0 new_select_field new_same_item d-flex flex-wrap">
-                            <input type="text" name="name" id="name" class="form-control"
-                                placeholder="Search by name" value="{{ request('name') }}" />
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-2">
-                        <select name="status" class="form-select" data-choices>
-                            <option value="">Status</option>
+        <!-- ── FILTER TOOLBAR ── -->
+        <form method="GET" action="{{ route('admin.selling_chart.fabrication.index') }}">
+            {{--
+                Mobile  (<640px): name full-width, status + buttons row (status flex-1, buttons shrink-0)
+                sm+ (≥640px): single row — name flex-1, status w-36, search + reset auto
+            --}}
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-5">
+
+                <!-- Name input -->
+                <div class="relative flex-1 min-w-0">
+                    <svg class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                         fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="7"/>
+                        <path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    <input type="text" name="name" placeholder="Search by name…"
+                           value="{{ request('name') }}"
+                           class="w-full pl-8 pr-3 h-9 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-accent-400 dark:focus:border-accent-400 transition-colors" />
+                </div>
+
+                <!-- Second row on mobile: status + buttons side-by-side -->
+                <div class="flex items-center gap-2 sm:contents">
+
+                    <!-- Status filter -->
+                    <div class="flex-1 sm:flex-none sm:w-36">
+                        <select name="status" class="tom-select w-full h-9" data-placeholder="Status">
+                            <option value="">All Status</option>
                             <option value="1" {{ request('status') === '1' ? 'selected' : '' }}>Active</option>
                             <option value="0" {{ request('status') === '0' ? 'selected' : '' }}>Inactive</option>
                         </select>
                     </div>
-                    <div class="col-12 col-md-7 text-end mt-2 mt-md-0">
-                        <div class="flex-center">
-                            <a href="{{ route('admin.selling_chart.fabrication.index') }}"
-                                class="btn btn-outline-danger flex-center mx-1"><i class="bi bi-arrow-clockwise ms-0"></i>
-                                Reset</a>
-                            <button type="submit" class="btn btn-primary mx-1"><i class="fa fa-filter ms-0"
-                                    aria-hidden="true"></i>
-                                Search</button>
-                        </div>
-                    </div>
+
+                    <!-- Search button -->
+                    <button type="submit"
+                            class="inline-flex items-center gap-1.5 px-3 h-9 text-[13px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors whitespace-nowrap shrink-0">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <circle cx="11" cy="11" r="7"/>
+                            <path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+                        </svg>
+                        <span>Search</span>
+                    </button>
+
+                    <!-- Reset button -->
+                    <a href="{{ route('admin.selling_chart.fabrication.index') }}"
+                       class="inline-flex items-center gap-1.5 px-3 h-9 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        <span>Reset</span>
+                    </a>
+
                 </div>
             </div>
-        </div>
-    </form>
-    <div class="card shadow-sm mt-3" style="overflow: hidden;">
-        <div class="card-body px-0 pt-0">
-            <div class="table-responsive">
-                <table class="table align-middle mb-0 table-hover table-centered">
-                    <thead class="bg-light-subtle">
-                        <tr>
-                            <th width="50">#SL</th>
-                            <th width="700">Name</th>
-                            <th width="200" class="text-center">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (!$lookup_names->isEmpty())
-                            @foreach ($lookup_names as $lookup)
-                                <tr>
-                                    <td>{{ $start + $loop->index }}</td>
-                                    <td>{{ $lookup->name }}</td>
-                                    <td class="text-center">
-                                        <div class="d-inline-flex text-center text-md-start text-nowrap">
-                                            @if ($lookup->status == 1)
-                                                <span class="badge bg-success">Active</span>
-                                            @else
-                                                <span class="badge bg-danger">Inactive</span>
-                                            @endif
-                                        </div>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        @else
-                            <tr>
-                                <td colspan="9">
-                                    <h5 class="text-danger text-center text-uppercase py-2 mb-0">No Result found.</h5>
-                                </td>
-                            </tr>
-                        @endif
-                    </tbody>
-                </table>
-            </div>
-            {!! optional($lookup_names)->links('master.custom-paginator') !!}
-        </div>
-    </div>
+        </form>
 
+        <!-- ── FABRICATION LIST (CARD/GRID STYLE) ── -->
+        <div class="flex flex-col gap-3">
+            @if (!$lookup_names->isEmpty())
+                @foreach ($lookup_names as $lookup)
+                    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 grid grid-cols-[1fr_auto] items-center gap-3">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 mb-1">
+                                <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{{ $lookup->name }}</h3>
+                                @if ($lookup->status == 1)
+                                    <span class="badge-custom badge-green">Active</span>
+                                @else
+                                    <span class="badge-custom badge-red">Inactive</span>
+                                @endif
+                            </div>
+                            @if(!empty($lookup->created_at))
+                                <p class="text-[12px] text-slate-400 dark:text-slate-500">Created {{ \Illuminate\Support\Carbon::parse($lookup->created_at)->diffForHumans() }}</p>
+                            @endif
+                        </div>
+
+                        <div class="flex gap-2 items-center">
+                            @can('general.fabrication.edit')
+                                <a href="{{ route('admin.selling_chart.fabrication.edit', $lookup->id) }}" title="Edit"
+                                   class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                    </svg>
+                                </a>
+                            @endcan
+
+                            @can('general.fabrication.delete')
+                                <button onclick="deleteData({{ $lookup->id }})" title="Delete"
+                                        class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-200 transition-colors">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                                <form id="delete-form-{{ $lookup->id }}" method="POST" action="{{ route('admin.selling_chart.fabrication.destroy', $lookup->id) }}" style="display: none;">
+                                    @csrf
+                                    @method('DELETE')
+                                </form>
+                            @endcan
+                        </div>
+                    </div>
+                @endforeach
+            @else
+                <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center">
+                    <p class="text-sm text-slate-400 dark:text-slate-500">No fabrication records found.</p>
+                </div>
+            @endif
+        </div>
+
+        <!-- ── PAGINATION ── -->
+        @if($lookup_names && $lookup_names->hasPages())
+            @include('master.pagination', ['paginator' => $lookup_names])
+        @endif
+    </div>
 @endsection
 
-@push('js')
-    @include('selling_chart.expense.script')
-@endpush

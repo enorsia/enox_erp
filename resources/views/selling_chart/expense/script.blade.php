@@ -1,2 +1,1 @@
-<script>
-</script>
+{{-- Expense scripts handled via Vite --}}

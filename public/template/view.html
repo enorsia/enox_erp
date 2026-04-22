@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enorsia Admin – View Order</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['DM Sans','sans-serif'], mono: ['DM Mono','monospace'] },
+          colors: {
+            accent: { 50:'#E1F5EE',100:'#9FE1CB',200:'#5DCAA5',400:'#1D9E75',600:'#0F6E56',800:'#085041',900:'#04342C' },
+          },
+        },
+      },
+    }
+  </script>
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;font-family:'DM Sans',sans-serif}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+    .dark ::-webkit-scrollbar-thumb{background:#334155}
+    .sidebar-scroll::-webkit-scrollbar{width:3px}
+    .sidebar-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1)}
+    .nav-active{border-right:2px solid #1D9E75!important}
+    .nav-link{border-right:2px solid transparent;transition:background 150ms,color 150ms}
+    @media(max-width:1023px){#sidebar{transform:translateX(-100%);transition:transform 250ms cubic-bezier(0.4,0,0.2,1);position:fixed;z-index:300;top:0;bottom:0;left:0}#sidebar.mobile-open{transform:translateX(0)}}
+    /* view-page specifics */
+    .info-card{background:#fff;border:1px solid #e2e8f0;border-radius:0.875rem;padding:1.25rem}
+    .dark .info-card{background:#1e293b;border-color:#334155}
+    .card-title{font-size:0.8125rem;font-weight:600;color:#1e293b;display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem}
+    .dark .card-title{color:#f1f5f9}
+    .row-label{font-size:11px;color:#94a3b8;font-weight:500;letter-spacing:.4px;margin-bottom:2px}
+    .row-value{font-size:13px;color:#1e293b;font-weight:400}
+    .dark .row-value{color:#e2e8f0}
+    .row-value-mono{font-size:12px;color:#1D9E75;font-family:'DM Mono',monospace;font-weight:500}
+    .kv{margin-bottom:14px}
+    /* status badge */
+    .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px}
+    .badge-shipped{background:#E1F5EE;color:#0F6E56}
+    .badge-pending{background:#FAEEDA;color:#854F0B}
+    .badge-cancelled{background:#FCEBEB;color:#A32D2D}
+    .badge-paid{background:#dcfce7;color:#166534}
+    .badge-auth{background:#dbeafe;color:#1e40af}
+    .dark .badge-shipped{background:rgba(29,158,117,0.2);color:#5DCAA5}
+    .dark .badge-pending{background:rgba(186,117,23,0.2);color:#fbbf24}
+    .dark .badge-cancelled{background:rgba(220,38,38,0.15);color:#f87171}
+    .dark .badge-paid{background:rgba(22,163,74,0.2);color:#4ade80}
+    .dark .badge-auth{background:rgba(59,130,246,0.2);color:#93c5fd}
+    /* timeline */
+    .timeline-item{display:flex;gap:14px;padding-bottom:20px;position:relative}
+    .timeline-item:not(:last-child)::after{content:'';position:absolute;left:13px;top:26px;bottom:0;width:1px;background:#e2e8f0}
+    .dark .timeline-item:not(:last-child)::after{background:#334155}
+    .timeline-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    /* tab nav */
+    .tab-btn{padding:8px 16px;font-size:13px;font-weight:500;border-bottom:2px solid transparent;color:#94a3b8;cursor:pointer;transition:color 150ms,border-color 150ms;white-space:nowrap}
+    .tab-btn.active{color:#1D9E75;border-bottom-color:#1D9E75}
+    .tab-btn:hover:not(.active){color:#475569}
+    .dark .tab-btn:hover:not(.active){color:#94a3b8}
+    /* product row */
+    .prod-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #f1f5f9}
+    .dark .prod-row{border-color:#1e293b}
+    .prod-row:last-child{border-bottom:none;padding-bottom:0}
+    /* print button */
+    @media print{.no-print{display:none!important}.info-card{border:1px solid #e2e8f0!important}}
+    /* action btn */
+    .action-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:all 150ms;border:1px solid}
+  </style>
+</head>
+
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors duration-200">
+<div class="flex h-screen overflow-hidden">
+
+  <!-- ═══════ SIDEBAR ═══════ -->
+  <aside id="sidebar" class="w-[230px] min-w-[230px] bg-[#0c1521] flex flex-col overflow-y-auto sidebar-scroll z-50 lg:relative lg:translate-x-0">
+    <div class="px-[18px] py-5 border-b border-white/[0.07] flex-shrink-0">
+      <div class="text-white font-semibold tracking-[2.5px] text-[15px]">ENORSIA</div>
+      <div class="text-[10px] tracking-[1.2px] text-white/30 mt-0.5">Admin Panel</div>
+    </div>
+    <nav class="flex-1 py-2">
+      <div class="pt-4 pb-1">
+        <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Access</p>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Admin Users</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>Role &amp; Permissions</a>
+      </div>
+      <div class="pt-4 pb-1">
+        <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Main</p>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 17l4-8 4 4 4-8 4 5"/></svg>Selling Chart</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4"/></svg>Manage Products</a>
+        <a href="#" class="nav-link nav-active flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-accent-200 bg-accent-400/20"><svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Manage Orders</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>Manage Packages</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 18l4-12 4 6 4-9 4 6"/><path stroke-linecap="round" d="M3 18h18"/></svg>Manage Reports</a>
+      </div>
+      <div class="pt-4 pb-1">
+        <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Warehouse</p>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1v-9.5z"/></svg>Manage WHM</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M2 11h20"/></svg>Manage Stock</a>
+        <a href="#" class="nav-link flex items-center gap-2.5 px-[18px] py-2 text-[13px] text-white/55 hover:bg-white/5 hover:text-white/90"><svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>Manage Package</a>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- ═══════ MAIN ═══════ -->
+  <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+
+    <!-- TOPBAR -->
+    <header class="h-14 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-5 flex-shrink-0 gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <button onclick="toggleSidebar()" class="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="text-xs text-slate-400 dark:text-slate-500 hidden sm:flex items-center gap-1.5">
+          online store <span class="text-slate-300 dark:text-slate-600">›</span>
+          <a href="#" class="hover:text-accent-400 transition-colors">manage orders</a>
+          <span class="text-slate-300 dark:text-slate-600">›</span>
+          <span class="text-slate-700 dark:text-slate-200 font-medium">#5555976725</span>
+        </div>
+        <div class="sm:hidden text-sm font-medium text-slate-700 dark:text-slate-200">#5555976725</div>
+      </div>
+      <div class="flex items-center gap-2.5 flex-shrink-0">
+        <button onclick="toggleDark()" class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+          <svg id="iconSun" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path stroke-linecap="round" d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <svg id="iconMoon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        </button>
+        <div class="w-8 h-8 rounded-full bg-accent-400 flex items-center justify-center text-white text-xs font-semibold">AD</div>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <main class="flex-1 overflow-y-auto">
+      <div class="max-w-6xl mx-auto px-5 py-6">
+
+        <!-- PAGE HEADER -->
+        <div class="flex items-start justify-between gap-4 mb-5 flex-wrap">
+          <div>
+            <div class="flex items-center gap-3 flex-wrap">
+              <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100 font-mono">#5555976725</h1>
+              <span class="badge badge-shipped">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8l-4-4H8z"/></svg>
+                Shipped
+              </span>
+              <span class="badge badge-auth">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12.75L11.25 15 15 9.75"/><circle cx="12" cy="12" r="9"/></svg>
+                Authorised
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-2">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
+              Created: 6 Apr 2026, 12:33 AM &nbsp;·&nbsp; Last updated: 6 Apr 2026, 02:15 PM
+            </p>
+          </div>
+
+          <!-- Action buttons -->
+          <div class="flex gap-2 flex-wrap no-print">
+            <button class="action-btn border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700" onclick="window.print()">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+              Print
+            </button>
+            <button class="action-btn border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 3v12M8 11l4 4 4-4"/><path stroke-linecap="round" d="M3 18h18"/></svg>
+              Export
+            </button>
+            <button class="action-btn border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              Edit
+            </button>
+            <button class="action-btn border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              Cancel order
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB NAV -->
+        <div class="flex border-b border-slate-200 dark:border-slate-700 mb-5 overflow-x-auto no-print">
+          <button class="tab-btn active" onclick="showTab('overview',this)">Overview</button>
+          <button class="tab-btn" onclick="showTab('timeline',this)">Timeline</button>
+          <button class="tab-btn" onclick="showTab('notes',this)">Notes</button>
+          <button class="tab-btn" onclick="showTab('attachments',this)">Attachments</button>
+        </div>
+
+        <!-- ══════════ TAB: OVERVIEW ══════════ -->
+        <div id="tab-overview">
+          <div class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
+
+            <!-- LEFT -->
+            <div class="space-y-5">
+
+              <!-- Products -->
+              <div class="info-card">
+                <div class="card-title">
+                  <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+                  Products ordered
+                </div>
+
+                <div class="prod-row">
+                  <div class="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-400 flex-shrink-0 border border-slate-200 dark:border-slate-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" d="M21 15l-5-5L5 21"/></svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-slate-700 dark:text-slate-200">Mens Navy Classic Print Stripe Sweatshirt</p>
+                    <div class="flex items-center gap-2 flex-wrap mt-0.5">
+                      <span class="text-xs text-slate-400 font-mono">MS3444328</span>
+                      <span class="text-xs text-slate-400">·</span>
+                      <span class="text-xs text-slate-400">Size: M</span>
+                      <span class="text-xs text-slate-400">·</span>
+                      <span class="text-xs text-slate-400">Color: Navy</span>
+                    </div>
+                  </div>
+                  <div class="text-right flex-shrink-0">
+                    <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 font-mono">£22.50</p>
+                    <p class="text-xs text-slate-400">Qty: 1</p>
+                  </div>
+                </div>
+
+                <!-- Add more prod-row blocks here -->
+
+                <!-- Totals -->
+                <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
+                  <div class="flex justify-between text-sm text-slate-500 dark:text-slate-400"><span>Subtotal</span><span class="font-mono text-slate-700 dark:text-slate-200">£22.50</span></div>
+                  <div class="flex justify-between text-sm text-slate-500 dark:text-slate-400"><span>Delivery (Standard)</span><span class="font-mono text-slate-700 dark:text-slate-200">Free</span></div>
+                  <div class="flex justify-between text-sm text-slate-500 dark:text-slate-400"><span>Discount</span><span class="font-mono text-green-500">–£0.00</span></div>
+                  <div class="flex justify-between text-sm text-slate-500 dark:text-slate-400"><span>VAT (20%)</span><span class="font-mono text-slate-700 dark:text-slate-200">£3.75</span></div>
+                  <hr class="border-slate-100 dark:border-slate-700 my-1" />
+                  <div class="flex justify-between font-semibold"><span class="text-slate-700 dark:text-slate-200">Total</span><span class="font-mono text-accent-400 text-[15px]">£26.25</span></div>
+                </div>
+              </div>
+
+              <!-- Customer -->
+              <div class="info-card">
+                <div class="card-title">
+                  <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                  Customer
+                </div>
+                <div class="flex items-center gap-3 mb-4">
+                  <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-[13px] font-semibold text-blue-600 dark:text-blue-300 flex-shrink-0">JJ</div>
+                  <div>
+                    <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">jude jude</p>
+                    <p class="text-xs text-slate-400">Guest account</p>
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                  <div class="kv"><p class="row-label">Email</p><p class="row-value text-accent-400">jude@example.com</p></div>
+                  <div class="kv"><p class="row-label">Phone</p><p class="row-value">07446284714</p></div>
+                  <div class="kv"><p class="row-label">Customer type</p><p class="row-value">Guest</p></div>
+                  <div class="kv"><p class="row-label">Total orders</p><p class="row-value">1</p></div>
+                </div>
+              </div>
+
+              <!-- Addresses -->
+              <div class="info-card">
+                <div class="card-title">
+                  <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><circle cx="12" cy="11" r="3"/></svg>
+                  Addresses
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div>
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Shipping address</p>
+                    <p class="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">jude jude<br/>Apartment 16 1 Hawkins Close<br/>Manchester, M9 8QH<br/>United Kingdom</p>
+                  </div>
+                  <div>
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Billing address</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 italic">Same as shipping</p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- RIGHT -->
+            <div class="space-y-5">
+
+              <!-- Quick status update -->
+              <div class="info-card no-print">
+                <div class="card-title">
+                  <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  Update status
+                </div>
+                <div class="space-y-2.5">
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-medium block mb-1">Order status</label>
+                    <select class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" style="appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 10px center;padding-right:32px">
+                      <option>Pending</option>
+                      <option>Processing</option>
+                      <option selected>Shipped</option>
+                      <option>Delivered</option>
+                      <option>Cancelled</option>
+                      <option>Returned</option>
+                      <option>Refunded</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-medium block mb-1">Payment status</label>
+                    <select class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" style="appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 10px center;padding-right:32px">
+                      <option>Pending</option>
+                      <option selected>Authorised</option>
+                      <option>Paid</option>
+                      <option>Failed</option>
+                      <option>Refunded</option>
+                    </select>
+                  </div>
+                  <button class="w-full py-2.5 text-[13px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors mt-1">
+                    Save changes
+                  </button>
+                </div>
+              </div>
+
+              <!-- Order info -->
+              <div class="info-card">
+                <div class="card-title">
+                  <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                  Order details
+                </div>
+                <div class="kv"><p class="row-label">Order ID</p><p class="row-value-mono">#5555976725</p></div>
+                <div class="kv"><p class="row-label">Date placed</p><p class="row-value">6 Apr 2026, 12:33 AM</p></div>
+                <div class="kv"><p class="row-label">Sales channel</p><p class="row-value">Online Store</p></div>
+                <div class="kv"><p class="row-label">Priority</p>
+                  <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                    <span class="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block"></span>Normal
+                  </span>
+                </div>
+                <div class="kv"><p class="row-label">N.D.D</p><p class="row-value">No</p></div>
+              </div>
+
+              <!-- Delivery info -->
+              <div class="info-card">
+                <div class="card-title">
+                  <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8l-4-4H8z"/><path stroke-linecap="round" d="M14 4v4h4"/></svg>
+                  Delivery
+                </div>
+                <div class="kv"><p class="row-label">Method</p><p class="row-value">Standard – Free</p></div>
+                <div class="kv"><p class="row-label">Dispatched</p><p class="row-value">6 Apr 2026</p></div>
+                <div class="kv"><p class="row-label">Tracking number</p>
+                  <div class="flex items-center gap-2">
+                    <span class="row-value-mono text-[11px]">JD000000000000000000</span>
+                    <button class="text-slate-300 dark:text-slate-600 hover:text-accent-400 transition-colors" title="Copy">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path stroke-linecap="round" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="kv"><p class="row-label">Warehouse</p><p class="row-value">Main Warehouse</p></div>
+              </div>
+
+              <!-- Payment info -->
+              <div class="info-card">
+                <div class="card-title">
+                  <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><path stroke-linecap="round" d="M1 10h22"/></svg>
+                  Payment
+                </div>
+                <div class="kv"><p class="row-label">Method</p><p class="row-value">Credit / Debit card</p></div>
+                <div class="kv"><p class="row-label">Status</p><span class="badge badge-auth text-[11px]">Authorised</span></div>
+                <div class="kv"><p class="row-label">Transaction ID</p><p class="row-value-mono text-[11px]">txn_3P8kM2Kz7eF9d</p></div>
+                <div class="kv mb-0"><p class="row-label">Discount code</p><p class="row-value text-slate-400 italic">None</p></div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════ TAB: TIMELINE ══════════ -->
+        <div id="tab-timeline" class="hidden">
+          <div class="info-card max-w-2xl">
+            <div class="card-title">
+              <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Order timeline
+            </div>
+
+            <div class="timeline-item">
+              <div class="timeline-dot bg-accent-400 text-white"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg></div>
+              <div class="pt-0.5">
+                <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Order shipped</p>
+                <p class="text-xs text-slate-400 mt-0.5">Dispatched from Main Warehouse · JD000000000000000000</p>
+                <p class="text-[11px] text-slate-300 dark:text-slate-600 mt-1">6 Apr 2026, 02:15 PM</p>
+              </div>
+            </div>
+
+            <div class="timeline-item">
+              <div class="timeline-dot bg-blue-100 dark:bg-blue-900/40 text-blue-500"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><path stroke-linecap="round" d="M1 10h22"/></svg></div>
+              <div class="pt-0.5">
+                <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Payment authorised</p>
+                <p class="text-xs text-slate-400 mt-0.5">Transaction ID: txn_3P8kM2Kz7eF9d</p>
+                <p class="text-[11px] text-slate-300 dark:text-slate-600 mt-1">6 Apr 2026, 12:34 AM</p>
+              </div>
+            </div>
+
+            <div class="timeline-item">
+              <div class="timeline-dot bg-amber-100 dark:bg-amber-900/40 text-amber-500"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+              <div class="pt-0.5">
+                <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Order placed</p>
+                <p class="text-xs text-slate-400 mt-0.5">Order #5555976725 received from Online Store</p>
+                <p class="text-[11px] text-slate-300 dark:text-slate-600 mt-1">6 Apr 2026, 12:33 AM</p>
+              </div>
+            </div>
+
+            <!-- Add note -->
+            <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 no-print">
+              <p class="text-[11px] font-semibold text-slate-400 mb-2">Add a note to the timeline</p>
+              <textarea class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors resize-none" rows="2" placeholder="Type a note..."></textarea>
+              <button class="mt-2 px-4 py-2 text-[13px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">Add note</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════ TAB: NOTES ══════════ -->
+        <div id="tab-notes" class="hidden">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-3xl">
+            <div class="info-card">
+              <div class="card-title">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M7 8h10M7 12h6m-6 4h4"/></svg>
+                Internal notes
+              </div>
+              <p class="text-sm text-slate-500 dark:text-slate-400 italic">No internal notes on this order.</p>
+              <textarea class="mt-3 w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors resize-none no-print" rows="3" placeholder="Add a private note..."></textarea>
+              <button class="mt-2 px-4 py-2 text-[13px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors no-print">Save note</button>
+            </div>
+            <div class="info-card">
+              <div class="card-title">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                Customer message
+              </div>
+              <p class="text-sm text-slate-500 dark:text-slate-400 italic">No customer-facing message set.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════ TAB: ATTACHMENTS ══════════ -->
+        <div id="tab-attachments" class="hidden">
+          <div class="info-card max-w-2xl">
+            <div class="card-title">
+              <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+              Attachments
+            </div>
+            <p class="text-sm text-slate-400 italic mb-4">No attachments uploaded for this order.</p>
+            <div class="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-6 text-center cursor-pointer hover:border-accent-200 hover:bg-accent-50/30 dark:hover:bg-accent-900/10 transition-colors no-print">
+              <svg class="w-7 h-7 text-slate-300 dark:text-slate-600 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+              <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">Upload files</p>
+              <p class="text-xs text-slate-400 mt-0.5">PNG, JPG, PDF up to 10MB</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="sidebarBackdrop" onclick="closeSidebar()" class="hidden fixed inset-0 bg-black/40 z-[200] lg:hidden"></div>
+
+<script>
+  var isDark = localStorage.getItem('enorsia-dark') === 'true';
+  applyDark(isDark);
+  function applyDark(dark) {
+    document.documentElement.classList.toggle('dark', dark);
+    document.getElementById('iconSun').classList.toggle('hidden', !dark);
+    document.getElementById('iconMoon').classList.toggle('hidden', dark);
+  }
+  function toggleDark() { isDark = !isDark; localStorage.setItem('enorsia-dark', isDark); applyDark(isDark); }
+  function toggleSidebar() {
+    var s = document.getElementById('sidebar'), b = document.getElementById('sidebarBackdrop');
+    var open = s.classList.contains('mobile-open');
+    s.classList.toggle('mobile-open', !open); b.classList.toggle('hidden', open);
+  }
+  function closeSidebar() { document.getElementById('sidebar').classList.remove('mobile-open'); document.getElementById('sidebarBackdrop').classList.add('hidden'); }
+
+  var tabs = ['overview','timeline','notes','attachments'];
+  function showTab(name, btn) {
+    tabs.forEach(function(t) {
+      document.getElementById('tab-'+t).classList.add('hidden');
+    });
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('tab-'+name).classList.remove('hidden');
+    btn.classList.add('active');
+  }
+</script>
+</body>
+</html>
