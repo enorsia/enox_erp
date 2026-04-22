@@ -16,7 +16,7 @@ class SellingChartApiService
 
     public function get($url, array $filters = [])
     {
-        return $this->api->get($url, $filters);
+        return $this->api->post($url, $filters);
     }
 
 
