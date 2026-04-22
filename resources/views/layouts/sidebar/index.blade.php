@@ -53,7 +53,12 @@
             @can('general.dashboard.index')
                 <a href="{{ route('admin.dashboard') }}"
                    class="nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::routeIs('admin.dashboard') ? 'nav-active text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
-                    <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 17l4-8 4 4 4-8 4 5"/></svg>
+
+                    <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18V3H3zm2 2h14v14H5V5z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 9h6v6H9z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v6M15 3v6M3 9h6M15 9h6"/>
+                    </svg>
                     Dashboard
                 </a>
             @endcan

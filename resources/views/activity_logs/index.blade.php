@@ -16,13 +16,6 @@
 
         <!-- ── FILTER TOOLBAR ── -->
         <form method="GET" action="{{ route('admin.activity-logs.index') }}">
-            {{--
-                Mobile (<640px):
-                  Row 1 — search input (full width)
-                  Row 2 — user select + date_from + date_to (flex-wrap, each flex-1 min-w-[120px])
-                  Row 3 — Search & Reset buttons
-                sm+ (≥640px): single row — search flex-1, user w-36, dates auto, buttons auto
-            --}}
             <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 mb-5">
 
                 <!-- Search — full width on mobile, flex-1 on sm+ -->
@@ -40,7 +33,7 @@
                 <div class="flex flex-wrap items-center gap-2 sm:contents">
 
                     <!-- User filter -->
-                    <div class="flex-1 min-w-[120px] sm:flex-none sm:w-36">
+                    <div class="flex-1 min-w-[340px] sm:flex-none sm:w-36">
                         <select name="user_id" class="tom-select w-full h-9" data-placeholder="All Users">
                             <option value="">All Users</option>
                             @foreach ($users as $user)
