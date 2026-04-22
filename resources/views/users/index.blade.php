@@ -164,7 +164,7 @@
         </div>
 
         <!-- ── PAGINATION ── -->
-        @include('master.pagination', ['paginator' => $users])
+        @include('layouts.pagination', ['paginator' => $users])
 
     </div>
 @endsection

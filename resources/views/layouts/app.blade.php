@@ -48,6 +48,6 @@
 
 @include('layouts.footer.index')
 @stack('js')
-@include('master.lara-izitoast')
+@include('layouts.lara-izitoast')
 </body>
 </html>
