@@ -441,14 +441,14 @@
                             <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-accent-400 via-blue-500 to-purple-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 
                             {{-- Card Header: #SL, Images, Design No, Status, Actions --}}
-                            <div class="flex items-start gap-3 p-4 pb-3">
+                            <div class="flex flex-col sm:flex-row sm:items-center gap-3 p-4 pb-3">
 
                                 {{-- Images --}}
                                 <div class="flex gap-2 shrink-0">
                                     <div class="flex flex-col items-center gap-1">
                                         @if ($chartInfo->design_image)
                                             <div class="relative group/img overflow-hidden rounded-lg">
-                                                <img class="w-14 h-14 rounded-lg object-cover border-2 border-slate-200 dark:border-slate-600 cursor-zoom-in transition-all duration-300 group-hover/img:scale-110 group-hover/img:border-accent-400"
+                                                <img class="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover border-2 border-slate-200 dark:border-slate-600 cursor-zoom-in transition-all duration-300 group-hover/img:scale-110 group-hover/img:border-accent-400"
                                                     src="{{ cloudflareImage($chartInfo->design_image, 80) }}"
                                                     x-on:click.prevent="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'"
                                                     data-large="{{ cloudflareImage($chartInfo->design_image, 1200) }}"
@@ -461,7 +461,7 @@
                                                 </button>
                                             </div>
                                         @else
-                                            <div class="w-14 h-14 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 border-2 border-slate-200 dark:border-slate-600 flex items-center justify-center group-hover:border-accent-300 transition-colors duration-300">
+                                            <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 border-2 border-slate-200 dark:border-slate-600 flex items-center justify-center group-hover:border-accent-300 transition-colors duration-300">
                                                 <svg class="w-5 h-5 text-slate-300 dark:text-slate-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                                 </svg>
@@ -472,7 +472,7 @@
                                     @if ($chartInfo->inspiration_image)
                                         <div class="hidden sm:flex flex-col items-center gap-1">
                                             <div class="relative group/img overflow-hidden rounded-lg">
-                                                <img class="w-14 h-14 rounded-lg object-cover border-2 border-slate-200 dark:border-slate-600 cursor-zoom-in transition-all duration-300 group-hover/img:scale-110 group-hover/img:border-purple-400"
+                                                <img class="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover border-2 border-slate-200 dark:border-slate-600 cursor-zoom-in transition-all duration-300 group-hover/img:scale-110 group-hover/img:border-purple-400"
                                                     src="{{ cloudflareImage($chartInfo->inspiration_image, 80) }}"
                                                     x-on:click.prevent="imagePopup = '{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}'"
                                                     data-large="{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}"
@@ -499,8 +499,8 @@
                                             {{ $start + $loop->index }}
                                         </span>
                                         <button type="button" onclick="viewChart({{ $chartInfo->id }})"
-                                            class="inline-flex items-center gap-1.5 text-[15px] font-bold text-accent-500 hover:text-accent-600 leading-tight group/title transition-all duration-200">
-                                            <span class="relative">
+                                            class="inline-flex min-w-0 items-center gap-1.5 text-[15px] font-bold text-accent-500 hover:text-accent-600 leading-tight group/title transition-all duration-200">
+                                            <span class="relative truncate">
                                                 {{ $chartInfo->design_no }}
                                                 <span class="absolute bottom-0 left-0 w-0 h-0.5 bg-accent-400 group-hover/title:w-full transition-all duration-300"></span>
                                             </span>
@@ -580,7 +580,7 @@
                                 </div>
 
                                 {{-- Action Buttons --}}
-                                <div class="flex items-center gap-1.5 shrink-0">
+                                <div class="flex items-center gap-1.5 shrink-0 sm:ml-auto mt-2 sm:mt-0">
                                     @can('general.chart.show')
                                         <button type="button" onclick="viewChart({{ $chartInfo->id }})"
                                             class="group/btn inline-flex items-center justify-center w-9 h-9 rounded-lg border-2 border-accent-200 dark:border-accent-700 bg-accent-50 dark:bg-accent-900/20 text-accent-500 hover:bg-accent-500 hover:border-accent-500 hover:text-white hover:shadow-lg hover:shadow-accent-500/30 hover:scale-110 transition-all duration-200"

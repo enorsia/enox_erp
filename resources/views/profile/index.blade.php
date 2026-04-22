@@ -27,11 +27,23 @@
                         <span class="badge-custom badge-amber">No role</span>
                     @endif
                 </div>
-                <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-2">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
-                    Joined: {{ $user->created_at ? $user->created_at->format('d M Y, h:i A') : 'N/A' }}
-                    &nbsp;·&nbsp;
-                    Last updated: {{ $user->updated_at ? $user->updated_at->format('d M Y, h:i A') : 'N/A' }}
+                <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="inline-flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <rect x="3" y="4" width="18" height="18" rx="2"/>
+                            <path stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/>
+                        </svg>
+                        <span class="whitespace-nowrap">Joined: {{ $user->created_at ? $user->created_at->format('d M Y, h:i A') : 'N/A' }}</span>
+                    </span>
+
+                    <span class="hidden xs:inline text-slate-300 dark:text-slate-600">·</span>
+
+                    <span class="inline-flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+                        </svg>
+                        <span class="whitespace-nowrap">Updated: {{ $user->updated_at ? $user->updated_at->format('d M Y, h:i A') : 'N/A' }}</span>
+                    </span>
                 </p>
             </div>
 
@@ -58,7 +70,7 @@
                     </div>
 
                     <div class="flex items-center gap-4 mb-5">
-                        <div class="w-20 h-20 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 flex-shrink-0">
+                        <div class="w-15 h-15 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 flex-shrink-0">
                             <img class="w-full h-full object-cover"
                                  src="{{ $user->avatar ? cloudflareImage($user->avatar, 200) : cloudflareImage('eca4fbfc-baba-4ac2-0966-e8a13d097700', 200) }}"
                                  alt="Avatar">

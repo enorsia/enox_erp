@@ -25,28 +25,29 @@
 
         <!-- ── FILTER TOOLBAR ── -->
         <form method="get" action="{{ route('admin.users.index') }}">
-            <div class="flex flex-wrap items-center gap-2.5 mb-5">
+            {{--
+                Mobile (<640px): name full-width row 1, row 2 contains role (flex-1) + buttons
+                sm+ (≥640px): single row — name flex-1, role fixed w-36, buttons compact
+            --}}
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-5">
 
-                <!-- Left 50/50 wrapper -->
-                <div class="flex flex-1 gap-2.5 min-w-0">
-
-                    <!-- Search (50%) -->
-                    <div class="relative w-1/2">
-                        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                <div class="flex-1 min-w-0 flex items-center gap-2">
+                    <!-- Search input -->
+                    <div class="relative flex-1">
+                        <svg class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
                              fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                             <circle cx="11" cy="11" r="7"/>
                             <path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
                         </svg>
-                        <input type="text" name="search" placeholder="Search by name or email..."
+                        <input type="text" name="search" placeholder="Search by name or email…"
                                value="{{ request('search') }}"
-                               class="w-full pl-9 pr-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-accent-400 dark:focus:border-accent-400 transition-colors"/>
-
+                               class="w-full pl-8 pr-3 h-9 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-accent-400 dark:focus:border-accent-400 transition-colors"/>
                     </div>
 
-                    <!-- Role filter (50%) -->
-                    <div class="w-1/2">
-                        <select name="role_id" class="tom-select w-full" data-placeholder="Select Role">
-                            <option value="">Select Role</option>
+                    <!-- Role filter (on mobile this will flex; on sm+ fixed width) -->
+                    <div class="flex-1 sm:flex-none sm:w-36">
+                        <select name="role_id" class="tom-select w-full h-9" data-placeholder="Select Role">
+                            <option value="">All Roles</option>
                             @foreach ($roles as $role)
                                 <option value="{{ $role->id }}" {{ request('role_id') == $role->id ? 'selected' : '' }}>
                                     {{ $role->name ?? '' }}
@@ -54,27 +55,28 @@
                             @endforeach
                         </select>
                     </div>
-
                 </div>
 
-                <!-- Search button -->
-                <button type="submit"
-                        class="flex items-center gap-2 px-3.5 py-2 text-[13px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <circle cx="11" cy="11" r="7"/>
-                        <path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
-                    </svg>
-                    Search
-                </button>
+                <!-- Buttons group (on mobile appears below input) -->
+                <div class="flex items-center gap-2 sm:ml-3">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1.5 px-3 h-9 text-[13px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors whitespace-nowrap shrink-0">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <circle cx="11" cy="11" r="7"/>
+                            <path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+                        </svg>
+                        <span>Search</span>
+                    </button>
 
-                <!-- Reset -->
-                <a href="{{ route('admin.users.index') }}"
-                   class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    Reset
-                </a>
+                    <a href="{{ route('admin.users.index') }}"
+                       class="inline-flex items-center gap-1.5 px-3 h-9 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        <span>Reset</span>
+                    </a>
+                </div>
+
             </div>
         </form>
 
