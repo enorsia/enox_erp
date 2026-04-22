@@ -1,10 +1,22 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="light">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ config('app.name') }} | @yield('title', 'Admin')</title>
+
+    {{-- Instant dark-mode: runs synchronously before any paint to prevent flash --}}
+    <script>
+        (function () {
+            var saved = localStorage.getItem('enorsia-dark');
+            var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            var isDark = saved !== null ? saved === 'true' : prefersDark;
+            if (isDark) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
 
     <link rel="shortcut icon" href="{{ asset('assets/images/favicon.ico') }}">
 

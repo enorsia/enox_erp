@@ -71,16 +71,16 @@
 
             <!-- Activity Logs -->
             @can('authentication.activity_logs.index')
-            <a href="{{ route('admin.activity-logs.index') }}"
-               class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 hover:border-accent-200 dark:hover:border-accent-700 transition-colors group">
-                <div class="w-10 h-10 rounded-lg bg-accent-50 dark:bg-accent-900/30 flex items-center justify-center mb-3">
-                    <svg class="w-5 h-5 text-accent-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                </div>
-                <p class="text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-accent-400 transition-colors">Activity Logs</p>
-                <p class="text-[12px] text-slate-400 dark:text-slate-500 mt-0.5">View system activity</p>
-            </a>
+                <a href="{{ route('admin.activity-logs.index') }}"
+                   class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 hover:border-accent-200 dark:hover:border-accent-700 transition-colors group">
+                    <div class="w-10 h-10 rounded-lg bg-accent-50 dark:bg-accent-800/50 flex items-center justify-center mb-3">
+                        <svg class="w-5 h-5 text-accent-500 dark:text-accent-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <p class="text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-accent-400 transition-colors">Activity Logs</p>
+                    <p class="text-[12px] text-slate-400 dark:text-slate-500 mt-0.5">View system activity</p>
+                </a>
             @endcan
 
         </div>
@@ -98,8 +98,10 @@
                 <!-- Selling Chart -->
                 <a href="{{ route('admin.selling_chart.index') }}"
                    class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 hover:border-accent-200 dark:hover:border-accent-700 transition-colors group">
-                    <div class="w-10 h-10 rounded-lg bg-accent-50 dark:bg-accent-900/30 flex items-center justify-center mb-3">
-                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4"/></svg>
+                    <div class="w-10 h-10 rounded-lg bg-accent-50 dark:bg-accent-800/50 flex items-center justify-center mb-3">
+                        <svg class="w-5 h-5 text-accent-500 dark:text-accent-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4"/>
+                        </svg>
                     </div>
                     <p class="text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-accent-400 transition-colors">Selling Chart</p>
                     <p class="text-[12px] text-slate-400 dark:text-slate-500 mt-0.5">Manage selling charts and data</p>
