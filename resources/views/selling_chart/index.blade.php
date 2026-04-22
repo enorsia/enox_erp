@@ -981,54 +981,7 @@
             </div>{{-- end cards list --}}
 
             {{-- ── Pagination ── --}}
-            @if($chartInfos->hasPages())
-                <div class="mt-6 flex justify-center">
-                    <div class="inline-flex items-center gap-1.5 flex-wrap bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 shadow-sm">
-                        @if($chartInfos->onFirstPage())
-                            <span class="px-4 py-2 text-[13px] text-slate-300 dark:text-slate-600 cursor-not-allowed font-medium">
-                                <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" d="M15 19l-7-7 7-7"/>
-                                </svg>
-                                Prev
-                            </span>
-                        @else
-                            <a href="{{ $chartInfos->previousPageUrl() }}"
-                                class="group inline-flex items-center px-4 py-2 text-[13px] text-slate-600 dark:text-slate-300 hover:text-accent-500 dark:hover:text-accent-400 rounded-lg hover:bg-accent-50 dark:hover:bg-accent-900/20 transition-all duration-200 font-medium">
-                                <svg class="w-4 h-4 mr-1 group-hover:-translate-x-0.5 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" d="M15 19l-7-7 7-7"/>
-                                </svg>
-                                Prev
-                            </a>
-                        @endif
-
-                        @foreach ($chartInfos->getUrlRange(1, $chartInfos->lastPage()) as $page => $url)
-                            @if ($page == $chartInfos->currentPage())
-                                <span class="min-w-[36px] h-9 flex items-center justify-center rounded-lg bg-gradient-to-br from-accent-400 to-accent-600 text-white text-[13px] font-bold shadow-lg shadow-accent-500/30">{{ $page }}</span>
-                            @else
-                                <a href="{{ $url }}"
-                                    class="min-w-[36px] h-9 flex items-center justify-center rounded-lg text-[13px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-accent-500 dark:hover:text-accent-400 transition-all duration-200 font-medium hover:shadow-md hover:scale-105">{{ $page }}</a>
-                            @endif
-                        @endforeach
-
-                        @if($chartInfos->hasMorePages())
-                            <a href="{{ $chartInfos->nextPageUrl() }}"
-                                class="group inline-flex items-center px-4 py-2 text-[13px] text-slate-600 dark:text-slate-300 hover:text-accent-500 dark:hover:text-accent-400 rounded-lg hover:bg-accent-50 dark:hover:bg-accent-900/20 transition-all duration-200 font-medium">
-                                Next
-                                <svg class="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" d="M9 5l7 7-7 7"/>
-                                </svg>
-                            </a>
-                        @else
-                            <span class="px-4 py-2 text-[13px] text-slate-300 dark:text-slate-600 cursor-not-allowed font-medium">
-                                Next
-                                <svg class="w-4 h-4 inline-block ml-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" d="M9 5l7 7-7 7"/>
-                                </svg>
-                            </span>
-                        @endif
-                    </div>
-                </div>
-            @endif
+            @include('master.pagination', ['paginator' => $chartInfos])
         </div>
     </div>
 

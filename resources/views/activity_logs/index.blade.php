@@ -146,37 +146,7 @@
         </div>
 
         <!-- ── PAGINATION ── -->
-        @if($activities->hasPages())
-            <div class="mt-5 flex justify-center">
-                <div class="flex items-center gap-1">
-                    @if($activities->onFirstPage())
-                        <span class="px-3 py-2 text-[13px] text-slate-300 dark:text-slate-600 cursor-not-allowed">← Prev
-                        </span>
-                    @else
-                        <a href="{{ $activities->previousPageUrl() }}"
-                           class="px-3 py-2 text-[13px] text-slate-600 dark:text-slate-300 hover:text-accent-400 transition-colors">← Prev</a>
-                    @endif
-
-                    @foreach ($activities->getUrlRange(1, $activities->lastPage()) as $page => $url)
-                        @if ($page == $activities->currentPage())
-                            <span class="w-8 h-8 flex items-center justify-center rounded-lg bg-accent-400 text-white text-[13px] font-semibold">{{ $page }}</span>
-                        @else
-                            <a href="{{ $url }}"
-                               class="w-8 h-8 flex items-center justify-center rounded-lg text-[13px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">{{ $page }}</a>
-                        @endif
-                    @endforeach
-
-                    @if($activities->hasMorePages())
-                        <a href="{{ $activities->nextPageUrl() }}"
-                           class="px-3 py-2 text-[13px] text-slate-600 dark:text-slate-300 hover:text-accent-400 transition-colors">Next
-                        →</a>
-                    @else
-                        <span class="px-3 py-2 text-[13px] text-slate-300 dark:text-slate-600 cursor-not-allowed">Next
-                        →</span>
-                    @endif
-                </div>
-            </div>
-        @endif
+        @include('master.pagination', ['paginator' => $activities])
 
     </div>
 @endsection
