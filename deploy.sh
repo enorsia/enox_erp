@@ -56,7 +56,7 @@ cd /srv/enox_erp || { echo -e "${RED}❌ Project folder not found${NC}"; exit 1;
 ########################################
 # Git update
 ########################################
-echo -e "${YELLOW}📦 Fetching latest code...${NC}"
+echo -e "${YELLOW}📦 Fetching latest code...${NC} "
 git fetch origin
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 echo -e "${YELLOW}🔀 Switching to branch $BRANCH...${NC}"
