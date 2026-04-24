@@ -126,6 +126,15 @@ return [
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],
+        
+        // Dedicated EnoxTracker channel — writes EnoxTracker controller logs to a separate file.
+        'enoxtracker' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/enoxtracker.log'),
+            'level' => env('LOG_ENOX_LEVEL', 'debug'),
+            'days' => env('LOG_ENOX_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
 
     ],
 
