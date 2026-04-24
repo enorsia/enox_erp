@@ -103,7 +103,7 @@ if [ "$RUN_MIGRATIONS" = "yes" ] && [ "$FAST_MODE" = "no" ]; then
     bash run_migrations.sh
 
 else
-    echo -e "${GREEN}⏭ Skipping migrations${NC}"
+    echo -e "${GREEN}⏭ Skipping migrations${NC} "
 fi
 
 ########################################
