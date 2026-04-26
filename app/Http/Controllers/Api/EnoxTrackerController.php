@@ -119,12 +119,14 @@ class EnoxTrackerController extends Controller
 
                 if (in_array($eventName, self::ELEMENT_CLICK_EVENTS, true)) {
                     $elementInteractions[] = $event;
+                    $generalEvents[] = $event; // dual-write: clicks appear in journey timeline
                 } elseif (in_array($eventName, self::SECTION_EVENTS, true)) {
                     $sectionVisibility[] = $event;
                 } elseif (in_array($eventName, self::ACCORDION_EVENTS, true)) {
                     $accordionTracking[] = $event;
                 } elseif (in_array($eventName, self::TRANSITION_EVENTS, true)) {
                     $pageTransitions[] = $event;
+                    $generalEvents[] = $event; // dual-write: navigation appears in journey timeline
                 } elseif (in_array($eventName, self::IMAGE_ATTENTION_EVENTS, true)) {
                     $imageAttention[] = $event;
                 } elseif (in_array($eventName, self::HOVER_EVENTS, true)) {
@@ -151,6 +153,10 @@ class EnoxTrackerController extends Controller
                     $attentionSpans[] = $event;
                 } elseif (in_array($eventName, self::SCROLL_EVENTS, true)) {
                     $scrollEvents[] = $event;
+                    // Dual-write only the *final* scroll milestone so journey shows max scroll depth reached
+                    if ($eventName === 'scroll_depth_final') {
+                        $generalEvents[] = $event;
+                    }
                 } else {
                     $generalEvents[] = $event;
                 }

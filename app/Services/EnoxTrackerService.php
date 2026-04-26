@@ -37,6 +37,7 @@ class EnoxTrackerService
                 'event_name', 'user_id', 'anonymous_id', 'session_id', 'project_id',
                 'product_id', 'product_name', 'sku', 'variant_color', 'variant_size',
                 'category', 'price', 'quantity', 'currency', 'event_value',
+                'order_id',
                 'page_url', 'page_title', 'page_path', 'page_type', 'referrer',
                 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
                 'gclid', 'fbclid', 'ttclid', 'msclkid', 'affiliate_id',
@@ -45,6 +46,11 @@ class EnoxTrackerService
                 'ip_address', 'properties',
                 'active_time_ms', 'total_time_on_page_ms',
                 'scroll_depth_pct', 'scroll_depth_px', 'element_visible_ms',
+                // Click / element fields — populated when element_click events are dual-written
+                'is_rage_click', 'is_dead_click',
+                'target_element_tag', 'target_element_id', 'target_element_classes',
+                'target_element_text', 'target_data_track',
+                'click_x', 'click_y', 'click_x_pct', 'click_y_pct',
                 'is_new_user', 'event_timestamp',
             ];
 
@@ -73,6 +79,7 @@ class EnoxTrackerService
                     (int)   ($props['quantity'] ?? 0),
                     "'" . $this->esc($props['currency'] ?? 'GBP') . "'",
                     (float) ($props['event_value'] ?? $props['revenue'] ?? $props['total'] ?? 0),
+                    "'" . $this->esc($props['order_id'] ?? $event['order_id'] ?? '') . "'",
                     "'" . $this->esc($page['url']      ?? $props['url']      ?? '') . "'",
                     "'" . $this->esc($page['title']    ?? $props['title']    ?? '') . "'",
                     "'" . $this->esc($page['path']     ?? $props['path']     ?? '') . "'",
@@ -108,6 +115,18 @@ class EnoxTrackerService
                     (int) ($props['scroll_depth_px']  ?? $props['depth_px']  ?? 0),
                     // element_visible_ms: explicit field or visible_ms (section_visibility events go to separate table)
                     (int) ($props['element_visible_ms'] ?? $props['total_visible_ms'] ?? 0),
+                    // Click / element fields — from element_click dual-write
+                    (int) ($props['is_rage_click']    ?? $event['is_rage_click']    ?? 0),
+                    (int) ($props['is_dead_click']    ?? $event['is_dead_click']    ?? 0),
+                    "'" . $this->esc($props['tag']     ?? $props['target_element_tag']     ?? '') . "'",
+                    "'" . $this->esc($props['id']      ?? $props['target_element_id']      ?? '') . "'",
+                    "'" . $this->esc(substr($props['classes'] ?? $props['target_element_classes'] ?? '', 0, 200)) . "'",
+                    "'" . $this->esc(substr($props['text']    ?? $props['target_element_text']    ?? '', 0, 200)) . "'",
+                    "'" . $this->esc($props['data_track'] ?? $props['target_data_track'] ?? '') . "'",
+                    (int) ($props['click_x']     ?? 0),
+                    (int) ($props['click_y']     ?? 0),
+                    (int) ($props['click_x_pct'] ?? 0),
+                    (int) ($props['click_y_pct'] ?? 0),
                     // is_new_user is a TOP-LEVEL field in the SDK event, NOT inside context
                     (int) ($event['is_new_user'] ?? 0),
                     "'" . $this->esc($ts) . "'",

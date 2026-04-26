@@ -4,39 +4,46 @@
 
 @push('css')
 <style>
-    .timeline-line { position: relative; }
-    .timeline-line::before {
+    /* ── Session tabs ──────────────────────────── */
+    .session-tab.session-active {
+        background: rgb(79 70 229) !important;
+        border-color: rgb(79 70 229) !important;
+        color: #fff !important;
+        box-shadow: 0 6px 18px rgba(79,70,229,.22);
+        transform: translateY(-1px);
+    }
+    .dark .session-tab.session-active {
+        background: rgb(99 102 241) !important;
+        border-color: rgb(99 102 241) !important;
+    }
+
+    /* ── Page batch connector ──────────────────── */
+    .page-batch + .page-batch > .batch-connector {
+        display: flex;
+    }
+
+    /* ── Event timeline inside a batch ─────────── */
+    .ev-line { position: relative; }
+    .ev-line::before {
         content: '';
         position: absolute;
-        left: 15px;
+        left: 10px;
         top: 0;
         bottom: 0;
         width: 2px;
         background: rgba(148,163,184,.2);
     }
-    .dark .timeline-line::before { background: rgba(71,85,105,.4); }
+    .dark .ev-line::before { background: rgba(71,85,105,.35); }
 
-    .session-tab.session-active {
-        background: rgb(79 70 229) !important;
-        border-color: rgb(79 70 229) !important;
-        color: #fff !important;
-        box-shadow: 0 8px 20px rgba(79, 70, 229, .22);
-        transform: translateY(-1px);
-    }
-
-    .dark .session-tab.session-active {
-        background: rgb(99 102 241) !important;
-        border-color: rgb(99 102 241) !important;
-        color: #fff !important;
-        box-shadow: 0 8px 20px rgba(99, 102, 241, .26);
-    }
+    /* ── Batch toggle icon ────────────────────── */
+    .batch-toggle-icon { transition: transform .2s; }
 </style>
 @endpush
 
 @section('content')
 <div class="p-5 lg:p-6 max-w-6xl mx-auto">
 
-    {{-- ── HEADER ── --}}
+    {{-- ── HEADER ───────────────────────────────────────────────────────── --}}
     <div class="flex items-start justify-between gap-4 mb-6 flex-wrap">
         <div>
             <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">User Journey</h1>
@@ -51,309 +58,531 @@
         </a>
     </div>
 
-    {{-- ── SUMMARY CARDS ── --}}
+    {{-- ── SUMMARY CARDS ─────────────────────────────────────────────────── --}}
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         @php
             $cards = [
-                ['label' => 'Total Events',   'value' => number_format($summary['total_events'] ?? 0),   'color' => 'blue'],
-                ['label' => 'Sessions',        'value' => number_format($summary['total_sessions'] ?? 0), 'color' => 'purple'],
-                ['label' => 'Page Views',      'value' => number_format($summary['page_views'] ?? 0),     'color' => 'sky'],
-                ['label' => 'Orders',          'value' => number_format($summary['orders'] ?? 0),         'color' => 'green'],
-                ['label' => 'Revenue',         'value' => '£' . number_format((float)($summary['revenue'] ?? 0), 2), 'color' => 'emerald'],
-                ['label' => 'Active Since',    'value' => $summary['first_seen'] ? \Carbon\Carbon::parse($summary['first_seen'])->format('d M Y') : '—', 'color' => 'amber'],
+                ['label' => 'Total Events',  'value' => number_format($summary['total_events']   ?? 0), 'color' => 'blue'],
+                ['label' => 'Sessions',       'value' => number_format($summary['total_sessions'] ?? 0), 'color' => 'purple'],
+                ['label' => 'Page Views',     'value' => number_format($summary['page_views']     ?? 0), 'color' => 'sky'],
+                ['label' => 'Orders',         'value' => number_format($summary['orders']         ?? 0), 'color' => 'green'],
+                ['label' => 'Revenue',        'value' => '£'.number_format((float)($summary['revenue'] ?? 0),2), 'color' => 'emerald'],
+                ['label' => 'Active Since',   'value' => !empty($summary['first_seen']) ? \Carbon\Carbon::parse($summary['first_seen'])->format('d M Y') : '—', 'color' => 'amber'],
             ];
-            $colorMap = [
-                'blue'    => 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300',
-                'purple'  => 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300',
-                'sky'     => 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300',
-                'green'   => 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300',
-                'emerald' => 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300',
-                'amber'   => 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300',
+            $badge = [
+                'blue'    => 'text-blue-600 dark:text-blue-300',
+                'purple'  => 'text-purple-600 dark:text-purple-300',
+                'sky'     => 'text-sky-600 dark:text-sky-300',
+                'green'   => 'text-green-600 dark:text-green-300',
+                'emerald' => 'text-emerald-600 dark:text-emerald-300',
+                'amber'   => 'text-amber-600 dark:text-amber-300',
             ];
         @endphp
         @foreach($cards as $card)
             <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
                 <p class="text-[11px] text-slate-400 dark:text-slate-500 mb-1">{{ $card['label'] }}</p>
-                <p class="text-[18px] font-bold {{ explode(' ', $colorMap[$card['color']])[2] ?? 'text-slate-700' }} dark:{{ explode(' ', $colorMap[$card['color']])[3] ?? '' }}">
-                    {{ $card['value'] }}
-                </p>
+                <p class="text-[18px] font-bold {{ $badge[$card['color']] }}">{{ $card['value'] }}</p>
             </div>
         @endforeach
     </div>
 
-    {{-- ── DEVICE / GEO INFO ── --}}
+    {{-- ── VISITOR DETAILS ───────────────────────────────────────────────── --}}
     <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 mb-6">
         <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">Visitor Details</p>
         <div class="flex flex-wrap gap-x-6 gap-y-2 text-[13px]">
-            @if($summary['device_type'])
-                <div><span class="text-slate-400">Device</span> <span class="text-slate-700 dark:text-slate-200 font-medium ml-1">{{ ucfirst($summary['device_type']) }}</span></div>
-            @endif
-            @if($summary['browser'])
-                <div><span class="text-slate-400">Browser</span> <span class="text-slate-700 dark:text-slate-200 font-medium ml-1">{{ $summary['browser'] }}</span></div>
-            @endif
-            @if($summary['os'])
-                <div><span class="text-slate-400">OS</span> <span class="text-slate-700 dark:text-slate-200 font-medium ml-1">{{ $summary['os'] }}</span></div>
-            @endif
-            @if($summary['screen_resolution'])
-                <div><span class="text-slate-400">Screen</span> <span class="text-slate-700 dark:text-slate-200 font-medium ml-1">{{ $summary['screen_resolution'] }}</span></div>
-            @endif
-            @if($summary['country'] || $summary['city'])
-                <div><span class="text-slate-400">Location</span> <span class="text-slate-700 dark:text-slate-200 font-medium ml-1">{{ implode(', ', array_filter([$summary['city'], $summary['country']])) }}</span></div>
-            @endif
-            @if($summary['ip_address'])
-                <div><span class="text-slate-400">IP</span> <span class="text-slate-700 dark:text-slate-200 font-medium font-mono ml-1">{{ $summary['ip_address'] }}</span></div>
-            @endif
-            @if($summary['language'])
-                <div><span class="text-slate-400">Language</span> <span class="text-slate-700 dark:text-slate-200 font-medium ml-1">{{ $summary['language'] }}</span></div>
-            @endif
-            @if($summary['first_seen'])
-                <div><span class="text-slate-400">Entry</span> <span class="text-slate-700 dark:text-slate-200 font-medium ml-1">{{ \Carbon\Carbon::parse($summary['first_seen'])->format('d M Y, H:i') }}</span></div>
-            @endif
-            @if($summary['last_seen'])
-                <div><span class="text-slate-400">Last Seen</span> <span class="text-slate-700 dark:text-slate-200 font-medium ml-1">{{ \Carbon\Carbon::parse($summary['last_seen'])->format('d M Y, H:i') }}</span></div>
-            @endif
+            @foreach([
+                ['Device',    !empty($summary['device_type']) ? ucfirst($summary['device_type']) : null],
+                ['Browser',   $summary['browser']  ?? null],
+                ['OS',        $summary['os']        ?? null],
+                ['Screen',    $summary['screen_resolution'] ?? null],
+                ['Location',  implode(', ', array_filter([$summary['city'] ?? '', $summary['country'] ?? ''])) ?: null],
+                ['IP',        $summary['ip_address'] ?? null],
+                ['Language',  $summary['language']  ?? null],
+                ['Entry',     !empty($summary['first_seen']) ? \Carbon\Carbon::parse($summary['first_seen'])->format('d M Y, H:i') : null],
+                ['Last Seen', !empty($summary['last_seen'])  ? \Carbon\Carbon::parse($summary['last_seen'])->format('d M Y, H:i')  : null],
+            ] as [$lbl, $val])
+                @if($val)
+                    <div>
+                        <span class="text-slate-400">{{ $lbl }}</span>
+                        <span class="text-slate-700 dark:text-slate-200 font-medium ml-1">{{ $val }}</span>
+                    </div>
+                @endif
+            @endforeach
         </div>
     </div>
 
-    {{-- ── SESSION TABS ── --}}
+    {{-- ── SESSION TABS ──────────────────────────────────────────────────── --}}
     @if(!empty($sessions))
         <div id="session-tabs" class="mb-4 flex items-center gap-2 flex-wrap">
             <span class="text-[12px] text-slate-400 dark:text-slate-500 font-semibold">Sessions:</span>
             @foreach($sessions as $si => $sess)
                 @php
-                    $isActiveTab = $loop->last;
-                    $hasOrderPlaced = (int) ($sess['order_placed'] ?? 0) > 0;
+                    $hasOrder  = (int)($sess['order_placed'] ?? 0) > 0;
+                    $batchCnt  = count($pagesBySession[$sess['session_id']] ?? []);
                 @endphp
                 <a href="javascript:void(0)"
                    data-session="{{ $sess['session_id'] }}"
-                   class="session-tab inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors
-                          {{ $hasOrderPlaced
+                   class="session-tab inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150
+                          {{ $hasOrder
                               ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
                               : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' }}
-                          {{ $isActiveTab ? ' session-active' : '' }}">
+                          {{ $loop->last ? ' session-active' : '' }}">
                     <span>Session {{ $si + 1 }}</span>
-                    {!! $hasOrderPlaced ? '<span>✓ Ordered</span>' : '' !!}
+                    <span class="opacity-60">{{ $batchCnt }}p</span>
+                    @if($hasOrder)<span>✓</span>@endif
                 </a>
             @endforeach
         </div>
     @endif
 
-    {{-- ── JOURNEY TIMELINE (grouped by session) ── --}}
-    <?php if (!empty($sessions)): ?>
-        <?php foreach ($sessions as $si => $sess): ?>
-        <?php
-            $sessEvents = $eventsBySession[$sess['session_id']] ?? [];
-            $duration   = (int) $sess['duration_seconds'];
-            $durationStr = $duration >= 3600
-                ? gmdate('H:i:s', $duration)
-                : ($duration >= 60 ? gmdate('i:s', $duration) . 'm' : $duration . 's');
+    {{-- ══════════════════════════════════════════════════════════════════════
+         SESSION PANELS  —  page-batch (page-wise) journey
+    ══════════════════════════════════════════════════════════════════════════ --}}
+    @forelse($sessions as $si => $sess)
+        @php
             $isActivePanel = $si === array_key_last($sessions);
-            $hasOrderPlaced = (int) ($sess['order_placed'] ?? 0) > 0;
-        ?>
-        <div id="session-{{ $sess['session_id'] }}"
-             data-session-id="{{ $sess['session_id'] }}"
-             class="session-panel bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl mb-5 overflow-hidden {{ $isActivePanel ? '' : 'hidden' }}">
+            $hasOrder      = (int)($sess['order_placed'] ?? 0) > 0;
+            $sidStr        = $sess['session_id'];
+            $batches       = $pagesBySession[$sidStr] ?? [];
+            $duration      = (int)$sess['duration_seconds'];
+            $durStr        = $duration >= 3600
+                ? gmdate('H:i:s', $duration)
+                : ($duration >= 60 ? gmdate('i:s', $duration).'m' : $duration.'s');
+        @endphp
 
-            {{-- Session header --}}
-            <div class="flex items-center justify-between px-5 py-3 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-700">
+        <div id="session-{{ $sidStr }}"
+             data-session-id="{{ $sidStr }}"
+             class="session-panel mb-6 {{ $isActivePanel ? '' : 'hidden' }}">
+
+            {{-- Session summary header --}}
+            <div class="flex items-center justify-between px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl mb-4 flex-wrap gap-2">
                 <div class="flex items-center gap-3 flex-wrap">
-                    <span class="text-[12px] font-bold text-slate-700 dark:text-slate-200">Session {{ $si + 1 }}</span>
-                    <span class="text-[11px] font-mono text-slate-400 dark:text-slate-500">{{ substr($sess['session_id'], 0, 36) }}</span>
-                    {!! $hasOrderPlaced ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 uppercase tracking-wide">✓ Ordered</span>' : '' !!}
+                    <span class="text-[13px] font-bold text-slate-700 dark:text-slate-200">Session {{ $si + 1 }}</span>
+                    <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500">{{ substr($sidStr, 0, 36) }}</span>
+                    @if($hasOrder)
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 uppercase tracking-wide">✓ Ordered</span>
+                    @endif
                 </div>
                 <div class="flex items-center gap-4 text-[12px] text-slate-400 dark:text-slate-500 flex-wrap">
-                    <span>⏱ {{ $durationStr }}</span>
-                    <span>📄 {{ $sess['page_count'] }} pages</span>
+                    <span>⏱ {{ $durStr }}</span>
+                    <span>📄 {{ count($batches) }} pages</span>
                     <span>⚡ {{ $sess['event_count'] }} events</span>
                     <span class="hidden sm:inline">{{ \Carbon\Carbon::parse($sess['start_time'])->format('d M Y, H:i') }}</span>
                 </div>
             </div>
 
-            {{-- Events timeline --}}
-            <?php if (!empty($sessEvents)): ?>
-                <div class="px-5 py-4 timeline-line space-y-0.5">
-                    @foreach($sessEvents as $ev)
-                        @php
-                            $evName = $ev['event_name'];
-                            // Colour + icon per event type
-                            [$dotColor, $dotBg, $icon] = match(true) {
-                                $evName === 'order_placed'      => ['bg-green-500',  'bg-green-100 dark:bg-green-900/40',   '🛍️'],
-                                $evName === 'add_to_cart'        => ['bg-blue-500',   'bg-blue-100 dark:bg-blue-900/40',     '🛒'],
-                                $evName === 'checkout_started'   => ['bg-yellow-500', 'bg-yellow-100 dark:bg-yellow-900/40', '💳'],
-                                $evName === 'product_viewed'     => ['bg-purple-500', 'bg-purple-100 dark:bg-purple-900/40', '👁️'],
-                                $evName === 'page_viewed'        => ['bg-sky-500',    'bg-sky-100 dark:bg-sky-900/40',       '📄'],
-                                $evName === 'session_started'    => ['bg-slate-500',  'bg-slate-100 dark:bg-slate-700',      '🚀'],
-                                $evName === 'session_ended'      => ['bg-slate-400',  'bg-slate-100 dark:bg-slate-700',      '🏁'],
-                                str_contains($evName, 'click')   => ['bg-orange-500', 'bg-orange-100 dark:bg-orange-900/40', '🖱️'],
-                                str_contains($evName, 'scroll')  => ['bg-indigo-500', 'bg-indigo-100 dark:bg-indigo-900/40', '↕️'],
-                                str_contains($evName, 'search')  => ['bg-pink-500',   'bg-pink-100 dark:bg-pink-900/40',     '🔍'],
-                                default                          => ['bg-slate-400',  'bg-slate-100 dark:bg-slate-700',      '•'],
-                            };
+            {{-- ── PAGE BATCHES ─────────────────────────────────────────────── --}}
+            @forelse($batches as $bi => $batch)
+                @php
+                    $bEvents  = $batch['events'];
+                    $bEvCount = count($bEvents);
+                    $bStart   = \Carbon\Carbon::parse($batch['start_time']);
+                    $bEnd     = \Carbon\Carbon::parse($batch['end_time']);
+                    $bDurSec  = max(0, $bEnd->diffInSeconds($bStart));
+                    $bDurStr  = $bDurSec >= 3600
+                        ? gmdate('H:i:s', $bDurSec)
+                        : ($bDurSec >= 60 ? gmdate('i:s', $bDurSec).'m' : $bDurSec.'s');
 
-                            $props = [];
-                            if (!empty($ev['properties']) && $ev['properties'] !== '{}') {
-                                $props = json_decode($ev['properties'], true) ?? [];
-                            }
-                        @endphp
+                    $utm   = $batch['utm_source'];
+                    $med   = $batch['utm_medium'];
+                    $camp  = $batch['utm_campaign'];
+                    $ref   = $batch['referrer'];
 
-                        <div class="relative flex gap-3 py-1.5 pl-8 group">
-                            {{-- Dot --}}
-                            <div class="absolute left-2.5 top-3.5 w-3 h-3 rounded-full {{ $dotColor }} ring-2 ring-white dark:ring-slate-800 shrink-0 z-10"></div>
+                    if ($utm) {
+                        $srcLabel = $utm.($med ? '/'.$med : '').($camp ? ' ('.$camp.')' : '');
+                        $srcBg    = 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700';
+                        $srcIcon  = '🎯';
+                    } elseif ($ref) {
+                        $srcLabel = \Illuminate\Support\Str::limit($ref, 45);
+                        $srcBg    = 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700';
+                        $srcIcon  = '🔗';
+                    } else {
+                        $srcLabel = 'Direct';
+                        $srcBg    = 'bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600';
+                        $srcIcon  = '⚡';
+                    }
 
-                            {{-- Card --}}
-                            <div class="flex-1 min-w-0 {{ $dotBg }} rounded-lg px-3 py-2">
-                                <div class="flex items-center justify-between gap-2 flex-wrap">
-                                    <div class="flex items-center gap-2 min-w-0">
-                                        <span class="text-base leading-none">{{ $icon }}</span>
-                                        <span class="text-[13px] font-semibold text-slate-700 dark:text-slate-200">
-                                            {{ str_replace('_', ' ', ucfirst($evName)) }}
-                                        </span>
-                                        @if($ev['is_rage_click'])
-                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300">RAGE</span>
-                                        @endif
-                                        @if($ev['is_dead_click'])
-                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400">DEAD</span>
-                                        @endif
-                                    </div>
-                                    <span class="text-[11px] text-slate-400 dark:text-slate-500 whitespace-nowrap shrink-0">
-                                        {{ \Carbon\Carbon::parse($ev['event_timestamp'])->format('H:i:s') }}
+                    $batchId = 'b-'.$sidStr.'-'.$bi;
+
+                    // Compute active time on page from time_on_page events
+                    $pageActiveMs = 0;
+                    $pageScrollMax = 0;
+                    $visibleEvents = [];
+                    foreach ($bEvents as $bev) {
+                        $bn = $bev['event_name'];
+                        // Accumulate page-level stats from noise events
+                        if ($bn === 'time_on_page') {
+                            $pageActiveMs  = max($pageActiveMs,  (int)($bev['active_time_ms'] ?? 0));
+                            $pageScrollMax = max($pageScrollMax, (int)($bev['scroll_depth_pct'] ?? 0));
+                            continue; // don't render
+                        }
+                        // Skip internal/noise events
+                        if (in_array($bn, ['tab_visibility','tab_visible','tab_hidden','tab_focus','tab_blur','user_idle'], true)) {
+                            continue;
+                        }
+                        $visibleEvents[] = $bev;
+                    }
+                    $bEvCount = count($visibleEvents);
+                @endphp
+
+                <div class="page-batch relative">
+
+                    {{-- Connector line from previous page --}}
+                    @if($bi > 0)
+                        <div class="batch-connector items-center gap-2 pl-8 pb-1 text-[11px] text-slate-400 dark:text-slate-500 hidden">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m0 0l-7-7m7 7l7-7"/>
+                            </svg>
+                            <span>→ <span class="font-mono">{{ $batch['page_path'] }}</span></span>
+                        </div>
+                        <div class="flex items-center gap-2 pl-9 pb-2 text-[11px] text-slate-400 dark:text-slate-500">
+                            <div class="w-0.5 h-5 bg-slate-200 dark:bg-slate-600 ml-0.5"></div>
+                            <svg class="w-3 h-3 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                            @php $navLabel = $batch['page_path'] === '/' ? 'Home (/)' : \Illuminate\Support\Str::limit($batch['page_path'], 60); @endphp
+                            <span class="font-mono text-[10px]">{{ $navLabel }}</span>
+                        </div>
+                    @endif
+
+                    {{-- Batch card --}}
+                    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+
+                        {{-- Batch header (click to collapse body) --}}
+                        <button type="button"
+                                onclick="toggleBatch('{{ $batchId }}')"
+                                class="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group">
+
+                            {{-- Batch number badge --}}
+                            <div class="shrink-0 w-7 h-7 rounded-full {{ $batch['order_placed'] ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' }} text-[11px] font-bold flex items-center justify-center mt-0.5">
+                                {{ $batch['batch_num'] }}
+                            </div>
+
+                            <div class="flex-1 min-w-0">
+                                {{-- Page title + badges --}}
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    @php
+                                        $displayTitle = $batch['page_title'] ?: $batch['page_path'];
+                                        $displayTitle = ($displayTitle === '/' || $displayTitle === '') ? 'Home' : $displayTitle;
+                                    @endphp
+                                    <span class="text-[13px] font-semibold text-slate-800 dark:text-slate-100">
+                                        {{ $displayTitle }}
                                     </span>
+                                    @if($batch['order_placed'])
+                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300">🛍 Order placed</span>
+                                    @endif
+                                    @if($batch['product_views'] > 0)
+                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300">👁 {{ $batch['product_views'] }} product{{ $batch['product_views'] > 1 ? 's' : '' }}</span>
+                                    @endif
                                 </div>
 
-                                {{-- Contextual sub-info --}}
-                                <div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                                    @if(!empty($ev['page_path']))
-                                        <span title="{{ $ev['page_url'] }}">
-                                            <span class="opacity-60">Page:</span>
-                                            {{ Str::limit($ev['page_path'], 60) }}
-                                        </span>
-                                    @endif
-                                    @if(!empty($ev['page_title']))
-                                        <span class="hidden sm:inline">
-                                            <span class="opacity-60">Title:</span>
-                                            {{ Str::limit($ev['page_title'], 50) }}
-                                        </span>
-                                    @endif
-                                    @if(!empty($ev['product_name']))
-                                        <span>
-                                            <span class="opacity-60">Product:</span>
-                                            {{ Str::limit($ev['product_name'], 40) }}
-                                        </span>
-                                    @endif
-                                    @if((float)$ev['event_value'] > 0)
-                                        <span class="font-semibold text-green-600 dark:text-green-400">
-                                            £{{ number_format((float)$ev['event_value'], 2) }}
-                                        </span>
-                                    @endif
-                                    @if((int)$ev['active_time_ms'] > 0)
-                                        <span>
-                                            <span class="opacity-60">Active:</span>
-                                            {{ round($ev['active_time_ms'] / 1000, 1) }}s
-                                        </span>
-                                    @endif
-                                    @if((int)$ev['scroll_depth_pct'] > 0)
-                                        <span>
-                                            <span class="opacity-60">Scroll:</span>
-                                            {{ $ev['scroll_depth_pct'] }}%
-                                        </span>
-                                    @endif
+                                {{-- URL path --}}
+                                @php $displayPath = $batch['page_path'] === '/' ? '/  (Home)' : $batch['page_path']; @endphp
+                                @if($batch['page_title'] && $batch['page_path'] && $batch['page_title'] !== $batch['page_path'])
+                                    <p class="text-[11px] font-mono text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                                        {{ \Illuminate\Support\Str::limit($displayPath, 80) }}
+                                    </p>
+                                @endif
 
-                                    {{-- UTM / referrer on session_started only --}}
-                                    @if($evName === 'session_started')
-                                        @if(!empty($ev['utm_source']))
-                                            <span>
-                                                <span class="opacity-60">Source:</span>
-                                                {{ $ev['utm_source'] }}{{ $ev['utm_medium'] ? '/' . $ev['utm_medium'] : '' }}
-                                                {{ $ev['utm_campaign'] ? '(' . $ev['utm_campaign'] . ')' : '' }}
-                                            </span>
-                                        @elseif(!empty($ev['referrer']))
-                                            <span>
-                                                <span class="opacity-60">Referrer:</span>
-                                                {{ Str::limit($ev['referrer'], 50) }}
-                                            </span>
-                                        @else
-                                            <span><span class="opacity-60">Source:</span> Direct</span>
+                                {{-- Meta: time range + source + stats --}}
+                                <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                                    <span class="text-slate-400 dark:text-slate-500 font-mono">
+                                        {{ $bStart->format('H:i:s') }}
+                                        @if($bDurSec > 0)
+                                            <span class="mx-0.5 opacity-40">→</span>{{ $bEnd->format('H:i:s') }}
+                                            <span class="ml-1 font-semibold text-slate-500">({{ $bDurStr }})</span>
                                         @endif
+                                    </span>
+
+                                    {{-- Active time on page (from time_on_page events) --}}
+                                    @if($pageActiveMs > 0)
+                                        <span class="text-slate-500 dark:text-slate-400 font-semibold">
+                                            🕐 {{ round($pageActiveMs / 1000) }}s active
+                                        </span>
                                     @endif
 
-                                    {{-- Extra properties on hover --}}
-                                    @if(!empty($props) && count($props) > 0)
-                                        <button
-                                            onclick="this.nextElementSibling.classList.toggle('hidden')"
-                                            class="text-accent-400 hover:text-accent-600 cursor-pointer underline underline-offset-2">
-                                            +props
-                                        </button>
-                                        <div class="hidden w-full mt-1 font-mono text-[10px] text-slate-500 dark:text-slate-400 break-all">
-                                            @foreach($props as $pk => $pv)
-                                                <span class="mr-3"><span class="opacity-70">{{ $pk }}:</span>
-                                                {{ is_array($pv) ? json_encode($pv) : Str::limit((string)$pv, 80) }}</span>
-                                            @endforeach
-                                        </div>
+                                    {{-- Max scroll depth --}}
+                                    @if($pageScrollMax > 0)
+                                        <span class="text-slate-400 dark:text-slate-500">↕ {{ $pageScrollMax }}%</span>
+                                    @endif
+
+                                    {{-- Show source on first page OR when non-direct --}}
+                                    @if($bi === 0 || $utm || $ref)
+                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-semibold {{ $srcBg }}">
+                                            {{ $srcIcon }} {{ $srcLabel }}
+                                        </span>
+                                    @endif
+
+                                    <span class="text-slate-400 dark:text-slate-500">⚡ {{ $bEvCount }} events</span>
+                                    @if($batch['clicks'] > 0)
+                                        <span class="text-slate-400 dark:text-slate-500">🖱 {{ $batch['clicks'] }}</span>
                                     @endif
                                 </div>
                             </div>
-                        </div>
-                    @endforeach
+
+                            {{-- Chevron --}}
+                            <svg id="{{ $batchId }}-icon"
+                                 class="batch-toggle-icon shrink-0 w-4 h-4 text-slate-400 dark:text-slate-500 mt-1 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+                                 fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+
+                        {{-- ── EVENT LIST ────────────────────────────────────────── --}}
+                        <div id="{{ $batchId }}-body" class="border-t border-slate-100 dark:border-slate-700">
+                            @if(!empty($visibleEvents))
+                                <div class="px-4 py-3 ev-line space-y-0.5">
+                                    @foreach($visibleEvents as $ev)
+                                        @php
+                                            $evName = $ev['event_name'];
+                                            $props  = [];
+                                            if (!empty($ev['properties']) && $ev['properties'] !== '{}') {
+                                                $props = json_decode($ev['properties'], true) ?? [];
+                                            }
+                                            $evTs = \Carbon\Carbon::parse($ev['event_timestamp']);
+
+                                            // ── Dot colour + background + icon ────────────────────
+                                            [$dot, $evBg, $icon] = match(true) {
+                                                $evName === 'order_placed'          => ['bg-green-500',   'bg-green-50 dark:bg-green-900/20',      '🛍️'],
+                                                $evName === 'add_to_cart'            => ['bg-blue-500',    'bg-blue-50 dark:bg-blue-900/20',        '🛒'],
+                                                $evName === 'checkout_started'       => ['bg-yellow-500',  'bg-yellow-50 dark:bg-yellow-900/20',    '💳'],
+                                                $evName === 'product_viewed'         => ['bg-purple-500',  'bg-purple-50 dark:bg-purple-900/20',    '👁️'],
+                                                $evName === 'page_viewed'            => ['bg-sky-400',     'bg-sky-50 dark:bg-sky-900/20',          '📄'],
+                                                $evName === 'session_started'        => ['bg-slate-400',   'bg-slate-100 dark:bg-slate-700/50',     '🚀'],
+                                                $evName === 'session_ended'          => ['bg-slate-400',   'bg-slate-100 dark:bg-slate-700/50',     '🏁'],
+                                                $evName === 'page_transition'        => ['bg-teal-500',    'bg-teal-50 dark:bg-teal-900/20',        '➡️'],
+                                                $evName === 'scroll_depth_final'     => ['bg-indigo-400',  'bg-indigo-50 dark:bg-indigo-900/20',    '↕️'],
+                                                $evName === 'element_click'          => ['bg-orange-500',  'bg-orange-50 dark:bg-orange-900/20',    '🖱️'],
+                                                $evName === 'rage_click'             => ['bg-red-500',     'bg-red-50 dark:bg-red-900/20',          '😡'],
+                                                str_contains($evName, 'search')      => ['bg-pink-500',    'bg-pink-50 dark:bg-pink-900/20',        '🔍'],
+                                                str_contains($evName, 'video')       => ['bg-rose-500',    'bg-rose-50 dark:bg-rose-900/20',        '🎬'],
+                                                str_contains($evName, 'wishlist')    => ['bg-fuchsia-500', 'bg-fuchsia-50 dark:bg-fuchsia-900/20',  '❤️'],
+                                                str_contains($evName, 'variant')     => ['bg-violet-500',  'bg-violet-50 dark:bg-violet-900/20',    '🎨'],
+                                                default                              => ['bg-slate-400',   'bg-slate-50 dark:bg-slate-700/30',      '•'],
+                                            };
+
+                                            // ── Human-readable label ───────────────────────────────
+                                            $labelMap = [
+                                                'session_started'      => 'Session started',
+                                                'session_ended'        => 'Session ended',
+                                                'page_viewed'          => 'Page viewed',
+                                                'product_viewed'       => 'Viewed product',
+                                                'add_to_cart'          => 'Added to cart',
+                                                'remove_from_cart'     => 'Removed from cart',
+                                                'checkout_started'     => 'Started checkout',
+                                                'order_placed'         => 'Order placed',
+                                                'element_click'        => 'Clicked',
+                                                'rage_click'           => 'Rage clicked',
+                                                'scroll_depth_final'   => 'Scrolled page',
+                                                'page_transition'      => 'Navigated to',
+                                                'search'               => 'Searched',
+                                                'search_click'         => 'Clicked search result',
+                                                'search_refine'        => 'Refined search',
+                                                'quick_view'           => 'Quick viewed',
+                                                'variant_selected'     => 'Selected variant',
+                                                'add_to_wishlist'      => 'Added to wishlist',
+                                                'notify_me'            => 'Requested "Notify me"',
+                                                'product_interaction'  => 'Product interaction',
+                                            ];
+                                            $readableLabel = $labelMap[$evName] ?? str_replace('_', ' ', ucfirst($evName));
+
+                                            // ── Headline detail (the most important single fact) ───
+                                            $elemText  = !empty($ev['target_element_text']) ? $ev['target_element_text'] : (!empty($props['text']) ? $props['text'] : '');
+                                            $trackKey  = !empty($ev['target_data_track']) ? $ev['target_data_track'] : (!empty($props['data_track']) ? $props['data_track'] : '');
+                                            $prodName  = $ev['product_name'] ?? $props['product_name'] ?? '';
+                                            $searchQ   = $props['query'] ?? '';
+                                            $toPath    = $props['to_path'] ?? '';
+
+                                            $headline = match(true) {
+                                                in_array($evName, ['element_click','rage_click'], true) =>
+                                                    ($elemText ? '"'.ucfirst(\Illuminate\Support\Str::limit($elemText, 50)).'"' : ($trackKey ?: null)),
+                                                in_array($evName, ['product_viewed','add_to_cart','remove_from_cart','quick_view','variant_selected','add_to_wishlist'], true) =>
+                                                    ($prodName ? \Illuminate\Support\Str::limit($prodName, 45) : null),
+                                                $evName === 'order_placed' =>
+                                                    '£'.number_format((float)($ev['event_value'] ?? 0), 2),
+                                                in_array($evName, ['search','search_click','search_refine'], true) =>
+                                                    ($searchQ ? '"'.ucfirst(\Illuminate\Support\Str::limit($searchQ, 50)).'"' : null),
+                                                $evName === 'scroll_depth_final' =>
+                                                    ((int)($ev['scroll_depth_pct'] ?? $props['depth_percent'] ?? 0) > 0
+                                                        ? (int)($ev['scroll_depth_pct'] ?? $props['depth_percent'] ?? 0).'% of page'
+                                                        : null),
+                                                $evName === 'page_transition' =>
+                                                    ($toPath ?: null),
+                                                $evName === 'session_started' =>
+                                                    (!empty($ev['utm_source'])
+                                                        ? $ev['utm_source'].($ev['utm_medium'] ? ' / '.$ev['utm_medium'] : '')
+                                                        : (!empty($ev['referrer']) ? 'from '.\Illuminate\Support\Str::limit($ev['referrer'],40) : 'Direct visit')),
+                                                $evName === 'checkout_started' =>
+                                                    ((float)($ev['event_value'] ?? 0) > 0 ? '£'.number_format((float)$ev['event_value'],2) : null),
+                                                default => null,
+                                            };
+                                        @endphp
+
+                                        <div class="relative flex gap-2.5 py-1.5 pl-6">
+                                            {{-- Timeline dot --}}
+                                            <div class="absolute left-1.5 top-3.5 w-2.5 h-2.5 rounded-full {{ $dot }} ring-2 ring-white dark:ring-slate-800 shrink-0 z-10"></div>
+
+                                            {{-- Event card --}}
+                                            <div class="flex-1 min-w-0 {{ $evBg }} rounded-lg px-3 py-2">
+                                                {{-- Top row: label + headline + timestamp --}}
+                                                <div class="flex items-baseline justify-between gap-2 flex-wrap">
+                                                    <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
+                                                        <span class="text-[13px] leading-none">{{ $icon }}</span>
+                                                        <span class="text-[12px] font-semibold text-slate-700 dark:text-slate-200">{{ $readableLabel }}</span>
+                                                        {{-- Headline detail shown inline after the label --}}
+                                                        @if($headline)
+                                                            <span class="text-[12px] font-medium text-slate-600 dark:text-slate-300 truncate max-w-xs">{{ $headline }}</span>
+                                                        @endif
+                                                        @if($ev['is_rage_click'])
+                                                            <span class="px-1 py-0.5 rounded text-[9px] font-bold bg-red-200 dark:bg-red-900/60 text-red-700 dark:text-red-300">RAGE</span>
+                                                        @endif
+                                                        @if($ev['is_dead_click'])
+                                                            <span class="px-1 py-0.5 rounded text-[9px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-500">DEAD</span>
+                                                        @endif
+                                                    </div>
+                                                    <span class="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap font-mono shrink-0">{{ $evTs->format('H:i:s') }}</span>
+                                                </div>
+
+                                                {{-- Secondary details row --}}
+                                                <div class="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+
+                                                    {{-- Product price / value --}}
+                                                    @if((float)($ev['event_value'] ?? 0) > 0 && $evName !== 'order_placed')
+                                                        <span class="font-semibold text-green-600 dark:text-green-400">£{{ number_format((float)$ev['event_value'],2) }}@if((int)($ev['quantity'] ?? 0) > 1) × {{ $ev['quantity'] }}@endif</span>
+                                                    @endif
+
+                                                    {{-- Order total + item count --}}
+                                                    @if($evName === 'order_placed')
+                                                        @if((int)($ev['quantity'] ?? 0) > 0)
+                                                            <span>{{ $ev['quantity'] }} item{{ (int)$ev['quantity'] > 1 ? 's' : ''}}</span>
+                                                        @endif
+                                                        @if(!empty($ev['order_id']))
+                                                            <span class="font-mono opacity-60">{{ $ev['order_id'] }}</span>
+                                                        @endif
+                                                    @endif
+
+                                                    {{-- Variant info for product events --}}
+                                                    @php $varColor = $ev['variant_color'] ?? $props['variant_color'] ?? ''; $varSize = $ev['variant_size'] ?? $props['variant_size'] ?? ''; @endphp
+                                                    @if($varColor || $varSize)
+                                                        <span>{{ implode(' · ', array_filter([$varColor, $varSize])) }}</span>
+                                                    @endif
+
+                                                    {{-- SKU --}}
+                                                    @if(!empty($ev['sku']))
+                                                        <span class="opacity-60 font-mono text-[10px]">{{ $ev['sku'] }}</span>
+                                                    @endif
+
+                                                    {{-- Active time on page (for session_ended / time-bearing events) --}}
+                                                    @if((int)($ev['active_time_ms'] ?? 0) > 0 && !in_array($evName, ['element_click','rage_click','scroll_depth_final'], true))
+                                                        <span><span class="opacity-60">Active:</span> {{ round($ev['active_time_ms']/1000,1) }}s</span>
+                                                    @endif
+
+                                                    {{-- Element click: tag + data-track fallback if no element text --}}
+                                                    @if(in_array($evName, ['element_click','rage_click'], true))
+                                                        @php $tagInfo = ltrim(($ev['target_element_tag'] ?? $props['tag'] ?? '').' '.($ev['target_element_id'] ? '#'.$ev['target_element_id'] : '')); @endphp
+                                                        @if($tagInfo)
+                                                            <span class="font-mono text-[10px] opacity-70">{{ $tagInfo }}</span>
+                                                        @endif
+                                                        @if($trackKey && !$elemText)
+                                                            <span><span class="opacity-60">data-track:</span> {{ $trackKey }}</span>
+                                                        @endif
+                                                    @endif
+
+                                                    {{-- Search results count --}}
+                                                    @if(str_contains($evName, 'search') && isset($props['results_count']))
+                                                        <span>{{ number_format((int)$props['results_count']) }} results</span>
+                                                    @endif
+
+                                                    {{-- Scroll depth px --}}
+                                                    @if($evName === 'scroll_depth_final' && (int)($ev['scroll_depth_px'] ?? $props['depth_px'] ?? 0) > 0)
+                                                        <span class="opacity-60">{{ number_format((int)($ev['scroll_depth_px'] ?? $props['depth_px'])) }}px</span>
+                                                    @endif
+
+                                                    {{-- Page transition: time spent on from-page --}}
+                                                    @if($evName === 'page_transition' && (int)($props['time_on_from_ms'] ?? 0) > 0)
+                                                        <span><span class="opacity-60">Spent:</span> {{ round($props['time_on_from_ms']/1000) }}s on previous page</span>
+                                                    @endif
+
+                                                    {{-- Session source (only for session_started — headline already shows it, so show campaign here) --}}
+                                                    @if($evName === 'session_started' && !empty($ev['utm_campaign']))
+                                                        <span><span class="opacity-60">Campaign:</span> {{ $ev['utm_campaign'] }}</span>
+                                                    @endif
+
+                                                    {{-- Extra props toggle --}}
+                                                    @if(!empty($props) && count($props) > 0)
+                                                        <button onclick="this.nextElementSibling.classList.toggle('hidden')"
+                                                                class="text-indigo-400 hover:text-indigo-600 cursor-pointer underline underline-offset-2 text-[10px]">+props</button>
+                                                        <div class="hidden w-full mt-1 font-mono text-[10px] text-slate-500 dark:text-slate-400 break-all bg-white/60 dark:bg-slate-800/60 rounded px-2 py-1">
+                                                            @foreach($props as $pk => $pv)
+                                                                <span class="mr-3"><span class="opacity-60">{{ $pk }}:</span> {{ is_array($pv) ? json_encode($pv) : \Illuminate\Support\Str::limit((string)$pv, 80) }}</span>
+                                                            @endforeach
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @else
+                                <p class="px-4 py-3 text-[12px] text-slate-400 dark:text-slate-500 italic">No events recorded on this page.</p>
+                            @endif
+                        </div>{{-- /event list --}}
+                    </div>{{-- /batch card --}}
+                </div>{{-- /page-batch --}}
+
+            @empty
+                <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center">
+                    <p class="text-slate-400 dark:text-slate-500">No page batches found for this session.</p>
                 </div>
-            <?php else: ?>
-                <p class="px-5 py-4 text-[13px] text-slate-400 dark:text-slate-500 italic">No events recorded for this session.</p>
-            <?php endif; ?>
-        </div>
-        <?php endforeach; ?>
-    <?php else: ?>
+            @endforelse
+
+        </div>{{-- /session-panel --}}
+
+    @empty
         <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-10 text-center">
             <p class="text-slate-400 dark:text-slate-500">No sessions found for this visitor.</p>
         </div>
-    <?php endif; ?>
-
-        @push('js')
-        <script>
-            document.addEventListener('DOMContentLoaded', function () {
-                const tabs = Array.from(document.querySelectorAll('.session-tab'));
-                const panels = Array.from(document.querySelectorAll('.session-panel'));
-
-                if (!tabs.length || !panels.length) return;
-
-                function activate(sessionId) {
-                    // Toggle tabs
-                    tabs.forEach(t => {
-                        if (t.dataset.session === sessionId) {
-                            t.classList.add('session-active');
-                        } else {
-                            t.classList.remove('session-active');
-                        }
-                    });
-
-                    // Toggle panels
-                    panels.forEach(p => {
-                        if (p.dataset.sessionId === sessionId) {
-                            p.classList.remove('hidden');
-                        } else {
-                            p.classList.add('hidden');
-                        }
-                    });
-                }
-
-                // Attach click handlers
-                tabs.forEach(t => {
-                    t.addEventListener('click', function (e) {
-                        e.preventDefault();
-                        const sid = this.dataset.session;
-                        if (!sid) return;
-                        activate(sid);
-                        // optional: focus panel
-                        const panel = document.querySelector('[data-session-id="' + sid + '"]');
-                        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    });
-                });
-
-                // Default: activate the last tab (latest session)
-                const defaultTab = tabs.find(t => t.classList.contains('session-active')) || tabs[tabs.length - 1];
-                if (defaultTab) activate(defaultTab.dataset.session);
-            });
-        </script>
-        @endpush
+    @endforelse
 
 </div>
 @endsection
+
+@push('js')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // ── Session tab switching ─────────────────────────
+    const tabs   = Array.from(document.querySelectorAll('.session-tab'));
+    const panels = Array.from(document.querySelectorAll('.session-panel'));
+
+    function activateSession(sessionId) {
+        tabs.forEach(t => t.classList.toggle('session-active', t.dataset.session === sessionId));
+        panels.forEach(p => p.classList.toggle('hidden', p.dataset.sessionId !== sessionId));
+    }
+
+    tabs.forEach(t => {
+        t.addEventListener('click', function (e) {
+            e.preventDefault();
+            const sid = this.dataset.session;
+            if (!sid) return;
+            activateSession(sid);
+            const panel = document.querySelector('[data-session-id="' + sid + '"]');
+            if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+
+    const defaultTab = tabs.find(t => t.classList.contains('session-active')) || tabs[tabs.length - 1];
+    if (defaultTab) activateSession(defaultTab.dataset.session);
+});
+
+// ── Batch collapse / expand ───────────────────────────
+function toggleBatch(batchId) {
+    const body = document.getElementById(batchId + '-body');
+    const icon = document.getElementById(batchId + '-icon');
+    if (!body) return;
+    const hide = body.style.display !== 'none';
+    body.style.display = hide ? 'none' : '';
+    if (icon) icon.style.transform = hide ? 'rotate(-90deg)' : '';
+}
+</script>
+@endpush
 

@@ -70,13 +70,13 @@ class TrackingController extends Controller
     }
 
     /* ──────────────────────────────────────────────────
-     | USER JOURNEY  — full event timeline
+     | USER JOURNEY  — page-batch event timeline
      ─────────────────────────────────────────────────── */
     public function journey(Request $request, string $anonymousId)
     {
         $safeId = addslashes($anonymousId);
 
-        // Summary stats for this user
+        // ── Summary stats ──────────────────────────────
         $summarySql = "SELECT
                 count()                                      AS total_events,
                 uniqExact(session_id)                        AS total_sessions,
@@ -100,26 +100,30 @@ class TrackingController extends Controller
         $summaryResult = $this->ch->query($summarySql);
         $summary = $summaryResult['data'][0] ?? [];
 
-        // All sessions for this user
+        // ── Sessions ───────────────────────────────────
         $sessionsSql = "SELECT
                 session_id,
                 min(event_timestamp) AS start_time,
                 max(event_timestamp) AS end_time,
                 dateDiff('second', min(event_timestamp), max(event_timestamp)) AS duration_seconds,
-                count() AS event_count,
+                count()              AS event_count,
                 uniqExact(page_path) AS page_count,
-                anyIf(page_path, event_name = 'session_started') AS landing_page,
-                countIf(event_name = 'order_placed') AS order_placed,
-                sumIf(event_value, event_name = 'order_placed') AS revenue
+                anyIf(page_path,  event_name = 'session_started') AS landing_page,
+                anyIf(utm_source, utm_source  != '')               AS utm_source,
+                anyIf(utm_medium, utm_medium  != '')               AS utm_medium,
+                anyIf(utm_campaign, utm_campaign != '')            AS utm_campaign,
+                anyIf(referrer,   referrer    != '')               AS referrer,
+                countIf(event_name = 'order_placed')               AS order_placed,
+                sumIf(event_value, event_name = 'order_placed')    AS revenue
             FROM enox_tracker.events
             WHERE anonymous_id = '{$safeId}'
             GROUP BY session_id
             ORDER BY start_time ASC";
 
         $sessionsResult = $this->ch->query($sessionsSql);
-        $sessions = $sessionsResult['data'] ?? [];
+        $sessions       = $sessionsResult['data'] ?? [];
 
-        // All events ordered by time
+        // ── All events (ordered) ────────────────────────
         $eventsSql = "SELECT
                 event_name,
                 event_category,
@@ -132,6 +136,7 @@ class TrackingController extends Controller
                 page_type,
                 product_id,
                 product_name,
+                sku,
                 event_value,
                 active_time_ms,
                 total_time_on_page_ms,
@@ -148,23 +153,87 @@ class TrackingController extends Controller
                 utm_source,
                 utm_medium,
                 utm_campaign,
-                referrer
+                referrer,
+                referrer_domain,
+                target_element_tag,
+                target_element_text,
+                target_data_track,
+                order_id,
+                quantity,
+                price
             FROM enox_tracker.events
             WHERE anonymous_id = '{$safeId}'
             ORDER BY event_timestamp ASC
-            LIMIT 2000";
+            LIMIT 3000";
 
         $eventsResult = $this->ch->query($eventsSql);
-        $events = $eventsResult['data'] ?? [];
+        $events       = $eventsResult['data'] ?? [];
 
-        // Group events by session_id
-        $eventsBySession = [];
-        foreach ($events as $event) {
-            $eventsBySession[$event['session_id']][] = $event;
+        // ── Group events → session → page-batches ──────
+        // A "page batch" = all consecutive events with the same page_path.
+        // When page_path changes, a new batch starts.
+        $eventsBySession  = [];
+        $pagesBySession   = [];  // ['session_id' => [ ['page_path'=>…, 'events'=>[…], …], … ]]
+
+        foreach ($events as $ev) {
+            $sid = $ev['session_id'];
+            $eventsBySession[$sid][] = $ev;
+        }
+
+        foreach ($eventsBySession as $sid => $sessEvents) {
+            $batches     = [];
+            $curBatch    = null;
+            $batchNum    = 0;
+
+            foreach ($sessEvents as $ev) {
+                $path = $ev['page_path'] ?: '/';
+
+                // Start new batch when path changes (or very first event)
+                if ($curBatch === null || $path !== $curBatch['page_path']) {
+                    if ($curBatch !== null) {
+                        $batches[] = $curBatch;
+                    }
+                    $batchNum++;
+                    $curBatch = [
+                        'batch_num'    => $batchNum,
+                        'page_path'    => $path,
+                        'page_url'     => $ev['page_url'],
+                        'page_title'   => $ev['page_title'],
+                        'page_type'    => $ev['page_type'],
+                        'start_time'   => $ev['event_timestamp'],
+                        'end_time'     => $ev['event_timestamp'],
+                        'referrer'     => $ev['referrer'],
+                        'referrer_domain' => $ev['referrer_domain'] ?? '',
+                        'utm_source'   => $ev['utm_source'],
+                        'utm_medium'   => $ev['utm_medium'],
+                        'utm_campaign' => $ev['utm_campaign'],
+                        'events'       => [],
+                        'product_views'  => 0,
+                        'clicks'         => 0,
+                        'order_placed'   => false,
+                    ];
+                }
+
+                // Accumulate page metrics
+                $curBatch['end_time'] = $ev['event_timestamp'];
+                $curBatch['events'][] = $ev;
+
+                $evName = $ev['event_name'];
+                if ($evName === 'product_viewed')  $curBatch['product_views']++;
+                if (str_contains($evName, 'click')) $curBatch['clicks']++;
+                if ($evName === 'order_placed')     $curBatch['order_placed'] = true;
+            }
+
+            if ($curBatch !== null) {
+                $batches[] = $curBatch;
+            }
+
+            $pagesBySession[$sid] = $batches;
         }
 
         return view('tracking.journey', compact(
-            'anonymousId', 'summary', 'sessions', 'events', 'eventsBySession'
+            'anonymousId', 'summary', 'sessions', 'events',
+            'eventsBySession', 'pagesBySession'
         ));
     }
 }
