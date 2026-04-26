@@ -11,6 +11,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SalesChartController;
 use App\Http\Controllers\SellingChartExpenseController;
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\TrackingController;
 use Illuminate\Support\Facades\Auth;
 
 
@@ -67,6 +68,12 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
         Route::put('selling-chart/expense/{id}', 'update')->name('selling_chart.expense.update');
         Route::delete('selling-chart/expense/{id}', 'destroy')->name('selling_chart.expense.destroy');
     });
+    // ── Tracking (ClickHouse analytics) ──
+    Route::controller(TrackingController::class)->group(function () {
+        Route::get('tracking', 'index')->name('tracking.index');
+        Route::get('tracking/{anonymousId}/journey', 'journey')->name('tracking.journey');
+    });
+
     Route::controller(ProfileController::class)->group(function () {
         /*~~~~~~~~~~~~~~ PROFILE AND PASSWORD MANAGE ~~~~~~~~~~~~~~*/
         Route::get('profile',  'index')->name('profile');
