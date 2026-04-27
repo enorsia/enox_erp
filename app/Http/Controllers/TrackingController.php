@@ -163,7 +163,7 @@ class TrackingController extends Controller
                 price
             FROM enox_tracker.events
             WHERE anonymous_id = '{$safeId}'
-            ORDER BY event_timestamp ASC
+            ORDER BY event_timestamp ASC, total_time_on_page_ms ASC, active_time_ms ASC
             LIMIT 3000";
 
         $eventsResult = $this->ch->query($eventsSql);
@@ -176,7 +176,10 @@ class TrackingController extends Controller
         $pagesBySession   = [];  // ['session_id' => [ ['page_path'=>…, 'events'=>[…], …], … ]]
 
         foreach ($events as $ev) {
-            $sid = $ev['session_id'];
+            $sid = $ev['session_id'] ?? '';
+            if ($sid === '') {
+                continue;
+            }
             $eventsBySession[$sid][] = $ev;
         }
 
@@ -187,7 +190,22 @@ class TrackingController extends Controller
             $visitedPaths = [];          // track revisits within this session
 
             foreach ($sessEvents as $ev) {
-                $path = $ev['page_path'] ?: '/';
+                $evName = $ev['event_name'] ?? '';
+
+                // Transition events are useful as metadata but should not create standalone page cards.
+                if ($evName === 'page_transition') {
+                    continue;
+                }
+
+                $props = [];
+                if (!empty($ev['properties']) && $ev['properties'] !== '{}') {
+                    $props = json_decode($ev['properties'], true) ?? [];
+                }
+
+                $path = $ev['page_path']
+                    ?: ($props['page_path'] ?? '')
+                    ?: ($props['path'] ?? '')
+                    ?: ($curBatch['page_path'] ?? '/');
 
                 // Start new batch when path changes (or very first event)
                 if ($curBatch === null || $path !== $curBatch['page_path']) {
@@ -224,7 +242,6 @@ class TrackingController extends Controller
                 $curBatch['end_time'] = $ev['event_timestamp'];
                 $curBatch['events'][] = $ev;
 
-                $evName = $ev['event_name'];
                 if ($evName === 'product_viewed')  $curBatch['product_views']++;
                 if (str_contains($evName, 'click')) $curBatch['clicks']++;
                 if ($evName === 'order_placed')     $curBatch['order_placed'] = true;

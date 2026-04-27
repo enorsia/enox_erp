@@ -579,7 +579,7 @@
                                                         @if(!empty($ev['order_id']))<span class="font-mono opacity-60">{{ $ev['order_id'] }}</span>@endif
                                                     @endif
 
-                                                    @if((int)($ev['active_time_ms'] ?? 0) > 0 && !in_array($evName, ['element_click','rage_click','scroll_depth_final'], true))
+                                                    @if((int)($ev['active_time_ms'] ?? 0) >= 1000 && !in_array($evName, ['element_click','rage_click','scroll_depth_final'], true))
                                                         <span><span class="opacity-60">Active:</span> {{ round($ev['active_time_ms']/1000,1) }}s</span>
                                                     @endif
 

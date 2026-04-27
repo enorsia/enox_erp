@@ -62,6 +62,12 @@ class EnoxTrackerService
                 $page  = $ctx['page']     ?? [];
                 $camp  = $ctx['campaign'] ?? [];
                 $ts    = $this->parseTimestamp($event['timestamp'] ?? null);
+                $eventName = $event['event'] ?? '';
+                $resolvedPagePath = $props['page_path']
+                    ?? (($eventName === 'page_transition') ? ($props['to_path'] ?? '') : '')
+                    ?? $page['path']
+                    ?? $props['path']
+                    ?? '';
 
                 $values = [
                     "'" . $this->esc($event['event']        ?? '') . "'",
@@ -82,7 +88,7 @@ class EnoxTrackerService
                     "'" . $this->esc($props['order_id'] ?? $event['order_id'] ?? '') . "'",
                     "'" . $this->esc($page['url']      ?? $props['url']      ?? '') . "'",
                     "'" . $this->esc($page['title']    ?? $props['title']    ?? '') . "'",
-                    "'" . $this->esc($page['path']     ?? $props['path']     ?? '') . "'",
+                    "'" . $this->esc($resolvedPagePath) . "'",
                     "'" . $this->esc($page['type']     ?? $props['page_type'] ?? '') . "'",
                     "'" . $this->esc($page['referrer'] ?? $props['referrer'] ?? '') . "'",
                     "'" . $this->esc($camp['source']   ?? '') . "'",
@@ -1040,7 +1046,14 @@ class EnoxTrackerService
             return now()->format('Y-m-d H:i:s.v');
         }
         if (is_numeric($timestamp)) {
-            return date('Y-m-d H:i:s.v', (int) ($timestamp / 1000));
+            $ts = (float) $timestamp;
+
+            // JS SDK sends epoch milliseconds; keep ms precision to avoid same-second reordering.
+            if ($ts > 9999999999) {
+                return \Carbon\Carbon::createFromTimestampMs((int) round($ts))->format('Y-m-d H:i:s.v');
+            }
+
+            return \Carbon\Carbon::createFromTimestamp((int) round($ts))->format('Y-m-d H:i:s.v');
         }
         return (string) $timestamp;
     }
