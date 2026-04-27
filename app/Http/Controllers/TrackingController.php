@@ -181,9 +181,10 @@ class TrackingController extends Controller
         }
 
         foreach ($eventsBySession as $sid => $sessEvents) {
-            $batches     = [];
-            $curBatch    = null;
-            $batchNum    = 0;
+            $batches      = [];
+            $curBatch     = null;
+            $batchNum     = 0;
+            $visitedPaths = [];          // track revisits within this session
 
             foreach ($sessEvents as $ev) {
                 $path = $ev['page_path'] ?: '/';
@@ -194,23 +195,28 @@ class TrackingController extends Controller
                         $batches[] = $curBatch;
                     }
                     $batchNum++;
+                    $isRevisit = in_array($path, $visitedPaths, true);
+                    if (!$isRevisit) {
+                        $visitedPaths[] = $path;
+                    }
                     $curBatch = [
-                        'batch_num'    => $batchNum,
-                        'page_path'    => $path,
-                        'page_url'     => $ev['page_url'],
-                        'page_title'   => $ev['page_title'],
-                        'page_type'    => $ev['page_type'],
-                        'start_time'   => $ev['event_timestamp'],
-                        'end_time'     => $ev['event_timestamp'],
-                        'referrer'     => $ev['referrer'],
+                        'batch_num'       => $batchNum,
+                        'page_path'       => $path,
+                        'page_url'        => $ev['page_url'],
+                        'page_title'      => $ev['page_title'],
+                        'page_type'       => $ev['page_type'],
+                        'start_time'      => $ev['event_timestamp'],
+                        'end_time'        => $ev['event_timestamp'],
+                        'referrer'        => $ev['referrer'],
                         'referrer_domain' => $ev['referrer_domain'] ?? '',
-                        'utm_source'   => $ev['utm_source'],
-                        'utm_medium'   => $ev['utm_medium'],
-                        'utm_campaign' => $ev['utm_campaign'],
-                        'events'       => [],
-                        'product_views'  => 0,
-                        'clicks'         => 0,
-                        'order_placed'   => false,
+                        'utm_source'      => $ev['utm_source'],
+                        'utm_medium'      => $ev['utm_medium'],
+                        'utm_campaign'    => $ev['utm_campaign'],
+                        'events'          => [],
+                        'product_views'   => 0,
+                        'clicks'          => 0,
+                        'order_placed'    => false,
+                        'is_revisit'      => $isRevisit,   // true when user returned to this URL
                     ];
                 }
 
