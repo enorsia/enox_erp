@@ -136,6 +136,16 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Raw full-payload channel — stores untruncated POST bodies for frontend debugging.
+        // Set LOG_ENOX_RAW=false in .env to disable without changing code.
+        'enoxtracker_raw' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/enoxtracker_raw.log'),
+            'level' => 'debug',
+            'days' => env('LOG_ENOX_RAW_DAYS', 7),
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];

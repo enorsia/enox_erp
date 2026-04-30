@@ -1033,6 +1033,125 @@ class EnoxTrackerService
     }
 
     // ─────────────────────────────────────────
+    // USER PROFILES
+    // Upserts the users table for:
+    //   a) Logged-in users  → user_id set, profile enriched on each login
+    //   b) Guest checkout   → user_id empty, keyed as "anon_<anonymous_id>"
+    //      so billing info is captured before account creation.
+    //      When the guest later registers, identity_map stitches the records.
+    // ─────────────────────────────────────────
+    public function upsertUserProfile(array $u, string $ipAddress = ''): bool
+    {
+        try {
+            $userId      = $u['user_id']      ?? '';
+            $anonymousId = $u['anonymous_id'] ?? '';
+
+            // For guests, synthesise a temporary user_id from their anonymous cookie.
+            // The ReplacingMergeTree on (project_id, user_id) will merge future updates.
+            $effectiveUserId = $userId ?: (empty($anonymousId) ? '' : ('anon_' . $anonymousId));
+            if (empty($effectiveUserId)) {
+                Log::warning('[EnoxTracker] upsertUserProfile: no user_id or anonymous_id — skipping');
+                return false;
+            }
+
+            // Split a single "name" field into first/last when individual fields are missing
+            $firstName = $u['first_name'] ?? '';
+            $lastName  = $u['last_name']  ?? '';
+            if (empty($firstName) && !empty($u['name'])) {
+                $parts     = explode(' ', trim($u['name']), 2);
+                $firstName = $parts[0] ?? '';
+                $lastName  = $parts[1] ?? '';
+            }
+
+            // Address fields (optional billing address from checkout form)
+            $address  = $u['address'] ?? [];
+            $city     = $address['city']     ?? '';
+            $country  = $address['country']  ?? '';
+
+            $now   = now()->format('Y-m-d H:i:s.v');
+            $today = now()->format('Y-m-d');
+
+            $cols = [
+                'user_id', 'project_id', 'anonymous_id',
+                'email', 'phone', 'first_name', 'last_name',
+                'last_country', 'last_ip',
+                'last_seen', 'updated_at', 'created_date',
+            ];
+
+            $vals = [
+                "'" . $this->esc($effectiveUserId)              . "'",
+                "'" . $this->esc($u['project_id'] ?? 'default') . "'",
+                "'" . $this->esc($anonymousId)                  . "'",
+                "'" . $this->esc($u['email'] ?? '')             . "'",
+                "'" . $this->esc($u['phone'] ?? '')             . "'",
+                "'" . $this->esc($firstName)                    . "'",
+                "'" . $this->esc($lastName)                     . "'",
+                "'" . $this->esc($country)                      . "'",
+                "'" . $this->esc($ipAddress)                    . "'",
+                "'" . $this->esc($now)                          . "'",
+                "'" . $this->esc($now)                          . "'",
+                "'" . $this->esc($today)                        . "'",
+            ];
+
+            $sql = "INSERT INTO enox_tracker.users (" . implode(',', $cols) . ") VALUES (" . implode(',', $vals) . ")";
+            $ok  = $this->ch->statement($sql);
+
+            if ($ok) {
+                Log::channel('enoxtracker')->info('[EnoxTracker] User profile upserted', [
+                    'effective_user_id' => $effectiveUserId,
+                    'is_guest'          => empty($userId),
+                    'has_email'         => !empty($u['email']),
+                    'has_phone'         => !empty($u['phone']),
+                    'has_address'       => !empty($address),
+                ]);
+            }
+
+            return $ok;
+
+        } catch (\Exception $e) {
+            Log::error('[EnoxTracker] Failed to upsert user profile', ['message' => $e->getMessage()]);
+            return false;
+        }
+    }
+
+    // ─────────────────────────────────────────
+    // IDENTITY MAP
+    // Records the anonymous_id → user_id link so past guest events
+    // can be attributed to the now-known user in analytics queries.
+    // ─────────────────────────────────────────
+    public function upsertIdentityMap(array $u, string $sessionId = ''): bool
+    {
+        try {
+            $anonymousId = $u['anonymous_id'] ?? '';
+            $userId      = $u['user_id']      ?? '';
+
+            if (empty($anonymousId) || empty($userId)) {
+                return false;
+            }
+
+            $now   = now()->format('Y-m-d H:i:s.v');
+            $today = now()->format('Y-m-d');
+
+            $cols = ['anonymous_id', 'user_id', 'project_id', 'stitched_session_id', 'stitched_at', 'created_date'];
+            $vals = [
+                "'" . $this->esc($anonymousId)                  . "'",
+                "'" . $this->esc($userId)                       . "'",
+                "'" . $this->esc($u['project_id'] ?? 'default') . "'",
+                "'" . $this->esc($sessionId)                    . "'",
+                "'" . $this->esc($now)                          . "'",
+                "'" . $this->esc($today)                        . "'",
+            ];
+
+            $sql = "INSERT INTO enox_tracker.identity_map (" . implode(',', $cols) . ") VALUES (" . implode(',', $vals) . ")";
+            return $this->ch->statement($sql);
+
+        } catch (\Exception $e) {
+            Log::error('[EnoxTracker] Failed to upsert identity map', ['message' => $e->getMessage()]);
+            return false;
+        }
+    }
+
+    // ─────────────────────────────────────────
     // HELPERS
     // ─────────────────────────────────────────
     protected function esc(string $value): string

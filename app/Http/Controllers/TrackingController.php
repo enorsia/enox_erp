@@ -64,6 +64,25 @@ class TrackingController extends Controller
         $result = $this->ch->query($sql);
         $users  = $result['data'] ?? [];
 
+        // ── Enrich with user profiles (name / email / phone) ──────────────
+        $userIds = array_filter(array_column($users, 'user_id'), fn($id) => $id !== '' && $id !== null);
+        $profileMap = [];
+        if (!empty($userIds)) {
+            $inList = implode("','", array_map('addslashes', $userIds));
+            $profileSql = "SELECT user_id, first_name, last_name, email, phone
+                           FROM enox_tracker.users FINAL
+                           WHERE user_id IN ('{$inList}')";
+            $profileResult = $this->ch->query($profileSql);
+            foreach ($profileResult['data'] ?? [] as $p) {
+                $profileMap[$p['user_id']] = $p;
+            }
+        }
+        foreach ($users as &$u) {
+            $uid = $u['user_id'] ?? '';
+            $u['profile'] = $profileMap[$uid] ?? null;
+        }
+        unset($u);
+
         $totalPages = (int) ceil($total / $perPage);
 
         return view('tracking.index', compact('users', 'total', 'page', 'totalPages', 'perPage', 'search'));

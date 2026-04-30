@@ -68,10 +68,13 @@
                     <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
                     @forelse ($users as $i => $user)
                         @php
-                            $rowNum = ($page - 1) * $perPage + $i + 1;
-                            $visitorLabel = $user['user_id']
-                                ? 'User #' . $user['user_id']
-                                : substr($user['anonymous_id'], 0, 22) . '…';
+                            $rowNum     = ($page - 1) * $perPage + $i + 1;
+                            $profile    = $user['profile'] ?? null;
+                            $firstName  = trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''));
+                            $email      = $profile['email'] ?? '';
+                            $phone      = $profile['phone'] ?? '';
+                            $isGuest    = empty($firstName) && empty($email);
+                            $guestLabel = 'Guest ' . $rowNum;
                             $deviceIcon = match(strtolower($user['device_type'] ?? '')) {
                                 'mobile'  => '📱',
                                 'tablet'  => '📟',
@@ -82,12 +85,29 @@
                             <td class="px-4 py-3 text-slate-400 dark:text-slate-500">{{ $rowNum }}</td>
 
                             {{-- Visitor ID --}}
-                            <td class="px-4 py-3">
-                                <div class="font-medium text-slate-700 dark:text-slate-200" title="{{ $user['anonymous_id'] }}">
-                                    {{ $visitorLabel }}
-                                </div>
-                                @if($user['ip_address'])
-                                    <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono">{{ $user['ip_address'] }}</div>
+                            <td class="px-4 py-3 max-w-[200px]">
+                                @if(!$isGuest)
+                                    {{-- Identified user --}}
+                                    @if($firstName)
+                                        <div class="font-semibold text-slate-800 dark:text-slate-100 truncate" title="{{ $firstName }}">{{ $firstName }}</div>
+                                    @endif
+                                    @if($email)
+                                        <div class="text-[12px] text-indigo-500 dark:text-indigo-400 truncate mt-0.5" title="{{ $email }}">{{ $email }}</div>
+                                    @endif
+                                    @if($phone)
+                                        <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{{ $phone }}</div>
+                                    @endif
+                                @else
+                                    {{-- Anonymous / Guest --}}
+                                    <div class="inline-flex items-center gap-1.5">
+                                        <span class="font-semibold text-slate-500 dark:text-slate-400">{{ $guestLabel }}</span>
+                                    </div>
+                                    @if($user['ip_address'])
+                                        <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono">{{ $user['ip_address'] }}</div>
+                                    @endif
+                                    @if(!empty($user['country']))
+                                        <div class="text-[11px] text-slate-400 dark:text-slate-500">{{ $user['country'] }}</div>
+                                    @endif
                                 @endif
                             </td>
 
