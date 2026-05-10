@@ -37,7 +37,7 @@
                         <select name="user_id" class="tom-select w-full h-9" data-placeholder="All Users">
                             <option value="">All Users</option>
                             @foreach ($users as $user)
-                                <option value="{{ $user->id }}" {{ request('user_id') == $user->id ? 'selected' : '' }}>
+                                <option value="{{ $user?->id }}" {{ request('user_id') == $user?->id ? 'selected' : '' }}>
                                     {{ $user->name ?? '' }}
                                 </option>
                             @endforeach
