@@ -180,3 +180,12 @@ document.addEventListener('DOMContentLoaded', function() {
         icon.style.transform = 'rotate(-90deg)';
     });
 });
+
+document.querySelector('input[name="name"]').addEventListener('blur', function() {
+    var slugField = document.getElementById('slug');
+    if (!slugField.value && this.value) {
+        slugField.value = this.value.toLowerCase()
+            .replace(/\s+/g, '-')
+            .replace(/[^\w\-]/g, '');
+    }
+});

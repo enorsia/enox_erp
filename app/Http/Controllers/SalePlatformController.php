@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SalePlatform;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
@@ -11,6 +12,15 @@ use Illuminate\Support\Str;
 
 class SalePlatformController extends Controller
 {
+    // ─────────────────────────────────────────────────────────────
+    // Private helpers
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Build a DFS-ordered flat list with depth metadata.
+     * Each node gets: depth, is_root, has_children, children_count,
+     *                 ancestor_names, is_last_child
+     */
     private function buildFlatTree(array $nodes, int $depth = 0, array $ancestorNames = []): array
     {
         $result = [];
@@ -21,7 +31,7 @@ class SalePlatformController extends Controller
             $node->has_children   = $node->children->isNotEmpty();
             $node->children_count = $node->children->count();
             $node->ancestor_names = $ancestorNames;
-            $node->is_last_child  = false; // will be fixed below
+            $node->is_last_child  = false;
 
             $result[] = $node;
 
@@ -36,17 +46,14 @@ class SalePlatformController extends Controller
             }
         }
 
-        // Mark last children so the blade can draw connectors correctly
-        if (!empty($result)) {
-            // Group siblings and mark the last one at each parent
-            $byParent = [];
-            foreach ($result as $item) {
-                $byParent[$item->parent_id ?? 'root'][] = $item;
-            }
-            foreach ($byParent as $siblings) {
-                if (!empty($siblings)) {
-                    $siblings[array_key_last($siblings)]->is_last_child = true;
-                }
+        // Mark the last sibling at each parent level for connector lines
+        $byParent = [];
+        foreach ($result as $item) {
+            $byParent[$item->parent_id ?? 'root'][] = $item;
+        }
+        foreach ($byParent as $siblings) {
+            if (!empty($siblings)) {
+                $siblings[array_key_last($siblings)]->is_last_child = true;
             }
         }
 
@@ -54,12 +61,12 @@ class SalePlatformController extends Controller
     }
 
     /**
-     * Recursively attach children from a keyed map.
+     * Recursively attach children. $childrenMap must stay a Collection of Collections
+     * (do NOT call ->toArray() on it before passing in).
      */
-    private function attachChildren(array $roots, \Illuminate\Support\Collection $childrenMap): array
+    private function attachChildren(array $roots, Collection $childrenMap): array
     {
         foreach ($roots as $node) {
-            // groupBy() keys on the cast value; parent_id may be int or string key
             $children = $childrenMap->get($node->id) ?? collect();
             $node->setRelation('children', $children);
 
@@ -70,6 +77,82 @@ class SalePlatformController extends Controller
 
         return $roots;
     }
+
+    /**
+     * Return a DFS-ordered flat array of all platforms suitable for <select> dropdowns.
+     * Each item has: id, name, depth, label (indented display name).
+     *
+     * Pass $excludeId to hide a platform and all its descendants (prevents
+     * a platform from being set as its own parent/ancestor).
+     */
+    private function getParentOptions(int $excludeId = null): array
+    {
+        $all         = SalePlatform::orderBy('sort_order')->orderBy('id')->get();
+        $childrenMap = $all->groupBy('parent_id');
+        $roots       = $all->whereNull('parent_id')->values();
+
+        $this->attachChildren($roots->all(), $childrenMap);
+
+        $flatTree = $this->buildFlatTree($roots->sortBy('sort_order')->all());
+
+        // Collect the IDs of the excluded node + all its descendants
+        $excludeIds = [];
+        if ($excludeId) {
+            $excludeIds   = $this->collectDescendantIds($flatTree, $excludeId);
+            $excludeIds[] = $excludeId;
+        }
+
+        $options = [];
+        foreach ($flatTree as $node) {
+            if (in_array($node->id, $excludeIds)) {
+                continue;
+            }
+
+            // Full-width spaces give visual indent inside <option> on most browsers
+            $pad       = str_repeat("\xE3\x80\x80", $node->depth); // U+3000 ideographic space
+            $arrow     = $node->depth > 0 ? '└ ' : '';
+            $options[] = [
+                'id'    => $node->id,
+                'parent_id' => $node->parent_id,
+                'name'  => $node->name,
+                'depth' => $node->depth,
+                'label' => $pad . $arrow . $node->name,
+            ];
+        }
+        return $options;
+    }
+
+    /**
+     * Walk the flat tree and collect all descendant IDs of $targetId.
+     */
+    private function collectDescendantIds(array $flatTree, int $targetId): array
+    {
+        $targetDepth = null;
+        $collecting  = false;
+        $ids         = [];
+
+        foreach ($flatTree as $node) {
+            if ($node->id === $targetId) {
+                $targetDepth = $node->depth;
+                $collecting  = true;
+                continue;
+            }
+
+            if ($collecting) {
+                if ($node->depth > $targetDepth) {
+                    $ids[] = $node->id;
+                } else {
+                    break; // back to same or higher level — done
+                }
+            }
+        }
+
+        return $ids;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Resource methods
+    // ─────────────────────────────────────────────────────────────
 
     public function index(Request $request)
     {
@@ -82,7 +165,6 @@ class SalePlatformController extends Controller
         $hasFilter = $search || $type || ($isActive !== null && $isActive !== '');
 
         if ($hasFilter) {
-            // Filtered: flat paginated list (hierarchy doesn't apply cleanly to filtered sets)
             $platforms = SalePlatform::with('parent')
                 ->when($search, fn($q) => $q->where(function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")
@@ -95,7 +177,6 @@ class SalePlatformController extends Controller
                 ->paginate(30)
                 ->withQueryString();
 
-            // Annotate depth = 0 for flat filtered results
             foreach ($platforms as $p) {
                 $p->depth          = 0;
                 $p->is_root        = true;
@@ -110,26 +191,20 @@ class SalePlatformController extends Controller
             $data['is_filtered'] = true;
             $data['start']       = ($platforms->currentPage() - 1) * $platforms->perPage() + 1;
         } else {
-            // No filter: load ALL platforms and build nested tree
-            $all = SalePlatform::orderBy('sort_order')->orderBy('id')->get();
-
-            // Keep groupBy result as a Collection of Collections — do NOT call toArray()
+            $all         = SalePlatform::orderBy('sort_order')->orderBy('id')->get();
             $childrenMap = $all->groupBy('parent_id');
             $roots       = $all->whereNull('parent_id')->values();
 
-            // Attach children recursively (passes the Collection, not an array)
             $this->attachChildren($roots->all(), $childrenMap);
 
-            // Build DFS flat list with depth metadata
             $flatTree = $this->buildFlatTree($roots->sortBy('sort_order')->all());
 
-            $data['platforms']   = null; // no paginator needed in tree mode
+            $data['platforms']   = null;
             $data['flat_list']   = $flatTree;
             $data['is_filtered'] = false;
             $data['start']       = 1;
         }
 
-        // Summary stats
         $data['stats'] = [
             'total'    => SalePlatform::count(),
             'active'   => SalePlatform::where('is_active', true)->count(),
@@ -140,46 +215,34 @@ class SalePlatformController extends Controller
         return view('sale_platforms.index', $data);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
         Gate::authorize('general.sale_platform.create');
 
-        $data['parentPlatforms'] = SalePlatform::where('parent_id', null)
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->get();
-
-        $data['types'] = ['channel', 'sub_channel', 'marketplace', 'region'];
+        $data['parentOptions'] = $this->getParentOptions();
+        $data['types']         = ['channel', 'sub_channel', 'marketplace', 'region'];
 
         return view('sale_platforms.create', $data);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:100|unique:sale_platforms,name',
-            'slug' => 'nullable|string|max:100|unique:sale_platforms,slug',
-            'parent_id' => 'nullable|exists:sale_platforms,id',
-            'type' => 'required|in:channel,sub_channel,marketplace,region',
-            'is_active' => 'nullable|boolean',
+            'name'       => 'required|string|max:100|unique:sale_platforms,name',
+            'slug'       => 'nullable|string|max:100|unique:sale_platforms,slug',
+            'parent_id'  => 'nullable|exists:sale_platforms,id',
+            'type'       => 'required|in:channel,sub_channel,marketplace,region',
+            'is_active'  => 'nullable|in:on,off',
             'sort_order' => 'nullable|integer|min:0|max:255',
         ]);
 
         try {
-            $slug = $validated['slug'] ?? Str::slug($request->name);
-
             $platform = SalePlatform::create([
-                'name' => $validated['name'],
-                'slug' => $slug,
-                'parent_id' => $validated['parent_id'] ?? null,
-                'type' => $validated['type'],
-                'is_active' => $request->has('is_active') ? true : false,
+                'name'       => $validated['name'],
+                'slug'       => $validated['slug'] ?? Str::slug($validated['name']),
+                'parent_id'  => $validated['parent_id'] ?? null,
+                'type'       => $validated['type'],
+                'is_active'  => $request->has('is_active'),
                 'sort_order' => $validated['sort_order'] ?? 0,
             ]);
 
@@ -194,7 +257,7 @@ class SalePlatformController extends Controller
         } catch (\Exception $e) {
             Log::error('Sale platform creation failed: ' . $e->getMessage());
             notify()->error('Failed to create sale platform', 'Error');
-            return redirect()->route('admin.sale-platforms.index');
+            return redirect()->back()->withInput();
         }
     }
 
@@ -204,7 +267,6 @@ class SalePlatformController extends Controller
 
         $salePlatform->load(['parent', 'children' => fn($q) => $q->orderBy('sort_order')]);
 
-        // Build full ancestor breadcrumb chain
         $breadcrumbs = [];
         $current     = $salePlatform->parent;
         while ($current) {
@@ -215,7 +277,6 @@ class SalePlatformController extends Controller
             }
         }
 
-        // Sibling count (same parent, same type)
         $siblingsCount = SalePlatform::where('parent_id', $salePlatform->parent_id)
             ->where('id', '!=', $salePlatform->id)
             ->count();
@@ -227,95 +288,49 @@ class SalePlatformController extends Controller
         ]);
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(SalePlatform $salePlatform)
     {
         Gate::authorize('general.sale_platform.edit');
 
-        $data['salePlatform'] = $salePlatform;
-        $data['parentPlatforms'] = SalePlatform::where('parent_id', null)
-            ->where('id', '!=', $salePlatform->id)
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->get();
-
-        $data['types'] = ['channel', 'sub_channel', 'marketplace', 'region'];
+        $data['salePlatform']  = $salePlatform;
+        $data['parentOptions'] = $this->getParentOptions($salePlatform->id);
+        $data['types']         = ['channel', 'sub_channel', 'marketplace', 'region'];
 
         return view('sale_platforms.edit', $data);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, SalePlatform $salePlatform)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:100|unique:sale_platforms,name,' . $salePlatform->id,
-            'slug' => 'nullable|string|max:100|unique:sale_platforms,slug,' . $salePlatform->id,
-            'parent_id' => 'nullable|exists:sale_platforms,id',
-            'type' => 'required|in:channel,sub_channel,marketplace,region',
-            'is_active' => 'nullable|in:on,off',
+            'name'       => 'required|string|max:100|unique:sale_platforms,name,' . $salePlatform->id,
+            'slug'       => 'nullable|string|max:100|unique:sale_platforms,slug,' . $salePlatform->id,
+            'parent_id'  => 'nullable|exists:sale_platforms,id',
+            'type'       => 'required|in:channel,sub_channel,marketplace,region',
+            'is_active'  => 'nullable|in:on,off',
             'sort_order' => 'nullable|integer|min:0|max:255',
         ]);
 
-        $validated['is_active'] = $request->boolean('is_active');
-
         try {
-            // Capture old values before update
-            $oldValues = [
-                'name' => $salePlatform->name,
-                'slug' => $salePlatform->slug,
-                'parent_id' => $salePlatform->parent_id,
-                'type' => $salePlatform->type,
-                'is_active' => $salePlatform->is_active,
-                'sort_order' => $salePlatform->sort_order,
-            ];
-
-            $slug = $validated['slug'] ?? Str::slug($request->name);
+            $oldValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'sort_order']);
 
             $salePlatform->update([
-                'name' => $validated['name'],
-                'slug' => $slug,
-                'parent_id' => $validated['parent_id'] ?? null,
-                'type' => $validated['type'],
-                'is_active' => $request->has('is_active') ? true : false,
+                'name'       => $validated['name'],
+                'slug'       => $validated['slug'] ?? Str::slug($validated['name']),
+                'parent_id'  => $validated['parent_id'] ?? null,
+                'type'       => $validated['type'],
+                'is_active'  => $request->has('is_active'),
                 'sort_order' => $validated['sort_order'] ?? 0,
             ]);
 
-            // Capture new values after update
-            $newValues = [
-                'name' => $salePlatform->name,
-                'slug' => $salePlatform->slug,
-                'parent_id' => $salePlatform->parent_id,
-                'type' => $salePlatform->type,
-                'is_active' => $salePlatform->is_active,
-                'sort_order' => $salePlatform->sort_order,
-            ];
+            $newValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'sort_order']);
+            $changes   = array_filter($newValues, fn($v, $k) => $v != $oldValues[$k], ARRAY_FILTER_USE_BOTH);
 
-            // Detect actual changes
-            $changes = [];
-            foreach ($oldValues as $key => $oldValue) {
-                if ($oldValue != $newValues[$key]) {
-                    $changes[$key] = [
-                        'old' => $oldValue,
-                        'new' => $newValues[$key]
-                    ];
-                }
-            }
-
-            // Log only if there are actual changes
-            if (count($changes) > 0) {
-                $changedFields = array_keys($changes);
-                $description = 'Updated sale platform: ' . $salePlatform->name;
-                $description .= ' (Changed: ' . implode(', ', array_map(fn($f) => ucfirst($f), $changedFields)) . ')';
-
+            if (!empty($changes)) {
                 activity()
                     ->causedBy(Auth::user())
                     ->performedOn($salePlatform)
                     ->withProperties(['old' => $oldValues, 'attributes' => $newValues])
-                    ->log($description);
+                    ->log('Updated sale platform: ' . $salePlatform->name . ' (Changed: ' . implode(', ', array_keys($changes)) . ')');
             }
 
             notify()->success("Sale platform updated successfully.", "Success");
@@ -323,13 +338,10 @@ class SalePlatformController extends Controller
         } catch (\Exception $e) {
             Log::error('Sale platform update failed: ' . $e->getMessage());
             notify()->error('Failed to update sale platform', 'Error');
-            return redirect()->route('admin.sale-platforms.index');
+            return redirect()->back()->withInput();
         }
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(SalePlatform $salePlatform)
     {
         Gate::authorize('general.sale_platform.delete');
@@ -352,4 +364,3 @@ class SalePlatformController extends Controller
         }
     }
 }
-

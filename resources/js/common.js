@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 new TomSelect(element, {
                     create: false,
                     searchField: 'text',
-                    sortField: 'text',
+                    sortField: [{field: '$order'}, {field: '$score'}],
                     placeholder: element.dataset.placeholder || 'Select an option',
                     maxOptions: 50,
                 });
