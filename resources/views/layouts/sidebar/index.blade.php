@@ -156,9 +156,9 @@
                            class="block py-1.5 px-3 text-[12px] rounded-md transition-colors text-white/45 hover:text-white/80 hover:bg-white/5">
                             Return Reason Types
                         </a>
-                        <a href="#"
+                        <a href="{{ route('admin.sale-platforms.index') }}"
                            class="block py-1.5 px-3 text-[12px] rounded-md transition-colors text-white/45 hover:text-white/80 hover:bg-white/5">
-                            Platform list
+                            Sale Platforms
                         </a>
                     </div>
                 </div>

@@ -23,9 +23,10 @@ class DatabaseSeeder extends Seeder
             'password' => bcrypt(config('enoxsuite.super_admin_password')),
         ]);
 
-        // Call the ReturnReasonType seeder
+        // Call the seeders
         $this->call([
             ReturnReasonTypeSeeder::class,
+            SalePlatformSeeder::class,
         ]);
     }
 }

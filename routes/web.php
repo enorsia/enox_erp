@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\SalePlatformController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ReturnReasonTypeController;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +32,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('roles', RoleController::class);
     Route::resource('platforms', PlatformController::class);
     Route::resource('return-reason-types', ReturnReasonTypeController::class);
+    Route::resource('sale-platforms', SalePlatformController::class);
     Route::resource('activity-logs', ActivityLogController::class)->only(['index', 'show']);
 
     Route::controller(SalesChartController::class)->group(function () {

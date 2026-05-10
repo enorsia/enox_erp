@@ -33,3 +33,4 @@ if (has('#forecasting-page-content'))         import('./pages/forecasting');
 if (has('#chart-page-content'))               import('./pages/selling-chart');
 if (has('#selling-chart-form-content'))       import('./pages/selling-chart');
 if (has('#return-reason-type-page-content'))       import('./pages/reason-type');
+if (has('#sale-platform-page-content'))       import('./pages/sale-platform');
