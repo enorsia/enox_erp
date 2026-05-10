@@ -54,9 +54,6 @@ window.toggleSwitch = function (id) {
     const track = document.getElementById(id);
     if (!track) return;
     track.classList.toggle('on');
-    // Sync any associated hidden checkbox (convention: id + 'Checkbox')
-    const cb = document.getElementById(id + 'Checkbox') || track.querySelector('input[type=checkbox]');
-    if (cb) cb.checked = track.classList.contains('on');
 };
 
 /* ══════════════════════════════════════

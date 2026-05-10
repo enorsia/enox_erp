@@ -51,6 +51,10 @@ return [
                 'guard' => 'web',
                 'actions' => ['index', 'show', 'update', 'approve', 'sent_mail'],
             ],
+            'return_reason_type' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
+            ]
         ],
 
         // SETTINGS MODULE
@@ -58,7 +62,7 @@ return [
             'platforms' => [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'delete'],
-            ]
+            ],
         ],
 
     ],
