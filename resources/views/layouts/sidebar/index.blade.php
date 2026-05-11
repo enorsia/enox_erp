@@ -199,6 +199,13 @@
                                     Sale Platforms
                                 </a>
                             @endcanany
+                            @can('general.monthly_budget.index')
+                                <a href="{{ route('admin.monthly-budgets.index') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors text-white/45 hover:text-white/80 hover:bg-white/5 {{ Request::is('admin/sales/monthly-budgets*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    Monthly Budget
+                                </a>
+                            @endcanany
+
                         </div>
                     </div>
                 </div>
