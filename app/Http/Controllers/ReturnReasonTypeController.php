@@ -3,18 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Models\ReturnReasonType;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 
 class ReturnReasonTypeController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index(Request $request)
+    const ROUTES = [
+        'index' => 'admin.return-reason-types.index',
+    ];
+    public function index(Request $request) : View
     {
         Gate::authorize('general.return_reason_type.index');
 
@@ -28,20 +30,14 @@ class ReturnReasonTypeController extends Controller
         return view('return_reason_types.index', $data);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function create() : View
     {
         Gate::authorize('general.return_reason_type.create');
 
         return view('return_reason_types.create');
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+    public function store(Request $request) : RedirectResponse
     {
         $validated = $request->validate([
             'name' => 'required|string|max:150|unique:return_reason_types,name',
@@ -69,38 +65,29 @@ class ReturnReasonTypeController extends Controller
                 ->log('Created new return reason type: ' . $reasonType->name);
 
             notify()->success("Return reason type created successfully.", "Success");
-            return redirect()->route('admin.return-reason-types.index');
+            return redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
-            Log::error('Return reason type creation failed: ' . $e->getMessage());
+            Log::error('RETURN REASON TYPES -  creation failed: ' . $e->getMessage());
             notify()->error('Failed to create return reason type', 'Error');
-            return redirect()->route('admin.return-reason-types.index');
+            return redirect()->route(self::ROUTES['index']);
         }
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(ReturnReasonType $returnReasonType)
+    public function show(ReturnReasonType $returnReasonType) : View
     {
         Gate::authorize('general.return_reason_type.show');
 
         return view('return_reason_types.show', compact('returnReasonType'));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(ReturnReasonType $returnReasonType)
+    public function edit(ReturnReasonType $returnReasonType) : View
     {
         Gate::authorize('general.return_reason_type.edit');
 
         return view('return_reason_types.edit', compact('returnReasonType'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, ReturnReasonType $returnReasonType)
+    public function update(Request $request, ReturnReasonType $returnReasonType) : RedirectResponse
     {
         $validated = $request->validate([
             'name' => 'required|string|max:150|unique:return_reason_types,name,' . $returnReasonType->id,
@@ -168,18 +155,15 @@ class ReturnReasonTypeController extends Controller
             }
 
             notify()->success("Return reason type updated successfully.", "Success");
-            return redirect()->route('admin.return-reason-types.index');
+            return redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
-            Log::error('Return reason type update failed: ' . $e->getMessage());
+            Log::error('RETURN REASON TYPES - update failed: ' . $e->getMessage());
             notify()->error('Failed to update return reason type', 'Error');
-            return redirect()->route('admin.return-reason-types.index');
+            return redirect()->route(self::ROUTES['index']);
         }
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(ReturnReasonType $returnReasonType)
+    public function destroy(ReturnReasonType $returnReasonType) : RedirectResponse
     {
         Gate::authorize('general.return_reason_type.delete');
 
@@ -195,7 +179,7 @@ class ReturnReasonTypeController extends Controller
             notify()->success("Return reason type deleted successfully.", "Deleted");
             return redirect()->back();
         } catch (\Exception $e) {
-            Log::error('Return reason type deletion failed: ' . $e->getMessage());
+            Log::error('RETURN REASON TYPES - deletion failed: ' . $e->getMessage());
             notify()->error('Failed to delete return reason type', 'Error');
             return redirect()->back();
         }
