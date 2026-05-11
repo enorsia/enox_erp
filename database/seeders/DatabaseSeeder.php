@@ -27,6 +27,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             ReturnReasonTypeSeeder::class,
             SalePlatformSeeder::class,
+            MonthlyBudgetSeeder::class,
         ]);
     }
 }

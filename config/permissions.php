@@ -58,7 +58,11 @@ return [
             'sale_platform' => [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'show', 'delete'],
-            ]
+            ],
+            'monthly_budget' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
+            ],
         ],
 
         // SETTINGS MODULE
