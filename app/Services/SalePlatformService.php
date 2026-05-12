@@ -164,7 +164,7 @@ class SalePlatformService
             ->filter($filters)
             ->orderBy('sort_order')
             ->latest('id')
-            ->paginate(30)
+            ->paginate(20)
             ->withQueryString();
 
         foreach ($platforms as $p) {

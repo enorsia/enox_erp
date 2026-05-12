@@ -17,7 +17,7 @@ class ReturnReasonTypeService
         return ReturnReasonType::filter($filters)
             ->orderBy('sort_order')
             ->latest('id')
-            ->paginate(30)
+            ->paginate(20)
             ->withQueryString();
     }
 

@@ -16,7 +16,7 @@ class MonthlyBudgetService
         return MonthlyBudget::with('salePlatform')
             ->filter($filters)
             ->latest('id')
-            ->paginate(30)
+            ->paginate(20)
             ->withQueryString();
     }
 

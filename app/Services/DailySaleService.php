@@ -18,7 +18,7 @@ class DailySaleService
             ->filter($filters)
             ->latest('date')
             ->latest('id')
-            ->paginate(30)
+            ->paginate(20)
             ->withQueryString();
     }
 
