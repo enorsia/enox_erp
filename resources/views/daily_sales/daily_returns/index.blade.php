@@ -189,72 +189,129 @@
             </div>
         @endif
 
-        {{-- Table --}}
-        <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
-                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">#</th>
-                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Platform</th>
-                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Date</th>
-                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Reason</th>
-                            <th class="px-4 py-3 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Returns</th>
-                            <th class="px-4 py-3 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Qty</th>
-                            <th class="px-4 py-3 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 dark:divide-slate-700/60">
-                        @forelse ($dailyReturns as $key => $return)
-                            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                <td class="px-4 py-3 text-[12px] text-slate-400">{{ $start + $key }}</td>
-                                <td class="px-4 py-3"><span class="text-[13px] font-medium text-slate-700 dark:text-slate-200">{{ $return->salePlatform->name ?? 'N/A' }}</span></td>
-                                <td class="px-4 py-3 text-[13px] text-slate-600 dark:text-slate-300">{{ $return->date ? $return->date->format('d M Y') : 'N/A' }}</td>
-                                <td class="px-4 py-3"><span class="badge-custom badge-blue text-[11px]">{{ $return->returnReasonType->name ?? 'N/A' }}</span></td>
-                                <td class="px-4 py-3 text-right text-[13px] font-semibold text-slate-800 dark:text-slate-100">{{ number_format($return->number_of_returns) }}</td>
-                                <td class="px-4 py-3 text-right text-[13px] text-slate-600 dark:text-slate-300">{{ number_format($return->number_of_return_quantities) }}</td>
-                                <td class="px-4 py-3">
-                                    <div class="flex justify-end gap-1">
-                                        @can('general.daily_return.show')
-                                            <a href="{{ route('admin.daily-returns.show', $return->id) }}" class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="View">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                            </a>
-                                        @endcan
-                                        @can('general.daily_return.edit')
-                                            <a href="{{ route('admin.daily-returns.edit', $return->id) }}" class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="Edit">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                                            </a>
-                                        @endcan
-                                        @can('general.daily_return.delete')
-                                            <button onclick="deleteData({{ $return->id }})" class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 hover:border-red-200 transition-colors" title="Delete">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                            </button>
-                                            <form id="delete-form-{{ $return->id }}" method="POST" action="{{ route('admin.daily-returns.destroy', $return->id) }}" style="display:none;">
-                                                @csrf @method('DELETE')
-                                            </form>
-                                        @endcan
-                                    </div>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="7" class="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">No daily return records found.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
+        {{-- ── PREMIUM CARD VIEW ── --}}
+        @if ($dailyReturns->isEmpty())
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-10 text-center">
+                <svg class="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"/></svg>
+                <p class="text-sm text-slate-400 dark:text-slate-500">No daily return records found.</p>
             </div>
-        </div>
+        @else
+            @foreach ($viewGroups as $yearGroup)
+                {{-- ── Year Section ── --}}
+                <div class="mb-8">
+                    {{-- Year Header --}}
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="dr-year-badge">
+                            <svg class="w-3.5 h-3.5 opacity-80" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5"/></svg>
+                            {{ $yearGroup['year'] }}
+                        </div>
+                        <div class="flex-1 h-px bg-slate-200 dark:bg-slate-700"></div>
+                        <div class="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
+                            <span>Total Returns: <strong class="text-slate-700 dark:text-slate-200">{{ number_format($yearGroup['yearTotalReturns']) }}</strong></span>
+                        </div>
+                    </div>
+
+                    {{-- Month Groups --}}
+                    @foreach ($yearGroup['monthGroups'] as $monthGroup)
+                        <div class="ml-3 mb-5">
+                            {{-- Month Header --}}
+                            <div class="flex items-center gap-2.5 mb-3">
+                                <span class="dr-month-pill">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0v-7.5"/></svg>
+                                    {{ $monthGroup['monthName'] }} {{ $monthGroup['year'] }}
+                                </span>
+                                <div class="flex-1 h-px bg-slate-100 dark:bg-slate-700/70"></div>
+                                <div class="flex items-center gap-3 text-[10px] text-slate-400 dark:text-slate-500 shrink-0">
+                                    <span>Returns: <strong class="text-slate-600 dark:text-slate-300">{{ number_format($monthGroup['monthTotalReturns']) }}</strong></span>
+                                </div>
+                            </div>
+
+                            {{-- Platform Groups --}}
+                            @foreach ($monthGroup['platformGroups'] as $platformGroup)
+                                @if($platformGroup['parentPlatform'])
+                                    <div class="dr-platform-group-header">{{ $platformGroup['parentPlatform']['name'] }}</div>
+                                @endif
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 @if($platformGroup['parentPlatform']) ml-4 @endif mb-3">
+                                    @foreach ($platformGroup['returns'] as $return)
+                                        <div class="dr-return-card">
+                                            {{-- Card Header --}}
+                                            <div class="flex items-start justify-between gap-2 mb-3">
+                                                <div class="flex items-center gap-2.5 min-w-0">
+                                                    <div class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center shrink-0">
+                                                        <svg class="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"/></svg>
+                                                    </div>
+                                                    <div class="min-w-0">
+                                                        <p class="text-[13px] font-semibold text-slate-800 dark:text-slate-100 truncate">{{ $return->salePlatform->name ?? 'N/A' }}</p>
+                                                        <div class="flex items-center gap-1.5 mt-0.5">
+                                                            <p class="text-[11px] text-slate-400 dark:text-slate-500">{{ $return->date ? $return->date->format('d M Y') : 'N/A' }}</p>
+                                                            @if($return->returnReasonType)
+                                                                <span class="badge-custom badge-blue text-[9px] px-1.5 py-0.5">{{ $return->returnReasonType->name }}</span>
+                                                            @endif
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {{-- Actions --}}
+                                                <div class="flex gap-1 shrink-0">
+                                                    @can('general.daily_return.show')
+                                                        <a href="{{ route('admin.daily-returns.show', $return->id) }}" class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="View">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                                        </a>
+                                                    @endcan
+                                                    @can('general.daily_return.edit')
+                                                        <a href="{{ route('admin.daily-returns.edit', $return->id) }}" class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="Edit">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                                        </a>
+                                                    @endcan
+                                                    @can('general.daily_return.delete')
+                                                        <button onclick="deleteData({{ $return->id }})" class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 hover:border-red-200 transition-colors" title="Delete">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                        </button>
+                                                        <form id="delete-form-{{ $return->id }}" method="POST" action="{{ route('admin.daily-returns.destroy', $return->id) }}" style="display:none;">
+                                                            @csrf @method('DELETE')
+                                                        </form>
+                                                    @endcan
+                                                </div>
+                                            </div>
+
+                                            {{-- Metrics Grid --}}
+                                            <div class="grid grid-cols-2 gap-1.5">
+                                                <div class="dr-metric-tile danger">
+                                                    <span class="dr-metric-label">Returns</span>
+                                                    <span class="dr-metric-value">{{ number_format($return->number_of_returns) }}</span>
+                                                </div>
+                                                <div class="dr-metric-tile">
+                                                    <span class="dr-metric-label">Return Qty</span>
+                                                    <span class="dr-metric-value">{{ number_format($return->number_of_return_quantities) }}</span>
+                                                </div>
+                                            </div>
+
+                                            {{-- Gender Breakdown --}}
+                                            @if(($return->number_of_male_returns ?? 0) + ($return->number_of_female_returns ?? 0) + ($return->number_of_kids_returns ?? 0) > 0)
+                                                <div class="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                                                    @if($return->number_of_male_returns)
+                                                        <span class="text-[10px] text-slate-400">M: <strong class="text-slate-600 dark:text-slate-300">{{ $return->number_of_male_returns }}</strong></span>
+                                                    @endif
+                                                    @if($return->number_of_female_returns)
+                                                        <span class="text-[10px] text-slate-400">F: <strong class="text-slate-600 dark:text-slate-300">{{ $return->number_of_female_returns }}</strong></span>
+                                                    @endif
+                                                    @if($return->number_of_kids_returns)
+                                                        <span class="text-[10px] text-slate-400">K: <strong class="text-slate-600 dark:text-slate-300">{{ $return->number_of_kids_returns }}</strong></span>
+                                                    @endif
+                                                </div>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endforeach
+                        </div>
+                    @endforeach
+                </div>
+            @endforeach
+        @endif
 
         @include('layouts.pagination', ['paginator' => $dailyReturns])
     </div>
 </div>
 @endsection
 
-@push('scripts')
-<script>
-    function deleteData(id) {
-        if (confirm('Are you sure you want to delete this daily return record?')) {
-            document.getElementById('delete-form-' + id).submit();
-        }
-    }
-</script>
-@endpush

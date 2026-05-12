@@ -36,6 +36,7 @@ class DailyReturnController extends Controller
         $data['salePlatforms']  = $this->salePlatformService->getParentOptions();
         $data['reasonTypes']    = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
         $data['start']          = ($data['dailyReturns']->currentPage() - 1) * $data['dailyReturns']->perPage() + 1;
+        $data['viewGroups']     = $this->service->buildViewGroups($data['dailyReturns'], $data['salePlatforms']);
 
         return view('daily_sales.daily_returns.index', $data);
     }

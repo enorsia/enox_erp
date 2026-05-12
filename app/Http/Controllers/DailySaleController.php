@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Maatwebsite\Excel\Facades\Excel;
@@ -33,6 +34,7 @@ class DailySaleController extends Controller
         $data['dailySales']    = $this->service->getList($request->all());
         $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
         $data['start']         = ($data['dailySales']->currentPage() - 1) * $data['dailySales']->perPage() + 1;
+        $data['viewGroups']    = $this->service->buildViewGroups($data['dailySales'], $data['salePlatforms']);
 
         return view('daily_sales.daily_sales.index', $data);
     }

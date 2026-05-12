@@ -32,13 +32,14 @@ class MonthlyBudgetController extends Controller
     {
         Gate::authorize('general.monthly_budget.index');
 
-        $data['years']         = DateOptions::years();
-        $data['months']        = config('constants.months');
-        $data['salePlatforms'] = $salePlatformService->getParentOptions();
+        $data['years']          = DateOptions::years();
+        $data['months']         = config('constants.months');
+        $data['salePlatforms']  = $salePlatformService->getParentOptions();
 
-        $monthlyBudgets        = $this->service->getList($request->all());
-        $data['monthlyBudgets']= $monthlyBudgets;
-        $data['start']         = ($monthlyBudgets->currentPage() - 1) * $monthlyBudgets->perPage() + 1;
+        $monthlyBudgets         = $this->service->getList($request->all());
+        $data['monthlyBudgets'] = $monthlyBudgets;
+        $data['start']          = ($monthlyBudgets->currentPage() - 1) * $monthlyBudgets->perPage() + 1;
+        $data['viewGroups']     = $this->service->buildViewGroups($monthlyBudgets);
 
         return view('daily_sales.monthly_budgets.index', $data);
     }

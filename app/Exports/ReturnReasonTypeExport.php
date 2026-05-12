@@ -13,6 +13,8 @@ use Maatwebsite\Excel\Events\AfterSheet;
 
 class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell, WithMapping
 {
+    private int $rowIndex = 0;
+
     public function __construct(
         private Builder $query,
         private array $columns = []
@@ -27,8 +29,10 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
 
     public function map($row): array
     {
+        $this->rowIndex++;
         $cols = $this->columns ?: $this->allColumns();
         $map  = $this->rowMap($row);
+        $map['id'] = $this->rowIndex;
         return array_values(array_intersect_key($map, array_flip($cols)));
     }
 
@@ -42,31 +46,33 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
     private function rowMap($row): array
     {
         return [
-            'id'          => $row->id,
+            'id'          => $this->rowIndex,
             'name'        => $row->name,
             'slug'        => $row->slug,
             'description' => $row->description ?? '-',
             'is_active'   => $row->is_active ? 'Active' : 'Inactive',
             'sort_order'  => $row->sort_order,
             'created_at'  => $row->created_at?->format('d M Y'),
+            'updated_at'  => $row->updated_at?->format('d M Y'),
         ];
     }
 
     public static function allColumns(): array
     {
-        return ['id', 'name', 'slug', 'description', 'is_active', 'sort_order', 'created_at'];
+        return ['id', 'name', 'slug', 'description', 'is_active', 'sort_order', 'created_at', 'updated_at'];
     }
 
     public static function columnLabels(): array
     {
         return [
-            'id'          => '#',
+            'id'          => 'SL',
             'name'        => 'Name',
             'slug'        => 'Slug',
             'description' => 'Description',
             'is_active'   => 'Status',
             'sort_order'  => 'Sort Order',
             'created_at'  => 'Created At',
+            'updated_at'  => 'Updated At',
         ];
     }
 
@@ -74,13 +80,14 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
-                $sheet  = $event->sheet->getDelegate();
-                $cols   = count($this->columns ?: $this->allColumns());
-                $endCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cols);
+                $sheet      = $event->sheet->getDelegate();
+                $activeCols = $this->columns ?: $this->allColumns();
+                $cols       = count($activeCols);
+                $endCol     = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cols);
 
                 $this->applyHeaderRows($sheet, $endCol, 'RETURN REASON TYPES');
                 $this->applyHeadingStyle($sheet, $endCol);
-                $this->applyDataStyle($sheet, $endCol);
+                $this->applyDataStyle($sheet, $endCol, $activeCols);
             },
         ];
     }
@@ -112,14 +119,33 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
         $sheet->getRowDimension(6)->setRowHeight(20);
     }
 
-    private function applyDataStyle($sheet, string $endCol): void
+    private function applyDataStyle($sheet, string $endCol, array $activeCols): void
     {
         $highestRow = $sheet->getHighestRow();
-        if ($highestRow >= 7) {
-            $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
-                'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
-            ]);
+        if ($highestRow < 7) {
+            $sheet->freezePane('A7');
+            return;
         }
+
+        // Center-align all data cells by default
+        $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
+            'alignment' => [
+                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+            ],
+        ]);
+
+        // Left-align & wrap long text columns
+        $leftCols = ['name', 'slug', 'description'];
+        foreach ($activeCols as $idx => $colKey) {
+            if (in_array($colKey, $leftCols)) {
+                $excelCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($idx + 1);
+                $sheet->getStyle("{$excelCol}7:{$excelCol}{$highestRow}")->getAlignment()
+                    ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT)
+                    ->setWrapText(true);
+            }
+        }
+
         $sheet->freezePane('A7');
     }
 }

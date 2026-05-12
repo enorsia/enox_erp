@@ -23,6 +23,63 @@ class DailySaleService
     }
 
     /**
+     * Build grouped view data (year → month → platform) with pre-computed totals.
+     * All heavy aggregation is done here so the blade template remains logic-free.
+     */
+    public function buildViewGroups(\Illuminate\Contracts\Pagination\LengthAwarePaginator $paginator, array $salePlatforms): array
+    {
+        $monthsMap      = config('constants.months', [
+            1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',
+            7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December',
+        ]);
+        $platformLookup = collect($salePlatforms)->keyBy('id');
+        $allSales       = $paginator->getCollection();
+        $yearGroups     = [];
+
+        foreach ($allSales->groupBy(fn($s) => optional($s->date)->year ?? 0)->sortKeysDesc() as $year => $yearSales) {
+            $monthGroups = [];
+
+            foreach ($yearSales->sortBy('date')->groupBy(fn($s) => optional($s->date)->month ?? 0)->sortKeys() as $monthNum => $monthSales) {
+                $platformGroups = [];
+
+                foreach ($monthSales->groupBy(fn($s) => $s->salePlatform?->parent_id ?? ('p'.$s->sale_platform_id)) as $groupKey => $groupSales) {
+                    $parentId = is_numeric($groupKey) ? (int) $groupKey : null;
+                    $platformGroups[] = [
+                        'parentPlatform' => $parentId ? $platformLookup->get($parentId) : null,
+                        'sales'          => $groupSales->map(function ($sale) {
+                            $sale->hasGenderBreakdown = (
+                                ($sale->number_of_male_orders   ?? 0) +
+                                ($sale->number_of_female_orders ?? 0) +
+                                ($sale->number_of_kids_orders   ?? 0)
+                            ) > 0;
+                            return $sale;
+                        }),
+                    ];
+                }
+
+                $monthGroups[] = [
+                    'monthNum'          => $monthNum,
+                    'monthName'         => $monthsMap[$monthNum] ?? (string) $monthNum,
+                    'year'              => $year,
+                    'monthTotalSales'   => $monthSales->sum('sales'),
+                    'monthTotalSpent'   => $monthSales->sum('spent'),
+                    'monthTotalOrders'  => $monthSales->sum('number_of_orders'),
+                    'platformGroups'    => $platformGroups,
+                ];
+            }
+
+            $yearGroups[] = [
+                'year'            => $year,
+                'yearTotalSales'  => $yearSales->sum('sales'),
+                'yearTotalOrders' => $yearSales->sum('number_of_orders'),
+                'monthGroups'     => $monthGroups,
+            ];
+        }
+
+        return $yearGroups;
+    }
+
+    /**
      * Return an un-paginated query for export (respects the same filters as getList).
      */
     public function getExportQuery(array $filters): Builder

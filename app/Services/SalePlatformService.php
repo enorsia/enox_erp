@@ -184,7 +184,7 @@ class SalePlatformService
      */
     public function getExportQuery(array $filters): Builder
     {
-        return SalePlatform::with('parent')
+        return SalePlatform::with('parent.parent')
             ->filter($filters)
             ->orderBy('sort_order')
             ->latest('id');

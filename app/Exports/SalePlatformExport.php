@@ -3,16 +3,25 @@
 namespace App\Exports;
 
 use Illuminate\Database\Eloquent\Builder;
-use Maatwebsite\Excel\Concerns\FromQuery;
+use Illuminate\Support\Collection;
+use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithCustomStartCell;
-use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-class SalePlatformExport implements FromQuery, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell, WithMapping
+class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell
 {
+    /** Data row index (1-based in data-space, row 7+ in Excel when startCell=A6). */
+    private int $dataRowIdx = 0;
+
+    /** Merge ranges keyed by column key → [[dataRowStart, dataRowEnd], ...] */
+    private array $mergeRanges = [];
+
     public function __construct(
         private Builder $query,
         private array $columns = []
@@ -20,71 +29,178 @@ class SalePlatformExport implements FromQuery, WithHeadings, WithEvents, ShouldA
 
     public function startCell(): string { return 'A6'; }
 
-    public function query()
+    // ── Build hierarchical flat collection ───────────────────────────
+
+    public function collection(): Collection
     {
-        return $this->query;
+        $this->dataRowIdx  = 0;
+        $this->mergeRanges = [];
+
+        $allPlatforms = $this->query->get();
+
+        // Group all platforms by their parent_id
+        $childrenMap = $allPlatforms->groupBy('parent_id');
+        $roots       = $allPlatforms->whereNull('parent_id')->sortBy('sort_order')->values();
+
+        $rows = [];
+        foreach ($roots as $root) {
+            $this->appendPlatformRows($root, $childrenMap, $rows);
+        }
+
+        // Renumber SL after building
+        foreach ($rows as $i => &$row) {
+            $row['id'] = $i + 1;
+        }
+        unset($row);
+
+        $activeCols = $this->columns ?: self::allColumns();
+
+        return collect(array_map(
+            fn($row) => array_values(array_intersect_key($row, array_flip($activeCols))),
+            $rows
+        ));
     }
 
-    public function map($row): array
+    private function appendPlatformRows($root, Collection $childrenMap, array &$rows): void
     {
-        $cols = $this->columns ?: $this->allColumns();
-        $map  = $this->rowMap($row);
-        return array_values(array_intersect_key($map, array_flip($cols)));
+        $children = ($childrenMap->get($root->id) ?? collect())->sortBy('sort_order')->values();
+
+        if ($children->isEmpty()) {
+            // Root with no children – single flat row
+            $this->dataRowIdx++;
+            $rows[] = $this->makeRow($root->name, '', '', $root);
+            return;
+        }
+
+        // Root with children – track for level-1 merging
+        $level1Start = $this->dataRowIdx + 1;
+
+        foreach ($children as $child) {
+            $grandchildren = ($childrenMap->get($child->id) ?? collect())->sortBy('sort_order')->values();
+
+            if ($grandchildren->isEmpty()) {
+                $this->dataRowIdx++;
+                $rows[] = $this->makeRow($root->name, $child->name, '', $child);
+            } else {
+                // Child with grandchildren – track for level-2 merging
+                $level2Start = $this->dataRowIdx + 1;
+
+                foreach ($grandchildren as $grand) {
+                    $this->dataRowIdx++;
+                    $rows[] = $this->makeRow($root->name, $child->name, $grand->name, $grand);
+                }
+
+                $level2End = $this->dataRowIdx;
+                if ($level2End > $level2Start) {
+                    $this->mergeRanges['level2'][] = [$level2Start, $level2End];
+                }
+            }
+        }
+
+        $level1End = $this->dataRowIdx;
+        if ($level1End > $level1Start) {
+            $this->mergeRanges['level1'][] = [$level1Start, $level1End];
+        }
     }
 
-    public function headings(): array
-    {
-        $cols = $this->columns ?: $this->allColumns();
-        $labels = $this->columnLabels();
-        return array_values(array_intersect_key($labels, array_flip($cols)));
-    }
-
-    private function rowMap($row): array
+    private function makeRow(string $l1, string $l2, string $l3, $platform): array
     {
         return [
-            'id'         => $row->id,
-            'name'       => $row->name,
-            'slug'       => $row->slug,
-            'parent'     => $row->parent?->name ?? '-',
-            'type'       => ucfirst(str_replace('_', ' ', $row->type)),
-            'is_active'  => $row->is_active ? 'Active' : 'Inactive',
-            'sort_order' => $row->sort_order,
-            'created_at' => $row->created_at?->format('d M Y'),
+            'id'         => 0,          // placeholder; renumbered after
+            'level1'     => $l1,
+            'level2'     => $l2,
+            'level3'     => $l3,
+            'type'       => ucfirst(str_replace('_', ' ', $platform->type ?? '')),
+            'is_active'  => ($platform->is_active ?? false) ? 'Active' : 'Inactive',
+            'sort_order' => $platform->sort_order ?? 0,
+            'created_at' => $platform->created_at?->format('d M Y'),
+            'updated_at' => $platform->updated_at?->format('d M Y'),
         ];
     }
 
+    // ── Headings ─────────────────────────────────────────────────────
+
+    public function headings(): array
+    {
+        $cols   = $this->columns ?: self::allColumns();
+        $labels = self::columnLabels();
+        return array_values(array_intersect_key($labels, array_flip($cols)));
+    }
+
+    // ── Static helpers ────────────────────────────────────────────────
+
     public static function allColumns(): array
     {
-        return ['id', 'name', 'slug', 'parent', 'type', 'is_active', 'sort_order', 'created_at'];
+        return ['id', 'level1', 'level2', 'level3', 'type', 'is_active', 'sort_order', 'created_at', 'updated_at'];
     }
 
     public static function columnLabels(): array
     {
         return [
-            'id'         => '#',
-            'name'       => 'Name',
-            'slug'       => 'Slug',
-            'parent'     => 'Parent',
+            'id'         => 'SL',
+            'level1'     => 'Platform',
+            'level2'     => 'Sub Platform',
+            'level3'     => 'Sub Sub Platform',
             'type'       => 'Type',
             'is_active'  => 'Status',
             'sort_order' => 'Sort Order',
             'created_at' => 'Created At',
+            'updated_at' => 'Updated At',
         ];
     }
+
+    // ── AfterSheet styling & merging ─────────────────────────────────
 
     public function registerEvents(): array
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
-                $sheet = $event->sheet->getDelegate();
-                $cols  = count($this->columns ?: $this->allColumns());
-                $endCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cols);
+                $sheet      = $event->sheet->getDelegate();
+                $activeCols = $this->columns ?: self::allColumns();
+                $colCount   = count($activeCols);
+                $endCol     = Coordinate::stringFromColumnIndex($colCount);
 
                 $this->applyHeaderRows($sheet, $endCol, 'SALE PLATFORMS');
                 $this->applyHeadingStyle($sheet, $endCol);
-                $this->applyDataStyle($sheet, $endCol);
+                $this->applyDataStyle($sheet, $endCol, $activeCols);
+                $this->applyHierarchicalMerges($sheet, $activeCols);
             },
         ];
+    }
+
+    /**
+     * Merge cells vertically for repeated level1 and level2 values,
+     * then center them vertically.
+     *
+     * Data rows in Excel = dataRowIndex + 6  (heading at row 6, data from row 7).
+     */
+    private function applyHierarchicalMerges($sheet, array $activeCols): void
+    {
+        $colIndexMap = array_flip($activeCols);       // colKey → 0-based position
+        $HEADER_OFFSET = 6;                           // row 6 is the heading row
+
+        foreach (['level1', 'level2'] as $key) {
+            if (!isset($colIndexMap[$key])) {
+                continue;                             // column was deselected
+            }
+            if (empty($this->mergeRanges[$key])) {
+                continue;
+            }
+
+            $excelCol = Coordinate::stringFromColumnIndex($colIndexMap[$key] + 1);
+
+            foreach ($this->mergeRanges[$key] as [$startData, $endData]) {
+                $startRow  = $startData + $HEADER_OFFSET;
+                $endRow    = $endData   + $HEADER_OFFSET;
+                $mergeRef  = "{$excelCol}{$startRow}:{$excelCol}{$endRow}";
+
+                $sheet->mergeCells($mergeRef);
+                $sheet->getStyle($mergeRef)->getAlignment()
+                    ->setVertical(Alignment::VERTICAL_CENTER)
+                    ->setHorizontal(Alignment::HORIZONTAL_LEFT)
+                    ->setWrapText(false);
+            }
+        }
     }
 
     private function applyHeaderRows($sheet, string $endCol, string $title): void
@@ -101,11 +217,10 @@ class SalePlatformExport implements FromQuery, WithHeadings, WithEvents, ShouldA
         $sheet->getStyle("A1:{$endCol}3")->applyFromArray([
             'font'      => ['bold' => true, 'size' => 14],
             'alignment' => [
-                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
-                'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
             ],
         ]);
-
         $sheet->getStyle('A1')->getFont()->setSize(18)->setBold(true);
         $sheet->getRowDimension(1)->setRowHeight(30);
         $sheet->getRowDimension(2)->setRowHeight(22);
@@ -115,21 +230,43 @@ class SalePlatformExport implements FromQuery, WithHeadings, WithEvents, ShouldA
     private function applyHeadingStyle($sheet, string $endCol): void
     {
         $sheet->getStyle("A6:{$endCol}6")->applyFromArray([
-            'fill'      => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
             'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
-            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
         ]);
         $sheet->getRowDimension(6)->setRowHeight(20);
     }
 
-    private function applyDataStyle($sheet, string $endCol): void
+    private function applyDataStyle($sheet, string $endCol, array $activeCols): void
     {
         $highestRow = $sheet->getHighestRow();
-        if ($highestRow >= 7) {
-            $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
-                'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
-            ]);
+        if ($highestRow < 7) {
+            $sheet->freezePane('A7');
+            return;
         }
+
+        // Default: center all data cells
+        $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
+        ]);
+
+        // Left-align hierarchical name columns
+        $leftCols = ['level1', 'level2', 'level3'];
+        foreach ($activeCols as $idx => $colKey) {
+            if (in_array($colKey, $leftCols)) {
+                $excelCol = Coordinate::stringFromColumnIndex($idx + 1);
+                $sheet->getStyle("{$excelCol}7:{$excelCol}{$highestRow}")->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_LEFT)
+                    ->setWrapText(false);
+            }
+        }
+
         $sheet->freezePane('A7');
     }
 }
