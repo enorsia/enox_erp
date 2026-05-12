@@ -54,23 +54,38 @@ class DailyReturn extends BaseModel
     public function scopeFilter($query, array $filters)
     {
         if (!empty($filters['sale_platform_id'])) {
-            $query->where('sale_platform_id', $filters['sale_platform_id']);
+            // Expand to include all child + grandchild platform IDs
+            $platformId    = (int) $filters['sale_platform_id'];
+            $childIds      = SalePlatform::where('parent_id', $platformId)->pluck('id')->toArray();
+            $grandChildIds = empty($childIds)
+                ? []
+                : SalePlatform::whereIn('parent_id', $childIds)->pluck('id')->toArray();
+            $allIds = array_unique(array_merge([$platformId], $childIds, $grandChildIds));
+            $query->whereIn('daily_returns.sale_platform_id', $allIds);
         }
 
         if (!empty($filters['return_reason_type_id'])) {
-            $query->where('return_reason_type_id', $filters['return_reason_type_id']);
+            $query->where('daily_returns.return_reason_type_id', $filters['return_reason_type_id']);
+        }
+
+        if (!empty($filters['year'])) {
+            $query->whereYear('daily_returns.date', (int) $filters['year']);
+        }
+
+        if (!empty($filters['month'])) {
+            $query->whereMonth('daily_returns.date', (int) $filters['month']);
         }
 
         if (!empty($filters['date'])) {
-            $query->where('date', $filters['date']);
+            $query->whereDate('daily_returns.date', $filters['date']);
         }
 
         if (!empty($filters['date_from'])) {
-            $query->where('date', '>=', $filters['date_from']);
+            $query->where('daily_returns.date', '>=', $filters['date_from']);
         }
 
         if (!empty($filters['date_to'])) {
-            $query->where('date', '<=', $filters['date_to']);
+            $query->where('daily_returns.date', '<=', $filters['date_to']);
         }
     }
 }

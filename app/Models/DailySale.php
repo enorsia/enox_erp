@@ -50,19 +50,35 @@ class DailySale extends BaseModel
     public function scopeFilter($query, array $filters)
     {
         if (!empty($filters['sale_platform_id'])) {
-            $query->where('sale_platform_id', $filters['sale_platform_id']);
+            // Expand to include all child + grandchild platform IDs so parent platform
+            // filter returns records belonging to any of its descendants
+            $platformId    = (int) $filters['sale_platform_id'];
+            $childIds      = SalePlatform::where('parent_id', $platformId)->pluck('id')->toArray();
+            $grandChildIds = empty($childIds)
+                ? []
+                : SalePlatform::whereIn('parent_id', $childIds)->pluck('id')->toArray();
+            $allIds = array_unique(array_merge([$platformId], $childIds, $grandChildIds));
+            $query->whereIn('daily_sales.sale_platform_id', $allIds);
+        }
+
+        if (!empty($filters['year'])) {
+            $query->whereYear('daily_sales.date', (int) $filters['year']);
+        }
+
+        if (!empty($filters['month'])) {
+            $query->whereMonth('daily_sales.date', (int) $filters['month']);
         }
 
         if (!empty($filters['date'])) {
-            $query->where('date', $filters['date']);
+            $query->whereDate('daily_sales.date', $filters['date']);
         }
 
         if (!empty($filters['date_from'])) {
-            $query->where('date', '>=', $filters['date_from']);
+            $query->where('daily_sales.date', '>=', $filters['date_from']);
         }
 
         if (!empty($filters['date_to'])) {
-            $query->where('date', '<=', $filters['date_to']);
+            $query->where('daily_sales.date', '<=', $filters['date_to']);
         }
     }
 }
