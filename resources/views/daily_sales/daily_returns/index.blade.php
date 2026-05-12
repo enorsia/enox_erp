@@ -228,13 +228,19 @@
 
                             {{-- Platform Groups --}}
                             @foreach ($monthGroup['platformGroups'] as $platformGroup)
-                                @if($platformGroup['parentPlatform'])
-                                    <div class="dr-platform-group-header">{{ $platformGroup['parentPlatform']['name'] }}</div>
-                                @endif
+                                @php
+                                    $isSubGroup = (bool) $platformGroup['parentPlatform'];
+                                    $wrapClass  = $isSubGroup
+                                        ? 'flex flex-wrap gap-3 ml-4 mb-4'
+                                        : 'flex flex-wrap gap-3 mb-4';
+                                @endphp
 
-                                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 @if($platformGroup['parentPlatform']) ml-4 @endif mb-3">
+                                {{-- Group header — always shown with | bar for every platform --}}
+                                <div class="dr-platform-group-header">{{ $platformGroup['headerName'] }}</div>
+
+                                <div class="{{ $wrapClass }}">
                                     @foreach ($platformGroup['returns'] as $return)
-                                        <div class="dr-return-card">
+                                        <div class="dr-return-card flex-1 min-w-[260px]">
                                             {{-- Card Header --}}
                                             <div class="flex items-start justify-between gap-2 mb-3">
                                                 <div class="flex items-center gap-2.5 min-w-0">
@@ -243,12 +249,10 @@
                                                     </div>
                                                     <div class="min-w-0">
                                                         <p class="text-[13px] font-semibold text-slate-800 dark:text-slate-100 truncate">{{ $return->salePlatform->name ?? 'N/A' }}</p>
-                                                        <div class="flex items-center gap-1.5 mt-0.5">
-                                                            <p class="text-[11px] text-slate-400 dark:text-slate-500">{{ $return->date ? $return->date->format('d M Y') : 'N/A' }}</p>
-                                                            @if($return->returnReasonType)
-                                                                <span class="badge-custom badge-blue text-[9px] px-1.5 py-0.5">{{ $return->returnReasonType->name }}</span>
-                                                            @endif
-                                                        </div>
+                                                        <p class="text-[11px] text-slate-400 dark:text-slate-500">{{ $return->date ? $return->date->format('d M Y') : 'N/A' }}</p>
+                                                        @if($return->returnReasonType)
+                                                            <p class="badge-custom badge-blue text-[8px] px-1.5 py-0.5 truncate">{{ $return->returnReasonType->name }}</p>
+                                                        @endif
                                                     </div>
                                                 </div>
                                                 {{-- Actions --}}
@@ -286,18 +290,20 @@
                                                 </div>
                                             </div>
 
-                                            {{-- Gender Breakdown --}}
-                                            @if(($return->number_of_male_returns ?? 0) + ($return->number_of_female_returns ?? 0) + ($return->number_of_kids_returns ?? 0) > 0)
-                                                <div class="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                                                    @if($return->number_of_male_returns)
-                                                        <span class="text-[10px] text-slate-400">M: <strong class="text-slate-600 dark:text-slate-300">{{ $return->number_of_male_returns }}</strong></span>
-                                                    @endif
-                                                    @if($return->number_of_female_returns)
-                                                        <span class="text-[10px] text-slate-400">F: <strong class="text-slate-600 dark:text-slate-300">{{ $return->number_of_female_returns }}</strong></span>
-                                                    @endif
-                                                    @if($return->number_of_kids_returns)
-                                                        <span class="text-[10px] text-slate-400">K: <strong class="text-slate-600 dark:text-slate-300">{{ $return->number_of_kids_returns }}</strong></span>
-                                                    @endif
+                                            @if($return->hasGenderBreakdown)
+                                                <div class="grid grid-cols-3 gap-1.5 mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/60">
+                                                    <div class="dr-metric-tile">
+                                                        <span class="dr-metric-label">Male</span>
+                                                        <span class="dr-metric-value">{{ number_format($return->number_of_male_returns ?? 0) }}</span>
+                                                    </div>
+                                                    <div class="dr-metric-tile">
+                                                        <span class="dr-metric-label">Female</span>
+                                                        <span class="dr-metric-value">{{ number_format($return->number_of_female_returns ?? 0) }}</span>
+                                                    </div>
+                                                    <div class="dr-metric-tile">
+                                                        <span class="dr-metric-label">Kids</span>
+                                                        <span class="dr-metric-value">{{ number_format($return->number_of_kids_returns ?? 0) }}</span>
+                                                    </div>
                                                 </div>
                                             @endif
                                         </div>

@@ -14,10 +14,19 @@ class DailySaleService
      */
     public function getList(array $filters): LengthAwarePaginator
     {
-        return DailySale::with('salePlatform')
+        return DailySale::with(['salePlatform'])
+            // Join 3 levels to order by platform hierarchy (same sequence as SalePlatformExport)
+            ->join('sale_platforms as sp',   'sp.id',   '=', 'daily_sales.sale_platform_id')
+            ->leftJoin('sale_platforms as sp_p', 'sp_p.id', '=', 'sp.parent_id')
+            ->leftJoin('sale_platforms as sp_g', 'sp_g.id', '=', 'sp_p.parent_id')
+            ->select('daily_sales.*')
             ->filter($filters)
-            ->latest('date')
-            ->latest('id')
+            // Root-level sort_order first → keeps all children of the same parent together
+            ->orderByRaw('COALESCE(sp_g.sort_order, sp_p.sort_order, sp.sort_order)')
+            ->orderByRaw('COALESCE(sp_p.sort_order, sp.sort_order, 0)')
+            ->orderBy('sp.sort_order')
+            ->orderByDesc('daily_sales.date')
+            ->orderByDesc('daily_sales.id')
             ->paginate(20)
             ->withQueryString();
     }
@@ -28,13 +37,18 @@ class DailySaleService
      */
     public function buildViewGroups(\Illuminate\Contracts\Pagination\LengthAwarePaginator $paginator, array $salePlatforms): array
     {
-        $monthsMap      = config('constants.months', [
+        $monthsMap = config('constants.months', [
             1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',
             7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December',
         ]);
+
         $platformLookup = collect($salePlatforms)->keyBy('id');
-        $allSales       = $paginator->getCollection();
-        $yearGroups     = [];
+
+        // DFS position index built from the already-sorted getParentOptions output
+        $platformDfsIndex = array_flip(array_column($salePlatforms, 'id'));
+
+        $allSales   = $paginator->getCollection();
+        $yearGroups = [];
 
         foreach ($allSales->groupBy(fn($s) => optional($s->date)->year ?? 0)->sortKeysDesc() as $year => $yearSales) {
             $monthGroups = [];
@@ -44,27 +58,45 @@ class DailySaleService
 
                 foreach ($monthSales->groupBy(fn($s) => $s->salePlatform?->parent_id ?? ('p'.$s->sale_platform_id)) as $groupKey => $groupSales) {
                     $parentId = is_numeric($groupKey) ? (int) $groupKey : null;
+
+                    // Use parent's DFS index for groups, own index for standalone roots
+                    $representativeId = $parentId ?? $groupSales->first()->sale_platform_id;
+                    $dfsIndex         = $platformDfsIndex[$representativeId] ?? PHP_INT_MAX;
+
                     $platformGroups[] = [
+                        '_dfsIndex'      => $dfsIndex,
+                        'headerName'     => $parentId
+                            ? ($platformLookup->get($parentId, [])['name'] ?? '—')
+                            : ($groupSales->first()->salePlatform?->name ?? '—'),
                         'parentPlatform' => $parentId ? $platformLookup->get($parentId) : null,
-                        'sales'          => $groupSales->map(function ($sale) {
-                            $sale->hasGenderBreakdown = (
-                                ($sale->number_of_male_orders   ?? 0) +
-                                ($sale->number_of_female_orders ?? 0) +
-                                ($sale->number_of_kids_orders   ?? 0)
-                            ) > 0;
-                            return $sale;
-                        }),
+                        'sales'          => $groupSales
+                            // Sort child platforms within a group by their DFS order
+                            ->sortBy(fn($s) => $platformDfsIndex[$s->sale_platform_id] ?? PHP_INT_MAX)
+                            ->map(function ($sale) {
+                                // Pre-compute all boolean flags so blade stays logic-free
+                                $sale->hasGenderBreakdown = (
+                                    ($sale->number_of_male_orders   ?? 0) +
+                                    ($sale->number_of_female_orders ?? 0) +
+                                    ($sale->number_of_kids_orders   ?? 0)
+                                ) > 0;
+                                return $sale;
+                            }),
                     ];
                 }
 
+                // Sort platform groups by DFS order (same sequence as SalePlatformExport)
+                usort($platformGroups, fn($a, $b) => $a['_dfsIndex'] <=> $b['_dfsIndex']);
+                foreach ($platformGroups as &$pg) { unset($pg['_dfsIndex']); }
+                unset($pg);
+
                 $monthGroups[] = [
-                    'monthNum'          => $monthNum,
-                    'monthName'         => $monthsMap[$monthNum] ?? (string) $monthNum,
-                    'year'              => $year,
-                    'monthTotalSales'   => $monthSales->sum('sales'),
-                    'monthTotalSpent'   => $monthSales->sum('spent'),
-                    'monthTotalOrders'  => $monthSales->sum('number_of_orders'),
-                    'platformGroups'    => $platformGroups,
+                    'monthNum'         => $monthNum,
+                    'monthName'        => $monthsMap[$monthNum] ?? (string) $monthNum,
+                    'year'             => $year,
+                    'monthTotalSales'  => $monthSales->sum('sales'),
+                    'monthTotalSpent'  => $monthSales->sum('spent'),
+                    'monthTotalOrders' => $monthSales->sum('number_of_orders'),
+                    'platformGroups'   => $platformGroups,
                 ];
             }
 

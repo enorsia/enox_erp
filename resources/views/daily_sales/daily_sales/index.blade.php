@@ -221,13 +221,19 @@
 
                             {{-- Platform Groups --}}
                             @foreach ($monthGroup['platformGroups'] as $platformGroup)
-                                @if($platformGroup['parentPlatform'])
-                                    <div class="ds-platform-group-header">{{ $platformGroup['parentPlatform']['name'] }}</div>
-                                @endif
+                                @php
+                                    $isSubGroup  = (bool) $platformGroup['parentPlatform'];
+                                    $wrapClass   = $isSubGroup
+                                        ? 'flex flex-wrap gap-3 ml-4 mb-4'
+                                        : 'flex flex-wrap gap-3 mb-4';
+                                @endphp
 
-                                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 @if($platformGroup['parentPlatform']) ml-4 @endif mb-3">
+                                {{-- Group header — always shown with | bar for every platform --}}
+                                <div class="ds-platform-group-header">{{ $platformGroup['headerName'] }}</div>
+
+                                <div class="{{ $wrapClass }}">
                                     @foreach ($platformGroup['sales'] as $sale)
-                                        <div class="ds-sale-card">
+                                        <div class="ds-sale-card flex-1 min-w-[260px]">
                                             <div class="flex items-start justify-between gap-2 mb-3">
                                                 <div class="flex items-center gap-2.5 min-w-0">
                                                     <div class="w-8 h-8 rounded-lg bg-accent-50 dark:bg-accent-900/20 flex items-center justify-center shrink-0">
@@ -279,17 +285,20 @@
                                                 </div>
                                             </div>
 
-                                            @if(($sale->number_of_male_orders ?? 0) + ($sale->number_of_female_orders ?? 0) + ($sale->number_of_kids_orders ?? 0) > 0)
-                                                <div class="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                                                    @if($sale->number_of_male_orders)
-                                                        <span class="text-[10px] text-slate-400">M: <strong class="text-slate-600 dark:text-slate-300">{{ $sale->number_of_male_orders }}</strong></span>
-                                                    @endif
-                                                    @if($sale->number_of_female_orders)
-                                                        <span class="text-[10px] text-slate-400">F: <strong class="text-slate-600 dark:text-slate-300">{{ $sale->number_of_female_orders }}</strong></span>
-                                                    @endif
-                                                    @if($sale->number_of_kids_orders)
-                                                        <span class="text-[10px] text-slate-400">K: <strong class="text-slate-600 dark:text-slate-300">{{ $sale->number_of_kids_orders }}</strong></span>
-                                                    @endif
+                                            @if($sale->hasGenderBreakdown)
+                                                <div class="grid grid-cols-3 gap-1.5 mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/60">
+                                                    <div class="ds-metric-tile">
+                                                        <span class="ds-metric-label">Male</span>
+                                                        <span class="ds-metric-value">{{ number_format($sale->number_of_male_orders ?? 0) }}</span>
+                                                    </div>
+                                                    <div class="ds-metric-tile">
+                                                        <span class="ds-metric-label">Female</span>
+                                                        <span class="ds-metric-value">{{ number_format($sale->number_of_female_orders ?? 0) }}</span>
+                                                    </div>
+                                                    <div class="ds-metric-tile">
+                                                        <span class="ds-metric-label">Kids</span>
+                                                        <span class="ds-metric-value">{{ number_format($sale->number_of_kids_orders ?? 0) }}</span>
+                                                    </div>
                                                 </div>
                                             @endif
                                         </div>

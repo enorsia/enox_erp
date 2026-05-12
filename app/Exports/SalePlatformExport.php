@@ -16,10 +16,8 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell
 {
-    /** Data row index (1-based in data-space, row 7+ in Excel when startCell=A6). */
     private int $dataRowIdx = 0;
 
-    /** Merge ranges keyed by column key → [[dataRowStart, dataRowEnd], ...] */
     private array $mergeRanges = [];
 
     public function __construct(
@@ -29,7 +27,6 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
 
     public function startCell(): string { return 'A6'; }
 
-    // ── Build hierarchical flat collection ───────────────────────────
 
     public function collection(): Collection
     {
@@ -38,7 +35,6 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
 
         $allPlatforms = $this->query->get();
 
-        // Group all platforms by their parent_id
         $childrenMap = $allPlatforms->groupBy('parent_id');
         $roots       = $allPlatforms->whereNull('parent_id')->sortBy('sort_order')->values();
 
@@ -47,7 +43,6 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
             $this->appendPlatformRows($root, $childrenMap, $rows);
         }
 
-        // Renumber SL after building
         foreach ($rows as $i => &$row) {
             $row['id'] = $i + 1;
         }
@@ -66,13 +61,11 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
         $children = ($childrenMap->get($root->id) ?? collect())->sortBy('sort_order')->values();
 
         if ($children->isEmpty()) {
-            // Root with no children – single flat row
             $this->dataRowIdx++;
             $rows[] = $this->makeRow($root->name, '', '', $root);
             return;
         }
 
-        // Root with children – track for level-1 merging
         $level1Start = $this->dataRowIdx + 1;
 
         foreach ($children as $child) {
@@ -82,7 +75,6 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
                 $this->dataRowIdx++;
                 $rows[] = $this->makeRow($root->name, $child->name, '', $child);
             } else {
-                // Child with grandchildren – track for level-2 merging
                 $level2Start = $this->dataRowIdx + 1;
 
                 foreach ($grandchildren as $grand) {
@@ -106,7 +98,7 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
     private function makeRow(string $l1, string $l2, string $l3, $platform): array
     {
         return [
-            'id'         => 0,          // placeholder; renumbered after
+            'id'         => 0,
             'level1'     => $l1,
             'level2'     => $l2,
             'level3'     => $l3,
@@ -118,7 +110,6 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
         ];
     }
 
-    // ── Headings ─────────────────────────────────────────────────────
 
     public function headings(): array
     {
@@ -127,7 +118,6 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
         return array_values(array_intersect_key($labels, array_flip($cols)));
     }
 
-    // ── Static helpers ────────────────────────────────────────────────
 
     public static function allColumns(): array
     {
@@ -149,8 +139,6 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
         ];
     }
 
-    // ── AfterSheet styling & merging ─────────────────────────────────
-
     public function registerEvents(): array
     {
         return [
@@ -168,20 +156,15 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
         ];
     }
 
-    /**
-     * Merge cells vertically for repeated level1 and level2 values,
-     * then center them vertically.
-     *
-     * Data rows in Excel = dataRowIndex + 6  (heading at row 6, data from row 7).
-     */
+
     private function applyHierarchicalMerges($sheet, array $activeCols): void
     {
-        $colIndexMap = array_flip($activeCols);       // colKey → 0-based position
-        $HEADER_OFFSET = 6;                           // row 6 is the heading row
+        $colIndexMap = array_flip($activeCols);
+        $HEADER_OFFSET = 6;
 
         foreach (['level1', 'level2'] as $key) {
             if (!isset($colIndexMap[$key])) {
-                continue;                             // column was deselected
+                continue;
             }
             if (empty($this->mergeRanges[$key])) {
                 continue;
@@ -248,7 +231,6 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
             return;
         }
 
-        // Default: center all data cells
         $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
             'alignment' => [
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -256,7 +238,6 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
             ],
         ]);
 
-        // Left-align hierarchical name columns
         $leftCols = ['level1', 'level2', 'level3'];
         foreach ($activeCols as $idx => $colKey) {
             if (in_array($colKey, $leftCols)) {

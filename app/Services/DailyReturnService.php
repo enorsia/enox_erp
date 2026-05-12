@@ -14,9 +14,17 @@ class DailyReturnService
     public function getList(array $filters): LengthAwarePaginator
     {
         return DailyReturn::with(['salePlatform', 'returnReasonType'])
+            // Join 3 levels to order by platform hierarchy (keeps parent+child groups together)
+            ->join('sale_platforms as sp',   'sp.id',   '=', 'daily_returns.sale_platform_id')
+            ->leftJoin('sale_platforms as sp_p', 'sp_p.id', '=', 'sp.parent_id')
+            ->leftJoin('sale_platforms as sp_g', 'sp_g.id', '=', 'sp_p.parent_id')
+            ->select('daily_returns.*')
             ->filter($filters)
-            ->latest('date')
-            ->latest('id')
+            ->orderByRaw('COALESCE(sp_g.sort_order, sp_p.sort_order, sp.sort_order)')
+            ->orderByRaw('COALESCE(sp_p.sort_order, sp.sort_order, 0)')
+            ->orderBy('sp.sort_order')
+            ->orderByDesc('daily_returns.date')
+            ->orderByDesc('daily_returns.id')
             ->paginate(20)
             ->withQueryString();
     }
@@ -27,13 +35,18 @@ class DailyReturnService
      */
     public function buildViewGroups(\Illuminate\Contracts\Pagination\LengthAwarePaginator $paginator, array $salePlatforms): array
     {
-        $monthsMap      = config('constants.months', [
+        $monthsMap = config('constants.months', [
             1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',
             7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December',
         ]);
+
         $platformLookup = collect($salePlatforms)->keyBy('id');
-        $allReturns     = $paginator->getCollection();
-        $yearGroups     = [];
+
+        // DFS position index built from the already-sorted getParentOptions output
+        $platformDfsIndex = array_flip(array_column($salePlatforms, 'id'));
+
+        $allReturns = $paginator->getCollection();
+        $yearGroups = [];
 
         foreach ($allReturns->groupBy(fn($r) => optional($r->date)->year ?? 0)->sortKeysDesc() as $year => $yearReturns) {
             $monthGroups = [];
@@ -43,18 +56,36 @@ class DailyReturnService
 
                 foreach ($monthReturns->groupBy(fn($r) => $r->salePlatform?->parent_id ?? ('p'.$r->sale_platform_id)) as $groupKey => $groupReturns) {
                     $parentId = is_numeric($groupKey) ? (int) $groupKey : null;
+
+                    // Use parent's DFS index for groups, own index for standalone roots
+                    $representativeId = $parentId ?? $groupReturns->first()->sale_platform_id;
+                    $dfsIndex         = $platformDfsIndex[$representativeId] ?? PHP_INT_MAX;
+
                     $platformGroups[] = [
+                        '_dfsIndex'      => $dfsIndex,
+                        'headerName'     => $parentId
+                            ? ($platformLookup->get($parentId, [])['name'] ?? '—')
+                            : ($groupReturns->first()->salePlatform?->name ?? '—'),
                         'parentPlatform' => $parentId ? $platformLookup->get($parentId) : null,
-                        'returns'        => $groupReturns->map(function ($return) {
-                            $return->hasGenderBreakdown = (
-                                ($return->number_of_male_returns   ?? 0) +
-                                ($return->number_of_female_returns ?? 0) +
-                                ($return->number_of_kids_returns   ?? 0)
-                            ) > 0;
-                            return $return;
-                        }),
+                        'returns'        => $groupReturns
+                            // Sort child platforms within a group by their DFS order
+                            ->sortBy(fn($r) => $platformDfsIndex[$r->sale_platform_id] ?? PHP_INT_MAX)
+                            ->map(function ($return) {
+                                // Pre-compute all boolean flags so blade stays logic-free
+                                $return->hasGenderBreakdown = (
+                                    ($return->number_of_male_returns   ?? 0) +
+                                    ($return->number_of_female_returns ?? 0) +
+                                    ($return->number_of_kids_returns   ?? 0)
+                                ) > 0;
+                                return $return;
+                            }),
                     ];
                 }
+
+                // Sort platform groups by DFS order (same sequence as SalePlatformExport)
+                usort($platformGroups, fn($a, $b) => $a['_dfsIndex'] <=> $b['_dfsIndex']);
+                foreach ($platformGroups as &$pg) { unset($pg['_dfsIndex']); }
+                unset($pg);
 
                 $monthGroups[] = [
                     'monthNum'          => $monthNum,

@@ -3,71 +3,133 @@
 namespace App\Exports;
 
 use Illuminate\Database\Eloquent\Builder;
-use Maatwebsite\Excel\Concerns\FromQuery;
+use Illuminate\Support\Collection;
+use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithCustomStartCell;
-use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-class DailySaleExport implements FromQuery, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell, WithMapping
+class DailySaleExport implements FromCollection, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell
 {
-    private int $rowIndex = 0;
+    private int   $dataRowIdx  = 0;
+    private array $mergeRanges = [];
 
     public function __construct(
         private Builder $query,
-        private array $columns = []
+        private array   $columns = []
     ) {}
 
     public function startCell(): string { return 'A6'; }
 
-    public function query()
+    // ── Collection ────────────────────────────────────────────────
+
+    public function collection(): Collection
     {
-        return $this->query;
+        $this->dataRowIdx  = 0;
+        $this->mergeRanges = [];
+
+        // Eager-load full 3-level platform hierarchy
+        $records = $this->query
+            ->with(['salePlatform.parent.parent'])
+            ->get();
+
+        // Sort by platform hierarchy (sort_order at each level) then date DESC, id DESC
+        $sorted = $records->sort(function ($a, $b) {
+            $ka = $this->buildSortKey($a);
+            $kb = $this->buildSortKey($b);
+            foreach ($ka as $i => $v) {
+                if ($v !== $kb[$i]) return $v <=> $kb[$i];
+            }
+            return 0;
+        })->values();
+
+        $rows      = [];
+        $prevL1    = null;
+        $prevL2Key = null;
+        $prevL3Key = null;
+        $l1Start   = $l2Start = $l3Start = null;
+
+        foreach ($sorted as $record) {
+            [$l1, $l2, $l3] = $this->resolvePlatformLevels($record->salePlatform);
+            $this->dataRowIdx++;
+
+            $l2Key = "{$l1}|{$l2}";
+            $l3Key = "{$l1}|{$l2}|{$l3}";
+
+            if ($l1 !== $prevL1) {
+                $this->closeMerge('level1', $l1Start, $this->dataRowIdx - 1);
+                $this->closeMerge('level2', $l2Start, $this->dataRowIdx - 1);
+                $this->closeMerge('level3', $l3Start, $this->dataRowIdx - 1);
+                $l1Start = $l2Start = $l3Start = $this->dataRowIdx;
+                $prevL1 = $l1; $prevL2Key = $l2Key; $prevL3Key = $l3Key;
+            } elseif ($l2Key !== $prevL2Key) {
+                $this->closeMerge('level2', $l2Start, $this->dataRowIdx - 1);
+                $this->closeMerge('level3', $l3Start, $this->dataRowIdx - 1);
+                $l2Start = $l3Start = $this->dataRowIdx;
+                $prevL2Key = $l2Key; $prevL3Key = $l3Key;
+            } elseif ($l3Key !== $prevL3Key) {
+                $this->closeMerge('level3', $l3Start, $this->dataRowIdx - 1);
+                $l3Start   = $this->dataRowIdx;
+                $prevL3Key = $l3Key;
+            }
+
+            $rows[] = [
+                'id'                           => 0,
+                'level1'                       => $l1,
+                'level2'                       => $l2,
+                'level3'                       => $l3,
+                'date'                         => $record->date?->format('d M Y'),
+                'spent'                        => number_format($record->spent, 2),
+                'sales'                        => number_format($record->sales, 2),
+                'number_of_orders'             => $record->number_of_orders,
+                'number_of_quantities'         => $record->number_of_quantities,
+                'number_of_male_orders'        => $record->number_of_male_orders,
+                'number_of_female_orders'      => $record->number_of_female_orders,
+                'number_of_kids_orders'        => $record->number_of_kids_orders,
+                'number_of_male_quantities'    => $record->number_of_male_quantities,
+                'number_of_female_quantities'  => $record->number_of_female_quantities,
+                'number_of_kids_quantities'    => $record->number_of_kids_quantities,
+                'created_at'                   => $record->created_at?->format('d M Y'),
+                'updated_at'                   => $record->updated_at?->format('d M Y'),
+            ];
+        }
+
+        // Close final open ranges
+        $this->closeMerge('level1', $l1Start, $this->dataRowIdx);
+        $this->closeMerge('level2', $l2Start, $this->dataRowIdx);
+        $this->closeMerge('level3', $l3Start, $this->dataRowIdx);
+
+        // Assign sequential SL numbers
+        foreach ($rows as $i => &$row) { $row['id'] = $i + 1; }
+        unset($row);
+
+        $activeCols = $this->columns ?: self::allColumns();
+        return collect(array_map(
+            fn($row) => array_values(array_intersect_key($row, array_flip($activeCols))),
+            $rows
+        ));
     }
 
-    public function map($row): array
-    {
-        $this->rowIndex++;
-        $cols = $this->columns ?: $this->allColumns();
-        $map  = $this->rowMap($row);
-        $map['id'] = $this->rowIndex;
-        return array_values(array_intersect_key($map, array_flip($cols)));
-    }
+    // ── Headings ──────────────────────────────────────────────────
 
     public function headings(): array
     {
-        $cols   = $this->columns ?: $this->allColumns();
-        $labels = $this->columnLabels();
+        $cols   = $this->columns ?: self::allColumns();
+        $labels = self::columnLabels();
         return array_values(array_intersect_key($labels, array_flip($cols)));
     }
 
-    private function rowMap($row): array
-    {
-        return [
-            'id'                           => $this->rowIndex,
-            'platform'                     => $row->salePlatform?->name ?? '-',
-            'date'                         => $row->date?->format('d M Y'),
-            'spent'                        => number_format($row->spent, 2),
-            'sales'                        => number_format($row->sales, 2),
-            'number_of_orders'             => $row->number_of_orders,
-            'number_of_quantities'         => $row->number_of_quantities,
-            'number_of_male_orders'        => $row->number_of_male_orders,
-            'number_of_female_orders'      => $row->number_of_female_orders,
-            'number_of_kids_orders'        => $row->number_of_kids_orders,
-            'number_of_male_quantities'    => $row->number_of_male_quantities,
-            'number_of_female_quantities'  => $row->number_of_female_quantities,
-            'number_of_kids_quantities'    => $row->number_of_kids_quantities,
-            'created_at'                   => $row->created_at?->format('d M Y'),
-            'updated_at'                   => $row->updated_at?->format('d M Y'),
-        ];
-    }
+    // ── Column definitions ────────────────────────────────────────
 
     public static function allColumns(): array
     {
         return [
-            'id', 'platform', 'date', 'spent', 'sales',
+            'id', 'level1', 'level2', 'level3', 'date', 'spent', 'sales',
             'number_of_orders', 'number_of_quantities',
             'number_of_male_orders', 'number_of_female_orders', 'number_of_kids_orders',
             'number_of_male_quantities', 'number_of_female_quantities', 'number_of_kids_quantities',
@@ -78,65 +140,162 @@ class DailySaleExport implements FromQuery, WithHeadings, WithEvents, ShouldAuto
     public static function columnLabels(): array
     {
         return [
-            'id'                           => 'SL',
-            'platform'                     => 'Platform',
-            'date'                         => 'Date',
-            'spent'                        => 'Spent (£)',
-            'sales'                        => 'Sales (£)',
-            'number_of_orders'             => 'Total Orders',
-            'number_of_quantities'         => 'Total Qty',
-            'number_of_male_orders'        => 'Male Orders',
-            'number_of_female_orders'      => 'Female Orders',
-            'number_of_kids_orders'        => 'Kids Orders',
-            'number_of_male_quantities'    => 'Male Qty',
-            'number_of_female_quantities'  => 'Female Qty',
-            'number_of_kids_quantities'    => 'Kids Qty',
-            'created_at'                   => 'Created At',
-            'updated_at'                   => 'Updated At',
+            'id'                          => 'SL',
+            'level1'                      => 'Platform',
+            'level2'                      => 'Sub Platform',
+            'level3'                      => 'Sub Sub Platform',
+            'date'                        => 'Date',
+            'spent'                       => 'Spent (£)',
+            'sales'                       => 'Sales (£)',
+            'number_of_orders'            => 'Total Orders',
+            'number_of_quantities'        => 'Total Qty',
+            'number_of_male_orders'       => 'Male Orders',
+            'number_of_female_orders'     => 'Female Orders',
+            'number_of_kids_orders'       => 'Kids Orders',
+            'number_of_male_quantities'   => 'Male Qty',
+            'number_of_female_quantities' => 'Female Qty',
+            'number_of_kids_quantities'   => 'Kids Qty',
+            'created_at'                  => 'Created At',
+            'updated_at'                  => 'Updated At',
         ];
     }
+
+    // ── Events ────────────────────────────────────────────────────
 
     public function registerEvents(): array
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet      = $event->sheet->getDelegate();
-                $activeCols = $this->columns ?: $this->allColumns();
-                $cols       = count($activeCols);
-                $endCol     = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cols);
+                $activeCols = $this->columns ?: self::allColumns();
+                $colCount   = count($activeCols);
+                $endCol     = Coordinate::stringFromColumnIndex($colCount);
 
                 $this->applyHeaderRows($sheet, $endCol, 'DAILY SALES');
-                $this->applyHeadingStyle($sheet, $endCol);
+                $this->applyHeadingStyle($sheet, $endCol, $activeCols);
                 $this->applyDataStyle($sheet, $endCol, $activeCols);
+                $this->applyHierarchicalMerges($sheet, $activeCols);
             },
         ];
+    }
+
+    // ── Private helpers ───────────────────────────────────────────
+
+    private function resolvePlatformLevels($platform): array
+    {
+        if (!$platform) return ['', '', ''];
+        if ($platform->parent_id && $platform->parent) {
+            $parent = $platform->parent;
+            if ($parent->parent_id && $parent->parent) {
+                return [$parent->parent->name, $parent->name, $platform->name];
+            }
+            return [$parent->name, $platform->name, ''];
+        }
+        return [$platform->name, '', ''];
+    }
+
+    private function buildSortKey($record): array
+    {
+        $p = $record->salePlatform;
+        if (!$p) return [PHP_INT_MAX, PHP_INT_MAX, PHP_INT_MAX, 0, 0];
+
+        $s0 = $s1 = $s2 = 0;
+        if ($p->parent_id && $p->parent) {
+            $parent = $p->parent;
+            if ($parent->parent_id && $parent->parent) {
+                $s0 = $parent->parent->sort_order ?? 0;
+                $s1 = $parent->sort_order ?? 0;
+                $s2 = $p->sort_order ?? 0;
+            } else {
+                $s0 = $parent->sort_order ?? 0;
+                $s1 = $p->sort_order ?? 0;
+            }
+        } else {
+            $s0 = $p->sort_order ?? 0;
+        }
+
+        // Within same platform: date DESC, id DESC (use negatives for descending)
+        $ts = $record->date ? $record->date->timestamp : 0;
+        return [$s0, $s1, $s2, -$ts, -$record->id];
+    }
+
+    private function closeMerge(string $key, ?int $start, int $end): void
+    {
+        if ($start !== null && $end > $start) {
+            $this->mergeRanges[$key][] = [$start, $end];
+        }
+    }
+
+    private function applyHierarchicalMerges($sheet, array $activeCols): void
+    {
+        $colIndexMap   = array_flip($activeCols);
+        $HEADER_OFFSET = 6;
+
+        foreach (['level1', 'level2', 'level3'] as $key) {
+            if (!isset($colIndexMap[$key]) || empty($this->mergeRanges[$key])) continue;
+
+            $excelCol = Coordinate::stringFromColumnIndex($colIndexMap[$key] + 1);
+
+            foreach ($this->mergeRanges[$key] as [$startData, $endData]) {
+                $startRow = $startData + $HEADER_OFFSET;
+                $endRow   = $endData   + $HEADER_OFFSET;
+                $ref      = "{$excelCol}{$startRow}:{$excelCol}{$endRow}";
+
+                $sheet->mergeCells($ref);
+                $sheet->getStyle($ref)->getAlignment()
+                    ->setVertical(Alignment::VERTICAL_CENTER)
+                    ->setHorizontal(Alignment::HORIZONTAL_LEFT)
+                    ->setWrapText(false);
+            }
+        }
     }
 
     private function applyHeaderRows($sheet, string $endCol, string $title): void
     {
         $appName = config('app.name', 'ENOX ERP');
-        foreach ([$appName, $title, 'Generated: ' . now()->format('d M Y H:i')] as $i => $text) {
+        $info    = [$appName, $title, 'Generated: ' . now()->format('d M Y H:i')];
+
+        foreach ($info as $i => $text) {
             $row = $i + 1;
             $sheet->setCellValue("A{$row}", $text);
             $sheet->mergeCells("A{$row}:{$endCol}{$row}");
         }
+
         $sheet->getStyle("A1:{$endCol}3")->applyFromArray([
             'font'      => ['bold' => true, 'size' => 14],
-            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
         ]);
         $sheet->getStyle('A1')->getFont()->setSize(18)->setBold(true);
         $sheet->getRowDimension(1)->setRowHeight(30);
         $sheet->getRowDimension(2)->setRowHeight(22);
+        $sheet->getRowDimension(3)->setRowHeight(18);
     }
 
-    private function applyHeadingStyle($sheet, string $endCol): void
+    private function applyHeadingStyle($sheet, string $endCol, array $activeCols): void
     {
+        // Base style: blue background, white bold text, center-aligned
         $sheet->getStyle("A6:{$endCol}6")->applyFromArray([
-            'fill'      => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
             'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
-            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
         ]);
         $sheet->getRowDimension(6)->setRowHeight(20);
+
+        // Left-align heading cells for long-text columns
+        $leftCols = ['level1', 'level2', 'level3'];
+        foreach ($activeCols as $idx => $colKey) {
+            if (in_array($colKey, $leftCols)) {
+                $excelCol = Coordinate::stringFromColumnIndex($idx + 1);
+                $sheet->getStyle("{$excelCol}6")->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            }
+        }
     }
 
     private function applyDataStyle($sheet, string $endCol, array $activeCols): void
@@ -147,25 +306,26 @@ class DailySaleExport implements FromQuery, WithHeadings, WithEvents, ShouldAuto
             return;
         }
 
-        // Center-align all data by default
+        // Center-align all data rows by default
         $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
             'alignment' => [
-                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
-                'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
             ],
         ]);
 
-        // Left-align text columns
-        $leftCols = ['platform'];
+        // Left-align long-text data columns
+        $leftCols = ['level1', 'level2', 'level3'];
         foreach ($activeCols as $idx => $colKey) {
             if (in_array($colKey, $leftCols)) {
-                $excelCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($idx + 1);
+                $excelCol = Coordinate::stringFromColumnIndex($idx + 1);
                 $sheet->getStyle("{$excelCol}7:{$excelCol}{$highestRow}")->getAlignment()
-                    ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT)
+                    ->setHorizontal(Alignment::HORIZONTAL_LEFT)
                     ->setWrapText(false);
             }
         }
 
+        // Sticky heading row
         $sheet->freezePane('A7');
     }
 }
