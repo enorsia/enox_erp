@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\ReturnReasonTypeExport;
 use App\Models\ReturnReasonType;
 use App\Services\ReturnReasonTypeService;
 use Illuminate\Http\RedirectResponse;
@@ -10,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ReturnReasonTypeController extends Controller
 {
@@ -111,6 +113,25 @@ class ReturnReasonTypeController extends Controller
             notify()->error('Failed to update return reason type', 'Error');
             return redirect()->back()->withInput();
         }
+    }
+
+    public function export(Request $request)
+    {
+        Gate::authorize('general.return_reason_type.index');
+
+        $columns = $request->input('columns', []);
+        if (is_string($columns)) {
+            $columns = array_filter(explode(',', $columns));
+        }
+        $allCols = ReturnReasonTypeExport::allColumns();
+        $columns = array_values(array_intersect($allCols, $columns ?: $allCols));
+
+        $query = $this->service->getExportQuery($request->except(['columns']));
+
+        return Excel::download(
+            new ReturnReasonTypeExport($query, $columns),
+            'return-reason-types-' . now()->format('Y-m-d') . '.xlsx'
+        );
     }
 
     public function destroy(ReturnReasonType $returnReasonType) : RedirectResponse

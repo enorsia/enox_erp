@@ -39,6 +39,13 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('sales/monthly-budgets', MonthlyBudgetController::class);
     Route::resource('sales/daily-sales', DailySaleController::class);
     Route::resource('sales/daily-returns', DailyReturnController::class);
+
+    // Export routes
+    Route::get('sales/return-reason-types-export', [ReturnReasonTypeController::class, 'export'])->name('return-reason-types.export');
+    Route::get('sales/sale-platforms-export', [SalePlatformController::class, 'export'])->name('sale-platforms.export');
+    Route::get('sales/monthly-budgets-export', [MonthlyBudgetController::class, 'export'])->name('monthly-budgets.export');
+    Route::get('sales/daily-sales-export', [DailySaleController::class, 'export'])->name('daily-sales.export');
+    Route::get('sales/daily-returns-export', [DailyReturnController::class, 'export'])->name('daily-returns.export');
     Route::resource('activity-logs', ActivityLogController::class)->only(['index', 'show']);
 
     Route::controller(SalesChartController::class)->group(function () {

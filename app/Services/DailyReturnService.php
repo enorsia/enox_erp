@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DailyReturn;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 
 class DailyReturnService
 {
@@ -18,6 +19,17 @@ class DailyReturnService
             ->latest('id')
             ->paginate(30)
             ->withQueryString();
+    }
+
+    /**
+     * Return an un-paginated query for export (respects the same filters as getList).
+     */
+    public function getExportQuery(array $filters): Builder
+    {
+        return DailyReturn::with(['salePlatform', 'returnReasonType'])
+            ->filter($filters)
+            ->latest('date')
+            ->latest('id');
     }
 
     /**

@@ -28,6 +28,8 @@ class DatabaseSeeder extends Seeder
             ReturnReasonTypeSeeder::class,
             SalePlatformSeeder::class,
             MonthlyBudgetSeeder::class,
+            DailySaleSeeder::class,
+            DailyReturnSeeder::class,
         ]);
     }
 }

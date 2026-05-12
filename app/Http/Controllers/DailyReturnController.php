@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\DailyReturnExport;
 use App\Models\DailyReturn;
 use App\Services\DailyReturnService;
 use App\Services\ReturnReasonTypeService;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Facades\Excel;
 
 class DailyReturnController extends Controller
 {
@@ -148,6 +150,25 @@ class DailyReturnController extends Controller
             notify()->error('Failed to update daily return', 'Error');
             return redirect()->back()->withInput();
         }
+    }
+
+    public function export(Request $request)
+    {
+        Gate::authorize('general.daily_return.index');
+
+        $columns = $request->input('columns', []);
+        if (is_string($columns)) {
+            $columns = array_filter(explode(',', $columns));
+        }
+        $allCols = DailyReturnExport::allColumns();
+        $columns = array_values(array_intersect($allCols, $columns ?: $allCols));
+
+        $query = $this->service->getExportQuery($request->except(['columns']));
+
+        return Excel::download(
+            new DailyReturnExport($query, $columns),
+            'daily-returns-' . now()->format('Y-m-d') . '.xlsx'
+        );
     }
 
     public function destroy(DailyReturn $dailyReturn): RedirectResponse

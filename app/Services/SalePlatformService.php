@@ -1,6 +1,7 @@
 <?php
 namespace App\Services;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use App\Models\SalePlatform;
 
@@ -176,6 +177,17 @@ class SalePlatformService
         }
 
         return $platforms;
+    }
+
+    /**
+     * Return an un-paginated query for export (respects same filters as getFilteredList).
+     */
+    public function getExportQuery(array $filters): Builder
+    {
+        return SalePlatform::with('parent')
+            ->filter($filters)
+            ->orderBy('sort_order')
+            ->latest('id');
     }
 
     /**

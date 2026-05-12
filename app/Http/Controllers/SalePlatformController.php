@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\SalePlatformExport;
 use App\Models\SalePlatform;
 use App\Services\SalePlatformService;
 use Illuminate\Http\Request;
@@ -9,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Maatwebsite\Excel\Facades\Excel;
 
 class SalePlatformController extends Controller
 {
@@ -174,6 +176,25 @@ class SalePlatformController extends Controller
             notify()->error('Failed to update sale platform', 'Error');
             return redirect()->back()->withInput();
         }
+    }
+
+    public function export(Request $request)
+    {
+        Gate::authorize('general.sale_platform.index');
+
+        $columns = $request->input('columns', []);
+        if (is_string($columns)) {
+            $columns = array_filter(explode(',', $columns));
+        }
+        $allCols = SalePlatformExport::allColumns();
+        $columns = array_values(array_intersect($allCols, $columns ?: $allCols));
+
+        $query = $this->service->getExportQuery($request->except(['columns']));
+
+        return Excel::download(
+            new SalePlatformExport($query, $columns),
+            'sale-platforms-' . now()->format('Y-m-d') . '.xlsx'
+        );
     }
 
     public function destroy(SalePlatform $salePlatform)

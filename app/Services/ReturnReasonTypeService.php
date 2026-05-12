@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ReturnReasonType;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
 class ReturnReasonTypeService
@@ -18,6 +19,16 @@ class ReturnReasonTypeService
             ->latest('id')
             ->paginate(30)
             ->withQueryString();
+    }
+
+    /**
+     * Return an un-paginated query for export (respects same filters as getList).
+     */
+    public function getExportQuery(array $filters): Builder
+    {
+        return ReturnReasonType::filter($filters)
+            ->orderBy('sort_order')
+            ->latest('id');
     }
 
     /**

@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\MonthlyBudgetExport;
 use App\Models\MonthlyBudget;
+use App\Services\MonthlyBudgetService;
 use App\Services\SalePlatformService;
 use App\Support\DateOptions;
 use Illuminate\Http\RedirectResponse;
@@ -12,6 +14,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Facades\Excel;
 
 class MonthlyBudgetController extends Controller
 {
@@ -20,30 +23,23 @@ class MonthlyBudgetController extends Controller
         'index'   => 'admin.monthly-budgets.index',
     ];
 
+    public function __construct(
+        private MonthlyBudgetService $service,
+    ) {}
+
 
     public function index(SalePlatformService $salePlatformService, Request $request) : View
     {
         Gate::authorize('general.monthly_budget.index');
 
-        $search = $request->input('search');
-        $year = $request->input('year');
-        $month = $request->input('month');
-        $salePlatformId = $request->input('sale_platform_id');
-
-        $hasFilter = $search || $year || $month || $salePlatformId;
-
-        $data['years'] = DateOptions::years();
-        $data['months'] = config('constants.months');
+        $data['years']         = DateOptions::years();
+        $data['months']        = config('constants.months');
         $data['salePlatforms'] = $salePlatformService->getParentOptions();
 
-        $monthlyBudgets = MonthlyBudget::filter($request->all())
-            ->with('salePlatform')
-            ->latest('id')
-            ->paginate(30)
-            ->withQueryString();
+        $monthlyBudgets        = $this->service->getList($request->all());
+        $data['monthlyBudgets']= $monthlyBudgets;
+        $data['start']         = ($monthlyBudgets->currentPage() - 1) * $monthlyBudgets->perPage() + 1;
 
-        $data['monthlyBudgets'] = $monthlyBudgets;
-        $data['start'] = ($monthlyBudgets->currentPage() - 1) * $monthlyBudgets->perPage() + 1;
         return view('monthly_budgets.index', $data);
     }
 
@@ -162,6 +158,25 @@ class MonthlyBudgetController extends Controller
             notify()->error('Failed to update monthly budget', 'Error');
             return redirect()->route(self::ROUTES['index']);
         }
+    }
+
+    public function export(Request $request)
+    {
+        Gate::authorize('general.monthly_budget.index');
+
+        $columns = $request->input('columns', []);
+        if (is_string($columns)) {
+            $columns = array_filter(explode(',', $columns));
+        }
+        $allCols = MonthlyBudgetExport::allColumns();
+        $columns = array_values(array_intersect($allCols, $columns ?: $allCols));
+
+        $query = $this->service->getExportQuery($request->except(['columns']));
+
+        return Excel::download(
+            new MonthlyBudgetExport($query, $columns),
+            'monthly-budgets-' . now()->format('Y-m-d') . '.xlsx'
+        );
     }
 
     public function destroy(MonthlyBudget $monthlyBudget) : RedirectResponse

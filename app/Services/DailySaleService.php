@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DailySale;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\Rule;
 
 class DailySaleService
@@ -19,6 +20,17 @@ class DailySaleService
             ->latest('id')
             ->paginate(30)
             ->withQueryString();
+    }
+
+    /**
+     * Return an un-paginated query for export (respects the same filters as getList).
+     */
+    public function getExportQuery(array $filters): Builder
+    {
+        return DailySale::with('salePlatform')
+            ->filter($filters)
+            ->latest('date')
+            ->latest('id');
     }
 
     /**

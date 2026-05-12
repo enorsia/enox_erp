@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\DailySaleExport;
 use App\Models\DailySale;
 use App\Services\DailySaleService;
 use App\Services\SalePlatformService;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Facades\Excel;
 
 class DailySaleController extends Controller
 {
@@ -135,6 +137,25 @@ class DailySaleController extends Controller
             notify()->error('Failed to update daily sale', 'Error');
             return redirect()->back()->withInput();
         }
+    }
+
+    public function export(Request $request)
+    {
+        Gate::authorize('general.daily_sale.index');
+
+        $columns = $request->input('columns', []);
+        if (is_string($columns)) {
+            $columns = array_filter(explode(',', $columns));
+        }
+        $allCols = DailySaleExport::allColumns();
+        $columns = array_values(array_intersect($allCols, $columns ?: $allCols));
+
+        $query = $this->service->getExportQuery($request->except(['columns']));
+
+        return Excel::download(
+            new DailySaleExport($query, $columns),
+            'daily-sales-' . now()->format('Y-m-d') . '.xlsx'
+        );
     }
 
     public function destroy(DailySale $dailySale): RedirectResponse
