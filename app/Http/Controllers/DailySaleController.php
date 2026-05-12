@@ -34,7 +34,7 @@ class DailySaleController extends Controller
         $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
         $data['start']         = ($data['dailySales']->currentPage() - 1) * $data['dailySales']->perPage() + 1;
 
-        return view('daily_sales.index', $data);
+        return view('daily_sales.daily_sales.index', $data);
     }
 
     public function create(): View
@@ -43,7 +43,7 @@ class DailySaleController extends Controller
 
         $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
 
-        return view('daily_sales.create', $data);
+        return view('daily_sales.daily_sales.create', $data);
     }
 
     public function store(Request $request): RedirectResponse
@@ -86,7 +86,7 @@ class DailySaleController extends Controller
 
         $dailySale->load('salePlatform');
 
-        return view('daily_sales.show', compact('dailySale'));
+        return view('daily_sales.daily_sales.show', compact('dailySale'));
     }
 
     public function edit(DailySale $dailySale): View
@@ -96,7 +96,7 @@ class DailySaleController extends Controller
         $data['dailySale']     = $dailySale;
         $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
 
-        return view('daily_sales.edit', $data);
+        return view('daily_sales.daily_sales.edit', $data);
     }
 
     public function update(Request $request, DailySale $dailySale): RedirectResponse

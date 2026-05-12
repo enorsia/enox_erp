@@ -48,7 +48,7 @@ class SalePlatformController extends Controller
 
         $data['stats'] = $this->service->getStats();
 
-        return view('sale_platforms.index', $data);
+        return view('daily_sales.sale_platforms.index', $data);
     }
 
     public function create()
@@ -58,7 +58,7 @@ class SalePlatformController extends Controller
         $data['parentOptions'] = $this->service->getParentOptions();
         $data['types']         = ['channel', 'sub_channel', 'marketplace', 'region'];
 
-        return view('sale_platforms.create', $data);
+        return view('daily_sales.sale_platforms.create', $data);
     }
 
     public function store(Request $request)
@@ -117,7 +117,7 @@ class SalePlatformController extends Controller
             ->where('id', '!=', $salePlatform->id)
             ->count();
 
-        return view('sale_platforms.show', [
+        return view('daily_sales.sale_platforms.show', [
             'salePlatform'  => $salePlatform,
             'breadcrumbs'   => $breadcrumbs,
             'siblingsCount' => $siblingsCount,
@@ -132,7 +132,7 @@ class SalePlatformController extends Controller
         $data['parentOptions'] = $this->service->getParentOptions($salePlatform->id);
         $data['types']         = ['channel', 'sub_channel', 'marketplace', 'region'];
 
-        return view('sale_platforms.edit', $data);
+        return view('daily_sales.sale_platforms.edit', $data);
     }
 
     public function update(Request $request, SalePlatform $salePlatform)

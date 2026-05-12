@@ -28,14 +28,14 @@ class ReturnReasonTypeController extends Controller
         $data['reasonTypes'] = $this->service->getList($request->all());
         $data['start']       = ($data['reasonTypes']->currentPage() - 1) * $data['reasonTypes']->perPage() + 1;
 
-        return view('return_reason_types.index', $data);
+        return view('daily_sales.return_reason_types.index', $data);
     }
 
     public function create() : View
     {
         Gate::authorize('general.return_reason_type.create');
 
-        return view('return_reason_types.create');
+        return view('daily_sales.return_reason_types.create');
     }
 
     public function store(Request $request) : RedirectResponse
@@ -70,14 +70,14 @@ class ReturnReasonTypeController extends Controller
     {
         Gate::authorize('general.return_reason_type.show');
 
-        return view('return_reason_types.show', compact('returnReasonType'));
+        return view('daily_sales.return_reason_types.show', compact('returnReasonType'));
     }
 
     public function edit(ReturnReasonType $returnReasonType) : View
     {
         Gate::authorize('general.return_reason_type.edit');
 
-        return view('return_reason_types.edit', compact('returnReasonType'));
+        return view('daily_sales.return_reason_types.edit', compact('returnReasonType'));
     }
 
     public function update(Request $request, ReturnReasonType $returnReasonType) : RedirectResponse

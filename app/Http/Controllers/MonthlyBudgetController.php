@@ -40,7 +40,7 @@ class MonthlyBudgetController extends Controller
         $data['monthlyBudgets']= $monthlyBudgets;
         $data['start']         = ($monthlyBudgets->currentPage() - 1) * $monthlyBudgets->perPage() + 1;
 
-        return view('monthly_budgets.index', $data);
+        return view('daily_sales.monthly_budgets.index', $data);
     }
 
     public function create(SalePlatformService $salePlatformService) : View
@@ -51,7 +51,7 @@ class MonthlyBudgetController extends Controller
         $data['years'] = DateOptions::years();
         $data['months'] = config('constants.months');
 
-        return view('monthly_budgets.create', $data);
+        return view('daily_sales.monthly_budgets.create', $data);
     }
 
     public function store(Request $request) : RedirectResponse
@@ -98,7 +98,7 @@ class MonthlyBudgetController extends Controller
         Gate::authorize('general.monthly_budget.show');
 
         $months = config('constants.months');
-        return view('monthly_budgets.show', compact('monthlyBudget', 'months'));
+        return view('daily_sales.monthly_budgets.show', compact('monthlyBudget', 'months'));
     }
 
     public function edit(MonthlyBudget $monthlyBudget, SalePlatformService $salePlatformService) : View
@@ -110,7 +110,7 @@ class MonthlyBudgetController extends Controller
         $data['years'] = DateOptions::years();
         $data['months'] = config('constants.months');
 
-        return view('monthly_budgets.edit', $data);
+        return view('daily_sales.monthly_budgets.edit', $data);
     }
 
     public function update(Request $request, MonthlyBudget $monthlyBudget) : RedirectResponse
