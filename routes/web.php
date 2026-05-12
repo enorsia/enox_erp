@@ -3,7 +3,9 @@
 use App\Http\Controllers\SalePlatformController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ReturnReasonTypeController;
-use App\Http\Controllers\MonthlyBudgetController; // Added this line
+use App\Http\Controllers\MonthlyBudgetController;
+use App\Http\Controllers\DailySaleController;
+use App\Http\Controllers\DailyReturnController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProfileController;
@@ -34,7 +36,9 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('platforms', PlatformController::class);
     Route::resource('sales/return-reason-types', ReturnReasonTypeController::class);
     Route::resource('sales/sale-platforms', SalePlatformController::class);
-    Route::resource('sales/monthly-budgets', MonthlyBudgetController::class); // Added this line
+    Route::resource('sales/monthly-budgets', MonthlyBudgetController::class);
+    Route::resource('sales/daily-sales', DailySaleController::class);
+    Route::resource('sales/daily-returns', DailyReturnController::class);
     Route::resource('activity-logs', ActivityLogController::class)->only(['index', 'show']);
 
     Route::controller(SalesChartController::class)->group(function () {

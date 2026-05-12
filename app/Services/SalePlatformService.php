@@ -75,7 +75,7 @@ class SalePlatformService
      * Pass $excludeId to hide a platform and all its descendants (prevents
      * a platform from being set as its own parent/ancestor).
     */
-    public function getParentOptions(int $excludeId = null): array
+    public function getParentOptions(?int $excludeId = null): array
     {
         $all         = SalePlatform::orderBy('sort_order')->orderBy('id')->get();
         $childrenMap = $all->groupBy('parent_id');
@@ -138,5 +138,58 @@ class SalePlatformService
         }
 
         return $ids;
+    }
+
+    /**
+     * Build and return the complete DFS-ordered flat tree for the index listing.
+     */
+    public function getFullTreeList(): array
+    {
+        $all         = SalePlatform::orderBy('sort_order')->orderBy('id')->get();
+        $childrenMap = $all->groupBy('parent_id');
+        $roots       = $all->whereNull('parent_id')->values();
+
+        $this->attachChildren($roots->all(), $childrenMap);
+
+        return $this->buildFlatTree($roots->sortBy('sort_order')->all());
+    }
+
+    /**
+     * Return a paginated, filtered flat list with basic tree-metadata stamped on each item.
+     */
+    public function getFilteredList(array $filters)
+    {
+        $platforms = SalePlatform::with('parent')
+            ->filter($filters)
+            ->orderBy('sort_order')
+            ->latest('id')
+            ->paginate(30)
+            ->withQueryString();
+
+        foreach ($platforms as $p) {
+            $p->depth          = 0;
+            $p->is_root        = true;
+            $p->has_children   = false;
+            $p->children_count = 0;
+            $p->ancestor_names = [];
+            $p->is_last_child  = false;
+        }
+
+        return $platforms;
+    }
+
+    /**
+     * Return aggregate stats for the dashboard cards on the index page.
+     */
+    public function getStats(): array
+    {
+        return [
+            'total'    => SalePlatform::count(),
+            'active'   => SalePlatform::where('is_active', true)->count(),
+            'inactive' => SalePlatform::where('is_active', false)->count(),
+            'types'    => SalePlatform::selectRaw('type, count(*) as count')
+                ->groupBy('type')
+                ->pluck('count', 'type'),
+        ];
     }
 }

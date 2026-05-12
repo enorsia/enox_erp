@@ -1,0 +1,238 @@
+@extends('layouts.app')
+
+@section('title', 'Add Daily Sale')
+
+@section('content')
+    <div id="daily-sales-page-content"></div>
+    <div class="max-w-5xl mx-auto px-5 py-6 pb-28">
+
+        <!-- PAGE HEADER -->
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+            <div>
+                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Add Daily Sale</h1>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Record a new daily sales entry</p>
+            </div>
+        </div>
+
+        <form method="POST" action="{{ route('admin.daily-sales.store') }}" id="validateForm">
+            @csrf
+
+            <div class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
+
+                <!-- LEFT COLUMN -->
+                <div class="space-y-5">
+
+                    <!-- ── Core Details ── -->
+                    <div class="section-card">
+                        <div class="section-title">
+                            <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Core Details
+                        </div>
+                        <p class="section-desc">Select the platform and date, then enter totals.</p>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- Platform -->
+                            <div class="sm:col-span-2">
+                                <label class="f-label">Sale Platform <span class="f-required">*</span></label>
+                                <select name="sale_platform_id" class="tom-select f-input @error('sale_platform_id') border-red-400 @enderror" required>
+                                    <option value="">Select a platform</option>
+                                    @foreach($salePlatforms as $platform)
+                                        <option value="{{ $platform['id'] }}" {{ old('sale_platform_id') == $platform['id'] ? 'selected' : '' }}>
+                                            {!! $platform['label'] !!}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @error('sale_platform_id')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <!-- Date -->
+                            <div>
+                                <label class="f-label">Date <span class="f-required">*</span></label>
+                                <input type="date" name="date"
+                                       class="f-input @error('date') border-red-400 @enderror"
+                                       value="{{ old('date', date('Y-m-d')) }}" required />
+                                @error('date')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <!-- Spent -->
+                            <div>
+                                <label class="f-label">Spent <span class="f-required">*</span></label>
+                                <input type="number" name="spent" step="0.01" min="0"
+                                       class="f-input @error('spent') border-red-400 @enderror"
+                                       placeholder="0.00" value="{{ old('spent', '0.00') }}" required />
+                                @error('spent')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <!-- Sales -->
+                            <div>
+                                <label class="f-label">Sales <span class="f-required">*</span></label>
+                                <input type="number" name="sales" step="0.01" min="0"
+                                       class="f-input @error('sales') border-red-400 @enderror"
+                                       placeholder="0.00" value="{{ old('sales', '0.00') }}" required />
+                                @error('sales')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <!-- Orders -->
+                            <div>
+                                <label class="f-label">Number of Orders <span class="f-required">*</span></label>
+                                <input type="number" name="number_of_orders" min="0"
+                                       class="f-input @error('number_of_orders') border-red-400 @enderror"
+                                       placeholder="0" value="{{ old('number_of_orders', 0) }}" required />
+                                @error('number_of_orders')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <!-- Quantities -->
+                            <div>
+                                <label class="f-label">Number of Quantities <span class="f-required">*</span></label>
+                                <input type="number" name="number_of_quantities" min="0"
+                                       class="f-input @error('number_of_quantities') border-red-400 @enderror"
+                                       placeholder="0" value="{{ old('number_of_quantities', 0) }}" required />
+                                @error('number_of_quantities')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Gender Breakdown — Orders ── -->
+                    <div class="section-card">
+                        <div class="section-title">
+                            <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            Gender Breakdown — Orders
+                        </div>
+                        <p class="section-desc">Optional breakdown of orders by gender.</p>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="f-label">Male Orders</label>
+                                <input type="number" name="number_of_male_orders" min="0"
+                                       class="f-input @error('number_of_male_orders') border-red-400 @enderror"
+                                       placeholder="0" value="{{ old('number_of_male_orders', 0) }}" />
+                                @error('number_of_male_orders')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+                            <div>
+                                <label class="f-label">Female Orders</label>
+                                <input type="number" name="number_of_female_orders" min="0"
+                                       class="f-input @error('number_of_female_orders') border-red-400 @enderror"
+                                       placeholder="0" value="{{ old('number_of_female_orders', 0) }}" />
+                                @error('number_of_female_orders')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+                            <div>
+                                <label class="f-label">Kids Orders</label>
+                                <input type="number" name="number_of_kids_orders" min="0"
+                                       class="f-input @error('number_of_kids_orders') border-red-400 @enderror"
+                                       placeholder="0" value="{{ old('number_of_kids_orders', 0) }}" />
+                                @error('number_of_kids_orders')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Gender Breakdown — Quantities ── -->
+                    <div class="section-card">
+                        <div class="section-title">
+                            <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                            </svg>
+                            Gender Breakdown — Quantities
+                        </div>
+                        <p class="section-desc">Optional breakdown of quantities by gender.</p>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="f-label">Male Quantities</label>
+                                <input type="number" name="number_of_male_quantities" min="0"
+                                       class="f-input @error('number_of_male_quantities') border-red-400 @enderror"
+                                       placeholder="0" value="{{ old('number_of_male_quantities', 0) }}" />
+                                @error('number_of_male_quantities')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+                            <div>
+                                <label class="f-label">Female Quantities</label>
+                                <input type="number" name="number_of_female_quantities" min="0"
+                                       class="f-input @error('number_of_female_quantities') border-red-400 @enderror"
+                                       placeholder="0" value="{{ old('number_of_female_quantities', 0) }}" />
+                                @error('number_of_female_quantities')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+                            <div>
+                                <label class="f-label">Kids Quantities</label>
+                                <input type="number" name="number_of_kids_quantities" min="0"
+                                       class="f-input @error('number_of_kids_quantities') border-red-400 @enderror"
+                                       placeholder="0" value="{{ old('number_of_kids_quantities', 0) }}" />
+                                @error('number_of_kids_quantities')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- RIGHT COLUMN (info panel) -->
+                <div class="space-y-5">
+                    <div class="section-card">
+                        <div class="section-title">
+                            <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+                            </svg>
+                            Guidelines
+                        </div>
+                        <ul class="text-[12px] text-slate-500 dark:text-slate-400 space-y-2 mt-2">
+                            <li>• Each platform can have only one record per day.</li>
+                            <li>• Gender breakdown fields are optional but recommended.</li>
+                            <li>• Spent and Sales values should be in GBP (or platform currency).</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── STICKY FOOTER ── -->
+            <div class="sticky-footer mt-5 -mx-5 rounded-none">
+                <div class="max-w-5xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+                    <div class="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        Fields marked <span class="text-red-400 mx-1">*</span> are required
+                    </div>
+                    <div class="flex gap-2.5">
+                        <a href="{{ route('admin.daily-sales.index') }}"
+                           class="px-4 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
+                            Cancel
+                        </a>
+                        <button type="submit"
+                                class="submit-btn px-5 py-2.5 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            Save Daily Sale
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+@endsection
+

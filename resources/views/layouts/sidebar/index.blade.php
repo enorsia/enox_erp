@@ -206,6 +206,20 @@
                                 </a>
                             @endcanany
 
+                            @can('general.daily_sale.index')
+                                <a href="{{ route('admin.daily-sales.index') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors text-white/45 hover:text-white/80 hover:bg-white/5 {{ Request::is('admin/sales/daily-sales*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    Daily Sales
+                                </a>
+                            @endcan
+
+                            @can('general.daily_return.index')
+                                <a href="{{ route('admin.daily-returns.index') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors text-white/45 hover:text-white/80 hover:bg-white/5 {{ Request::is('admin/sales/daily-returns*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    Daily Returns
+                                </a>
+                            @endcan
+
                         </div>
                     </div>
                 </div>

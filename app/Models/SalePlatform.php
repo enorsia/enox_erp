@@ -48,6 +48,21 @@ class SalePlatform extends BaseModel
         return $this->hasMany(SalePlatform::class, 'parent_id');
     }
 
+    public function dailySales()
+    {
+        return $this->hasMany(DailySale::class);
+    }
+
+    public function dailyReturns()
+    {
+        return $this->hasMany(DailyReturn::class);
+    }
+
+    public function monthlyBudgets()
+    {
+        return $this->hasMany(MonthlyBudget::class);
+    }
+
     public function scopeFilter($query, array $filters)
     {
         if (!empty($filters['search'])) {

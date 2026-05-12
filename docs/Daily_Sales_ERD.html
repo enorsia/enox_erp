@@ -1,0 +1,137 @@
+
+<div id="erd"></div>
+<style>
+#erd svg { width: 100%; }
+#erd svg.erDiagram .row-rect-odd path,
+#erd svg.erDiagram .row-rect-even path { stroke: none !important; }
+</style>
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '"Anthropic Sans", sans-serif',
+  themeVariables: {
+    darkMode: dark,
+    fontSize: '12px',
+    fontFamily: '"Anthropic Sans", sans-serif',
+    lineColor: dark ? '#9c9a92' : '#73726c',
+    textColor: dark ? '#c2c0b6' : '#3d3d3a',
+    primaryColor: dark ? '#3C3489' : '#EEEDFE',
+    primaryBorderColor: dark ? '#AFA9EC' : '#534AB7',
+    primaryTextColor: dark ? '#CECBF6' : '#26215C',
+    secondaryColor: dark ? '#085041' : '#E1F5EE',
+    secondaryBorderColor: dark ? '#5DCAA5' : '#0F6E56',
+    secondaryTextColor: dark ? '#9FE1CB' : '#04342C',
+    tertiaryColor: dark ? '#442B13' : '#FAEEDA',
+    tertiaryBorderColor: dark ? '#EF9F27' : '#854F0B',
+    tertiaryTextColor: dark ? '#FAC775' : '#412402',
+  },
+});
+
+const diagram = `erDiagram
+  platforms {
+    bigint id PK
+    string name
+    string slug UK
+    bigint parent_id FK
+    enum type
+    tinyint sort_order
+    bool is_active
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  daily_sales {
+    bigint id PK
+    bigint platform_id FK
+    date date
+    decimal spent
+    decimal sales
+    int number_of_orders
+    int number_of_quantities
+    int number_of_male_orders
+    int number_of_female_orders
+    int number_of_kids_orders
+    int number_of_male_quantities
+    int number_of_female_quantities
+    int number_of_kids_quantities
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  return_reason_types {
+    bigint id PK
+    string name
+    string slug UK
+    text description
+    bool is_active
+    tinyint sort_order
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  daily_returns {
+    bigint id PK
+    bigint platform_id FK
+    bigint return_reason_type_id FK
+    date date
+    int number_of_returns
+    int number_of_return_quantities
+    int number_of_male_returns
+    int number_of_female_returns
+    int number_of_kids_returns
+    int number_of_male_return_quantities
+    int number_of_female_return_quantities
+    int number_of_kids_return_quantities
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  monthly_budgets {
+    bigint id PK
+    bigint platform_id FK
+    smallint year
+    tinyint month
+    decimal budget
+    char currency
+    text notes
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  platforms ||--o{ platforms : "parent_id (self-ref)"
+  platforms ||--o{ daily_sales : "platform_id"
+  platforms ||--o{ daily_returns : "platform_id"
+  platforms ||--o{ monthly_budgets : "platform_id"
+  return_reason_types ||--o{ daily_returns : "return_reason_type_id"
+`;
+
+const { svg } = await mermaid.render('erd-svg', diagram);
+document.getElementById('erd').innerHTML = svg;
+
+document.querySelectorAll('#erd svg.erDiagram .node').forEach(node => {
+  const firstPath = node.querySelector('path[d]');
+  if (!firstPath) return;
+  const d = firstPath.getAttribute('d');
+  const nums = d.match(/-?[\d.]+/g)?.map(Number);
+  if (!nums || nums.length < 8) return;
+  const xs = [nums[0], nums[2], nums[4], nums[6]];
+  const ys = [nums[1], nums[3], nums[5], nums[7]];
+  const x = Math.min(...xs), y = Math.min(...ys);
+  const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('x', x); rect.setAttribute('y', y);
+  rect.setAttribute('width', w); rect.setAttribute('height', h);
+  rect.setAttribute('rx', '8');
+  for (const a of ['fill', 'stroke', 'stroke-width', 'class', 'style']) {
+    if (firstPath.hasAttribute(a)) rect.setAttribute(a, firstPath.getAttribute(a));
+  }
+  firstPath.replaceWith(rect);
+});
+document.querySelectorAll('#erd svg.erDiagram .row-rect-odd path, #erd svg.erDiagram .row-rect-even path').forEach(p => {
+  p.setAttribute('stroke', 'none');
+});
+</script>

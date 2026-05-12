@@ -63,6 +63,14 @@ return [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'show', 'delete'],
             ],
+            'daily_sale' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
+            ],
+            'daily_return' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
+            ],
         ],
 
         // SETTINGS MODULE

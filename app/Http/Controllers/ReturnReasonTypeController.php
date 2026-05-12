@@ -3,12 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\ReturnReasonType;
+use App\Services\ReturnReasonTypeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class ReturnReasonTypeController extends Controller
@@ -16,16 +16,15 @@ class ReturnReasonTypeController extends Controller
     const ROUTES = [
         'index' => 'admin.return-reason-types.index',
     ];
+
+    public function __construct(private ReturnReasonTypeService $service) {}
+
     public function index(Request $request) : View
     {
         Gate::authorize('general.return_reason_type.index');
 
-        $data['reasonTypes'] = ReturnReasonType::filter($request->all())
-            ->orderBy('sort_order')
-            ->latest('id')
-            ->paginate(30);
-
-        $data['start'] = ($data['reasonTypes']->currentPage() - 1) * $data['reasonTypes']->perPage() + 1;
+        $data['reasonTypes'] = $this->service->getList($request->all());
+        $data['start']       = ($data['reasonTypes']->currentPage() - 1) * $data['reasonTypes']->perPage() + 1;
 
         return view('return_reason_types.index', $data);
     }
@@ -40,23 +39,15 @@ class ReturnReasonTypeController extends Controller
     public function store(Request $request) : RedirectResponse
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:150|unique:return_reason_types,name',
-            'slug' => 'nullable|string|max:150|unique:return_reason_types,slug',
+            'name'        => 'required|string|max:150|unique:return_reason_types,name',
+            'slug'        => 'nullable|string|max:150|unique:return_reason_types,slug',
             'description' => 'nullable|string',
-            'is_active' => 'nullable|boolean',
-            'sort_order' => 'nullable|integer|min:0|max:255',
+            'is_active'   => 'nullable|boolean',
+            'sort_order'  => 'nullable|integer|min:0|max:255',
         ]);
 
         try {
-            $slug = $validated['slug'] ?? Str::slug($request->name);
-
-            $reasonType = ReturnReasonType::create([
-                'name' => $validated['name'],
-                'slug' => $slug,
-                'description' => $validated['description'] ?? null,
-                'is_active' => $request->has('is_active') ? true : false,
-                'sort_order' => $validated['sort_order'] ?? 0,
-            ]);
+            $reasonType = $this->service->create($validated, $request->has('is_active'));
 
             activity()
                 ->causedBy(Auth::user())
@@ -67,9 +58,9 @@ class ReturnReasonTypeController extends Controller
             notify()->success("Return reason type created successfully.", "Success");
             return redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
-            Log::error('RETURN REASON TYPES -  creation failed: ' . $e->getMessage());
+            Log::error('RETURN REASON TYPES - creation failed: ' . $e->getMessage());
             notify()->error('Failed to create return reason type', 'Error');
-            return redirect()->route(self::ROUTES['index']);
+            return redirect()->back()->withInput();
         }
     }
 
@@ -90,68 +81,27 @@ class ReturnReasonTypeController extends Controller
     public function update(Request $request, ReturnReasonType $returnReasonType) : RedirectResponse
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:150|unique:return_reason_types,name,' . $returnReasonType->id,
-            'slug' => 'nullable|string|max:150|unique:return_reason_types,slug,' . $returnReasonType->id,
+            'name'        => 'required|string|max:150|unique:return_reason_types,name,' . $returnReasonType->id,
+            'slug'        => 'nullable|string|max:150|unique:return_reason_types,slug,' . $returnReasonType->id,
             'description' => 'nullable|string',
-            'is_active' => 'nullable|in:on,off',
-            'sort_order' => 'nullable|integer|min:0|max:255',
+            'is_active'   => 'nullable|in:on,off',
+            'sort_order'  => 'nullable|integer|min:0|max:255',
         ]);
 
-
-        $validated['is_active'] = $request->boolean('is_active');
-
-
         try {
-            // Capture old values before update
-            $oldValues = [
-                'name' => $returnReasonType->name,
-                'slug' => $returnReasonType->slug,
-                'description' => $returnReasonType->description,
-                'is_active' => $returnReasonType->is_active,
-                'sort_order' => $returnReasonType->sort_order,
-            ];
+            $oldValues  = $returnReasonType->only(['name', 'slug', 'description', 'is_active', 'sort_order']);
+            $reasonType = $this->service->update($returnReasonType, $validated, $request->has('is_active'));
+            $newValues  = $reasonType->only(['name', 'slug', 'description', 'is_active', 'sort_order']);
 
-            $slug = $validated['slug'] ?? Str::slug($request->name);
+            $changes = array_filter($newValues, fn($v, $k) => $v != $oldValues[$k], ARRAY_FILTER_USE_BOTH);
 
-            $returnReasonType->update([
-                'name' => $validated['name'],
-                'slug' => $slug,
-                'description' => $validated['description'] ?? null,
-                'is_active' => $request->has('is_active') ? true : false,
-                'sort_order' => $validated['sort_order'] ?? 0,
-            ]);
-
-            // Capture new values after update
-            $newValues = [
-                'name' => $returnReasonType->name,
-                'slug' => $returnReasonType->slug,
-                'description' => $returnReasonType->description,
-                'is_active' => $returnReasonType->is_active,
-                'sort_order' => $returnReasonType->sort_order,
-            ];
-
-            // Detect actual changes
-            $changes = [];
-            foreach ($oldValues as $key => $oldValue) {
-                if ($oldValue != $newValues[$key]) {
-                    $changes[$key] = [
-                        'old' => $oldValue,
-                        'new' => $newValues[$key]
-                    ];
-                }
-            }
-
-            // Log only if there are actual changes
-            if (count($changes) > 0) {
-                $changedFields = array_keys($changes);
-                $description = 'Updated return reason type: ' . $returnReasonType->name;
-                $description .= ' (Changed: ' . implode(', ', array_map(fn($f) => ucfirst($f), $changedFields)) . ')';
-
+            if (!empty($changes)) {
                 activity()
                     ->causedBy(Auth::user())
-                    ->performedOn($returnReasonType)
+                    ->performedOn($reasonType)
                     ->withProperties(['old' => $oldValues, 'attributes' => $newValues])
-                    ->log($description);
+                    ->log('Updated return reason type: ' . $reasonType->name
+                        . ' (Changed: ' . implode(', ', array_keys($changes)) . ')');
             }
 
             notify()->success("Return reason type updated successfully.", "Success");
@@ -159,7 +109,7 @@ class ReturnReasonTypeController extends Controller
         } catch (\Exception $e) {
             Log::error('RETURN REASON TYPES - update failed: ' . $e->getMessage());
             notify()->error('Failed to update return reason type', 'Error');
-            return redirect()->route(self::ROUTES['index']);
+            return redirect()->back()->withInput();
         }
     }
 
@@ -174,7 +124,7 @@ class ReturnReasonTypeController extends Controller
                 ->withProperties(['deleted_reason_type' => $returnReasonType->name])
                 ->log('Deleted return reason type: ' . $returnReasonType->name);
 
-            $returnReasonType->delete();
+            $this->service->delete($returnReasonType);
 
             notify()->success("Return reason type deleted successfully.", "Deleted");
             return redirect()->back();
