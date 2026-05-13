@@ -60,7 +60,7 @@
         </div>
 
         <!-- ── STICKY FOOTER ── -->
-        <div class="sticky-footer mt-5 -mx-5 rounded-none" style="z-index: 1 !important;">
+        <div class="sticky-footer mt-5 -mx-5 rounded-none">
             <div class="px-5 flex items-center justify-between gap-3 flex-wrap">
                 <div class="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
                     <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
