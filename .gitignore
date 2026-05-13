@@ -26,3 +26,4 @@ Thumbs.db
 /deployments/*
 composer.lock
 package-lock.json
+public/aprin_2025.xlsx
