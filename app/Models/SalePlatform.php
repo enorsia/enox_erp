@@ -12,6 +12,9 @@ class SalePlatform extends BaseModel
         'parent_id',
         'type',
         'is_active',
+        'is_spent',
+        'is_sales',
+        'allows_direct_entry',
         'sort_order',
     ];
 
@@ -19,6 +22,9 @@ class SalePlatform extends BaseModel
     {
         return [
             'is_active' => 'boolean',
+            'is_spent' => 'boolean',
+            'is_sales' => 'boolean',
+            'allows_direct_entry' => 'boolean',
         ];
     }
 
@@ -79,6 +85,18 @@ class SalePlatform extends BaseModel
 
         if (isset($filters['is_active']) && $filters['is_active'] !== '' && $filters['is_active'] !== null) {
             $query->where('is_active', (bool) $filters['is_active']);
+        }
+
+        if (isset($filters['is_spent']) && $filters['is_spent'] !== '' && $filters['is_spent'] !== null) {
+            $query->where('is_spent', (bool) $filters['is_spent']);
+        }
+
+        if (isset($filters['is_sales']) && $filters['is_sales'] !== '' && $filters['is_sales'] !== null) {
+            $query->where('is_sales', (bool) $filters['is_sales']);
+        }
+
+        if (isset($filters['allows_direct_entry']) && $filters['allows_direct_entry'] !== '' && $filters['allows_direct_entry'] !== null) {
+            $query->where('allows_direct_entry', (bool) $filters['allows_direct_entry']);
         }
 
         return $query;

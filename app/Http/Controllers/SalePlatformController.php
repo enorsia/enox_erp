@@ -64,22 +64,28 @@ class SalePlatformController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'       => 'required|string|max:100|unique:sale_platforms,name',
-            'slug'       => 'nullable|string|max:100|unique:sale_platforms,slug',
-            'parent_id'  => 'nullable|exists:sale_platforms,id',
-            'type'       => 'required|in:channel,sub_channel,marketplace,region',
-            'is_active'  => 'nullable|in:on,off',
-            'sort_order' => 'nullable|integer|min:0|max:255',
+            'name'                 => 'required|string|max:100|unique:sale_platforms,name',
+            'slug'                 => 'nullable|string|max:100|unique:sale_platforms,slug',
+            'parent_id'            => 'nullable|exists:sale_platforms,id',
+            'type'                 => 'required|in:channel,sub_channel,marketplace,region',
+            'is_active'            => 'nullable|in:on,off',
+            'is_spent'             => 'nullable|in:on,off',
+            'is_sales'             => 'nullable|in:on,off',
+            'allows_direct_entry'  => 'nullable|in:on,off',
+            'sort_order'           => 'nullable|integer|min:0|max:255',
         ]);
 
         try {
             $platform = SalePlatform::create([
-                'name'       => $validated['name'],
-                'slug'       => $validated['slug'] ?? Str::slug($validated['name']),
-                'parent_id'  => $validated['parent_id'] ?? null,
-                'type'       => $validated['type'],
-                'is_active'  => $request->has('is_active'),
-                'sort_order' => $validated['sort_order'] ?? 0,
+                'name'                => $validated['name'],
+                'slug'                => $validated['slug'] ?? Str::slug($validated['name']),
+                'parent_id'           => $validated['parent_id'] ?? null,
+                'type'                => $validated['type'],
+                'is_active'           => $request->has('is_active'),
+                'is_spent'            => $request->has('is_spent'),
+                'is_sales'            => $request->has('is_sales'),
+                'allows_direct_entry' => $request->has('allows_direct_entry'),
+                'sort_order'          => $validated['sort_order'] ?? 0,
             ]);
 
             activity()
@@ -138,27 +144,33 @@ class SalePlatformController extends Controller
     public function update(Request $request, SalePlatform $salePlatform)
     {
         $validated = $request->validate([
-            'name'       => 'required|string|max:100|unique:sale_platforms,name,' . $salePlatform->id,
-            'slug'       => 'nullable|string|max:100|unique:sale_platforms,slug,' . $salePlatform->id,
-            'parent_id'  => 'nullable|exists:sale_platforms,id',
-            'type'       => 'required|in:channel,sub_channel,marketplace,region',
-            'is_active'  => 'nullable|in:on,off',
-            'sort_order' => 'nullable|integer|min:0|max:255',
+            'name'                 => 'required|string|max:100|unique:sale_platforms,name,' . $salePlatform->id,
+            'slug'                 => 'nullable|string|max:100|unique:sale_platforms,slug,' . $salePlatform->id,
+            'parent_id'            => 'nullable|exists:sale_platforms,id',
+            'type'                 => 'required|in:channel,sub_channel,marketplace,region',
+            'is_active'            => 'nullable|in:on,off',
+            'is_spent'             => 'nullable|in:on,off',
+            'is_sales'             => 'nullable|in:on,off',
+            'allows_direct_entry'  => 'nullable|in:on,off',
+            'sort_order'           => 'nullable|integer|min:0|max:255',
         ]);
 
         try {
-            $oldValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'sort_order']);
+            $oldValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'is_spent', 'is_sales', 'allows_direct_entry', 'sort_order']);
 
             $salePlatform->update([
-                'name'       => $validated['name'],
-                'slug'       => $validated['slug'] ?? Str::slug($validated['name']),
-                'parent_id'  => $validated['parent_id'] ?? null,
-                'type'       => $validated['type'],
-                'is_active'  => $request->has('is_active'),
-                'sort_order' => $validated['sort_order'] ?? 0,
+                'name'                => $validated['name'],
+                'slug'                => $validated['slug'] ?? Str::slug($validated['name']),
+                'parent_id'           => $validated['parent_id'] ?? null,
+                'type'                => $validated['type'],
+                'is_active'           => $request->has('is_active'),
+                'is_spent'            => $request->has('is_spent'),
+                'is_sales'            => $request->has('is_sales'),
+                'allows_direct_entry' => $request->has('allows_direct_entry'),
+                'sort_order'          => $validated['sort_order'] ?? 0,
             ]);
 
-            $newValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'sort_order']);
+            $newValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'is_spent', 'is_sales', 'allows_direct_entry', 'sort_order']);
             $changes   = array_filter($newValues, fn($v, $k) => $v != $oldValues[$k], ARRAY_FILTER_USE_BOTH);
 
             if (!empty($changes)) {

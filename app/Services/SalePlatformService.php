@@ -196,10 +196,13 @@ class SalePlatformService
     public function getStats(): array
     {
         return [
-            'total'    => SalePlatform::count(),
-            'active'   => SalePlatform::where('is_active', true)->count(),
-            'inactive' => SalePlatform::where('is_active', false)->count(),
-            'types'    => SalePlatform::selectRaw('type, count(*) as count')
+            'total'              => SalePlatform::count(),
+            'active'             => SalePlatform::where('is_active', true)->count(),
+            'inactive'           => SalePlatform::where('is_active', false)->count(),
+            'with_spent'         => SalePlatform::where('is_spent', true)->count(),
+            'with_sales'         => SalePlatform::where('is_sales', true)->count(),
+            'allow_direct_entry' => SalePlatform::where('allows_direct_entry', true)->count(),
+            'types'              => SalePlatform::selectRaw('type, count(*) as count')
                 ->groupBy('type')
                 ->pluck('count', 'type'),
         ];

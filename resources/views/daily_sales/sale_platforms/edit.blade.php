@@ -124,21 +124,69 @@
                             <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
                             </svg>
-                            Status
+                            Status & Capabilities
                         </div>
 
-                        <div>
-                            <label class="flex items-center gap-3 cursor-pointer">
-                                <div class="toggle-track {{ old('is_active', $salePlatform->is_active) ? 'on' : '' }}"
-                                     id="statusToggle" onclick="toggleSwitch('statusToggle')">
-                                    <div class="toggle-thumb"></div>
-                                </div>
-                                <span class="text-sm text-slate-600 dark:text-slate-300 font-medium"
-                                      onclick="toggleSwitch('statusToggle')">Active status</span>
-                                <input type="checkbox" name="is_active" id="statusCheckbox" class="hidden"
-                                        {{ old('is_active', $salePlatform->is_active) ? 'checked' : '' }}>
-                            </label>
-                            <p class="f-hint mt-1">Enable to make this sale platform active.</p>
+                        <div class="space-y-3">
+                            <!-- Active Status -->
+                            <div>
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <div class="toggle-track {{ old('is_active', $salePlatform->is_active) ? 'on' : '' }}"
+                                         id="statusToggle" onclick="toggleSwitch('statusToggle')">
+                                        <div class="toggle-thumb"></div>
+                                    </div>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium"
+                                          onclick="toggleSwitch('statusToggle')">Active status</span>
+                                    <input type="checkbox" name="is_active" id="statusCheckbox" class="hidden"
+                                            {{ old('is_active', $salePlatform->is_active) ? 'checked' : '' }}>
+                                </label>
+                                <p class="f-hint mt-1 ml-11">Enable to make this sale platform active.</p>
+                            </div>
+
+                            <!-- Is Spent -->
+                            <div>
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <div class="toggle-track {{ old('is_spent', $salePlatform->is_spent) ? 'on' : '' }}" id="isSpentToggle"
+                                         onclick="toggleSwitch('isSpentToggle')">
+                                        <div class="toggle-thumb"></div>
+                                    </div>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium"
+                                          onclick="toggleSwitch('isSpentToggle')">Can track spent</span>
+                                    <input type="checkbox" name="is_spent" id="isSpentCheckbox" class="hidden"
+                                            {{ old('is_spent', $salePlatform->is_spent) ? 'checked' : '' }}>
+                                </label>
+                                <p class="f-hint mt-1 ml-11">Allow recording spending/cost data on this platform.</p>
+                            </div>
+
+                            <!-- Is Sales -->
+                            <div>
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <div class="toggle-track {{ old('is_sales', $salePlatform->is_sales) ? 'on' : '' }}" id="isSalesToggle"
+                                         onclick="toggleSwitch('isSalesToggle')">
+                                        <div class="toggle-thumb"></div>
+                                    </div>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium"
+                                          onclick="toggleSwitch('isSalesToggle')">Can track sales</span>
+                                    <input type="checkbox" name="is_sales" id="isSalesCheckbox" class="hidden"
+                                            {{ old('is_sales', $salePlatform->is_sales) ? 'checked' : '' }}>
+                                </label>
+                                <p class="f-hint mt-1 ml-11">Allow recording sales data on this platform.</p>
+                            </div>
+
+                            <!-- Allows Direct Entry -->
+                            <div>
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <div class="toggle-track {{ old('allows_direct_entry', $salePlatform->allows_direct_entry) ? 'on' : '' }}" id="allowsDirectEntryToggle"
+                                         onclick="toggleSwitch('allowsDirectEntryToggle')">
+                                        <div class="toggle-thumb"></div>
+                                    </div>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium"
+                                          onclick="toggleSwitch('allowsDirectEntryToggle')">Allow direct entry</span>
+                                    <input type="checkbox" name="allows_direct_entry" id="allowsDirectEntryCheckbox" class="hidden"
+                                            {{ old('allows_direct_entry', $salePlatform->allows_direct_entry) ? 'checked' : '' }}>
+                                </label>
+                                <p class="f-hint mt-1 ml-11">If enabled, sales/spent can be added directly to this platform. If disabled, entries can only be added to sub-platforms.</p>
+                            </div>
                         </div>
                     </div>
 
