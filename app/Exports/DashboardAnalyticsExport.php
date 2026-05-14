@@ -14,27 +14,40 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DashboardAnalyticsExport
 {
-    // ── Colour palette ──────────────────────────────────────────────
-    private const CLR_TITLE    = 'FF00B0F0'; // bright cyan – title row
-    private const CLR_HEADER   = 'FF00B0F0'; // fixed / right-section headers
-    private const CLR_PLATFORM = 'FFD9E1F2'; // platform group name rows
-    private const CLR_COLLABEL = 'FFB8CCE4'; // Cost / Sales label row
-    private const CLR_WEEK     = 'FFFFC000'; // week label in col A (amber)
-    private const CLR_TOTAL    = 'FFBDD7EE'; // total rows (light blue)
-    private const CLR_BUDGET   = 'FFE2EFDA'; // budget rows (light green)
-    private const CLR_FORE     = 'FFFFEB9C'; // forecasting (light yellow)
-    private const CLR_ROAS     = 'FFFCE4D6'; // ROI row (peach)
-    private const CLR_WHITE    = 'FFFFFFFF';
-    private const CLR_ALT      = 'FFF2F2F2'; // alternate data row
-    private const CLR_SECTION  = 'FFFFE699'; // weekly / return section headers
-    private const CLR_RETURN   = 'FFFCE4D6'; // return reason rows
+    // ── Colour palette  (accent = #009966) ──────────────────────────
+    private const CLR_ACCENT     = 'FF009966'; // accent green – A1/B1 cells
+    private const CLR_TITLE_BG   = 'FF005C3E'; // very dark green – title row bg
+    private const CLR_TITLE_FG   = 'FFFFFFFF'; // white – title text
+    private const CLR_HDR_BG     = 'FF009966'; // accent – main fixed/col headers bg
+    private const CLR_HDR_FG     = 'FFFFFFFF'; // white – header text
+    private const CLR_PLAT_BG    = 'FF52B08C'; // medium green – platform group bg
+    private const CLR_PLAT_FG    = 'FFFFFFFF'; // white – platform group text
+    private const CLR_COLLABEL   = 'FFCCEEDD'; // light mint – Spend/Sales label row
+    private const CLR_COLLABEL_FG= 'FF003D2B'; // very dark green – col-label text
+    private const CLR_WEEK       = 'FFFFBF00'; // amber – week column label
+    private const CLR_WEEK_FG    = 'FF3D2B00'; // dark amber text
+    private const CLR_ROW_ALT    = 'FFF0FAF5'; // very light green – alternate rows
+    private const CLR_TOTAL      = 'FFB3E6CC'; // green – total rows
+    private const CLR_TOTAL_FG   = 'FF003D2B';
+    private const CLR_BUDGET     = 'FFFFF9CC'; // light yellow – budget rows
+    private const CLR_FORE       = 'FFFFF0AA'; // amber-yellow – forecasting row
+    private const CLR_ROAS       = 'FFFFDDC0'; // light peach – ROI row
+    private const CLR_WHITE      = 'FFFFFFFF';
+    private const CLR_DARK_TEXT  = 'FF1A3A2A'; // dark green-black – default text
+    // Bottom-section colours
+    private const CLR_SEC_TITLE  = 'FF003D2B'; // very dark green – section title bg
+    private const CLR_SEC_HDR    = 'FF009966'; // accent – section column header bg
+    private const CLR_SEC_ALT    = 'FFF0FAF5'; // same as row alt
 
     // Fixed column indices (1-based)
-    private const COL_WEEK  = 1; // A – week label (merged per week)
-    private const COL_DATE  = 2; // B – date
-    private const COL_SALES = 3; // C – Daily Sales
-    private const COL_ROAS  = 4; // D – Daily ROAS%
-    private const COL_SPEND = 5; // E – Daily Spend
+    private const COL_WEEK  = 1; // A
+    private const COL_DATE  = 2; // B
+    private const COL_SALES = 3; // C
+    private const COL_ROAS  = 4; // D
+    private const COL_SPEND = 5; // E
+
+    // All bottom sections start at column F = 6
+    private const COL_SECTION_ANCHOR = 6; // F
 
     public function __construct(
         private string $dateFrom,
@@ -52,112 +65,75 @@ class DashboardAnalyticsExport
         $sheet->setTitle('Sales Report');
 
         // ── Unpack service data ──────────────────────────────────────
-        $columnData        = $export['column_data'];
-        $columns           = $columnData['columns'];
-        $headerLevels      = $columnData['header_levels'];
-        $platMaxDepth      = $columnData['max_depth'];
+        $columnData       = $export['column_data'];
+        $columns          = $columnData['columns'];
+        $headerLevels     = $columnData['header_levels'];
+        $platMaxDepth     = $columnData['max_depth'];
 
-        $rootPlatforms     = $export['root_platforms'];
-        $rows              = $export['rows'];
-        $summaryRows       = $export['summary_rows'];
-        $weeklyRows        = $export['weekly_rows'];
-        $returnReasonData  = $export['return_reason_data'];
-        $totals            = $export['totals'];
+        $rootPlatforms    = $export['root_platforms'];
+        $rows             = $export['rows'];
+        $summaryRows      = $export['summary_rows'];
+        $weeklyRows       = $export['weekly_rows'];
+        $returnReasonData = $export['return_reason_data'];
+        $totals           = $export['totals'];
 
-        // ── Main column index mapping ────────────────────────────────
-        $platBaseCol = self::COL_SPEND + 1;   // first platform column (1-based)
+        $numRoots    = count($rootPlatforms);
+
+        // ── Column indices ───────────────────────────────────────────
+        $platBaseCol = self::COL_SPEND + 1;   // F = 6, first platform column
         $numPlatCols = count($columns);
+
+        // Right section (after platform columns): per-root orders → total orders → per-root qty → total qty → Kids/Female/Male
+        $rsBase          = $platBaseCol + $numPlatCols;
+        $rsRootOrderBase = $rsBase;                         // per-root orders (numRoots cols)
+        $rsOrdersCol     = $rsBase + $numRoots;             // Total Orders
+        $rsQtyRootBase   = $rsBase + $numRoots + 1;         // per-root QTY (numRoots cols)
+        $rsQtyCol        = $rsBase + 2 * $numRoots + 1;     // Total QTY
+        $rsKidsCol       = $rsBase + 2 * $numRoots + 2;
+        $rsFemaleCol     = $rsBase + 2 * $numRoots + 3;
+        $rsMaleCol       = $rsBase + 2 * $numRoots + 4;
+        $mainLastCol     = $rsMaleCol;
+
+        // Root-column maps for right section
+        $rsRootOrderCols = [];
+        $rsRootQtyCols   = [];
+        foreach ($rootPlatforms as $i => $root) {
+            $rsRootOrderCols[$root['id']] = $rsRootOrderBase + $i;
+            $rsRootQtyCols[$root['id']]   = $rsQtyRootBase   + $i;
+        }
 
         $platColMap = [];
         foreach ($columns as $i => $col) {
             $platColMap["{$col['platform_id']}_{$col['type']}"] = $platBaseCol + $i;
         }
 
-        $rightBase     = $platBaseCol + $numPlatCols;
-        $orderTotalCol = $rightBase;
-        $colIdx        = $rightBase + 1;
-
-        $rootOrderCols = [];
-        foreach ($rootPlatforms as $root) {
-            $rootOrderCols[$root['id']] = $colIdx++;
-        }
-        $qtyTotalCol = $colIdx++;
-        $rootQtyCols = [];
-        foreach ($rootPlatforms as $root) {
-            $rootQtyCols[$root['id']] = $colIdx++;
-        }
-        $kidsCol   = $colIdx++;
-        $femaleCol = $colIdx++;
-        $maleCol   = $colIdx++;
-        $mainLastCol = $colIdx - 1;   // last column of the MAIN data area (title ends here)
-
-        // ── Return-reason section extra columns ──────────────────────
-        // Placed to the right of the main area, 1 column gap
-        $retLabelCol  = $mainLastCol + 2;        // "Reason" label
-        $retRootCols  = [];
-        $retColIdx    = $retLabelCol + 1;
-        foreach ($rootPlatforms as $root) {
-            $retRootCols[$root['id']] = $retColIdx++;
-        }
-        $retKidsCol   = $retColIdx++;
-        $retFemaleCol = $retColIdx++;
-        $retMaleCol   = $retColIdx++;
-        $sheetLastCol = $retColIdx - 1;  // absolute last column on the sheet
-
         // ── Row positions ────────────────────────────────────────────
-        // Row 1          : Title (C1 : mainLastCol)
-        // Rows 2 … 1+D   : Platform-name hierarchy rows  (D = platMaxDepth, ≥ 0)
-        // Row 2+D        : Cost/Sales label row  (= col-label row)
-        //                  When platMaxDepth = 0 the col-label row IS row 2 (single header)
-        // Row 3+D …      : Data rows
-        $firstHdrRow = 2;
-        if ($platMaxDepth > 0) {
-            $colLabelRow  = $firstHdrRow + $platMaxDepth;   // e.g. depth=1 → row 3
-        } else {
-            $colLabelRow  = $firstHdrRow;                   // single header row
-        }
+        $firstHdrRow  = 2;
+        $colLabelRow  = $platMaxDepth > 0 ? $firstHdrRow + $platMaxDepth : $firstHdrRow;
         $dataStartRow = $colLabelRow + 1;
+        $hdrSpan      = $colLabelRow - $firstHdrRow + 1; // total header rows (for merging)
 
-        // ── Row 1: Title  (starts at C, leaves A/B empty) ────────────
-        $titleStr  = 'Tracking digital Marketing COST VS Allocation – ' . ($this->label['label'] ?? '');
+        // ── Row 1: Title (C1 : mainLastCol) + accent fill on A1/B1 ──
+        $titleStr      = 'Tracking Digital Marketing COST VS Allocation – ' . ($this->label['label'] ?? '');
         $titleStartCol = Coordinate::stringFromColumnIndex(self::COL_SALES); // "C"
         $titleEndCol   = Coordinate::stringFromColumnIndex($mainLastCol);
         $sheet->setCellValue($titleStartCol . '1', $titleStr);
         $sheet->mergeCells("{$titleStartCol}1:{$titleEndCol}1");
         $this->styleTitle($sheet, "{$titleStartCol}1:{$titleEndCol}1");
+        foreach (['A1', 'B1'] as $cell) {
+            $sheet->getStyle($cell)->getFill()->setFillType(Fill::FILL_SOLID)
+                ->getStartColor()->setARGB(self::CLR_ACCENT);
+        }
 
-        // ── Fixed + right-section column headers ─────────────────────
-        // (all merged vertically from firstHdrRow → colLabelRow when there is hierarchy)
+        // ── Fixed column headers (A–E) ───────────────────────────────
         $fixedHdrs = [
-            self::COL_WEEK  => 'week',
+            self::COL_WEEK  => 'Week',
             self::COL_DATE  => 'Date',
             self::COL_SALES => 'Daily Sales',
             self::COL_ROAS  => 'Daily ROAS',
             self::COL_SPEND => 'Daily Spend',
         ];
         foreach ($fixedHdrs as $ci => $lbl) {
-            $cl = Coordinate::stringFromColumnIndex($ci);
-            $sheet->setCellValue($cl . $firstHdrRow, $lbl);
-            if ($colLabelRow > $firstHdrRow) {
-                $sheet->mergeCells("{$cl}{$firstHdrRow}:{$cl}{$colLabelRow}");
-            }
-            $this->applyHeaderStyle($sheet, "{$cl}{$firstHdrRow}:{$cl}{$colLabelRow}");
-        }
-
-        $rightHdrs = [[$orderTotalCol, 'Total Orders']];
-        foreach ($rootPlatforms as $root) {
-            $rightHdrs[] = [$rootOrderCols[$root['id']], $root['name'] . ' Orders'];
-        }
-        $rightHdrs[] = [$qtyTotalCol, 'Total QTY'];
-        foreach ($rootPlatforms as $root) {
-            $rightHdrs[] = [$rootQtyCols[$root['id']], $root['name'] . ' QTY'];
-        }
-        $rightHdrs = array_merge($rightHdrs, [
-            [$kidsCol,   'Kids'],
-            [$femaleCol, 'Female'],
-            [$maleCol,   'Male'],
-        ]);
-        foreach ($rightHdrs as [$ci, $lbl]) {
             $cl = Coordinate::stringFromColumnIndex($ci);
             $sheet->setCellValue($cl . $firstHdrRow, $lbl);
             if ($colLabelRow > $firstHdrRow) {
@@ -175,7 +151,6 @@ class DashboardAnalyticsExport
                 $endCi   = $startCi + $cell['col_span'] - 1;
                 $endCl   = Coordinate::stringFromColumnIndex($endCi);
                 $endRow  = $excelRow + $cell['row_span'] - 1;
-
                 $sheet->setCellValue($startCl . $excelRow, $cell['label']);
                 if ($endCi > $startCi || $endRow > $excelRow) {
                     $sheet->mergeCells("{$startCl}{$excelRow}:{$endCl}{$endRow}");
@@ -184,19 +159,40 @@ class DashboardAnalyticsExport
             }
         }
 
-        // ── Cost / Sales label row ────────────────────────────────────
+        // ── Spend/Sales label row ────────────────────────────────────
         foreach ($columns as $i => $col) {
             $ci  = $platBaseCol + $i;
             $cl  = Coordinate::stringFromColumnIndex($ci);
-            $lbl = $col['type'] === 'cost' ? 'Cost' : 'Sales';
+            $lbl = $col['type'] === 'cost' ? 'Spend' : 'Sales';
             $sheet->setCellValue($cl . $colLabelRow, $lbl);
-            $sheet->getStyle($cl . $colLabelRow)
-                ->getFill()->setFillType(Fill::FILL_SOLID)
+            $sheet->getStyle($cl . $colLabelRow)->getFill()->setFillType(Fill::FILL_SOLID)
                 ->getStartColor()->setARGB(self::CLR_COLLABEL);
-            $sheet->getStyle($cl . $colLabelRow)->getFont()->setBold(true);
+            $sheet->getStyle($cl . $colLabelRow)->getFont()->setBold(true)
+                ->getColor()->setARGB(self::CLR_COLLABEL_FG);
             $sheet->getStyle($cl . $colLabelRow)->getAlignment()
-                ->setHorizontal(Alignment::HORIZONTAL_CENTER)
-                ->setVertical(Alignment::VERTICAL_CENTER);
+                ->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+        }
+
+        // ── Right-section headers (all merged vertically firstHdrRow→colLabelRow) ─
+        $rsHdrDefs = [];
+        foreach ($rootPlatforms as $root) {
+            $sn = $this->shortName($root['name']);
+            $rsHdrDefs[$rsRootOrderCols[$root['id']]] = $sn;
+            $rsHdrDefs[$rsRootQtyCols[$root['id']]]   = $sn . ' QTY';
+        }
+        $rsHdrDefs[$rsOrdersCol]  = "No.\nof Order";
+        $rsHdrDefs[$rsQtyCol]     = "No.\nof QTY";
+        $rsHdrDefs[$rsKidsCol]    = 'Kids';
+        $rsHdrDefs[$rsFemaleCol]  = 'Female';
+        $rsHdrDefs[$rsMaleCol]    = 'Male';
+
+        foreach ($rsHdrDefs as $ci => $lbl) {
+            $cl = Coordinate::stringFromColumnIndex($ci);
+            $sheet->setCellValue($cl . $firstHdrRow, $lbl);
+            if ($colLabelRow > $firstHdrRow) {
+                $sheet->mergeCells("{$cl}{$firstHdrRow}:{$cl}{$colLabelRow}");
+            }
+            $this->applyHeaderStyle($sheet, "{$cl}{$firstHdrRow}:{$cl}{$colLabelRow}");
         }
 
         // Row heights for header rows
@@ -204,7 +200,7 @@ class DashboardAnalyticsExport
             $sheet->getRowDimension($hr)->setRowHeight(28);
         }
 
-        // ── Data rows ─────────────────────────────────────────────────
+        // ── Data rows ────────────────────────────────────────────────
         $r          = $dataStartRow;
         $weekRanges = [];
         $prevWeek   = null;
@@ -212,7 +208,7 @@ class DashboardAnalyticsExport
         foreach ($rows as $row) {
             $weekNum = $row['week'];
             if ($weekNum !== $prevWeek) {
-                $sheet->setCellValue('A' . $r, 'week ' . $weekNum);
+                $sheet->setCellValue('A' . $r, 'Week ' . $weekNum);
                 $weekRanges[$weekNum] = ['start' => $r, 'end' => $r];
                 $prevWeek = $weekNum;
             } else {
@@ -224,302 +220,413 @@ class DashboardAnalyticsExport
             $sheet->setCellValue('D' . $r, $row['roas']);
             $sheet->setCellValue('E' . $r, $row['total_spent']);
 
+            // Platform cost/sales columns
             foreach ($columns as $col) {
                 $pid = $col['platform_id'];
                 $typ = $col['type'];
                 $ci  = $platColMap["{$pid}_{$typ}"];
-                $val = $typ === 'cost'
-                    ? ($row['platform'][$pid]['cost']  ?? 0)
-                    : ($row['platform'][$pid]['sales'] ?? 0);
+                $val = $typ === 'cost' ? ($row['platform'][$pid]['cost'] ?? 0)
+                                       : ($row['platform'][$pid]['sales'] ?? 0);
                 $sheet->setCellValueByColumnAndRow($ci, $r, $val);
             }
 
-            $sheet->setCellValueByColumnAndRow($orderTotalCol, $r, $row['total_orders']);
+            // Right-section: per-root orders, total orders, per-root qty, total qty, kids/female/male
             foreach ($rootPlatforms as $root) {
+                $rid = $root['id'];
                 $sheet->setCellValueByColumnAndRow(
-                    $rootOrderCols[$root['id']], $r,
-                    $row['root_groups'][$root['id']]['orders'] ?? 0
+                    $rsRootOrderCols[$rid], $r, $row['root_groups'][$rid]['orders'] ?? 0
+                );
+                $sheet->setCellValueByColumnAndRow(
+                    $rsRootQtyCols[$rid], $r, $row['root_groups'][$rid]['qty'] ?? 0
                 );
             }
-            $sheet->setCellValueByColumnAndRow($qtyTotalCol, $r, $row['total_qty']);
-            foreach ($rootPlatforms as $root) {
-                $sheet->setCellValueByColumnAndRow(
-                    $rootQtyCols[$root['id']], $r,
-                    $row['root_groups'][$root['id']]['qty'] ?? 0
-                );
-            }
-            $sheet->setCellValueByColumnAndRow($kidsCol,   $r, $row['kids']);
-            $sheet->setCellValueByColumnAndRow($femaleCol, $r, $row['female']);
-            $sheet->setCellValueByColumnAndRow($maleCol,   $r, $row['male']);
+            $sheet->setCellValueByColumnAndRow($rsOrdersCol,  $r, $row['total_orders']);
+            $sheet->setCellValueByColumnAndRow($rsQtyCol,     $r, $row['total_qty']);
+            $sheet->setCellValueByColumnAndRow($rsKidsCol,    $r, $row['kids']);
+            $sheet->setCellValueByColumnAndRow($rsFemaleCol,  $r, $row['female']);
+            $sheet->setCellValueByColumnAndRow($rsMaleCol,    $r, $row['male']);
 
             if ($r % 2 === 0) {
-                $this->fillRow($sheet, $r, $mainLastCol, self::CLR_ALT);
+                $this->fillRow($sheet, $r, $mainLastCol, self::CLR_ROW_ALT);
             }
+            // Right-align numeric data
+            $sheet->getStyle('C' . $r . ':' . Coordinate::stringFromColumnIndex($mainLastCol) . $r)
+                ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
 
             $r++;
         }
         $dataEndRow = $r - 1;
 
-        // Merge week-label cells in column A
+        // Merge week-label cells in column A – VERTICAL CENTER
         foreach ($weekRanges as $wRange) {
             if ($wRange['end'] > $wRange['start']) {
                 $sheet->mergeCells('A' . $wRange['start'] . ':A' . $wRange['end']);
-                $sheet->getStyle('A' . $wRange['start'])->getAlignment()
-                    ->setVertical(Alignment::VERTICAL_TOP);
             }
-            $this->fillRow($sheet, $wRange['start'], 1, self::CLR_WEEK, true);
+            $sheet->getStyle('A' . $wRange['start'])->getAlignment()
+                ->setVertical(Alignment::VERTICAL_CENTER)   // ← centered (not top)
+                ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle('A' . $wRange['start'])->getFill()->setFillType(Fill::FILL_SOLID)
+                ->getStartColor()->setARGB(self::CLR_WEEK);
+            $sheet->getStyle('A' . $wRange['start'])->getFont()->setBold(true)
+                ->getColor()->setARGB(self::CLR_WEEK_FG);
         }
 
-        // ── Main summary rows ─────────────────────────────────────────
+        // ── Summary rows ─────────────────────────────────────────────
         $summaryColorMap = [
-            'total_spend'    => self::CLR_TOTAL,
-            'roi'            => self::CLR_ROAS,
-            'total_budget'   => self::CLR_BUDGET,
-            'balance_budget' => self::CLR_BUDGET,
             'average_daily'  => self::CLR_WHITE,
             'total_sale'     => self::CLR_TOTAL,
+            'total_spend'    => self::CLR_TOTAL,
+            'total_budget'   => self::CLR_BUDGET,
+            'balance_budget' => self::CLR_BUDGET,
+            'roi'            => self::CLR_ROAS,
             'forecasting'    => self::CLR_FORE,
         ];
 
         foreach ($summaryRows as $key => $sRow) {
             $color = $summaryColorMap[$key] ?? self::CLR_WHITE;
             $sheet->setCellValue('B' . $r, $sRow['label']);
+            $sheet->getStyle('B' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
-            if ($sRow['col_c'] !== null) $sheet->setCellValue('C' . $r, $sRow['col_c']);
+            if ($sRow['col_c'] !== null) {
+                $sheet->setCellValue('C' . $r, $sRow['col_c']);
+                $sheet->getStyle('C' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            }
             if ($sRow['col_e'] !== null) {
                 $sheet->setCellValue('E' . $r, $sRow['col_e']);
+                $sheet->getStyle('E' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                 if (!empty($sRow['col_e_format'])) {
                     $sheet->getStyle('E' . $r)->getNumberFormat()->setFormatCode($sRow['col_e_format']);
                 }
             }
-
             foreach ($sRow['platform'] as $colKey => $value) {
                 if (!isset($platColMap[$colKey])) continue;
                 $ci = $platColMap[$colKey];
                 $sheet->setCellValueByColumnAndRow($ci, $r, $value);
+                $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                 if (!empty($sRow['platform_formats'][$colKey])) {
                     $sheet->getStyleByColumnAndRow($ci, $r)->getNumberFormat()
                         ->setFormatCode($sRow['platform_formats'][$colKey]);
                 }
             }
 
-            if ($sRow['total_orders'] !== null)
-                $sheet->setCellValueByColumnAndRow($orderTotalCol, $r, $sRow['total_orders']);
+            // Right-section summary values (only rows that have them)
+            if (!empty($sRow['total_orders'])) {
+                $sheet->setCellValueByColumnAndRow($rsOrdersCol, $r, $sRow['total_orders']);
+            }
             if (!empty($sRow['root_orders'])) {
-                foreach ($sRow['root_orders'] as $rootId => $val) {
-                    if (isset($rootOrderCols[$rootId]))
-                        $sheet->setCellValueByColumnAndRow($rootOrderCols[$rootId], $r, $val);
+                foreach ($rootPlatforms as $root) {
+                    $rid = $root['id'];
+                    if (isset($sRow['root_orders'][$rid], $rsRootOrderCols[$rid])) {
+                        $sheet->setCellValueByColumnAndRow($rsRootOrderCols[$rid], $r, $sRow['root_orders'][$rid]);
+                    }
                 }
             }
-            if ($sRow['total_qty'] !== null)
-                $sheet->setCellValueByColumnAndRow($qtyTotalCol, $r, $sRow['total_qty']);
+            if (!empty($sRow['total_qty'])) {
+                $sheet->setCellValueByColumnAndRow($rsQtyCol, $r, $sRow['total_qty']);
+            }
             if (!empty($sRow['root_qty'])) {
-                foreach ($sRow['root_qty'] as $rootId => $val) {
-                    if (isset($rootQtyCols[$rootId]))
-                        $sheet->setCellValueByColumnAndRow($rootQtyCols[$rootId], $r, $val);
+                foreach ($rootPlatforms as $root) {
+                    $rid = $root['id'];
+                    if (isset($sRow['root_qty'][$rid], $rsRootQtyCols[$rid])) {
+                        $sheet->setCellValueByColumnAndRow($rsRootQtyCols[$rid], $r, $sRow['root_qty'][$rid]);
+                    }
                 }
             }
-            if ($sRow['kids']   !== null) $sheet->setCellValueByColumnAndRow($kidsCol,   $r, $sRow['kids']);
-            if ($sRow['female'] !== null) $sheet->setCellValueByColumnAndRow($femaleCol, $r, $sRow['female']);
-            if ($sRow['male']   !== null) $sheet->setCellValueByColumnAndRow($maleCol,   $r, $sRow['male']);
+            if ($sRow['kids']   !== null) $sheet->setCellValueByColumnAndRow($rsKidsCol,   $r, $sRow['kids']);
+            if ($sRow['female'] !== null) $sheet->setCellValueByColumnAndRow($rsFemaleCol,  $r, $sRow['female']);
+            if ($sRow['male']   !== null) $sheet->setCellValueByColumnAndRow($rsMaleCol,    $r, $sRow['male']);
 
             $this->fillRow($sheet, $r, $mainLastCol, $color);
-            $this->setBold($sheet, 'B' . $r);
+            $sheet->getStyle('B' . $r)->getFont()->setBold(true);
             $r++;
         }
         $lastMainRow = $r - 1;
 
         // ══════════════════════════════════════════════════════════════
-        // ── BOTTOM SECTION: Weekly breakdown + Return-reason ──────────
+        // ── BOTTOM SECTIONS  (all anchored at column F = 6) ──────────
         // ══════════════════════════════════════════════════════════════
 
-        $r++;   // blank row gap
+        $r  += 4;   // 4 blank rows after summary
+        $anc = self::COL_SECTION_ANCHOR; // 6 = F
 
-        // ── Section A: Weekly breakdown ───────────────────────────────
-        // Uses the SAME main-area column positions so values sit under their headers
+        // ─────────────────────────────────────────────────────────────
+        // SECTION 1 – Weekly Breakdown
+        //   F=Week | G=Sales | H=Spend | I=Ret PCS | J=Ret GBP
+        // ─────────────────────────────────────────────────────────────
+        $wbCols = [
+            'label'  => $anc,
+            'sales'  => $anc + 1,
+            'spend'  => $anc + 2,
+            'retpcs' => $anc + 3,
+            'retgbp' => $anc + 4,
+        ];
+        $wbLastCol  = $wbCols['retgbp'];
+        $wbSecStart = $r;
 
-        $weekSectionStart = $r;
-
-        // Section header (row $r)
-        $this->setCellBold($sheet, 'B' . $r, 'Weekly Breakdown');
-        $sheet->setCellValue('C'  . $r, 'Weekly Sales');
-        $sheet->setCellValue('E'  . $r, 'Weekly Spend');
-        $sheet->setCellValueByColumnAndRow($orderTotalCol, $r, 'Total Orders');
-        foreach ($rootPlatforms as $root) {
-            $sheet->setCellValueByColumnAndRow($rootOrderCols[$root['id']], $r, $root['name']);
-        }
-        $sheet->setCellValueByColumnAndRow($qtyTotalCol, $r, 'Total QTY');
-        foreach ($rootPlatforms as $root) {
-            $sheet->setCellValueByColumnAndRow($rootQtyCols[$root['id']], $r, $root['name'] . ' QTY');
-        }
-        $sheet->setCellValueByColumnAndRow($kidsCol,   $r, 'Kids');
-        $sheet->setCellValueByColumnAndRow($femaleCol, $r, 'Female');
-        $sheet->setCellValueByColumnAndRow($maleCol,   $r, 'Male');
-        $this->fillRow($sheet, $r, $mainLastCol, self::CLR_SECTION);
+        $this->writeSectionTitle($sheet, $anc, $wbLastCol, $r, 'Weekly Breakdown');
+        $r++;
+        $this->writeSectionHeaders($sheet, $anc, ['Week', 'Sales', 'Spend', 'Ret PCS', 'Ret GBP'], $r);
         $r++;
 
-        // Per-week rows
         foreach ($weeklyRows as $wRow) {
-            $sheet->setCellValue('B' . $r, $wRow['label']);
-            $sheet->setCellValue('C' . $r, $wRow['sales']);
-            $sheet->setCellValue('E' . $r, $wRow['spend']);
-            $sheet->setCellValueByColumnAndRow($orderTotalCol, $r, $wRow['orders']);
-            foreach ($rootPlatforms as $root) {
-                $sheet->setCellValueByColumnAndRow(
-                    $rootOrderCols[$root['id']], $r,
-                    $wRow['root_orders'][$root['id']] ?? 0
-                );
-            }
-            $sheet->setCellValueByColumnAndRow($qtyTotalCol, $r, $wRow['qty']);
-            foreach ($rootPlatforms as $root) {
-                $sheet->setCellValueByColumnAndRow(
-                    $rootQtyCols[$root['id']], $r,
-                    $wRow['root_qty'][$root['id']] ?? 0
-                );
-            }
-            $sheet->setCellValueByColumnAndRow($kidsCol,   $r, $wRow['kids']);
-            $sheet->setCellValueByColumnAndRow($femaleCol, $r, $wRow['female']);
-            $sheet->setCellValueByColumnAndRow($maleCol,   $r, $wRow['male']);
-
-            if ($r % 2 === 0) $this->fillRow($sheet, $r, $mainLastCol, self::CLR_ALT);
+            $sheet->setCellValueByColumnAndRow($wbCols['label'],  $r, $wRow['label']);
+            $sheet->setCellValueByColumnAndRow($wbCols['sales'],  $r, $wRow['sales']);
+            $sheet->setCellValueByColumnAndRow($wbCols['spend'],  $r, $wRow['spend']);
+            $sheet->setCellValueByColumnAndRow($wbCols['retpcs'], $r, $wRow['returns_pcs']);
+            $sheet->setCellValueByColumnAndRow($wbCols['retgbp'], $r, $wRow['returns_gbp'] ?? 0);
+            $this->alignSecRow($sheet, $anc, $wbLastCol, $r);
+            if ($r % 2 === 0) $this->fillSecRange($sheet, $anc, $wbLastCol, $r, self::CLR_SEC_ALT);
             $r++;
         }
+        $totalRetPcs = array_sum(array_column($weeklyRows, 'returns_pcs'));
+        $totalRetGbp = array_sum(array_column($weeklyRows, 'returns_gbp'));
+        $sheet->setCellValueByColumnAndRow($wbCols['label'],  $r, 'Total');
+        $sheet->setCellValueByColumnAndRow($wbCols['sales'],  $r, $totals['sales']);
+        $sheet->setCellValueByColumnAndRow($wbCols['spend'],  $r, $totals['spent']);
+        $sheet->setCellValueByColumnAndRow($wbCols['retpcs'], $r, $totalRetPcs);
+        $sheet->setCellValueByColumnAndRow($wbCols['retgbp'], $r, $totalRetGbp);
+        $this->fillSecRange($sheet, $anc, $wbLastCol, $r, self::CLR_TOTAL, true);
+        $this->alignSecRow($sheet, $anc, $wbLastCol, $r);
+        $wbSecEnd = $r;
+        $this->sectionBorder($sheet, $anc, $wbLastCol, $wbSecStart, $wbSecEnd);
 
-        // Weekly total row
-        $sheet->setCellValue('B' . $r, 'Total');
-        $sheet->setCellValue('C' . $r, $totals['sales']);
-        $sheet->setCellValue('E' . $r, $totals['spent']);
-        $sheet->setCellValueByColumnAndRow($orderTotalCol, $r, $totals['orders']);
-        foreach ($rootPlatforms as $root) {
-            $rootId    = $root['id'];
-            $rootTotal = 0;
-            foreach ($weeklyRows as $wRow) {
-                $rootTotal += ($wRow['root_orders'][$rootId] ?? 0);
-            }
-            $sheet->setCellValueByColumnAndRow($rootOrderCols[$rootId], $r, $rootTotal);
-        }
-        $sheet->setCellValueByColumnAndRow($qtyTotalCol, $r, $totals['qty']);
-        $sheet->setCellValueByColumnAndRow($kidsCol,   $r, $totals['kids']);
-        $sheet->setCellValueByColumnAndRow($femaleCol, $r, $totals['female']);
-        $sheet->setCellValueByColumnAndRow($maleCol,   $r, $totals['male']);
-        $this->fillRow($sheet, $r, $mainLastCol, self::CLR_TOTAL);
-        $this->setBold($sheet, 'B' . $r);
-        $weekSectionEnd = $r;
+        $moneyFmt   = '#,##0.00';
+        $wbSalesLtr = Coordinate::stringFromColumnIndex($wbCols['sales']);
+        $wbSpendLtr = Coordinate::stringFromColumnIndex($wbCols['spend']);
+        $wbGbpLtr   = Coordinate::stringFromColumnIndex($wbCols['retgbp']);
+        $sheet->getStyle($wbSalesLtr . ($wbSecStart + 2) . ':' . $wbSalesLtr . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
+        $sheet->getStyle($wbSpendLtr . ($wbSecStart + 2) . ':' . $wbSpendLtr . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
+        $sheet->getStyle($wbGbpLtr   . ($wbSecStart + 2) . ':' . $wbGbpLtr   . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
         $r++;
 
-        // ── Section B: Return-reason breakdown ────────────────────────
-        // Placed to the right of the main area (columns retLabelCol …)
-        // Rows are interleaved with the weekly section: same sectionStart row
+        // ─────────────────────────────────────────────────────────────
+        // SECTION 2a – Total Order QTY  (order count per week) ───────
+        //   F=Week | G=[root1] | G+1=[root2] | … | G+numRoots=Total Orders
+        // ─────────────────────────────────────────────────────────────
+        $r += 4;
 
-        $reasons = $returnReasonData['reasons'];
-        $retSectionRow = $weekSectionStart;  // Start at same row as weekly section header
+        $toqRootStart = $anc + 1;           // per-root order cols
+        $toqTotal     = $anc + 1 + $numRoots; // Total Orders col
+        $toqLastCol   = $toqTotal;
 
-        // Section header (same row as weekly header)
-        $sheet->setCellValue(
-            Coordinate::stringFromColumnIndex($retLabelCol) . $retSectionRow,
-            'Return Breakdown'
-        );
-        $this->setBold($sheet, Coordinate::stringFromColumnIndex($retLabelCol) . $retSectionRow);
-        foreach ($rootPlatforms as $root) {
-            $sheet->setCellValueByColumnAndRow(
-                $retRootCols[$root['id']], $retSectionRow,
-                $root['name'] . ' Returns'
-            );
+        $toqRootCols = [];
+        foreach ($rootPlatforms as $i => $root) {
+            $toqRootCols[$root['id']] = $toqRootStart + $i;
         }
-        $sheet->setCellValueByColumnAndRow($retKidsCol,   $retSectionRow, 'Kids');
-        $sheet->setCellValueByColumnAndRow($retFemaleCol, $retSectionRow, 'Female');
-        $sheet->setCellValueByColumnAndRow($retMaleCol,   $retSectionRow, 'Male');
-        // Fill section header for return columns
-        $retHdrRange = Coordinate::stringFromColumnIndex($retLabelCol) . $retSectionRow . ':'
-                     . Coordinate::stringFromColumnIndex($retMaleCol)  . $retSectionRow;
-        $sheet->getStyle($retHdrRange)->getFill()->setFillType(Fill::FILL_SOLID)
-            ->getStartColor()->setARGB(self::CLR_SECTION);
-        $sheet->getStyle($retHdrRange)->getFont()->setBold(true);
-        $retSectionRow++;
 
-        // Return-reason data rows
-        foreach ($reasons as $reason) {
-            $sheet->setCellValueByColumnAndRow($retLabelCol, $retSectionRow, $reason['name']);
+        $toqSecStart = $r;
+        $this->writeSectionTitle($sheet, $anc, $toqLastCol, $r, 'Total Order QTY');
+        $r++;
+
+        // Column headers
+        $sheet->setCellValueByColumnAndRow($anc,      $r, 'Week');
+        foreach ($rootPlatforms as $root) {
+            $sheet->setCellValueByColumnAndRow($toqRootCols[$root['id']], $r, $this->shortName($root['name']));
+        }
+        $sheet->setCellValueByColumnAndRow($toqTotal, $r, 'Total');
+        $this->fillSecRange($sheet, $anc, $toqLastCol, $r, self::CLR_SEC_HDR, true);
+        $this->applySecHdrTextStyle($sheet, $anc, $toqLastCol, $r);
+        $r++;
+
+        foreach ($weeklyRows as $wRow) {
+            $sheet->setCellValueByColumnAndRow($anc,      $r, $wRow['label']);
             foreach ($rootPlatforms as $root) {
                 $sheet->setCellValueByColumnAndRow(
-                    $retRootCols[$root['id']], $retSectionRow,
-                    $reason['by_root'][$root['id']] ?? 0
+                    $toqRootCols[$root['id']], $r, $wRow['root_orders'][$root['id']] ?? 0
                 );
             }
-            $sheet->setCellValueByColumnAndRow($retKidsCol,   $retSectionRow, $reason['kids']);
-            $sheet->setCellValueByColumnAndRow($retFemaleCol, $retSectionRow, $reason['female']);
-            $sheet->setCellValueByColumnAndRow($retMaleCol,   $retSectionRow, $reason['male']);
-            if ($retSectionRow % 2 === 0) {
-                $retRange = Coordinate::stringFromColumnIndex($retLabelCol) . $retSectionRow . ':'
-                          . Coordinate::stringFromColumnIndex($retMaleCol)  . $retSectionRow;
-                $sheet->getStyle($retRange)->getFill()->setFillType(Fill::FILL_SOLID)
-                    ->getStartColor()->setARGB(self::CLR_ALT);
-            }
-            $retSectionRow++;
+            $sheet->setCellValueByColumnAndRow($toqTotal, $r, $wRow['orders']);
+            $this->alignSecRow($sheet, $anc, $toqLastCol, $r);
+            if ($r % 2 === 0) $this->fillSecRange($sheet, $anc, $toqLastCol, $r, self::CLR_SEC_ALT);
+            $r++;
+        }
+        // Total row
+        $sheet->setCellValueByColumnAndRow($anc,      $r, 'Total');
+        foreach ($rootPlatforms as $root) {
+            $rid = $root['id'];
+            $sum = array_sum(array_column(array_column($weeklyRows, 'root_orders'), $rid));
+            $sheet->setCellValueByColumnAndRow($toqRootCols[$rid], $r, $sum);
+        }
+        $sheet->setCellValueByColumnAndRow($toqTotal, $r, $totals['orders']);
+        $this->fillSecRange($sheet, $anc, $toqLastCol, $r, self::CLR_TOTAL, true);
+        $this->alignSecRow($sheet, $anc, $toqLastCol, $r);
+        $toqSecEnd = $r;
+        $this->sectionBorder($sheet, $anc, $toqLastCol, $toqSecStart, $toqSecEnd);
+        $r++;
+
+        // ─────────────────────────────────────────────────────────────
+        // SECTION 2b – Total Order Item QTY  (qty/pieces per week) ───
+        //   F=Week | G=[root1 QTY] | … | G+numRoots=Total QTY | Kids | Female | Male
+        // ─────────────────────────────────────────────────────────────
+        $r += 4;
+
+        $tiqRootStart = $anc + 1;
+        $tiqTotal     = $anc + 1 + $numRoots;
+        $tiqKids      = $anc + 2 + $numRoots;
+        $tiqFemale    = $anc + 3 + $numRoots;
+        $tiqMale      = $anc + 4 + $numRoots;
+        $tiqLastCol   = $tiqMale;
+
+        $tiqRootCols = [];
+        foreach ($rootPlatforms as $i => $root) {
+            $tiqRootCols[$root['id']] = $tiqRootStart + $i;
         }
 
-        // Return totals row
-        $sheet->setCellValueByColumnAndRow($retLabelCol, $retSectionRow, 'Total');
+        $tiqSecStart = $r;
+        $this->writeSectionTitle($sheet, $anc, $tiqLastCol, $r, 'Total Order Item QTY');
+        $r++;
+
+        // Column headers
+        $sheet->setCellValueByColumnAndRow($anc,       $r, 'Week');
+        foreach ($rootPlatforms as $root) {
+            $sheet->setCellValueByColumnAndRow($tiqRootCols[$root['id']], $r, $this->shortName($root['name']));
+        }
+        $sheet->setCellValueByColumnAndRow($tiqTotal,  $r, 'Total');
+        $sheet->setCellValueByColumnAndRow($tiqKids,   $r, 'Kids');
+        $sheet->setCellValueByColumnAndRow($tiqFemale, $r, 'Female');
+        $sheet->setCellValueByColumnAndRow($tiqMale,   $r, 'Male');
+        $this->fillSecRange($sheet, $anc, $tiqLastCol, $r, self::CLR_SEC_HDR, true);
+        $this->applySecHdrTextStyle($sheet, $anc, $tiqLastCol, $r);
+        $r++;
+
+        foreach ($weeklyRows as $wRow) {
+            $sheet->setCellValueByColumnAndRow($anc,       $r, $wRow['label']);
+            foreach ($rootPlatforms as $root) {
+                $sheet->setCellValueByColumnAndRow(
+                    $tiqRootCols[$root['id']], $r, $wRow['root_qty'][$root['id']] ?? 0
+                );
+            }
+            $sheet->setCellValueByColumnAndRow($tiqTotal,  $r, $wRow['qty']);
+            $sheet->setCellValueByColumnAndRow($tiqKids,   $r, $wRow['kids']);
+            $sheet->setCellValueByColumnAndRow($tiqFemale, $r, $wRow['female']);
+            $sheet->setCellValueByColumnAndRow($tiqMale,   $r, $wRow['male']);
+            $this->alignSecRow($sheet, $anc, $tiqLastCol, $r);
+            if ($r % 2 === 0) $this->fillSecRange($sheet, $anc, $tiqLastCol, $r, self::CLR_SEC_ALT);
+            $r++;
+        }
+        // Total row
+        $sheet->setCellValueByColumnAndRow($anc,       $r, 'Total');
+        foreach ($rootPlatforms as $root) {
+            $rid = $root['id'];
+            $sum = array_sum(array_column(array_column($weeklyRows, 'root_qty'), $rid));
+            $sheet->setCellValueByColumnAndRow($tiqRootCols[$rid], $r, $sum);
+        }
+        $sheet->setCellValueByColumnAndRow($tiqTotal,  $r, $totals['qty']);
+        $sheet->setCellValueByColumnAndRow($tiqKids,   $r, $totals['kids']);
+        $sheet->setCellValueByColumnAndRow($tiqFemale, $r, $totals['female']);
+        $sheet->setCellValueByColumnAndRow($tiqMale,   $r, $totals['male']);
+        $this->fillSecRange($sheet, $anc, $tiqLastCol, $r, self::CLR_TOTAL, true);
+        $this->alignSecRow($sheet, $anc, $tiqLastCol, $r);
+        $tiqSecEnd = $r;
+        $this->sectionBorder($sheet, $anc, $tiqLastCol, $tiqSecStart, $tiqSecEnd);
+        $r++;
+
+        // ─────────────────────────────────────────────────────────────
+        // SECTION 3 – Return Breakdown  (after 4 blank rows)
+        //   F=Reason | G…=per-root | Kids | Female | Male
+        // ─────────────────────────────────────────────────────────────
+        $r += 4;
+
+        $retLabelCol  = $anc;
+        $retRootStart = $anc + 1;
+        $retRootCols  = [];
+        foreach ($rootPlatforms as $i => $root) {
+            $retRootCols[$root['id']] = $retRootStart + $i;
+        }
+        $retKidsCol   = $retRootStart + $numRoots;
+        $retFemaleCol = $retKidsCol + 1;
+        $retMaleCol   = $retFemaleCol + 1;
+        $retLastCol   = $retMaleCol;
+
+        $retSecStart = $r;
+        $this->writeSectionTitle($sheet, $anc, $retLastCol, $r, 'Return Breakdown');
+        $r++;
+
+        $sheet->setCellValueByColumnAndRow($retLabelCol, $r, 'Reason');
+        foreach ($rootPlatforms as $root) {
+            $sheet->setCellValueByColumnAndRow($retRootCols[$root['id']], $r, $this->shortName($root['name']));
+        }
+        $sheet->setCellValueByColumnAndRow($retKidsCol,   $r, 'Kids');
+        $sheet->setCellValueByColumnAndRow($retFemaleCol, $r, 'Female');
+        $sheet->setCellValueByColumnAndRow($retMaleCol,   $r, 'Male');
+        $this->fillSecRange($sheet, $anc, $retLastCol, $r, self::CLR_SEC_HDR, true);
+        $this->applySecHdrTextStyle($sheet, $anc, $retLastCol, $r);
+        $r++;
+
+        foreach ($returnReasonData['reasons'] as $reason) {
+            $sheet->setCellValueByColumnAndRow($retLabelCol, $r, $reason['name']);
+            foreach ($rootPlatforms as $root) {
+                $sheet->setCellValueByColumnAndRow(
+                    $retRootCols[$root['id']], $r, $reason['by_root'][$root['id']] ?? 0
+                );
+            }
+            $sheet->setCellValueByColumnAndRow($retKidsCol,   $r, $reason['kids']);
+            $sheet->setCellValueByColumnAndRow($retFemaleCol, $r, $reason['female']);
+            $sheet->setCellValueByColumnAndRow($retMaleCol,   $r, $reason['male']);
+            $this->alignSecRow($sheet, $anc, $retLastCol, $r);
+            if ($r % 2 === 0) $this->fillSecRange($sheet, $anc, $retLastCol, $r, self::CLR_SEC_ALT);
+            $r++;
+        }
+        $sheet->setCellValueByColumnAndRow($retLabelCol, $r, 'Total');
         foreach ($rootPlatforms as $root) {
             $sheet->setCellValueByColumnAndRow(
-                $retRootCols[$root['id']], $retSectionRow,
-                $returnReasonData['totals_by_root'][$root['id']] ?? 0
+                $retRootCols[$root['id']], $r, $returnReasonData['totals_by_root'][$root['id']] ?? 0
             );
         }
-        $sheet->setCellValueByColumnAndRow($retKidsCol,   $retSectionRow, $returnReasonData['totals_kids']);
-        $sheet->setCellValueByColumnAndRow($retFemaleCol, $retSectionRow, $returnReasonData['totals_female']);
-        $sheet->setCellValueByColumnAndRow($retMaleCol,   $retSectionRow, $returnReasonData['totals_male']);
-        $retTotRange = Coordinate::stringFromColumnIndex($retLabelCol) . $retSectionRow . ':'
-                     . Coordinate::stringFromColumnIndex($retMaleCol)  . $retSectionRow;
-        $sheet->getStyle($retTotRange)->getFill()->setFillType(Fill::FILL_SOLID)
-            ->getStartColor()->setARGB(self::CLR_TOTAL);
-        $sheet->getStyle($retTotRange)->getFont()->setBold(true);
+        $sheet->setCellValueByColumnAndRow($retKidsCol,   $r, $returnReasonData['totals_kids']);
+        $sheet->setCellValueByColumnAndRow($retFemaleCol, $r, $returnReasonData['totals_female']);
+        $sheet->setCellValueByColumnAndRow($retMaleCol,   $r, $returnReasonData['totals_male']);
+        $this->fillSecRange($sheet, $anc, $retLastCol, $r, self::CLR_TOTAL, true);
+        $this->alignSecRow($sheet, $anc, $retLastCol, $r);
+        $retSecEnd = $r;
+        $this->sectionBorder($sheet, $anc, $retLastCol, $retSecStart, $retSecEnd);
 
-        $lastRow = max($r - 1, $retSectionRow);
-
-        // ── Number formats ────────────────────────────────────────────
-        $moneyFmt = '#,##0.00';
-        $sheet->getStyle('C' . $dataStartRow . ':C' . $lastRow)->getNumberFormat()->setFormatCode($moneyFmt);
-        $sheet->getStyle('E' . $dataStartRow . ':E' . $lastRow)->getNumberFormat()->setFormatCode($moneyFmt);
+        // ── Number formats – main area ───────────────────────────────
+        $sheet->getStyle('C' . $dataStartRow . ':C' . $lastMainRow)->getNumberFormat()->setFormatCode($moneyFmt);
+        $sheet->getStyle('E' . $dataStartRow . ':E' . $lastMainRow)->getNumberFormat()->setFormatCode($moneyFmt);
         if ($dataEndRow >= $dataStartRow) {
-            $sheet->getStyle('D' . $dataStartRow . ':D' . $dataEndRow)
-                ->getNumberFormat()->setFormatCode('0.00%');
+            $sheet->getStyle('D' . $dataStartRow . ':D' . $dataEndRow)->getNumberFormat()->setFormatCode('0.00%');
         }
         if ($numPlatCols > 0) {
             $pStart = Coordinate::stringFromColumnIndex($platBaseCol);
             $pEnd   = Coordinate::stringFromColumnIndex($platBaseCol + $numPlatCols - 1);
-            $sheet->getStyle("{$pStart}{$dataStartRow}:{$pEnd}{$lastMainRow}")
-                ->getNumberFormat()->setFormatCode($moneyFmt);
+            $sheet->getStyle("{$pStart}{$dataStartRow}:{$pEnd}{$lastMainRow}")->getNumberFormat()->setFormatCode($moneyFmt);
         }
 
-        // ── Borders ───────────────────────────────────────────────────
-        // Main area (including title, headers, data, and summary)
+        // ── Borders – main area ──────────────────────────────────────
         $mainRange = 'A1:' . Coordinate::stringFromColumnIndex($mainLastCol) . $lastMainRow;
         $sheet->getStyle($mainRange)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
-        // Weekly section borders
-        $wSecRange = 'A' . $weekSectionStart . ':' . Coordinate::stringFromColumnIndex($mainLastCol) . $weekSectionEnd;
-        $sheet->getStyle($wSecRange)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-
-        // Return section borders
-        $retBorderRange = Coordinate::stringFromColumnIndex($retLabelCol) . $weekSectionStart . ':'
-                        . Coordinate::stringFromColumnIndex($retMaleCol) . $retSectionRow;
-        $sheet->getStyle($retBorderRange)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-
-        // ── Column widths ─────────────────────────────────────────────
+        // ── Column widths ────────────────────────────────────────────
         $sheet->getColumnDimension('A')->setWidth(10);
         $sheet->getColumnDimension('B')->setWidth(14);
         $sheet->getColumnDimension('C')->setWidth(14);
         $sheet->getColumnDimension('D')->setWidth(12);
         $sheet->getColumnDimension('E')->setWidth(14);
-        for ($ci = $platBaseCol; $ci <= $sheetLastCol; $ci++) {
+        for ($ci = $platBaseCol; $ci <= $platBaseCol + $numPlatCols - 1; $ci++) {
             $sheet->getColumnDimensionByColumn($ci)->setWidth(13);
         }
+        // Right section in main area
+        for ($ci = $rsBase; $ci <= $mainLastCol; $ci++) {
+            $sheet->getColumnDimensionByColumn($ci)->setWidth(10);
+        }
+        // Bottom sections: label col wider, value cols standard
+        $maxSecLastCol = max($wbLastCol, $toqLastCol, $tiqLastCol, $retLastCol);
+        $sheet->getColumnDimensionByColumn($anc)->setWidth(18); // F label col
+        for ($ci = $anc + 1; $ci <= $maxSecLastCol; $ci++) {
+            $sheet->getColumnDimensionByColumn($ci)->setWidth(12);
+        }
 
-        // ── Freeze panes ──────────────────────────────────────────────
+        // ── Row height for section title rows ────────────────────────
+        $sheet->getRowDimension($wbSecStart)->setRowHeight(22);
+        $sheet->getRowDimension($toqSecStart)->setRowHeight(22);
+        $sheet->getRowDimension($tiqSecStart)->setRowHeight(22);
+        $sheet->getRowDimension($retSecStart)->setRowHeight(22);
+
+        // ── Freeze panes ─────────────────────────────────────────────
         $sheet->freezePane('C' . $dataStartRow);
 
-        // ── Stream ────────────────────────────────────────────────────
+        // ── Stream ───────────────────────────────────────────────────
         $filename = 'analytics-'
             . str_replace(' ', '_', strtolower($this->label['label'] ?? 'report'))
             . '-' . now()->format('Y-m-d') . '.xlsx';
@@ -534,13 +641,15 @@ class DashboardAnalyticsExport
         ]);
     }
 
-    // ── Style helpers ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════
+    // ── Style helpers ─────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════
 
     private function styleTitle($sheet, string $range): void
     {
         $style = $sheet->getStyle($range);
-        $style->getFont()->setBold(true)->setSize(13)->getColor()->setARGB('FF1F3864');
-        $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_TITLE);
+        $style->getFont()->setBold(true)->setSize(13)->getColor()->setARGB(self::CLR_TITLE_FG);
+        $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_TITLE_BG);
         $style->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
         $sheet->getRowDimension(1)->setRowHeight(26);
     }
@@ -548,8 +657,8 @@ class DashboardAnalyticsExport
     private function applyHeaderStyle($sheet, string $range): void
     {
         $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID)
-            ->getStartColor()->setARGB(self::CLR_HEADER);
-        $sheet->getStyle($range)->getFont()->setBold(true)->getColor()->setARGB('FF1F3864');
+            ->getStartColor()->setARGB(self::CLR_HDR_BG);
+        $sheet->getStyle($range)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_HDR_FG);
         $sheet->getStyle($range)->getAlignment()
             ->setHorizontal(Alignment::HORIZONTAL_CENTER)
             ->setVertical(Alignment::VERTICAL_CENTER)
@@ -559,32 +668,88 @@ class DashboardAnalyticsExport
     private function applyPlatformGroupStyle($sheet, string $range): void
     {
         $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID)
-            ->getStartColor()->setARGB(self::CLR_PLATFORM);
-        $sheet->getStyle($range)->getFont()->setBold(true)->getColor()->setARGB('FF1F3864');
+            ->getStartColor()->setARGB(self::CLR_PLAT_BG);
+        $sheet->getStyle($range)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_PLAT_FG);
         $sheet->getStyle($range)->getAlignment()
             ->setHorizontal(Alignment::HORIZONTAL_CENTER)
             ->setVertical(Alignment::VERTICAL_CENTER)
             ->setWrapText(true);
     }
 
-    private function fillRow($sheet, int $row, int $lastColIdx, string $argb, bool $singleColOnly = false): void
+    private function fillRow($sheet, int $row, int $lastColIdx, string $argb): void
     {
-        $range = $singleColOnly
-            ? 'A' . $row
-            : 'A' . $row . ':' . Coordinate::stringFromColumnIndex($lastColIdx) . $row;
-        $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID)
-            ->getStartColor()->setARGB($argb);
+        $range = 'A' . $row . ':' . Coordinate::stringFromColumnIndex($lastColIdx) . $row;
+        $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($argb);
     }
 
-    private function setBold($sheet, string $cell): void
+    private function fillSecRange($sheet, int $colStart, int $colEnd, int $row, string $argb, bool $bold = false): void
     {
-        $sheet->getStyle($cell)->getFont()->setBold(true);
+        $range = Coordinate::stringFromColumnIndex($colStart) . $row
+               . ':' . Coordinate::stringFromColumnIndex($colEnd) . $row;
+        $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($argb);
+        if ($bold) $sheet->getStyle($range)->getFont()->setBold(true);
     }
 
-    private function setCellBold($sheet, string $cell, string $value): void
+    private function writeSectionTitle($sheet, int $colStart, int $colEnd, int $row, string $title): void
     {
-        $sheet->setCellValue($cell, $value);
-        $sheet->getStyle($cell)->getFont()->setBold(true);
+        $startLtr = Coordinate::stringFromColumnIndex($colStart);
+        $endLtr   = Coordinate::stringFromColumnIndex($colEnd);
+        $sheet->setCellValue($startLtr . $row, $title);
+        $sheet->mergeCells("{$startLtr}{$row}:{$endLtr}{$row}");
+        $sheet->getStyle("{$startLtr}{$row}:{$endLtr}{$row}")->getFill()
+            ->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SEC_TITLE);
+        $sheet->getStyle("{$startLtr}{$row}:{$endLtr}{$row}")->getFont()
+            ->setBold(true)->setSize(11)->getColor()->setARGB('FFFFFFFF');
+        $sheet->getStyle("{$startLtr}{$row}:{$endLtr}{$row}")->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+    }
+
+    private function writeSectionHeaders($sheet, int $colStart, array $labels, int $row): void
+    {
+        foreach ($labels as $i => $lbl) {
+            $sheet->setCellValueByColumnAndRow($colStart + $i, $row, $lbl);
+        }
+        $colEnd = $colStart + count($labels) - 1;
+        $this->fillSecRange($sheet, $colStart, $colEnd, $row, self::CLR_SEC_HDR, true);
+        $this->applySecHdrTextStyle($sheet, $colStart, $colEnd, $row);
+    }
+
+    private function applySecHdrTextStyle($sheet, int $colStart, int $colEnd, int $row): void
+    {
+        $range = Coordinate::stringFromColumnIndex($colStart) . $row
+               . ':' . Coordinate::stringFromColumnIndex($colEnd) . $row;
+        $sheet->getStyle($range)->getFont()->getColor()->setARGB('FFFFFFFF');
+        $sheet->getStyle($range)->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setWrapText(true);
+        $sheet->getRowDimension($row)->setRowHeight(22);
+    }
+
+    private function alignSecRow($sheet, int $colStart, int $colEnd, int $row): void
+    {
+        $sheet->getStyleByColumnAndRow($colStart, $row)->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_LEFT)->setVertical(Alignment::VERTICAL_CENTER);
+        if ($colEnd > $colStart) {
+            $startLtr = Coordinate::stringFromColumnIndex($colStart + 1);
+            $endLtr   = Coordinate::stringFromColumnIndex($colEnd);
+            $sheet->getStyle("{$startLtr}{$row}:{$endLtr}{$row}")->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_RIGHT)->setVertical(Alignment::VERTICAL_CENTER);
+        }
+    }
+
+    private function sectionBorder($sheet, int $colStart, int $colEnd, int $rowStart, int $rowEnd): void
+    {
+        $range = Coordinate::stringFromColumnIndex($colStart) . $rowStart
+               . ':' . Coordinate::stringFromColumnIndex($colEnd) . $rowEnd;
+        $sheet->getStyle($range)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+    }
+
+    private function shortName(string $name): string
+    {
+        $name = preg_replace('/\s*(platform|marketplace|store)\s*/i', '', $name);
+        $name = trim($name);
+        return mb_strlen($name) > 10 ? mb_substr($name, 0, 9) . '.' : $name;
     }
 }
 

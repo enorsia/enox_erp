@@ -493,12 +493,14 @@ class DashboardAnalyticsService
         }
 
         // 6. Daily returns by date
-        $dailyReturns  = DailyReturn::whereBetween('date', [$dateFrom, $dateTo])
-            ->get(['date', 'number_of_returns']);
-        $returnsByDate = [];
+        $dailyReturns    = DailyReturn::whereBetween('date', [$dateFrom, $dateTo])
+            ->get(['date', 'number_of_returns', 'number_of_return_quantities']);
+        $returnsByDate   = [];   // number of return transactions
+        $returnQtyByDate = [];   // number of pieces/items returned (PCS)
         foreach ($dailyReturns as $r) {
             $d = $r->date->toDateString();
-            $returnsByDate[$d] = ($returnsByDate[$d] ?? 0) + $r->number_of_returns;
+            $returnsByDate[$d]   = ($returnsByDate[$d]   ?? 0) + (int) $r->number_of_returns;
+            $returnQtyByDate[$d] = ($returnQtyByDate[$d] ?? 0) + (int) $r->number_of_return_quantities;
         }
 
         // 7. Budget per platform
@@ -525,19 +527,16 @@ class DashboardAnalyticsService
         }
 
         // 9. Build daily data rows
-        $weekNumber     = 0;
-        $currentWeekNum = null;
-        $rows           = [];
+        $rows            = [];
+        $periodStart     = Carbon::parse($dateFrom);
 
         // Collect unique platform IDs from leaf columns for fast lookup
         $leafPlatformIds = array_unique(array_column($columnData['columns'], 'platform_id'));
 
         foreach ($dates as $date) {
-            $isoWeek = Carbon::parse($date)->isoWeek();
-            if ($isoWeek !== $currentWeekNum) {
-                $weekNumber++;
-                $currentWeekNum = $isoWeek;
-            }
+            // 7-day weeks from day 1 of the period (week 1 = days 0-6, week 2 = days 7-13, …)
+            $dayOfPeriod = $periodStart->diffInDays(Carbon::parse($date));
+            $weekNumber  = (int) floor($dayOfPeriod / 7) + 1;
 
             $platformData = $byDatePlatform[$date] ?? [];
 
@@ -600,7 +599,8 @@ class DashboardAnalyticsService
                 'kids'         => $totalKids,
                 'female'       => $totalFemale,
                 'male'         => $totalMale,
-                'returns'      => $returnsByDate[$date] ?? 0,
+                'returns'      => $returnsByDate[$date]   ?? 0,
+                'returns_qty'  => $returnQtyByDate[$date] ?? 0,  // pieces/items returned
                 'platform'     => $perPlatform,
                 'root_groups'  => $perRoot,
             ];
@@ -910,7 +910,57 @@ class DashboardAnalyticsService
     ): array {
         $rows = [];
 
-        // ── Total Spend ────────────────────────────────────────
+        // ── Average Daily Sales ── (serial 1) ─────────────────
+        $avgPlatRow = [];
+        foreach ($columns as $col) {
+            $pid  = $col['platform_id'];
+            $type = $col['type'];
+            $key  = "{$pid}_{$type}";
+            $avgPlatRow[$key] = $type === 'cost'
+                ? ($platformTotals[$pid]['cost']  ?? 0) / $dayCount
+                : ($platformTotals[$pid]['sales'] ?? 0) / $dayCount;
+        }
+        $rows['average_daily'] = [
+            'label'        => 'Average Sales Daily',
+            'col_c'        => $totals['sales'] / $dayCount,
+            'col_e'        => $totals['spent'] / $dayCount,
+            'col_d'        => null,
+            'platform'     => $avgPlatRow,
+            'total_orders' => $totals['orders'] / $dayCount,
+            'root_orders'  => null,
+            'total_qty'    => null,
+            'root_qty'     => null,
+            'kids'         => null,
+            'female'       => null,
+            'male'         => null,
+        ];
+
+        // ── Total Sale ── (serial 2) ───────────────────────────
+        $totalSalePlatRow = [];
+        foreach ($columns as $col) {
+            $pid  = $col['platform_id'];
+            $type = $col['type'];
+            $key  = "{$pid}_{$type}";
+            if ($type === 'sales') {
+                $totalSalePlatRow[$key] = $platformTotals[$pid]['sales'] ?? 0;
+            }
+        }
+        $rows['total_sale'] = [
+            'label'        => 'Total Sale',
+            'col_c'        => $totals['sales'],
+            'col_e'        => null,
+            'col_d'        => null,
+            'platform'     => $totalSalePlatRow,
+            'total_orders' => null,
+            'root_orders'  => null,
+            'total_qty'    => null,
+            'root_qty'     => null,
+            'kids'         => null,
+            'female'       => null,
+            'male'         => null,
+        ];
+
+        // ── Total Spend ── (serial 3) ──────────────────────────
         $platRow = [];
         foreach ($columns as $col) {
             $pid  = $col['platform_id'];
@@ -951,25 +1001,7 @@ class DashboardAnalyticsService
                 }
             }
         }
-        $overallRoi = $totals['spent'] > 0 ? ($totals['sales'] / $totals['spent']) : null;
-        $rows['roi'] = [
-            'label'            => 'ROI %',
-            'col_c'            => null,
-            'col_e'            => $overallRoi,
-            'col_d'            => null,
-            'col_e_format'     => '0.00%',
-            'platform'         => $roiRow,
-            'platform_formats' => $roiFmt,
-            'total_orders'     => null,
-            'root_orders'      => null,
-            'total_qty'        => null,
-            'root_qty'         => null,
-            'kids'             => null,
-            'female'           => null,
-            'male'             => null,
-        ];
-
-        // ── Total Budget ───────────────────────────────────────
+        // ── Total Budget ── (serial 4) ────────────────────────
         $budgetPlatRow = [];
         $totalBudget   = array_sum($budgetMap);
         foreach ($columns as $col) {
@@ -998,7 +1030,7 @@ class DashboardAnalyticsService
             'male'         => null,
         ];
 
-        // ── Balance Budget ─────────────────────────────────────
+        // ── Balance Budget ── (serial 5) ──────────────────────
         $balancePlatRow = [];
         foreach ($columns as $col) {
             $pid  = $col['platform_id'];
@@ -1027,57 +1059,26 @@ class DashboardAnalyticsService
             'male'         => null,
         ];
 
-        // ── Average Daily Sales ────────────────────────────────
-        $avgPlatRow = [];
-        foreach ($columns as $col) {
-            $pid  = $col['platform_id'];
-            $type = $col['type'];
-            $key  = "{$pid}_{$type}";
-            $avgPlatRow[$key] = $type === 'cost'
-                ? ($platformTotals[$pid]['cost']  ?? 0) / $dayCount
-                : ($platformTotals[$pid]['sales'] ?? 0) / $dayCount;
-        }
-        $rows['average_daily'] = [
-            'label'        => 'Average Sales Daily',
-            'col_c'        => $totals['sales'] / $dayCount,
-            'col_e'        => $totals['spent'] / $dayCount,
-            'col_d'        => null,
-            'platform'     => $avgPlatRow,
-            'total_orders' => $totals['orders'] / $dayCount,
-            'root_orders'  => null,
-            'total_qty'    => null,
-            'root_qty'     => null,
-            'kids'         => null,
-            'female'       => null,
-            'male'         => null,
+        // ── ROI % ── (serial 6) ────────────────────────────────
+        $overallRoi = $totals['spent'] > 0 ? ($totals['sales'] / $totals['spent']) : null;
+        $rows['roi'] = [
+            'label'            => 'ROI %',
+            'col_c'            => null,
+            'col_e'            => $overallRoi,
+            'col_d'            => null,
+            'col_e_format'     => '0.00%',
+            'platform'         => $roiRow,
+            'platform_formats' => $roiFmt,
+            'total_orders'     => null,
+            'root_orders'      => null,
+            'total_qty'        => null,
+            'root_qty'         => null,
+            'kids'             => null,
+            'female'           => null,
+            'male'             => null,
         ];
 
-        // ── Total Sale ─────────────────────────────────────────
-        $totalSalePlatRow = [];
-        foreach ($columns as $col) {
-            $pid  = $col['platform_id'];
-            $type = $col['type'];
-            $key  = "{$pid}_{$type}";
-            if ($type === 'sales') {
-                $totalSalePlatRow[$key] = $platformTotals[$pid]['sales'] ?? 0;
-            }
-        }
-        $rows['total_sale'] = [
-            'label'        => 'Total Sale',
-            'col_c'        => $totals['sales'],
-            'col_e'        => null,
-            'col_d'        => null,
-            'platform'     => $totalSalePlatRow,
-            'total_orders' => null,
-            'root_orders'  => null,
-            'total_qty'    => null,
-            'root_qty'     => null,
-            'kids'         => null,
-            'female'       => null,
-            'male'         => null,
-        ];
-
-        // ── Forecasting (30 days) ──────────────────────────────
+        // ── Forecasting (30 days) ── (serial 7) ───────────────
         $forecastPlatRow = [];
         foreach ($columns as $col) {
             $pid  = $col['platform_id'];
@@ -1132,6 +1133,7 @@ class DashboardAnalyticsService
                     'female'      => 0,
                     'male'        => 0,
                     'returns_pcs' => 0,
+                    'returns_gbp' => 0,   // monetary return value (placeholder, not in DB)
                     'root_orders' => array_fill_keys($rootIds, 0),
                     'root_qty'    => array_fill_keys($rootIds, 0),
                 ];
@@ -1143,7 +1145,7 @@ class DashboardAnalyticsService
             $weeks[$wk]['kids']        += $row['kids'];
             $weeks[$wk]['female']      += $row['female'];
             $weeks[$wk]['male']        += $row['male'];
-            $weeks[$wk]['returns_pcs'] += ($row['returns'] ?? 0);
+            $weeks[$wk]['returns_pcs'] += ($row['returns_qty'] ?? $row['returns'] ?? 0); // pieces
             foreach ($rootPlatforms as $root) {
                 $rid = $root['id'];
                 $weeks[$wk]['root_orders'][$rid] += ($row['root_groups'][$rid]['orders'] ?? 0);
