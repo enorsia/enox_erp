@@ -734,6 +734,7 @@ class DashboardAnalyticsService
             'columns'       => $columns,
             'header_levels' => $headerLevels,
             'max_depth'     => $maxDepth,
+            'tree'          => $tree,   // full platform tree for grouped-column export
         ];
     }
 

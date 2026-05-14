@@ -66,9 +66,8 @@ class DashboardAnalyticsExport
 
         // ── Unpack service data ──────────────────────────────────────
         $columnData       = $export['column_data'];
-        $columns          = $columnData['columns'];
-        $headerLevels     = $columnData['header_levels'];
-        $platMaxDepth     = $columnData['max_depth'];
+        $columns          = $columnData['columns'];   // leaf cols (kept for summary-row data)
+        $tree             = $columnData['tree'];       // full platform tree
 
         $rootPlatforms    = $export['root_platforms'];
         $rows             = $export['rows'];
@@ -81,20 +80,31 @@ class DashboardAnalyticsExport
 
         // ── Column indices ───────────────────────────────────────────
         $platBaseCol = self::COL_SPEND + 1;   // F = 6, first platform column
-        $numPlatCols = count($columns);
 
-        // Right section (after platform columns): per-root orders → total orders → per-root qty → total qty → Kids/Female/Male
-        $rsBase          = $platBaseCol + $numPlatCols;
-        $rsRootOrderBase = $rsBase;                         // per-root orders (numRoots cols)
-        $rsOrdersCol     = $rsBase + $numRoots;             // Total Orders
-        $rsQtyRootBase   = $rsBase + $numRoots + 1;         // per-root QTY (numRoots cols)
-        $rsQtyCol        = $rsBase + 2 * $numRoots + 1;     // Total QTY
+        // Build grouped column layout: summary cols (parent nodes) + leaf cols
+        // summary cols store sums of their leaf descendants; leaf cols store individual values
+        $allPlatCols    = $this->buildGroupedColumns($tree);
+        $numAllPlatCols = count($allPlatCols);
+
+        // Leaf-only map: "pid_type" => Excel column index  (for data + summary row lookup)
+        $platColMap = [];
+        foreach ($allPlatCols as $i => $col) {
+            if ($col['kind'] === 'leaf') {
+                $platColMap["{$col['platform_id']}_{$col['col_type']}"] = $platBaseCol + $i;
+            }
+        }
+
+        // Right section (after all platform columns)
+        $rsBase          = $platBaseCol + $numAllPlatCols;
+        $rsRootOrderBase = $rsBase;
+        $rsOrdersCol     = $rsBase + $numRoots;
+        $rsQtyRootBase   = $rsBase + $numRoots + 1;
+        $rsQtyCol        = $rsBase + 2 * $numRoots + 1;
         $rsKidsCol       = $rsBase + 2 * $numRoots + 2;
         $rsFemaleCol     = $rsBase + 2 * $numRoots + 3;
         $rsMaleCol       = $rsBase + 2 * $numRoots + 4;
         $mainLastCol     = $rsMaleCol;
 
-        // Root-column maps for right section
         $rsRootOrderCols = [];
         $rsRootQtyCols   = [];
         foreach ($rootPlatforms as $i => $root) {
@@ -102,16 +112,11 @@ class DashboardAnalyticsExport
             $rsRootQtyCols[$root['id']]   = $rsQtyRootBase   + $i;
         }
 
-        $platColMap = [];
-        foreach ($columns as $i => $col) {
-            $platColMap["{$col['platform_id']}_{$col['type']}"] = $platBaseCol + $i;
-        }
-
         // ── Row positions ────────────────────────────────────────────
+        // Always 2 header rows: row 2 = platform names, row 3 = Spend/Sales
         $firstHdrRow  = 2;
-        $colLabelRow  = $platMaxDepth > 0 ? $firstHdrRow + $platMaxDepth : $firstHdrRow;
+        $colLabelRow  = $numAllPlatCols > 0 ? $firstHdrRow + 1 : $firstHdrRow;
         $dataStartRow = $colLabelRow + 1;
-        $hdrSpan      = $colLabelRow - $firstHdrRow + 1; // total header rows (for merging)
 
         // ── Row 1: Title (C1 : mainLastCol) + accent fill on A1/B1 ──
         $titleStr      = 'Tracking Digital Marketing COST VS Allocation – ' . ($this->label['label'] ?? '');
@@ -142,35 +147,77 @@ class DashboardAnalyticsExport
             $this->applyHeaderStyle($sheet, "{$cl}{$firstHdrRow}:{$cl}{$colLabelRow}");
         }
 
-        // ── Platform hierarchy header rows ───────────────────────────
-        foreach ($headerLevels as $level => $levelCells) {
-            $excelRow = $firstHdrRow + $level;
-            foreach ($levelCells as $cell) {
-                $startCi = $platBaseCol + $cell['col_offset'];
-                $startCl = Coordinate::stringFromColumnIndex($startCi);
-                $endCi   = $startCi + $cell['col_span'] - 1;
-                $endCl   = Coordinate::stringFromColumnIndex($endCi);
-                $endRow  = $excelRow + $cell['row_span'] - 1;
-                $sheet->setCellValue($startCl . $excelRow, $cell['label']);
-                if ($endCi > $startCi || $endRow > $excelRow) {
-                    $sheet->mergeCells("{$startCl}{$excelRow}:{$endCl}{$endRow}");
-                }
-                $this->applyPlatformGroupStyle($sheet, "{$startCl}{$excelRow}:{$endCl}{$endRow}");
-            }
-        }
+        // ── Platform headers: row firstHdrRow = platform name (merged per-platform)
+        //                    row colLabelRow  = Spend / Sales ──────────
+        // Also apply Excel column grouping (outline) so users can collapse/expand
+        // each parent platform. showSummaryRight=false → summary on LEFT.
+        $sheet->setShowSummaryRight(false);
 
-        // ── Spend/Sales label row ────────────────────────────────────
-        foreach ($columns as $i => $col) {
-            $ci  = $platBaseCol + $i;
-            $cl  = Coordinate::stringFromColumnIndex($ci);
-            $lbl = $col['type'] === 'cost' ? 'Spend' : 'Sales';
-            $sheet->setCellValue($cl . $colLabelRow, $lbl);
-            $sheet->getStyle($cl . $colLabelRow)->getFill()->setFillType(Fill::FILL_SOLID)
-                ->getStartColor()->setARGB(self::CLR_COLLABEL);
-            $sheet->getStyle($cl . $colLabelRow)->getFont()->setBold(true)
-                ->getColor()->setARGB(self::CLR_COLLABEL_FG);
-            $sheet->getStyle($cl . $colLabelRow)->getAlignment()
-                ->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+        if ($numAllPlatCols > 0) {
+            $prevPlatId  = null;
+            $mergeStart  = null;
+
+            foreach ($allPlatCols as $i => $col) {
+                $ci       = $platBaseCol + $i;
+                $cl       = Coordinate::stringFromColumnIndex($ci);
+                $platId   = $col['platform_id'];
+                $isSummary = $col['kind'] === 'summary';
+
+                // ── Name row cell: set value + style once per platform ──
+                if ($platId !== $prevPlatId) {
+                    // Close previous merge
+                    if ($mergeStart !== null && $mergeStart < $ci - 1) {
+                        $mStartLtr = Coordinate::stringFromColumnIndex($mergeStart);
+                        $mEndLtr   = Coordinate::stringFromColumnIndex($ci - 1);
+                        $sheet->mergeCells("{$mStartLtr}{$firstHdrRow}:{$mEndLtr}{$firstHdrRow}");
+                    }
+                    // Write platform name
+                    $sheet->setCellValueByColumnAndRow($ci, $firstHdrRow, $col['name']);
+                    $hdrBg = $isSummary ? self::CLR_HDR_BG : self::CLR_PLAT_BG;
+                    $sheet->getStyleByColumnAndRow($ci, $firstHdrRow)->getFill()
+                        ->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($hdrBg);
+                    $sheet->getStyleByColumnAndRow($ci, $firstHdrRow)->getFont()
+                        ->setBold(true)->getColor()->setARGB('FFFFFFFF');
+                    $sheet->getStyleByColumnAndRow($ci, $firstHdrRow)->getAlignment()
+                        ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+                        ->setVertical(Alignment::VERTICAL_CENTER)->setWrapText(true);
+                    $mergeStart = $ci;
+                    $prevPlatId = $platId;
+                } else {
+                    // Same platform → propagate style to this cell too (needed for merged range)
+                    $hdrBg = $isSummary ? self::CLR_HDR_BG : self::CLR_PLAT_BG;
+                    $sheet->getStyleByColumnAndRow($ci, $firstHdrRow)->getFill()
+                        ->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($hdrBg);
+                    $sheet->getStyleByColumnAndRow($ci, $firstHdrRow)->getFont()
+                        ->setBold(true)->getColor()->setARGB('FFFFFFFF');
+                }
+
+                // ── Spend/Sales label row ───────────────────────────────
+                $lbl = $col['col_type'] === 'cost' ? 'Spend' : 'Sales';
+                $sheet->setCellValueByColumnAndRow($ci, $colLabelRow, $lbl);
+                $sheet->getStyleByColumnAndRow($ci, $colLabelRow)->getFill()
+                    ->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_COLLABEL);
+                $sheet->getStyleByColumnAndRow($ci, $colLabelRow)->getFont()
+                    ->setBold(true)->getColor()->setARGB(self::CLR_COLLABEL_FG);
+                $sheet->getStyleByColumnAndRow($ci, $colLabelRow)->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+
+                // ── Column outline level (collapse/expand) ──────────────
+                // Outline level enables the native Excel +/− toggle buttons.
+                // Columns start VISIBLE (expanded) so bottom sections are unaffected
+                // on file open. Users click [−] to collapse any parent platform group.
+                $sheet->getColumnDimensionByColumn($ci)->setOutlineLevel($col['level']);
+            }
+
+            // Close last merge
+            if ($mergeStart !== null) {
+                $lastCi = $platBaseCol + $numAllPlatCols - 1;
+                if ($mergeStart < $lastCi) {
+                    $mStartLtr = Coordinate::stringFromColumnIndex($mergeStart);
+                    $mEndLtr   = Coordinate::stringFromColumnIndex($lastCi);
+                    $sheet->mergeCells("{$mStartLtr}{$firstHdrRow}:{$mEndLtr}{$firstHdrRow}");
+                }
+            }
         }
 
         // ── Right-section headers (all merged vertically firstHdrRow→colLabelRow) ─
@@ -220,13 +267,23 @@ class DashboardAnalyticsExport
             $sheet->setCellValue('D' . $r, $row['roas']);
             $sheet->setCellValue('E' . $r, $row['total_spent']);
 
-            // Platform cost/sales columns
-            foreach ($columns as $col) {
-                $pid = $col['platform_id'];
-                $typ = $col['type'];
-                $ci  = $platColMap["{$pid}_{$typ}"];
-                $val = $typ === 'cost' ? ($row['platform'][$pid]['cost'] ?? 0)
-                                       : ($row['platform'][$pid]['sales'] ?? 0);
+            // Platform columns (summary + leaf)
+            foreach ($allPlatCols as $i => $platCol) {
+                $ci = $platBaseCol + $i;
+                if ($platCol['kind'] === 'leaf') {
+                    $pid = $platCol['platform_id'];
+                    $val = $platCol['col_type'] === 'cost'
+                        ? ($row['platform'][$pid]['cost']  ?? 0)
+                        : ($row['platform'][$pid]['sales'] ?? 0);
+                } else {
+                    // Summary: sum all leaf descendants
+                    $val = 0;
+                    foreach ($platCol['leaf_ids'] as $leafId) {
+                        $val += $platCol['col_type'] === 'cost'
+                            ? ($row['platform'][$leafId]['cost']  ?? 0)
+                            : ($row['platform'][$leafId]['sales'] ?? 0);
+                    }
+                }
                 $sheet->setCellValueByColumnAndRow($ci, $r, $val);
             }
 
@@ -298,6 +355,7 @@ class DashboardAnalyticsExport
                     $sheet->getStyle('E' . $r)->getNumberFormat()->setFormatCode($sRow['col_e_format']);
                 }
             }
+            // Leaf platform columns (pre-computed by service)
             foreach ($sRow['platform'] as $colKey => $value) {
                 if (!isset($platColMap[$colKey])) continue;
                 $ci = $platColMap[$colKey];
@@ -306,6 +364,33 @@ class DashboardAnalyticsExport
                 if (!empty($sRow['platform_formats'][$colKey])) {
                     $sheet->getStyleByColumnAndRow($ci, $r)->getNumberFormat()
                         ->setFormatCode($sRow['platform_formats'][$colKey]);
+                }
+            }
+            // Summary (parent) platform columns: sum their leaf descendants' values from this row
+            foreach ($allPlatCols as $i => $platCol) {
+                if ($platCol['kind'] !== 'summary') continue;
+                $ci  = $platBaseCol + $i;
+                $val = 0;
+                foreach ($platCol['leaf_ids'] as $leafId) {
+                    $key = "{$leafId}_{$platCol['col_type']}";
+                    if (isset($sRow['platform'][$key])) {
+                        $val += $sRow['platform'][$key];
+                    }
+                }
+                if ($val != 0) {
+                    $sheet->setCellValueByColumnAndRow($ci, $r, $val);
+                    $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                    if (!empty($sRow['platform_formats'])) {
+                        // Use format from any leaf_id + col_type combo if available
+                        foreach ($platCol['leaf_ids'] as $leafId) {
+                            $key = "{$leafId}_{$platCol['col_type']}";
+                            if (!empty($sRow['platform_formats'][$key])) {
+                                $sheet->getStyleByColumnAndRow($ci, $r)->getNumberFormat()
+                                    ->setFormatCode($sRow['platform_formats'][$key]);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -587,9 +672,9 @@ class DashboardAnalyticsExport
         if ($dataEndRow >= $dataStartRow) {
             $sheet->getStyle('D' . $dataStartRow . ':D' . $dataEndRow)->getNumberFormat()->setFormatCode('0.00%');
         }
-        if ($numPlatCols > 0) {
+        if ($numAllPlatCols > 0) {
             $pStart = Coordinate::stringFromColumnIndex($platBaseCol);
-            $pEnd   = Coordinate::stringFromColumnIndex($platBaseCol + $numPlatCols - 1);
+            $pEnd   = Coordinate::stringFromColumnIndex($platBaseCol + $numAllPlatCols - 1);
             $sheet->getStyle("{$pStart}{$dataStartRow}:{$pEnd}{$lastMainRow}")->getNumberFormat()->setFormatCode($moneyFmt);
         }
 
@@ -603,7 +688,7 @@ class DashboardAnalyticsExport
         $sheet->getColumnDimension('C')->setWidth(14);
         $sheet->getColumnDimension('D')->setWidth(12);
         $sheet->getColumnDimension('E')->setWidth(14);
-        for ($ci = $platBaseCol; $ci <= $platBaseCol + $numPlatCols - 1; $ci++) {
+        for ($ci = $platBaseCol; $ci <= $platBaseCol + $numAllPlatCols - 1; $ci++) {
             $sheet->getColumnDimensionByColumn($ci)->setWidth(13);
         }
         // Right section in main area
@@ -750,6 +835,125 @@ class DashboardAnalyticsExport
         $name = preg_replace('/\s*(platform|marketplace|store)\s*/i', '', $name);
         $name = trim($name);
         return mb_strlen($name) > 10 ? mb_substr($name, 0, 9) . '.' : $name;
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ── Grouped-column builder (collapse / expand feature) ────────────
+    // ══════════════════════════════════════════════════════════════════
+
+    /**
+     * Walk the platform tree and build a flat ordered column array that
+     * includes SUMMARY columns for every parent node (left of its children)
+     * and LEAF columns for leaf nodes.
+     *
+     * Excel outline levels are assigned by tree depth:
+     *   depth 0 → level 0 (always visible)
+     *   depth 1 → level 1 (collapsed under root summary)
+     *   depth 2 → level 2 (collapsed under depth-1 summary)
+     *   …
+     * The first child column of each parent is flagged as 'collapsed=true'
+     * so Excel places the +/− toggle button there.
+     *
+     * Each column:
+     *   kind        'summary' | 'leaf'
+     *   platform_id  int
+     *   col_type    'cost' | 'sales'
+     *   level        int   (outline depth)
+     *   name         string
+     *   leaf_ids     int[] (for summary: all leaf descendants; for leaf: [self])
+     *   visible      bool  (false for level > 0 columns → initially collapsed)
+     *   collapsed    bool  (true on first child of each group → +/− button)
+     */
+    private function buildGroupedColumns(array $tree, int $depth = 0): array
+    {
+        $cols = [];
+
+        foreach ($tree as $node) {
+            $hasChildren = !empty($node['children']);
+
+            if ($hasChildren) {
+                // Collect all leaf IDs under this node for value aggregation
+                $leafIds = [];
+                $this->collectLeafIdsFromTree($node['children'], $leafIds);
+
+                // Summary column(s) at current depth (left of children, always visible at depth 0)
+                if ($node['is_spent']) {
+                    $cols[] = [
+                        'kind'        => 'summary',
+                        'platform_id' => $node['id'],
+                        'col_type'    => 'cost',
+                        'level'       => $depth,
+                        'name'        => $node['name'],
+                        'leaf_ids'    => $leafIds,
+                        'visible'     => true,
+                        'collapsed'   => false,
+                    ];
+                }
+                if ($node['is_sales']) {
+                    $cols[] = [
+                        'kind'        => 'summary',
+                        'platform_id' => $node['id'],
+                        'col_type'    => 'sales',
+                        'level'       => $depth,
+                        'name'        => $node['name'],
+                        'leaf_ids'    => $leafIds,
+                        'visible'     => true,
+                        'collapsed'   => false,
+                    ];
+                }
+
+                // Children at the next depth level (all hidden initially)
+                $childCols = $this->buildGroupedColumns($node['children'], $depth + 1);
+
+                // Mark the first child column as the group boundary (shows toggle button)
+                if (!empty($childCols)) {
+                    $childCols[0]['collapsed'] = true;
+                }
+
+                $cols = array_merge($cols, $childCols);
+
+            } else {
+                // Leaf node: appears at current depth; visible only if depth === 0
+                if ($node['is_spent']) {
+                    $cols[] = [
+                        'kind'        => 'leaf',
+                        'platform_id' => $node['id'],
+                        'col_type'    => 'cost',
+                        'level'       => $depth,
+                        'name'        => $node['name'],
+                        'leaf_ids'    => [$node['id']],
+                        'visible'     => ($depth === 0),
+                        'collapsed'   => false,
+                    ];
+                }
+                if ($node['is_sales']) {
+                    $cols[] = [
+                        'kind'        => 'leaf',
+                        'platform_id' => $node['id'],
+                        'col_type'    => 'sales',
+                        'level'       => $depth,
+                        'name'        => $node['name'],
+                        'leaf_ids'    => [$node['id']],
+                        'visible'     => ($depth === 0),
+                        'collapsed'   => false,
+                    ];
+                }
+            }
+        }
+
+        return $cols;
+    }
+
+    /** Recursively collect IDs of all leaf nodes under $nodes. */
+    private function collectLeafIdsFromTree(array $nodes, array &$ids): void
+    {
+        foreach ($nodes as $node) {
+            if (empty($node['children'])) {
+                $ids[] = $node['id'];
+            } else {
+                $this->collectLeafIdsFromTree($node['children'], $ids);
+            }
+        }
     }
 }
 
