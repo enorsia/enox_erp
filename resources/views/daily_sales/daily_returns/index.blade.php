@@ -304,95 +304,108 @@
                     </div>
                 </div>
 
-                {{-- Platform groups --}}
+                {{-- Platform groups (3-level hierarchy: root → mid → cards) --}}
                 <div class="p-4 space-y-5">
-                @foreach ($dg['platformGroups'] as $pg)
+                @foreach ($dg['rootGroups'] as $rg)
 
-                    {{-- Platform group header --}}
                     <div>
+                        {{-- ── Root platform header ── --}}
                         <div class="flex items-center gap-2 mb-3">
-                            <div class="ds-group-dot {{ $pg['isChild'] ? 'child' : 'root' }}"></div>
-                            <span class="ds-group-label {{ $pg['isChild'] ? 'child' : 'root' }}">{{ $pg['groupName'] }}</span>
+                            <div class="ds-group-dot root"></div>
+                            <span class="ds-group-label root">{{ $rg['rootName'] }}</span>
                             <div class="flex-1 h-px bg-slate-100 dark:bg-slate-700/60 ml-1"></div>
-                            <span class="text-[10px] text-slate-300 dark:text-slate-600 font-medium">{{ $pg['entries']->count() }} {{ Str::plural('entry', $pg['entries']->count()) }}</span>
                         </div>
 
-                        {{-- Return entry cards --}}
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                        @foreach ($pg['entries'] as $return)
-                            @php
-                                $hasGender = (($return->number_of_male_returns ?? 0) + ($return->number_of_female_returns ?? 0) + ($return->number_of_kids_returns ?? 0)) > 0;
-                            @endphp
-                            <div class="ds-sale-card group">
-                                {{-- Card top: platform + reason + actions --}}
-                                <div class="flex items-start justify-between gap-2 mb-3">
-                                    <div class="flex items-center gap-2.5 min-w-0">
-                                        <div class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center shrink-0">
-                                            <svg class="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"/></svg>
-                                        </div>
-                                        <div class="min-w-0">
-                                            <p class="text-[13px] font-bold text-slate-800 dark:text-slate-100 truncate leading-tight">{{ $return->salePlatform->name ?? 'N/A' }}</p>
-                                            @if($return->salePlatform?->parent)
-                                                <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate leading-tight mt-0.5">
-                                                    <span class="inline-block w-2 h-px bg-slate-300 dark:bg-slate-600 align-middle mr-1"></span>{{ $return->salePlatform->parent->name }}
-                                                </p>
-                                            @endif
-                                            @if($return->returnReasonType)
-                                                <span class="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-800">
-                                                    {{ $return->returnReasonType->name }}
-                                                </span>
-                                            @endif
-                                        </div>
-                                    </div>
-                                    <div class="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        @can('general.daily_return.show')
-                                            <a href="{{ route('admin.daily-returns.show', $return->id) }}" class="ds-action-btn" title="View">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                                            </a>
-                                        @endcan
-                                        @can('general.daily_return.delete')
-                                            <button onclick="deleteData({{ $return->id }})" class="ds-action-btn danger" title="Delete">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                            </button>
-                                            <form id="delete-form-{{ $return->id }}" method="POST" action="{{ route('admin.daily-returns.destroy', $return->id) }}" style="display:none;">
-                                                @csrf @method('DELETE')
-                                            </form>
-                                        @endcan
-                                    </div>
-                                </div>
+                        @foreach ($rg['subGroups'] as $sg)
+                        <div class="{{ $sg['subName'] ? 'ml-5 mb-4' : 'mb-3' }}">
 
-                                {{-- Metrics --}}
-                                <div class="grid grid-cols-2 gap-1.5 mb-1.5">
-                                    <div class="ds-metric-cell orders-cell">
-                                        <span class="ds-metric-lbl">Returns</span>
-                                        <span class="ds-metric-val">{{ number_format($return->number_of_returns) }}</span>
-                                    </div>
-                                    <div class="ds-metric-cell qty-cell">
-                                        <span class="ds-metric-lbl">Return Qty</span>
-                                        <span class="ds-metric-val">{{ number_format($return->number_of_return_quantities) }}</span>
-                                    </div>
-                                </div>
-
-                                {{-- Gender breakdown --}}
-                                @if($hasGender)
-                                <div class="ds-gender-strip">
-                                    <div class="ds-gender-item male">
-                                        <span>Male</span>
-                                        <span>{{ number_format($return->number_of_male_returns ?? 0) }}</span>
-                                    </div>
-                                    <div class="ds-gender-item female">
-                                        <span>Female</span>
-                                        <span>{{ number_format($return->number_of_female_returns ?? 0) }}</span>
-                                    </div>
-                                    <div class="ds-gender-item kids">
-                                        <span>Kids</span>
-                                        <span>{{ number_format($return->number_of_kids_returns ?? 0) }}</span>
-                                    </div>
-                                </div>
-                                @endif
+                            @if($sg['subName'])
+                            {{-- ── Level-2 sub-group header ── --}}
+                            <div class="flex items-center gap-2 mb-2.5">
+                                <div class="ds-group-dot child"></div>
+                                <span class="ds-group-label child">{{ $sg['subName'] }}</span>
+                                <div class="flex-1 h-px bg-slate-100 dark:bg-slate-700/60 ml-1"></div>
                             </div>
-                        @endforeach
+                            @endif
+
+                            {{-- Return entry cards --}}
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 {{ $sg['subName'] ? 'ml-5' : '' }}">
+                            @foreach ($sg['entries'] as $return)
+                                @php
+                                    $hasGender = (($return->number_of_male_returns ?? 0) + ($return->number_of_female_returns ?? 0) + ($return->number_of_kids_returns ?? 0)) > 0;
+                                @endphp
+                                <div class="ds-sale-card group">
+                                    {{-- Card top: platform + reason + actions --}}
+                                    <div class="flex items-start justify-between gap-2 mb-3">
+                                        <div class="flex items-center gap-2.5 min-w-0">
+                                            <div class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center shrink-0">
+                                                <svg class="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"/></svg>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <p class="text-[13px] font-bold text-slate-800 dark:text-slate-100 truncate leading-tight">{{ $return->salePlatform->name ?? 'N/A' }}</p>
+                                                @if($return->salePlatform?->parent)
+                                                    <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate leading-tight mt-0.5">
+                                                        <span class="inline-block w-2 h-px bg-slate-300 dark:bg-slate-600 align-middle mr-1"></span>{{ $return->salePlatform->parent->name }}
+                                                    </p>
+                                                @endif
+                                                @if($return->returnReasonType)
+                                                    <span class="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-800">
+                                                        {{ $return->returnReasonType->name }}
+                                                    </span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                        <div class="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            @can('general.daily_return.show')
+                                                <a href="{{ route('admin.daily-returns.show', $return->id) }}" class="ds-action-btn" title="View">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                </a>
+                                            @endcan
+                                            @can('general.daily_return.delete')
+                                                <button onclick="deleteData({{ $return->id }})" class="ds-action-btn danger" title="Delete">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                </button>
+                                                <form id="delete-form-{{ $return->id }}" method="POST" action="{{ route('admin.daily-returns.destroy', $return->id) }}" style="display:none;">
+                                                    @csrf @method('DELETE')
+                                                </form>
+                                            @endcan
+                                        </div>
+                                    </div>
+
+                                    {{-- Metrics --}}
+                                    <div class="grid grid-cols-2 gap-1.5 mb-1.5">
+                                        <div class="ds-metric-cell orders-cell">
+                                            <span class="ds-metric-lbl">Returns</span>
+                                            <span class="ds-metric-val">{{ number_format($return->number_of_returns) }}</span>
+                                        </div>
+                                        <div class="ds-metric-cell qty-cell">
+                                            <span class="ds-metric-lbl">Return Qty</span>
+                                            <span class="ds-metric-val">{{ number_format($return->number_of_return_quantities) }}</span>
+                                        </div>
+                                    </div>
+
+                                    {{-- Gender breakdown --}}
+                                    @if($hasGender)
+                                    <div class="ds-gender-strip">
+                                        <div class="ds-gender-item male">
+                                            <span>Male</span>
+                                            <span>{{ number_format($return->number_of_male_returns ?? 0) }}</span>
+                                        </div>
+                                        <div class="ds-gender-item female">
+                                            <span>Female</span>
+                                            <span>{{ number_format($return->number_of_female_returns ?? 0) }}</span>
+                                        </div>
+                                        <div class="ds-gender-item kids">
+                                            <span>Kids</span>
+                                            <span>{{ number_format($return->number_of_kids_returns ?? 0) }}</span>
+                                        </div>
+                                    </div>
+                                    @endif
+                                </div>
+                            @endforeach
+                            </div>
                         </div>
+                        @endforeach
                     </div>
 
                 @endforeach

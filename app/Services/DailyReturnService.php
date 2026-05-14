@@ -13,25 +13,40 @@ class DailyReturnService
      */
     public function getList(array $filters): LengthAwarePaginator
     {
-        return DailyReturn::with(['salePlatform', 'returnReasonType'])
-            // Join 3 levels to order by platform hierarchy (keeps parent+child groups together)
-            ->join('sale_platforms as sp',   'sp.id',   '=', 'daily_returns.sale_platform_id')
+        return DailyReturn::with(['salePlatform.parent.parent', 'returnReasonType'])
+            // Join 3 levels to allow platform-hierarchy ordering within each date
+            ->join('sale_platforms as sp',       'sp.id',   '=', 'daily_returns.sale_platform_id')
             ->leftJoin('sale_platforms as sp_p', 'sp_p.id', '=', 'sp.parent_id')
             ->leftJoin('sale_platforms as sp_g', 'sp_g.id', '=', 'sp_p.parent_id')
             ->select('daily_returns.*')
             ->filter($filters)
+            // PRIMARY: date DESC — keeps all records for the same date together for pagination
+            ->orderByDesc('daily_returns.date')
+            // SECONDARY: platform hierarchy order within each date
             ->orderByRaw('COALESCE(sp_g.sort_order, sp_p.sort_order, sp.sort_order)')
             ->orderByRaw('COALESCE(sp_p.sort_order, sp.sort_order, 0)')
             ->orderBy('sp.sort_order')
-            ->orderByDesc('daily_returns.date')
             ->orderByDesc('daily_returns.id')
-            ->paginate(20)
+            ->paginate(30)
             ->withQueryString();
     }
 
     /**
      * Build date-wise view groups for the index page.
-     * Entries within each date are sub-grouped by their parent platform.
+     *
+     * Structure returned:
+     *   dateGroups[]
+     *     date / dateFormatted / totals / entries (for edit-btn)
+     *     rootGroups[]
+     *       rootName  — level-1 (root) platform name
+     *       subGroups[]
+     *         subName  — level-2 platform name, or NULL when entries are root/level-2 owned
+     *         entries  — Collection of DailyReturn models
+     *
+     * Hierarchy rule:
+     *   • Record at depth 0 (root)  → rootGroup only,  subName = null
+     *   • Record at depth 1 (mid)   → rootGroup only,  subName = null
+     *   • Record at depth 2+ (leaf) → rootGroup + subGroup, subName = level-2 name
      */
     public function buildDateViewGroups(\Illuminate\Contracts\Pagination\LengthAwarePaginator $paginator): array
     {
@@ -43,21 +58,60 @@ class DailyReturnService
                 ->sortKeysDesc()
             as $date => $dateReturns
         ) {
-            $platformGroups = [];
-            foreach (
-                $dateReturns->groupBy(fn($r) => $r->salePlatform?->parent_id ?? ('r_' . $r->sale_platform_id))
-                as $gKey => $gReturns
-            ) {
-                $first     = $gReturns->first();
-                $isChild   = is_numeric($gKey);
-                $groupName = $isChild
-                    ? ($first->salePlatform?->parent?->name ?? '—')
-                    : ($first->salePlatform?->name ?? '—');
+            $rootGroupsMap = [];
+            $rootOrderList = [];
 
-                $platformGroups[] = [
-                    'groupName' => $groupName,
-                    'isChild'   => $isChild,
-                    'entries'   => $gReturns->values(),
+            foreach ($dateReturns as $ret) {
+                $plat = $ret->salePlatform;
+
+                // Build ancestor chain: [root, level-2?, leaf]  (index 0 = topmost)
+                $ancestors = [];
+                $cur = $plat;
+                while ($cur) {
+                    array_unshift($ancestors, $cur);
+                    $cur = $cur->parent ?? null;
+                }
+
+                $root = $ancestors[0] ?? null;
+                $mid  = count($ancestors) >= 3 ? $ancestors[1] : null;
+
+                $rootKey = $root ? ('r' . $root->id) : 'r_unknown';
+                $subKey  = $mid  ? ('s' . $mid->id)  : 'direct';
+
+                if (!isset($rootGroupsMap[$rootKey])) {
+                    $rootGroupsMap[$rootKey] = [
+                        'rootName' => $root?->name ?? '—',
+                        'subMap'   => [],
+                        'subOrder' => [],
+                    ];
+                    $rootOrderList[] = $rootKey;
+                }
+
+                if (!isset($rootGroupsMap[$rootKey]['subMap'][$subKey])) {
+                    $rootGroupsMap[$rootKey]['subMap'][$subKey] = [
+                        'subName' => $mid?->name,
+                        'entries' => [],
+                    ];
+                    $rootGroupsMap[$rootKey]['subOrder'][] = $subKey;
+                }
+
+                $rootGroupsMap[$rootKey]['subMap'][$subKey]['entries'][] = $ret;
+            }
+
+            $rootGroups = [];
+            foreach ($rootOrderList as $rk) {
+                $rg = $rootGroupsMap[$rk];
+                $subGroups = [];
+                foreach ($rg['subOrder'] as $sk) {
+                    $sg = $rg['subMap'][$sk];
+                    $subGroups[] = [
+                        'subName' => $sg['subName'],
+                        'entries' => collect($sg['entries']),
+                    ];
+                }
+                $rootGroups[] = [
+                    'rootName'  => $rg['rootName'],
+                    'subGroups' => $subGroups,
                 ];
             }
 
@@ -66,7 +120,7 @@ class DailyReturnService
                 'dateFormatted'  => \Carbon\Carbon::parse($date)->format('d M Y'),
                 'totalReturns'   => $dateReturns->sum('number_of_returns'),
                 'totalReturnQty' => $dateReturns->sum('number_of_return_quantities'),
-                'platformGroups' => $platformGroups,
+                'rootGroups'     => $rootGroups,
                 'entries'        => $dateReturns->values(),
             ];
         }

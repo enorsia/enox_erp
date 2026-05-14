@@ -13,40 +13,226 @@ class DailySaleSeeder extends Seeder
      */
     public function run(): void
     {
-        $sales = [
-            // Enorsia sub-channels (leaf nodes — raw data)
-            ['sale_platform_id' => 10, 'date' => '2025-01-15', 'spent' => 1200.00, 'sales' => 4800.00, 'number_of_orders' => 95,  'number_of_quantities' => 120, 'number_of_male_orders' => 40, 'number_of_female_orders' => 45, 'number_of_kids_orders' => 10, 'number_of_male_quantities' => 52, 'number_of_female_quantities' => 56, 'number_of_kids_quantities' => 12], // Google
-            ['sale_platform_id' => 11, 'date' => '2025-01-15', 'spent' => 850.00,  'sales' => 3200.00, 'number_of_orders' => 70,  'number_of_quantities' => 88,  'number_of_male_orders' => 28, 'number_of_female_orders' => 32, 'number_of_kids_orders' => 10, 'number_of_male_quantities' => 36, 'number_of_female_quantities' => 40, 'number_of_kids_quantities' => 12], // Meta
-            ['sale_platform_id' => 12, 'date' => '2025-01-15', 'spent' => 0.00,    'sales' => 1500.00, 'number_of_orders' => 40,  'number_of_quantities' => 50,  'number_of_male_orders' => 15, 'number_of_female_orders' => 20, 'number_of_kids_orders' => 5,  'number_of_male_quantities' => 19, 'number_of_female_quantities' => 25, 'number_of_kids_quantities' => 6],  // Klaviyo
-            ['sale_platform_id' => 13, 'date' => '2025-01-15', 'spent' => 300.00,  'sales' => 900.00,  'number_of_orders' => 20,  'number_of_quantities' => 25,  'number_of_male_orders' => 8,  'number_of_female_orders' => 10, 'number_of_kids_orders' => 2,  'number_of_male_quantities' => 10, 'number_of_female_quantities' => 13, 'number_of_kids_quantities' => 2],  // Influencer
-            ['sale_platform_id' => 14, 'date' => '2025-01-15', 'spent' => 0.00,    'sales' => 600.00,  'number_of_orders' => 15,  'number_of_quantities' => 18,  'number_of_male_orders' => 6,  'number_of_female_orders' => 7,  'number_of_kids_orders' => 2,  'number_of_male_quantities' => 7,  'number_of_female_quantities' => 9,  'number_of_kids_quantities' => 2],  // SEO
-            ['sale_platform_id' => 15, 'date' => '2025-01-15', 'spent' => 0.00,    'sales' => 400.00,  'number_of_orders' => 10,  'number_of_quantities' => 12,  'number_of_male_orders' => 4,  'number_of_female_orders' => 5,  'number_of_kids_orders' => 1,  'number_of_male_quantities' => 5,  'number_of_female_quantities' => 6,  'number_of_kids_quantities' => 1],  // Awin
-            ['sale_platform_id' => 16, 'date' => '2025-01-15', 'spent' => 0.00,    'sales' => 200.00,  'number_of_orders' => 5,   'number_of_quantities' => 6,   'number_of_male_orders' => 2,  'number_of_female_orders' => 2,  'number_of_kids_orders' => 1,  'number_of_male_quantities' => 2,  'number_of_female_quantities' => 3,  'number_of_kids_quantities' => 1],  // Others
-
-            // Debenhams (leaf node)
-            ['sale_platform_id' => 2,  'date' => '2025-01-15', 'spent' => 0.00,    'sales' => 2100.00, 'number_of_orders' => 55,  'number_of_quantities' => 68,  'number_of_male_orders' => 20, 'number_of_female_orders' => 25, 'number_of_kids_orders' => 10, 'number_of_male_quantities' => 26, 'number_of_female_quantities' => 30, 'number_of_kids_quantities' => 12],
-
-            // Amazon UK (leaf node)
-            ['sale_platform_id' => 20, 'date' => '2025-01-15', 'spent' => 500.00,  'sales' => 3800.00, 'number_of_orders' => 90,  'number_of_quantities' => 110, 'number_of_male_orders' => 35, 'number_of_female_orders' => 42, 'number_of_kids_orders' => 13, 'number_of_male_quantities' => 44, 'number_of_female_quantities' => 52, 'number_of_kids_quantities' => 14],
-
-            // Amazon EU countries (leaf nodes)
-            ['sale_platform_id' => 30, 'date' => '2025-01-15', 'spent' => 120.00,  'sales' => 980.00,  'number_of_orders' => 22,  'number_of_quantities' => 28,  'number_of_male_orders' => 9,  'number_of_female_orders' => 10, 'number_of_kids_orders' => 3,  'number_of_male_quantities' => 11, 'number_of_female_quantities' => 14, 'number_of_kids_quantities' => 3],  // Germany
-            ['sale_platform_id' => 31, 'date' => '2025-01-15', 'spent' => 80.00,   'sales' => 620.00,  'number_of_orders' => 14,  'number_of_quantities' => 18,  'number_of_male_orders' => 5,  'number_of_female_orders' => 7,  'number_of_kids_orders' => 2,  'number_of_male_quantities' => 6,  'number_of_female_quantities' => 9,  'number_of_kids_quantities' => 3],  // France
-            ['sale_platform_id' => 32, 'date' => '2025-01-15', 'spent' => 60.00,   'sales' => 480.00,  'number_of_orders' => 11,  'number_of_quantities' => 14,  'number_of_male_orders' => 4,  'number_of_female_orders' => 5,  'number_of_kids_orders' => 2,  'number_of_male_quantities' => 5,  'number_of_female_quantities' => 7,  'number_of_kids_quantities' => 2],  // Italy
-            ['sale_platform_id' => 33, 'date' => '2025-01-15', 'spent' => 55.00,   'sales' => 410.00,  'number_of_orders' => 10,  'number_of_quantities' => 13,  'number_of_male_orders' => 4,  'number_of_female_orders' => 4,  'number_of_kids_orders' => 2,  'number_of_male_quantities' => 5,  'number_of_female_quantities' => 6,  'number_of_kids_quantities' => 2],  // Spain
-            ['sale_platform_id' => 34, 'date' => '2025-01-15', 'spent' => 40.00,   'sales' => 290.00,  'number_of_orders' => 7,   'number_of_quantities' => 9,   'number_of_male_orders' => 3,  'number_of_female_orders' => 3,  'number_of_kids_orders' => 1,  'number_of_male_quantities' => 4,  'number_of_female_quantities' => 4,  'number_of_kids_quantities' => 1],  // Netherlands
-            ['sale_platform_id' => 35, 'date' => '2025-01-15', 'spent' => 30.00,   'sales' => 210.00,  'number_of_orders' => 5,   'number_of_quantities' => 6,   'number_of_male_orders' => 2,  'number_of_female_orders' => 2,  'number_of_kids_orders' => 1,  'number_of_male_quantities' => 2,  'number_of_female_quantities' => 3,  'number_of_kids_quantities' => 1],  // Poland
-            ['sale_platform_id' => 36, 'date' => '2025-01-15', 'spent' => 25.00,   'sales' => 180.00,  'number_of_orders' => 4,   'number_of_quantities' => 5,   'number_of_male_orders' => 2,  'number_of_female_orders' => 1,  'number_of_kids_orders' => 1,  'number_of_male_quantities' => 2,  'number_of_female_quantities' => 2,  'number_of_kids_quantities' => 1],  // Sweden
-            ['sale_platform_id' => 37, 'date' => '2025-01-15', 'spent' => 20.00,   'sales' => 150.00,  'number_of_orders' => 4,   'number_of_quantities' => 5,   'number_of_male_orders' => 1,  'number_of_female_orders' => 2,  'number_of_kids_orders' => 1,  'number_of_male_quantities' => 2,  'number_of_female_quantities' => 2,  'number_of_kids_quantities' => 1],  // Belgium
-            ['sale_platform_id' => 38, 'date' => '2025-01-15', 'spent' => 15.00,   'sales' => 110.00,  'number_of_orders' => 3,   'number_of_quantities' => 4,   'number_of_male_orders' => 1,  'number_of_female_orders' => 1,  'number_of_kids_orders' => 1,  'number_of_male_quantities' => 1,  'number_of_female_quantities' => 2,  'number_of_kids_quantities' => 1],  // Ireland
-
+        $platforms = [
+            // Enorsia sub-channels
+            ['id' => 10, 'name' => 'Google'],
+            ['id' => 11, 'name' => 'Meta'],
+            ['id' => 12, 'name' => 'Klaviyo'],
+            ['id' => 13, 'name' => 'Influencer'],
+            ['id' => 14, 'name' => 'SEO'],
+            ['id' => 15, 'name' => 'Awin'],
+            ['id' => 16, 'name' => 'Others'],
+            // Debenhams
+            ['id' => 2, 'name' => 'Debenhams'],
+            // Amazon UK
+            ['id' => 20, 'name' => 'Amazon UK'],
+            // Amazon EU countries
+            ['id' => 30, 'name' => 'Germany'],
+            ['id' => 31, 'name' => 'France'],
+            ['id' => 32, 'name' => 'Italy'],
+            ['id' => 33, 'name' => 'Spain'],
+            ['id' => 34, 'name' => 'Netherlands'],
+            ['id' => 35, 'name' => 'Poland'],
+            ['id' => 36, 'name' => 'Sweden'],
+            ['id' => 37, 'name' => 'Belgium'],
+            ['id' => 38, 'name' => 'Ireland'],
             // Other top-level channels
-            ['sale_platform_id' => 4,  'date' => '2025-01-15', 'spent' => 0.00,    'sales' => 750.00,  'number_of_orders' => 18,  'number_of_quantities' => 22,  'number_of_male_orders' => 7,  'number_of_female_orders' => 9,  'number_of_kids_orders' => 2,  'number_of_male_quantities' => 9,  'number_of_female_quantities' => 11, 'number_of_kids_quantities' => 2],  // Spartoo
-            ['sale_platform_id' => 5,  'date' => '2025-01-15', 'spent' => 0.00,    'sales' => 320.00,  'number_of_orders' => 8,   'number_of_quantities' => 10,  'number_of_male_orders' => 3,  'number_of_female_orders' => 4,  'number_of_kids_orders' => 1,  'number_of_male_quantities' => 4,  'number_of_female_quantities' => 5,  'number_of_kids_quantities' => 1],  // Temu
-            ['sale_platform_id' => 6,  'date' => '2025-01-15', 'spent' => 0.00,    'sales' => 540.00,  'number_of_orders' => 13,  'number_of_quantities' => 16,  'number_of_male_orders' => 5,  'number_of_female_orders' => 6,  'number_of_kids_orders' => 2,  'number_of_male_quantities' => 6,  'number_of_female_quantities' => 8,  'number_of_kids_quantities' => 2],  // Rackhams
+            ['id' => 4, 'name' => 'Spartoo'],
+            ['id' => 5, 'name' => 'Temu'],
+            ['id' => 6, 'name' => 'Rackhams'],
         ];
 
-        foreach ($sales as $sale) {
+        // April has 30 days
+        $dates = [];
+        for ($day = 1; $day <= 30; $day++) {
+            $dates[] = '2026-04-' . str_pad($day, 2, '0', STR_PAD_LEFT);
+        }
+
+        $allSales = []; // Changed from $sales to $allSales
+
+        foreach ($platforms as $platform) {
+            foreach ($dates as $date) {
+                // Weekday vs weekend pattern (higher sales on weekends)
+                $dayOfWeek = date('N', strtotime($date));
+                $isWeekend = ($dayOfWeek >= 6);
+                $weekendMultiplier = $isWeekend ? 1.4 : 1.0;
+
+                // Random factor for daily variation
+                $dailyVariation = rand(70, 130) / 100;
+
+                // Platform-specific base values
+                switch ($platform['id']) {
+                    case 10: // Google
+                        $spent = round(rand(800, 1500) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(3500, 5500) * $weekendMultiplier * $dailyVariation, 2); // Renamed variable
+                        $orders = rand(70, 110);
+                        $quantities = rand(85, 140);
+                        break;
+                    case 11: // Meta
+                        $spent = round(rand(600, 1100) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(2500, 4200) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(55, 90);
+                        $quantities = rand(70, 110);
+                        break;
+                    case 12: // Klaviyo
+                        $spent = 0;
+                        $salesAmount = round(rand(1000, 2200) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(30, 55);
+                        $quantities = rand(40, 70);
+                        break;
+                    case 13: // Influencer
+                        $spent = round(rand(200, 500) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(600, 1300) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(15, 30);
+                        $quantities = rand(20, 40);
+                        break;
+                    case 14: // SEO
+                        $spent = 0;
+                        $salesAmount = round(rand(400, 900) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(10, 22);
+                        $quantities = rand(14, 30);
+                        break;
+                    case 15: // Awin
+                        $spent = 0;
+                        $salesAmount = round(rand(250, 600) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(6, 15);
+                        $quantities = rand(8, 20);
+                        break;
+                    case 16: // Others
+                        $spent = 0;
+                        $salesAmount = round(rand(100, 350) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(3, 10);
+                        $quantities = rand(4, 14);
+                        break;
+                    case 2: // Debenhams
+                        $spent = 0;
+                        $salesAmount = round(rand(1400, 2800) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(40, 70);
+                        $quantities = rand(50, 85);
+                        break;
+                    case 20: // Amazon UK
+                        $spent = round(rand(300, 700) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(2800, 4800) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(65, 105);
+                        $quantities = rand(80, 130);
+                        break;
+                    case 30: // Germany
+                        $spent = round(rand(80, 160) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(700, 1300) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(16, 30);
+                        $quantities = rand(20, 38);
+                        break;
+                    case 31: // France
+                        $spent = round(rand(50, 110) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(450, 850) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(10, 22);
+                        $quantities = rand(14, 28);
+                        break;
+                    case 32: // Italy
+                        $spent = round(rand(40, 90) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(350, 700) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(8, 18);
+                        $quantities = rand(10, 24);
+                        break;
+                    case 33: // Spain
+                        $spent = round(rand(35, 80) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(300, 600) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(7, 16);
+                        $quantities = rand(9, 20);
+                        break;
+                    case 34: // Netherlands
+                        $spent = round(rand(25, 60) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(200, 420) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(5, 12);
+                        $quantities = rand(6, 15);
+                        break;
+                    case 35: // Poland
+                        $spent = round(rand(20, 50) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(150, 320) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(4, 10);
+                        $quantities = rand(5, 12);
+                        break;
+                    case 36: // Sweden
+                        $spent = round(rand(15, 40) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(120, 260) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(3, 8);
+                        $quantities = rand(4, 10);
+                        break;
+                    case 37: // Belgium
+                        $spent = round(rand(12, 35) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(100, 220) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(3, 7);
+                        $quantities = rand(4, 9);
+                        break;
+                    case 38: // Ireland
+                        $spent = round(rand(10, 30) * $weekendMultiplier * $dailyVariation, 2);
+                        $salesAmount = round(rand(80, 180) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(2, 6);
+                        $quantities = rand(3, 8);
+                        break;
+                    case 4: // Spartoo
+                        $spent = 0;
+                        $salesAmount = round(rand(500, 1000) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(12, 25);
+                        $quantities = rand(16, 32);
+                        break;
+                    case 5: // Temu
+                        $spent = 0;
+                        $salesAmount = round(rand(200, 500) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(5, 14);
+                        $quantities = rand(7, 18);
+                        break;
+                    case 6: // Rackhams
+                        $spent = 0;
+                        $salesAmount = round(rand(350, 750) * $weekendMultiplier * $dailyVariation, 2);
+                        $orders = rand(9, 20);
+                        $quantities = rand(12, 26);
+                        break;
+                    default:
+                        continue 2;
+                }
+
+                // Calculate gender splits (percentage based on platform)
+                $malePercent = match($platform['id']) {
+                    10, 11, 30, 31, 32, 33, 34, 35, 36, 37, 38 => rand(40, 55),
+                    20 => rand(45, 60),
+                    2, 4 => rand(30, 45),
+                    5, 6 => rand(35, 50),
+                    default => rand(40, 55),
+                };
+
+                $femalePercent = rand(30, 45);
+                $kidsPercent = 100 - ($malePercent + $femalePercent);
+
+                $maleOrders = round($orders * ($malePercent / 100));
+                $femaleOrders = round($orders * ($femalePercent / 100));
+                $kidsOrders = $orders - ($maleOrders + $femaleOrders);
+
+                $maleQuantities = round($quantities * ($malePercent / 100));
+                $femaleQuantities = round($quantities * ($femalePercent / 100));
+                $kidsQuantities = $quantities - ($maleQuantities + $femaleQuantities);
+
+                $allSales[] = [ // Changed from $sales to $allSales
+                    'sale_platform_id' => $platform['id'],
+                    'date' => $date,
+                    'spent' => $spent,
+                    'sales' => $salesAmount, // Changed from $sales to $salesAmount
+                    'number_of_orders' => $orders,
+                    'number_of_quantities' => $quantities,
+                    'number_of_male_orders' => $maleOrders,
+                    'number_of_female_orders' => $femaleOrders,
+                    'number_of_kids_orders' => $kidsOrders,
+                    'number_of_male_quantities' => $maleQuantities,
+                    'number_of_female_quantities' => $femaleQuantities,
+                    'number_of_kids_quantities' => $kidsQuantities,
+                ];
+            }
+        }
+
+        // Shuffle for variety but keep data integrity
+        shuffle($allSales);
+
+        foreach ($allSales as $sale) {
             DailySale::updateOrCreate(
                 ['sale_platform_id' => $sale['sale_platform_id'], 'date' => $sale['date']],
                 $sale
@@ -54,4 +240,3 @@ class DailySaleSeeder extends Seeder
         }
     }
 }
-

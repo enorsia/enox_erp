@@ -14,27 +14,40 @@ class DailySaleService
      */
     public function getList(array $filters): LengthAwarePaginator
     {
-        return DailySale::with(['salePlatform.parent'])
-            // Join 3 levels to order by platform hierarchy (same sequence as SalePlatformExport)
-            ->join('sale_platforms as sp',   'sp.id',   '=', 'daily_sales.sale_platform_id')
-            ->leftJoin('sale_platforms as sp_p', 'sp_p.id', '=', 'sp.parent_id')
-            ->leftJoin('sale_platforms as sp_g', 'sp_g.id', '=', 'sp_p.parent_id')
+        return DailySale::with(['salePlatform.parent.parent'])
+            // Join 3 levels to allow platform-hierarchy ordering within each date
+            ->join('sale_platforms as sp',       'sp.id',     '=', 'daily_sales.sale_platform_id')
+            ->leftJoin('sale_platforms as sp_p', 'sp_p.id',   '=', 'sp.parent_id')
+            ->leftJoin('sale_platforms as sp_g', 'sp_g.id',   '=', 'sp_p.parent_id')
             ->select('daily_sales.*')
             ->filter($filters)
-            // Root-level sort_order first → keeps all children of the same parent together
+            // PRIMARY: date DESC — keeps all records for the same date together for pagination
+            ->orderByDesc('daily_sales.date')
+            // SECONDARY: platform hierarchy order within each date
             ->orderByRaw('COALESCE(sp_g.sort_order, sp_p.sort_order, sp.sort_order)')
             ->orderByRaw('COALESCE(sp_p.sort_order, sp.sort_order, 0)')
             ->orderBy('sp.sort_order')
-            ->orderByDesc('daily_sales.date')
             ->orderByDesc('daily_sales.id')
-            ->paginate(20)
+            ->paginate(30)
             ->withQueryString();
     }
 
     /**
      * Build date-wise view groups for the index page.
-     * Entries within each date are sub-grouped by their parent platform so the
-     * blade can show clear hierarchy without any logic.
+     *
+     * Structure returned:
+     *   dateGroups[]
+     *     date / dateFormatted / totals / entries (for edit-btn)
+     *     rootGroups[]
+     *       rootName  — level-1 (root) platform name
+     *       subGroups[]
+     *         subName  — level-2 platform name, or NULL when entries are root/level-2 owned
+     *         entries  — Collection of DailySale models
+     *
+     * Hierarchy rule:
+     *   • Record at depth 0 (root)   → rootGroup only,  subName = null
+     *   • Record at depth 1 (mid)    → rootGroup only,  subName = null
+     *   • Record at depth 2+ (leaf)  → rootGroup + subGroup, subName = level-2 name
      */
     public function buildDateViewGroups(\Illuminate\Contracts\Pagination\LengthAwarePaginator $paginator): array
     {
@@ -46,34 +59,74 @@ class DailySaleService
                 ->sortKeysDesc()
             as $date => $dateSales
         ) {
-            // Group each date's entries by their parent platform (or own if root)
-            $platformGroups = [];
-            foreach (
-                $dateSales->groupBy(fn($s) => $s->salePlatform?->parent_id ?? ('r_' . $s->sale_platform_id))
-                as $gKey => $gSales
-            ) {
-                $first     = $gSales->first();
-                $isChild   = is_numeric($gKey);
-                $groupName = $isChild
-                    ? ($first->salePlatform?->parent?->name ?? '—')
-                    : ($first->salePlatform?->name ?? '—');
+            $rootGroupsMap = [];  // [rootKey => ['rootName', 'subMap' => [subKey => [...]], 'subOrder' => []]]
+            $rootOrderList = [];  // preserves first-seen order
 
-                $platformGroups[] = [
-                    'groupName' => $groupName,
-                    'isChild'   => $isChild,
-                    'entries'   => $gSales->values(),
+            foreach ($dateSales as $sale) {
+                $plat = $sale->salePlatform;
+
+                // Build ancestor chain: [root, level-2?, level-3?]  (index 0 = topmost)
+                $ancestors = [];
+                $cur = $plat;
+                while ($cur) {
+                    array_unshift($ancestors, $cur);
+                    $cur = $cur->parent ?? null;
+                }
+
+                $root = $ancestors[0] ?? null;
+                // Mid-group only if depth >= 2 (i.e. there are ≥3 ancestors: root, mid, leaf)
+                $mid  = count($ancestors) >= 3 ? $ancestors[1] : null;
+
+                $rootKey = $root ? ('r' . $root->id) : 'r_unknown';
+                $subKey  = $mid  ? ('s' . $mid->id)  : 'direct';
+
+                if (!isset($rootGroupsMap[$rootKey])) {
+                    $rootGroupsMap[$rootKey] = [
+                        'rootName' => $root?->name ?? '—',
+                        'subMap'   => [],
+                        'subOrder' => [],
+                    ];
+                    $rootOrderList[] = $rootKey;
+                }
+
+                if (!isset($rootGroupsMap[$rootKey]['subMap'][$subKey])) {
+                    $rootGroupsMap[$rootKey]['subMap'][$subKey] = [
+                        'subName' => $mid?->name,   // null → no sub-header rendered
+                        'entries' => [],
+                    ];
+                    $rootGroupsMap[$rootKey]['subOrder'][] = $subKey;
+                }
+
+                $rootGroupsMap[$rootKey]['subMap'][$subKey]['entries'][] = $sale;
+            }
+
+            // Flatten to plain indexed arrays so the blade needs zero PHP logic
+            $rootGroups = [];
+            foreach ($rootOrderList as $rk) {
+                $rg = $rootGroupsMap[$rk];
+                $subGroups = [];
+                foreach ($rg['subOrder'] as $sk) {
+                    $sg = $rg['subMap'][$sk];
+                    $subGroups[] = [
+                        'subName' => $sg['subName'],
+                        'entries' => collect($sg['entries']),
+                    ];
+                }
+                $rootGroups[] = [
+                    'rootName'  => $rg['rootName'],
+                    'subGroups' => $subGroups,
                 ];
             }
 
             $dateGroups[] = [
-                'date'           => $date,
-                'dateFormatted'  => \Carbon\Carbon::parse($date)->format('d M Y'),
-                'totalSales'     => $dateSales->sum('sales'),
-                'totalSpent'     => $dateSales->sum('spent'),
-                'totalOrders'    => $dateSales->sum('number_of_orders'),
-                'totalQty'       => $dateSales->sum('number_of_quantities'),
-                'platformGroups' => $platformGroups,
-                'entries'        => $dateSales->values(),   // kept for edit button
+                'date'          => $date,
+                'dateFormatted' => \Carbon\Carbon::parse($date)->format('d M Y'),
+                'totalSales'    => $dateSales->sum('sales'),
+                'totalSpent'    => $dateSales->sum('spent'),
+                'totalOrders'   => $dateSales->sum('number_of_orders'),
+                'totalQty'      => $dateSales->sum('number_of_quantities'),
+                'rootGroups'    => $rootGroups,
+                'entries'       => $dateSales->values(),   // kept for Edit Date button
             ];
         }
 

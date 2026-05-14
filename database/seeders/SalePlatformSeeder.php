@@ -15,9 +15,9 @@ class SalePlatformSeeder extends Seeder
     {
         $platforms = [
             // Top-level channels
-            ['id' => 1,  'name' => 'Enorsia',     'slug' => 'enorsia',            'parent_id' => null, 'type' => 'channel',     'sort_order' => 1, 'is_spent' => true, 'is_sales' => true, 'allows_direct_entry' => true],
+            ['id' => 1,  'name' => 'Enorsia',     'slug' => 'enorsia',            'parent_id' => null, 'type' => 'channel',     'sort_order' => 1, 'is_spent' => true, 'is_sales' => true, 'allows_direct_entry' => false],
             ['id' => 2,  'name' => 'Debenhams',   'slug' => 'debenhams',          'parent_id' => null, 'type' => 'channel',     'sort_order' => 2, 'is_spent' => true, 'is_sales' => true, 'allows_direct_entry' => true],
-            ['id' => 3,  'name' => 'Amazon',      'slug' => 'amazon',             'parent_id' => null, 'type' => 'channel',     'sort_order' => 3, 'is_spent' => true, 'is_sales' => true, 'allows_direct_entry' => true],
+            ['id' => 3,  'name' => 'Amazon',      'slug' => 'amazon',             'parent_id' => null, 'type' => 'channel',     'sort_order' => 3, 'is_spent' => true, 'is_sales' => true, 'allows_direct_entry' => false],
             ['id' => 4,  'name' => 'Spartoo',     'slug' => 'spartoo',            'parent_id' => null, 'type' => 'channel',     'sort_order' => 4, 'is_spent' => true, 'is_sales' => true, 'allows_direct_entry' => true],
             ['id' => 5,  'name' => 'Temu',        'slug' => 'temu',               'parent_id' => null, 'type' => 'channel',     'sort_order' => 5, 'is_spent' => true, 'is_sales' => true, 'allows_direct_entry' => true],
             ['id' => 6,  'name' => 'Rackhams',    'slug' => 'rackhams',           'parent_id' => null, 'type' => 'channel',     'sort_order' => 6, 'is_spent' => true, 'is_sales' => true, 'allows_direct_entry' => true],
