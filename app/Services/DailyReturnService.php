@@ -30,80 +30,140 @@ class DailyReturnService
     }
 
     /**
-     * Build grouped view data (year → month → platform) with pre-computed totals.
-     * All heavy aggregation is done here so the blade template remains logic-free.
+     * Build date-wise view groups for the index page.
+     * Entries within each date are sub-grouped by their parent platform.
      */
-    public function buildViewGroups(\Illuminate\Contracts\Pagination\LengthAwarePaginator $paginator, array $salePlatforms): array
+    public function buildDateViewGroups(\Illuminate\Contracts\Pagination\LengthAwarePaginator $paginator): array
     {
-        $monthsMap = config('constants.months', [
-            1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',
-            7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December',
-        ]);
+        $dateGroups = [];
 
-        $platformLookup = collect($salePlatforms)->keyBy('id');
+        foreach (
+            $paginator->getCollection()
+                ->groupBy(fn($r) => optional($r->date)->format('Y-m-d') ?? '')
+                ->sortKeysDesc()
+            as $date => $dateReturns
+        ) {
+            $platformGroups = [];
+            foreach (
+                $dateReturns->groupBy(fn($r) => $r->salePlatform?->parent_id ?? ('r_' . $r->sale_platform_id))
+                as $gKey => $gReturns
+            ) {
+                $first     = $gReturns->first();
+                $isChild   = is_numeric($gKey);
+                $groupName = $isChild
+                    ? ($first->salePlatform?->parent?->name ?? '—')
+                    : ($first->salePlatform?->name ?? '—');
 
-        // DFS position index built from the already-sorted getParentOptions output
-        $platformDfsIndex = array_flip(array_column($salePlatforms, 'id'));
-
-        $allReturns = $paginator->getCollection();
-        $yearGroups = [];
-
-        foreach ($allReturns->groupBy(fn($r) => optional($r->date)->year ?? 0)->sortKeysDesc() as $year => $yearReturns) {
-            $monthGroups = [];
-
-            foreach ($yearReturns->sortBy('date')->groupBy(fn($r) => optional($r->date)->month ?? 0)->sortKeys() as $monthNum => $monthReturns) {
-                $platformGroups = [];
-
-                foreach ($monthReturns->groupBy(fn($r) => $r->salePlatform?->parent_id ?? ('p'.$r->sale_platform_id)) as $groupKey => $groupReturns) {
-                    $parentId = is_numeric($groupKey) ? (int) $groupKey : null;
-
-                    // Use parent's DFS index for groups, own index for standalone roots
-                    $representativeId = $parentId ?? $groupReturns->first()->sale_platform_id;
-                    $dfsIndex         = $platformDfsIndex[$representativeId] ?? PHP_INT_MAX;
-
-                    $platformGroups[] = [
-                        '_dfsIndex'      => $dfsIndex,
-                        'headerName'     => $parentId
-                            ? ($platformLookup->get($parentId, [])['name'] ?? '—')
-                            : ($groupReturns->first()->salePlatform?->name ?? '—'),
-                        'parentPlatform' => $parentId ? $platformLookup->get($parentId) : null,
-                        'returns'        => $groupReturns
-                            // Sort child platforms within a group by their DFS order
-                            ->sortBy(fn($r) => $platformDfsIndex[$r->sale_platform_id] ?? PHP_INT_MAX)
-                            ->map(function ($return) {
-                                // Pre-compute all boolean flags so blade stays logic-free
-                                $return->hasGenderBreakdown = (
-                                    ($return->number_of_male_returns   ?? 0) +
-                                    ($return->number_of_female_returns ?? 0) +
-                                    ($return->number_of_kids_returns   ?? 0)
-                                ) > 0;
-                                return $return;
-                            }),
-                    ];
-                }
-
-                // Sort platform groups by DFS order (same sequence as SalePlatformExport)
-                usort($platformGroups, fn($a, $b) => $a['_dfsIndex'] <=> $b['_dfsIndex']);
-                foreach ($platformGroups as &$pg) { unset($pg['_dfsIndex']); }
-                unset($pg);
-
-                $monthGroups[] = [
-                    'monthNum'          => $monthNum,
-                    'monthName'         => $monthsMap[$monthNum] ?? (string) $monthNum,
-                    'year'              => $year,
-                    'monthTotalReturns' => $monthReturns->sum('number_of_returns'),
-                    'platformGroups'    => $platformGroups,
+                $platformGroups[] = [
+                    'groupName' => $groupName,
+                    'isChild'   => $isChild,
+                    'entries'   => $gReturns->values(),
                 ];
             }
 
-            $yearGroups[] = [
-                'year'             => $year,
-                'yearTotalReturns' => $yearReturns->sum('number_of_returns'),
-                'monthGroups'      => $monthGroups,
+            $dateGroups[] = [
+                'date'           => $date,
+                'dateFormatted'  => \Carbon\Carbon::parse($date)->format('d M Y'),
+                'totalReturns'   => $dateReturns->sum('number_of_returns'),
+                'totalReturnQty' => $dateReturns->sum('number_of_return_quantities'),
+                'platformGroups' => $platformGroups,
+                'entries'        => $dateReturns->values(),
             ];
         }
 
-        return $yearGroups;
+        return $dateGroups;
+    }
+
+    /**
+     * Load all daily return records for a specific date.
+     */
+    public function getByDate(string $date): \Illuminate\Database\Eloquent\Collection
+    {
+        return DailyReturn::with(['salePlatform', 'returnReasonType'])
+            ->whereDate('date', $date)
+            ->get();
+    }
+
+    /**
+     * Validation rules for bulk creation via the entries[] array.
+     */
+    public function bulkStoreRules(): array
+    {
+        return [
+            'date'                                          => 'required|date',
+            'entries'                                       => 'required|array|min:1',
+            'entries.*.sale_platform_id'                   => 'required|exists:sale_platforms,id',
+            'entries.*.return_reason_type_id'              => 'required|exists:return_reason_types,id',
+            'entries.*.number_of_returns'                  => 'required|integer|min:0',
+            'entries.*.number_of_return_quantities'        => 'required|integer|min:0',
+            'entries.*.number_of_male_returns'             => 'nullable|integer|min:0',
+            'entries.*.number_of_female_returns'           => 'nullable|integer|min:0',
+            'entries.*.number_of_kids_returns'             => 'nullable|integer|min:0',
+            'entries.*.number_of_male_return_quantities'   => 'nullable|integer|min:0',
+            'entries.*.number_of_female_return_quantities' => 'nullable|integer|min:0',
+            'entries.*.number_of_kids_return_quantities'   => 'nullable|integer|min:0',
+        ];
+    }
+
+    /**
+     * Validation rules for bulk update via the entries[] array.
+     */
+    public function bulkUpdateRules(): array
+    {
+        return [
+            'date'                                          => 'required|date',
+            'entries'                                       => 'present|array',
+            'entries.*.sale_platform_id'                   => 'required_with:entries|exists:sale_platforms,id',
+            'entries.*.return_reason_type_id'              => 'required_with:entries|exists:return_reason_types,id',
+            'entries.*.number_of_returns'                  => 'required_with:entries|integer|min:0',
+            'entries.*.number_of_return_quantities'        => 'required_with:entries|integer|min:0',
+            'entries.*.number_of_male_returns'             => 'nullable|integer|min:0',
+            'entries.*.number_of_female_returns'           => 'nullable|integer|min:0',
+            'entries.*.number_of_kids_returns'             => 'nullable|integer|min:0',
+            'entries.*.number_of_male_return_quantities'   => 'nullable|integer|min:0',
+            'entries.*.number_of_female_return_quantities' => 'nullable|integer|min:0',
+            'entries.*.number_of_kids_return_quantities'   => 'nullable|integer|min:0',
+        ];
+    }
+
+    /**
+     * Bulk-create daily return records for a given date.
+     */
+    public function bulkCreate(string $date, array $entries): array
+    {
+        $created = [];
+        foreach ($entries as $entry) {
+            $entry['date'] = $date;
+            $created[]     = DailyReturn::create($this->normaliseNullables($entry));
+        }
+        return $created;
+    }
+
+    /**
+     * Sync all entries for a date:
+     *  – Delete records whose IDs appear in $deleteIds.
+     *  – Update records that have an 'id' key.
+     *  – Create records that have no 'id' key.
+     */
+    public function syncForDate(string $date, array $entries, array $deleteIds = []): void
+    {
+        if (!empty($deleteIds)) {
+            DailyReturn::where('date', $date)->whereIn('id', $deleteIds)->delete();
+        }
+
+        foreach ($entries as $entry) {
+            $entry['date'] = $date;
+            $data          = $this->normaliseNullables($entry);
+
+            if (!empty($data['id'])) {
+                $id = (int) $data['id'];
+                unset($data['id']);
+                DailyReturn::where('id', $id)->where('date', $date)->update($data);
+            } else {
+                unset($data['id']);
+                DailyReturn::create($data);
+            }
+        }
     }
 
     /**
