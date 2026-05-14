@@ -14,7 +14,7 @@ class DailySaleService
      */
     public function getList(array $filters): LengthAwarePaginator
     {
-        return DailySale::with(['salePlatform'])
+        return DailySale::with(['salePlatform.parent'])
             // Join 3 levels to order by platform hierarchy (same sequence as SalePlatformExport)
             ->join('sale_platforms as sp',   'sp.id',   '=', 'daily_sales.sale_platform_id')
             ->leftJoin('sale_platforms as sp_p', 'sp_p.id', '=', 'sp.parent_id')
@@ -29,6 +29,55 @@ class DailySaleService
             ->orderByDesc('daily_sales.id')
             ->paginate(20)
             ->withQueryString();
+    }
+
+    /**
+     * Build date-wise view groups for the index page.
+     * Entries within each date are sub-grouped by their parent platform so the
+     * blade can show clear hierarchy without any logic.
+     */
+    public function buildDateViewGroups(\Illuminate\Contracts\Pagination\LengthAwarePaginator $paginator): array
+    {
+        $dateGroups = [];
+
+        foreach (
+            $paginator->getCollection()
+                ->groupBy(fn($s) => optional($s->date)->format('Y-m-d') ?? '')
+                ->sortKeysDesc()
+            as $date => $dateSales
+        ) {
+            // Group each date's entries by their parent platform (or own if root)
+            $platformGroups = [];
+            foreach (
+                $dateSales->groupBy(fn($s) => $s->salePlatform?->parent_id ?? ('r_' . $s->sale_platform_id))
+                as $gKey => $gSales
+            ) {
+                $first     = $gSales->first();
+                $isChild   = is_numeric($gKey);
+                $groupName = $isChild
+                    ? ($first->salePlatform?->parent?->name ?? '—')
+                    : ($first->salePlatform?->name ?? '—');
+
+                $platformGroups[] = [
+                    'groupName' => $groupName,
+                    'isChild'   => $isChild,
+                    'entries'   => $gSales->values(),
+                ];
+            }
+
+            $dateGroups[] = [
+                'date'           => $date,
+                'dateFormatted'  => \Carbon\Carbon::parse($date)->format('d M Y'),
+                'totalSales'     => $dateSales->sum('sales'),
+                'totalSpent'     => $dateSales->sum('spent'),
+                'totalOrders'    => $dateSales->sum('number_of_orders'),
+                'totalQty'       => $dateSales->sum('number_of_quantities'),
+                'platformGroups' => $platformGroups,
+                'entries'        => $dateSales->values(),   // kept for edit button
+            ];
+        }
+
+        return $dateGroups;
     }
 
     /**
@@ -123,7 +172,7 @@ class DailySaleService
     }
 
     /**
-     * Validation rules for creating a daily sale.
+     * Validation rules for creating a daily sale (single record).
      */
     public function storeRules(): array
     {
@@ -140,6 +189,50 @@ class DailySaleService
             'number_of_male_quantities'  => 'nullable|integer|min:0',
             'number_of_female_quantities'=> 'nullable|integer|min:0',
             'number_of_kids_quantities'  => 'nullable|integer|min:0',
+        ];
+    }
+
+    /**
+     * Validation rules for bulk creation via the entries[] array.
+     */
+    public function bulkStoreRules(): array
+    {
+        return [
+            'date'                                    => 'required|date',
+            'entries'                                 => 'required|array|min:1',
+            'entries.*.sale_platform_id'              => 'required|exists:sale_platforms,id',
+            'entries.*.spent'                         => 'required|numeric|min:0',
+            'entries.*.sales'                         => 'required|numeric|min:0',
+            'entries.*.number_of_orders'              => 'required|numeric|min:0',
+            'entries.*.number_of_quantities'          => 'required|numeric|min:0',
+            'entries.*.number_of_male_orders'         => 'nullable|numeric|min:0',
+            'entries.*.number_of_female_orders'       => 'nullable|numeric|min:0',
+            'entries.*.number_of_kids_orders'         => 'nullable|numeric|min:0',
+            'entries.*.number_of_male_quantities'     => 'nullable|numeric|min:0',
+            'entries.*.number_of_female_quantities'   => 'nullable|numeric|min:0',
+            'entries.*.number_of_kids_quantities'     => 'nullable|numeric|min:0',
+        ];
+    }
+
+    /**
+     * Validation rules for bulk update via the entries[] array.
+     */
+    public function bulkUpdateRules(): array
+    {
+        return [
+            'date'                                    => 'required|date',
+            'entries'                                 => 'present|array',
+            'entries.*.sale_platform_id'              => 'required_with:entries|exists:sale_platforms,id',
+            'entries.*.spent'                         => 'required_with:entries|numeric|min:0',
+            'entries.*.sales'                         => 'required_with:entries|numeric|min:0',
+            'entries.*.number_of_orders'              => 'required_with:entries|numeric|min:0',
+            'entries.*.number_of_quantities'          => 'required_with:entries|numeric|min:0',
+            'entries.*.number_of_male_orders'         => 'nullable|numeric|min:0',
+            'entries.*.number_of_female_orders'       => 'nullable|numeric|min:0',
+            'entries.*.number_of_kids_orders'         => 'nullable|numeric|min:0',
+            'entries.*.number_of_male_quantities'     => 'nullable|numeric|min:0',
+            'entries.*.number_of_female_quantities'   => 'nullable|numeric|min:0',
+            'entries.*.number_of_kids_quantities'     => 'nullable|numeric|min:0',
         ];
     }
 
@@ -172,6 +265,63 @@ class DailySaleService
     }
 
     /**
+     * Bulk-create daily sale records for a given date.
+     * Returns the list of created models.
+     */
+    public function bulkCreate(string $date, array $entries): array
+    {
+        $created = [];
+        foreach ($entries as $entry) {
+            $entry['date'] = $date;
+            $created[]     = DailySale::create($this->normaliseNullables($entry));
+        }
+        return $created;
+    }
+
+    /**
+     * Load all daily sale records for a specific date (with salePlatform relation).
+     */
+    public function getByDate(string $date): \Illuminate\Database\Eloquent\Collection
+    {
+        return DailySale::with('salePlatform')
+            ->whereDate('date', $date)
+            ->get();
+    }
+
+    /**
+     * Sync all entries for a date:
+     *  – Delete records whose IDs appear in $deleteIds.
+     *  – Update records that have an 'id' key.
+     *  – Create (or update on conflict) records that have no 'id' key.
+     */
+    public function syncForDate(string $date, array $entries, array $deleteIds = []): void
+    {
+        if (!empty($deleteIds)) {
+            DailySale::where('date', $date)->whereIn('id', $deleteIds)->delete();
+        }
+
+        foreach ($entries as $entry) {
+            $entry['date'] = $date;
+            $data          = $this->normaliseNullables($entry);
+
+            if (!empty($data['id'])) {
+                $id   = (int) $data['id'];
+                unset($data['id']);
+                DailySale::where('id', $id)->where('date', $date)->update($data);
+            } else {
+                // Use updateOrCreate so a race condition or missed delete never
+                // causes a hard DB duplicate-key error; it just overwrites silently.
+                $platId = $data['sale_platform_id'];
+                unset($data['id']);
+                DailySale::updateOrCreate(
+                    ['sale_platform_id' => $platId, 'date' => $date],
+                    $data
+                );
+            }
+        }
+    }
+
+    /**
      * Update an existing daily sale record.
      */
     public function update(DailySale $dailySale, array $validated): DailySale
@@ -192,6 +342,19 @@ class DailySaleService
 
     private function normaliseNullables(array $data): array
     {
+        // Cast integer fields (form may submit "5.0" etc.)
+        $intFields = [
+            'number_of_orders', 'number_of_quantities',
+            'number_of_male_orders', 'number_of_female_orders', 'number_of_kids_orders',
+            'number_of_male_quantities', 'number_of_female_quantities', 'number_of_kids_quantities',
+        ];
+        foreach ($intFields as $field) {
+            if (isset($data[$field]) && $data[$field] !== '' && $data[$field] !== null) {
+                $data[$field] = (int) $data[$field];
+            }
+        }
+
+        // Nullable int fields default to 0
         $nullableInts = [
             'number_of_male_orders', 'number_of_female_orders', 'number_of_kids_orders',
             'number_of_male_quantities', 'number_of_female_quantities', 'number_of_kids_quantities',

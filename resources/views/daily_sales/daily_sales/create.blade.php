@@ -38,7 +38,7 @@
                            value="{{ old('date', date('Y-m-d')) }}" required />
                     @error('date') <p class="f-error">{{ $message }}</p> @enderror
                 </div>
-                <p class="text-xs text-slate-400 dark:text-slate-500 pb-1.5">
+                <p class="text-xs text-slate-400 dark:text-slate-500 pb-1.5" id="date-platform-hint">
                     All platform entries below will be saved for this date.
                 </p>
             </div>
@@ -89,138 +89,13 @@
 
 @push('js')
 <script>
-(function () {
-    var platforms  = @json($salePlatforms);
-    var oldEntries = @json(array_values(old('entries', [])));
-    var rowIndex   = 0;
-    var tomMap     = {};
-
-    function makeSelect(name, selectedId) {
-        var sel      = document.createElement('select');
-        sel.name     = name;
-        sel.required = true;
-        sel.className = 'w-full';
-        var blank       = document.createElement('option');
-        blank.value     = '';
-        blank.textContent = 'Select platform';
-        sel.appendChild(blank);
-        platforms.forEach(function (p) {
-            var opt       = document.createElement('option');
-            opt.value     = p.id;
-            opt.textContent = p.label;
-            if (String(p.id) === String(selectedId)) { opt.selected = true; }
-            sel.appendChild(opt);
-        });
-        return sel;
-    }
-
-    function makeNum(name, val, req, step) {
-        var el     = document.createElement('input');
-        el.type    = 'number';
-        el.name    = name;
-        el.min     = '0';
-        el.className = 'tbl-input w-full';
-        if (step) { el.step = step; el.placeholder = '0.00'; } else { el.placeholder = '0'; }
-        if (req)  { el.required = true; }
-        el.value = (val !== null && val !== undefined && val !== '') ? val : (req ? '0' : '');
-        return el;
-    }
-
-    function updateCount() {
-        var n  = document.querySelectorAll('#entries-container .ds-entry-row').length;
-        var el = document.getElementById('row-count-label');
-        if (el) { el.textContent = n > 1 ? n + ' entries' : ''; }
-    }
-
-    function createRow(data, idx) {
-        data = data || {};
-
-        var row      = document.createElement('div');
-        row.className = 'ds-entry-row section-card !p-2.5 !mb-2';
-
-        var outer     = document.createElement('div');
-        outer.className = 'flex flex-col xl:flex-row xl:items-start gap-2';
-
-        /* Platform */
-        var platWrap      = document.createElement('div');
-        platWrap.className = 'xl:shrink-0 xl:w-[220px]';
-        var platLbl        = document.createElement('label');
-        platLbl.className  = 'f-label text-[11px] xl:hidden !text-[11px]';
-        platLbl.textContent = 'Platform *';
-        platWrap.appendChild(platLbl);
-        var selectEl = makeSelect('entries[' + idx + '][sale_platform_id]', data.sale_platform_id || '');
-        platWrap.appendChild(selectEl);
-        outer.appendChild(platWrap);
-
-        /* Numeric grid */
-        var numGrid      = document.createElement('div');
-        numGrid.className = 'flex-1 grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10 gap-2';
-
-        var fields = [
-            { label: 'Spent *',   key: 'spent',                       req: true,  step: '0.01' },
-            { label: 'Sales *',   key: 'sales',                       req: true,  step: '0.01' },
-            { label: 'Orders *',  key: 'number_of_orders',            req: true,  step: null   },
-            { label: 'Qty *',     key: 'number_of_quantities',        req: true,  step: null   },
-            { label: 'Male Orders', key: 'number_of_male_orders',       req: false, step: null   },
-            { label: 'Female Orders', key: 'number_of_female_orders',     req: false, step: null   },
-            { label: 'Kids Orders', key: 'number_of_kids_orders',       req: false, step: null   },
-            { label: 'Male Qty',    key: 'number_of_male_quantities',   req: false, step: null   },
-            { label: 'Female Qty',    key: 'number_of_female_quantities', req: false, step: null   },
-            { label: 'Kids Qty',    key: 'number_of_kids_quantities',   req: false, step: null   },
-        ];
-        fields.forEach(function (f) {
-            var cell      = document.createElement('div');
-            var lbl       = document.createElement('label');
-            lbl.className = 'f-label text-[11px] xl:hidden !text-[11px]';
-            lbl.textContent = f.label;
-            var inp = makeNum('entries[' + idx + '][' + f.key + ']', data[f.key], f.req, f.step);
-            cell.appendChild(lbl);
-            cell.appendChild(inp);
-            numGrid.appendChild(cell);
-        });
-        outer.appendChild(numGrid);
-
-        /* Remove button */
-        var removeBtn     = document.createElement('button');
-        removeBtn.type    = 'button';
-        removeBtn.className = 'xl:mt-[22px] xl:shrink-0 flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors';
-        removeBtn.title   = 'Remove row';
-        removeBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>';
-        removeBtn.addEventListener('click', function () {
-            if (tomMap[idx]) { try { tomMap[idx].destroy(); } catch (e) {} delete tomMap[idx]; }
-            row.remove();
-            updateCount();
-        });
-        outer.appendChild(removeBtn);
-        row.appendChild(outer);
-
-        /* Init TomSelect after element is in the DOM */
-        requestAnimationFrame(function () {
-            if (typeof TomSelect !== 'undefined') {
-                tomMap[idx] = new TomSelect(selectEl, {
-                    create: false,
-                    searchField: 'text',
-                    sortField:   [{ field: '$order' }, { field: '$score' }],
-                    maxOptions:  200,
-                    placeholder: 'Select platform',
-                });
-            }
-        });
-
-        return row;
-    }
-
-    function addRow(data) {
-        document.getElementById('entries-container').appendChild(createRow(data, rowIndex++));
-        updateCount();
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        var initial = oldEntries.length ? oldEntries : [{}];
-        initial.forEach(function (e) { addRow(e); });
-        document.getElementById('add-more-btn').addEventListener('click', function () { addRow({}); });
-    });
-})();
+window.DS = {
+    mode             : 'create',
+    platforms        : @json($salePlatforms),
+    entries          : @json(array_values(old('entries', []))),
+    deleteIds        : [],
+    usedPlatformIds  : @json($usedPlatformIds),          // platform IDs already in DB for default date
+    usedPlatformsUrl : '{{ route("admin.daily-sales.usedPlatforms") }}',
+};
 </script>
 @endpush
-

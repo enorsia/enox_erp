@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Edit Daily Sale')
+@section('title', 'Edit Daily Sales — ' . \Carbon\Carbon::parse($date)->format('d M Y'))
 
 @section('content')
 <div id="daily-sales-page-content"></div>
@@ -9,9 +9,10 @@
     <!-- PAGE HEADER -->
     <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
-            <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Edit Daily Sale</h1>
+            <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Edit Daily Sales</h1>
             <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">
-                {{ $dailySale->salePlatform->name ?? 'N/A' }} — {{ $dailySale->date ? $dailySale->date->format('d M Y') : '' }}
+                Editing all entries for
+                <strong class="text-slate-600 dark:text-slate-300">{{ \Carbon\Carbon::parse($date)->format('d M Y') }}</strong>
             </p>
         </div>
     </div>
@@ -27,21 +28,25 @@
     </div>
     @endif
 
-    <form method="POST" action="{{ route('admin.daily-sales.update', $dailySale->id) }}" id="EditValidateForm">
+    <form method="POST" action="{{ route('admin.daily-sales.update', $dailySale->id) }}" id="editForm">
         @csrf
         @method('PUT')
+
+        <!-- Hidden date — keeps validation happy; date is locked to the original record's date -->
+        <input type="hidden" name="date" value="{{ $date }}" />
+
+        <!-- Hidden container for entry IDs queued for deletion -->
+        <div id="delete-ids-container"></div>
 
         <!-- ── DATE ROW ── -->
         <div class="section-card !mb-4">
             <div class="flex flex-wrap items-end gap-5">
                 <div class="w-56">
-                    <label class="f-label">Date <span class="f-required">*</span></label>
-                    <input type="date" name="date"
-                           class="f-input @error('date') border-red-400 @enderror"
-                           value="{{ old('date', $dailySale->date ? $dailySale->date->format('Y-m-d') : '') }}" required />
-                    @error('date') <p class="f-error">{{ $message }}</p> @enderror
+                    <label class="f-label">Date</label>
+                    <input type="text" class="f-input bg-slate-50 dark:bg-slate-700/50 cursor-default"
+                           value="{{ \Carbon\Carbon::parse($date)->format('d M Y') }}" readonly />
                 </div>
-                <div class="flex-1 text-xs text-slate-400 dark:text-slate-500 pb-1.5">
+                <div class="text-xs text-slate-400 dark:text-slate-500 pb-1.5">
                     <span class="font-medium text-slate-500 dark:text-slate-400">Created:</span>
                     {{ $dailySale->created_at ? $dailySale->created_at->diffForHumans() : 'N/A' }}
                     &nbsp;&middot;&nbsp;
@@ -51,125 +56,19 @@
             </div>
         </div>
 
-        <!-- ── COLUMN HEADERS (xl+) ── -->
-        <div class="hidden xl:grid gap-2 px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500"
-             style="grid-template-columns: minmax(180px,2.5fr) repeat(10,1fr)">
-            <div>Platform</div>
-            <div>Spent</div>
-            <div>Sales</div>
-            <div>Orders</div>
-            <div>Qty</div>
-            <div>M. Orders</div>
-            <div>F. Orders</div>
-            <div>K. Orders</div>
-            <div>M. Qty</div>
-            <div>F. Qty</div>
-            <div>K. Qty</div>
-        </div>
+        <!-- ── ENTRIES CONTAINER ── -->
+        <div id="entries-container" class="space-y-2"></div>
 
-        <!-- ── ENTRY ROW ── -->
-        <div class="section-card !p-2.5 !mb-0">
-            <div class="flex flex-col xl:flex-row xl:items-start gap-2">
-
-                <!-- Platform -->
-                <div class="xl:shrink-0 xl:w-[220px]">
-                    <label class="f-label text-[10px] xl:hidden">Platform *</label>
-                    <select name="sale_platform_id" class="tom-select w-full @error('sale_platform_id') border-red-400 @enderror" required>
-                        <option value="">Select platform</option>
-                        @foreach($salePlatforms as $platform)
-                            <option value="{{ $platform['id'] }}" {{ old('sale_platform_id', $dailySale->sale_platform_id) == $platform['id'] ? 'selected' : '' }}>
-                                {{ $platform['label'] }}
-                            </option>
-                        @endforeach
-                    </select>
-                    @error('sale_platform_id') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                </div>
-
-                <!-- Numeric fields -->
-                <div class="flex-1 grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10 gap-2">
-
-                    <div>
-                        <label class="f-label text-[10px] xl:hidden">Spent *</label>
-                        <input type="number" name="spent" step="0.01" min="0"
-                               class="tbl-input @error('spent') border-red-400 @enderror"
-                               placeholder="0.00" value="{{ old('spent', $dailySale->spent) }}" required />
-                        @error('spent') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="f-label text-[10px] xl:hidden">Sales *</label>
-                        <input type="number" name="sales" step="0.01" min="0"
-                               class="tbl-input @error('sales') border-red-400 @enderror"
-                               placeholder="0.00" value="{{ old('sales', $dailySale->sales) }}" required />
-                        @error('sales') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="f-label text-[10px] xl:hidden">Orders *</label>
-                        <input type="number" name="number_of_orders" min="0"
-                               class="tbl-input @error('number_of_orders') border-red-400 @enderror"
-                               placeholder="0" value="{{ old('number_of_orders', $dailySale->number_of_orders) }}" required />
-                        @error('number_of_orders') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="f-label text-[10px] xl:hidden">Qty *</label>
-                        <input type="number" name="number_of_quantities" min="0"
-                               class="tbl-input @error('number_of_quantities') border-red-400 @enderror"
-                               placeholder="0" value="{{ old('number_of_quantities', $dailySale->number_of_quantities) }}" required />
-                        @error('number_of_quantities') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="f-label text-[10px] xl:hidden">M. Orders</label>
-                        <input type="number" name="number_of_male_orders" min="0"
-                               class="tbl-input @error('number_of_male_orders') border-red-400 @enderror"
-                               placeholder="0" value="{{ old('number_of_male_orders', $dailySale->number_of_male_orders) }}" />
-                        @error('number_of_male_orders') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="f-label text-[10px] xl:hidden">F. Orders</label>
-                        <input type="number" name="number_of_female_orders" min="0"
-                               class="tbl-input @error('number_of_female_orders') border-red-400 @enderror"
-                               placeholder="0" value="{{ old('number_of_female_orders', $dailySale->number_of_female_orders) }}" />
-                        @error('number_of_female_orders') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="f-label text-[10px] xl:hidden">K. Orders</label>
-                        <input type="number" name="number_of_kids_orders" min="0"
-                               class="tbl-input @error('number_of_kids_orders') border-red-400 @enderror"
-                               placeholder="0" value="{{ old('number_of_kids_orders', $dailySale->number_of_kids_orders) }}" />
-                        @error('number_of_kids_orders') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="f-label text-[10px] xl:hidden">M. Qty</label>
-                        <input type="number" name="number_of_male_quantities" min="0"
-                               class="tbl-input @error('number_of_male_quantities') border-red-400 @enderror"
-                               placeholder="0" value="{{ old('number_of_male_quantities', $dailySale->number_of_male_quantities) }}" />
-                        @error('number_of_male_quantities') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="f-label text-[10px] xl:hidden">F. Qty</label>
-                        <input type="number" name="number_of_female_quantities" min="0"
-                               class="tbl-input @error('number_of_female_quantities') border-red-400 @enderror"
-                               placeholder="0" value="{{ old('number_of_female_quantities', $dailySale->number_of_female_quantities) }}" />
-                        @error('number_of_female_quantities') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="f-label text-[10px] xl:hidden">K. Qty</label>
-                        <input type="number" name="number_of_kids_quantities" min="0"
-                               class="tbl-input @error('number_of_kids_quantities') border-red-400 @enderror"
-                               placeholder="0" value="{{ old('number_of_kids_quantities', $dailySale->number_of_kids_quantities) }}" />
-                        @error('number_of_kids_quantities') <p class="f-error text-[10px]">{{ $message }}</p> @enderror
-                    </div>
-
-                </div>
-            </div>
+        <!-- ── ADD MORE BUTTON ── -->
+        <div class="mt-3 flex items-center gap-3">
+            <button type="button" id="add-more-btn"
+                    class="flex items-center gap-2 px-4 py-2 text-sm rounded-xl border border-dashed border-accent-400 text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-900/20 transition-colors font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                </svg>
+                Add More
+            </button>
+            <span class="text-xs text-slate-400 dark:text-slate-500" id="row-count-label"></span>
         </div>
 
         <!-- ── STICKY FOOTER ── -->
@@ -191,7 +90,7 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" d="M5 13l4 4L19 7"/>
                         </svg>
-                        Update Daily Sale
+                        Update Daily Sales
                     </button>
                 </div>
             </div>
@@ -200,3 +99,13 @@
 </div>
 @endsection
 
+@push('js')
+<script>
+window.DS = {
+    mode      : 'edit',
+    platforms : @json($salePlatforms),
+    entries   : @json(array_values(old('entries', $existingEntries))),
+    deleteIds : @json(array_values(old('entries_delete', []))),
+};
+</script>
+@endpush

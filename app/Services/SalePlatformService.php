@@ -103,11 +103,14 @@ class SalePlatformService
             $pad       = str_repeat("\xE3\x80\x80", $node->depth); // U+3000 ideographic space
             $arrow     = $node->depth > 0 ? '└ ' : '';
             $options[] = [
-                'id'    => $node->id,
-                'parent_id' => $node->parent_id,
-                'name'  => $node->name,
-                'depth' => $node->depth,
-                'label' => $pad . $arrow . $node->name,
+                'id'                  => $node->id,
+                'parent_id'           => $node->parent_id,
+                'name'                => $node->name,
+                'depth'               => $node->depth,
+                'label'               => $pad . $arrow . $node->name,
+                'is_spent'            => (bool) $node->is_spent,
+                'is_sales'            => (bool) $node->is_sales,
+                'allows_direct_entry' => (bool) $node->allows_direct_entry,
             ];
         }
         return $options;
