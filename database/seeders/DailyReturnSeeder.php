@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\DailyReturn;
+use App\Models\DailySale;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -53,56 +54,87 @@ class DailyReturnSeeder extends Seeder
             ['id' => 6, 'name' => 'Rackhams', 'returnRate' => 0.036],
         ];
 
-        // April has 30 days
+        // Generate dates for the last 12 months (May 2025 to April 2026)
         $dates = [];
-        for ($day = 1; $day <= 30; $day++) {
-            $dates[] = '2026-04-' . str_pad($day, 2, '0', STR_PAD_LEFT);
+        $startDate = new \DateTime('2025-05-01');
+        $endDate = new \DateTime('2026-04-30');
+        $currentDate = clone $startDate;
+
+        while ($currentDate <= $endDate) {
+            $dates[] = $currentDate->format('Y-m-d');
+            $currentDate->modify('+1 day');
         }
 
         $allReturns = [];
 
-        // First, get daily sales volumes from the DailySale table
-        // Since we're seeding after DailySaleSeeder, we can reference real data
-        // But for random generation, we'll create correlated return data
-
         foreach ($platforms as $platform) {
             foreach ($dates as $date) {
+                // Get month number for seasonal adjustments (returns also have seasonality)
+                $monthNum = (int)date('n', strtotime($date));
+
+                // Seasonal multiplier for returns (higher returns after holiday season)
+                $seasonalMultiplier = match($monthNum) {
+                    1 => 1.4,       // January (post-holiday returns spike)
+                    2 => 1.2,       // February (continued returns)
+                    11, 12 => 0.8,  // November, December (lower returns during holidays)
+                    3, 4 => 1.0,    // March, April
+                    5, 6 => 0.9,    // May, June
+                    7, 8 => 0.95,   // July, August
+                    9, 10 => 1.0,   // September, October
+                    default => 1.0,
+                };
+
                 $dayOfWeek = date('N', strtotime($date));
                 $isWeekend = ($dayOfWeek >= 6);
-                $weekendMultiplier = $isWeekend ? 1.3 : 1.0;
+                $weekendMultiplier = $isWeekend ? 1.2 : 1.0; // Slightly fewer returns on weekends
 
                 // Daily random variation for return volume
                 $dailyVariation = rand(70, 130) / 100;
 
-                // Calculate expected sales quantity for this platform/date
-                // Based on typical daily quantities from the sales seeder
-                $baseQuantity = match($platform['id']) {
-                    10 => rand(85, 140),
-                    11 => rand(70, 110),
-                    12 => rand(40, 70),
-                    13 => rand(20, 40),
-                    14 => rand(14, 30),
-                    15 => rand(8, 20),
-                    16 => rand(4, 14),
-                    2 => rand(50, 85),
-                    20 => rand(80, 130),
-                    30 => rand(20, 38),
-                    31 => rand(14, 28),
-                    32 => rand(10, 24),
-                    33 => rand(9, 20),
-                    34 => rand(6, 15),
-                    35 => rand(5, 12),
-                    36 => rand(4, 10),
-                    37 => rand(4, 9),
-                    38 => rand(3, 8),
-                    4 => rand(16, 32),
-                    5 => rand(7, 18),
-                    6 => rand(12, 26),
-                    default => 50,
-                };
+                // Try to get actual sales quantity from DailySale table first
+                $actualSale = DailySale::where('sale_platform_id', $platform['id'])
+                    ->where('date', $date)
+                    ->first();
 
+                if ($actualSale) {
+                    // Use actual sales data for more accurate returns
+                    $baseQuantity = $actualSale->number_of_quantities;
+                } else {
+                    // Fallback to estimated quantities if sales data not available
+                    $baseQuantity = match($platform['id']) {
+                        10 => rand(85, 140),
+                        11 => rand(70, 110),
+                        12 => rand(40, 70),
+                        13 => rand(20, 40),
+                        14 => rand(14, 30),
+                        15 => rand(8, 20),
+                        16 => rand(4, 14),
+                        2 => rand(50, 85),
+                        20 => rand(80, 130),
+                        30 => rand(20, 38),
+                        31 => rand(14, 28),
+                        32 => rand(10, 24),
+                        33 => rand(9, 20),
+                        34 => rand(6, 15),
+                        35 => rand(5, 12),
+                        36 => rand(4, 10),
+                        37 => rand(4, 9),
+                        38 => rand(3, 8),
+                        4 => rand(16, 32),
+                        5 => rand(7, 18),
+                        6 => rand(12, 26),
+                        default => 50,
+                    };
+                }
+
+                // Apply seasonal and weekend multipliers to returns
                 $adjustedQuantity = round($baseQuantity * $weekendMultiplier * $dailyVariation);
-                $totalReturnQuantity = round($adjustedQuantity * $platform['returnRate'] * $dailyVariation);
+
+                // Base return rate with seasonal adjustment
+                $adjustedReturnRate = $platform['returnRate'] * $seasonalMultiplier;
+
+                // Calculate total return quantity
+                $totalReturnQuantity = round($adjustedQuantity * $adjustedReturnRate * $dailyVariation);
 
                 if ($totalReturnQuantity == 0) {
                     continue; // Skip days with no returns
@@ -117,7 +149,7 @@ class DailyReturnSeeder extends Seeder
                         // Last reason gets the remaining
                         $reasonQuantity = $remainingReturns;
                     } else {
-                        // Random distribution with weighted probabilities
+                        // Weighted distribution based on reason type
                         $weight = match($reason['id']) {
                             1 => 35, // Wrong size - most common
                             2 => 20, // Defective
@@ -129,7 +161,16 @@ class DailyReturnSeeder extends Seeder
                             default => 10,
                         };
 
-                        $maxForThisReason = min($remainingReturns, round($totalReturnQuantity * ($weight / 100)));
+                        // Adjust weights seasonally (more defective returns in winter? etc.)
+                        $adjustedWeight = $weight;
+                        if ($reason['id'] == 2 && in_array($monthNum, [1, 2, 3])) {
+                            $adjustedWeight = $weight * 1.3; // More defects in winter months
+                        }
+                        if ($reason['id'] == 5 && in_array($monthNum, [11, 12])) {
+                            $adjustedWeight = $weight * 1.5; // More late deliveries during holidays
+                        }
+
+                        $maxForThisReason = min($remainingReturns, round($totalReturnQuantity * ($adjustedWeight / 100)));
                         $reasonQuantity = ($index === 0)
                             ? rand(1, max(1, $maxForThisReason))
                             : rand(0, $maxForThisReason);
@@ -150,7 +191,8 @@ class DailyReturnSeeder extends Seeder
 
                 // Create return records for each reason type
                 foreach ($reasonDistributions as $dist) {
-                    $returnCount = max(1, round($dist['quantity'] / rand(1, 2))); // Number of return transactions
+                    // Number of return transactions (1-3 items per return typically)
+                    $returnCount = max(1, round($dist['quantity'] / rand(1, 3)));
                     $returnQuantity = $dist['quantity'];
 
                     // Gender distribution for returns (similar to sales but slightly different)
@@ -162,21 +204,53 @@ class DailyReturnSeeder extends Seeder
                         default => rand(38, 52),
                     };
 
+                    // Average return value between £20 and £60, with seasonal variation
+                    $avgReturnValue = match($monthNum) {
+                        11, 12 => rand(35, 75), // Higher value returns during holidays
+                        1, 2 => rand(25, 65),   // Mixed values in post-holiday
+                        default => rand(20, 60),
+                    };
+
+                    $return_amount = round($returnQuantity * $avgReturnValue);
+
                     $femalePercent = rand(28, 43);
                     $kidsPercent = 100 - ($malePercent + $femalePercent);
 
-                    $maleReturns = round($returnCount * ($malePercent / 100));
-                    $femaleReturns = round($returnCount * ($femalePercent / 100));
+                    // Ensure kidsPercent is not negative
+                    if ($kidsPercent < 0) {
+                        $overage = -$kidsPercent;
+                        $femalePercent = max(0, $femalePercent - $overage);
+                        $kidsPercent = 100 - ($malePercent + $femalePercent);
+                    }
+
+                    // Calculate gender splits with proper rounding
+                    $maleReturns = (int)round($returnCount * ($malePercent / 100));
+                    $femaleReturns = (int)round($returnCount * ($femalePercent / 100));
                     $kidsReturns = $returnCount - ($maleReturns + $femaleReturns);
 
-                    $maleReturnQuantities = round($returnQuantity * ($malePercent / 100));
-                    $femaleReturnQuantities = round($returnQuantity * ($femalePercent / 100));
+                    // Ensure no negative values
+                    if ($kidsReturns < 0) {
+                        $kidsReturns = 0;
+                        $maleReturns = (int)round($returnCount * 0.6);
+                        $femaleReturns = $returnCount - $maleReturns;
+                    }
+
+                    $maleReturnQuantities = (int)round($returnQuantity * ($malePercent / 100));
+                    $femaleReturnQuantities = (int)round($returnQuantity * ($femalePercent / 100));
                     $kidsReturnQuantities = $returnQuantity - ($maleReturnQuantities + $femaleReturnQuantities);
+
+                    // Ensure no negative quantities
+                    if ($kidsReturnQuantities < 0) {
+                        $kidsReturnQuantities = 0;
+                        $maleReturnQuantities = (int)round($returnQuantity * 0.6);
+                        $femaleReturnQuantities = $returnQuantity - $maleReturnQuantities;
+                    }
 
                     $allReturns[] = [
                         'sale_platform_id' => $platform['id'],
                         'return_reason_type_id' => $dist['reason_id'],
                         'date' => $date,
+                        'return_amount' => $return_amount,
                         'number_of_returns' => $returnCount,
                         'number_of_return_quantities' => $returnQuantity,
                         'number_of_male_returns' => $maleReturns,
@@ -193,15 +267,19 @@ class DailyReturnSeeder extends Seeder
         // Shuffle for variety
         shuffle($allReturns);
 
-        foreach ($allReturns as $return) {
-            DailyReturn::updateOrCreate(
-                [
-                    'sale_platform_id' => $return['sale_platform_id'],
-                    'return_reason_type_id' => $return['return_reason_type_id'],
-                    'date' => $return['date'],
-                ],
-                $return
-            );
+        // Insert or update in chunks to avoid memory issues
+        $chunks = array_chunk($allReturns, 500);
+        foreach ($chunks as $chunk) {
+            foreach ($chunk as $return) {
+                DailyReturn::updateOrCreate(
+                    [
+                        'sale_platform_id' => $return['sale_platform_id'],
+                        'return_reason_type_id' => $return['return_reason_type_id'],
+                        'date' => $return['date'],
+                    ],
+                    $return
+                );
+            }
         }
     }
 }

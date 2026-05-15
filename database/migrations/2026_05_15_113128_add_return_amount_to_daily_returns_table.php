@@ -12,7 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('daily_returns', function (Blueprint $table) {
-            //
+            //return_amount
+            $table->decimal('return_amount', 8, 2)->nullable()->after('date');
         });
     }
 
