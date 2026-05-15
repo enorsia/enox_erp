@@ -121,6 +121,7 @@ class DailyReturnController extends Controller
             'id'                                  => $r->id,
             'sale_platform_id'                    => $r->sale_platform_id,
             'return_reason_type_id'               => $r->return_reason_type_id,
+            'return_amount'                       => $r->return_amount,
             'number_of_returns'                   => $r->number_of_returns,
             'number_of_return_quantities'         => $r->number_of_return_quantities,
             'number_of_male_returns'              => $r->number_of_male_returns,

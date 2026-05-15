@@ -85,6 +85,7 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
                 'level3'                             => $l3,
                 'reason'                             => $record->returnReasonType?->name ?? '-',
                 'date'                               => $record->date?->format('d M Y'),
+                'return_amount'                      => $record->return_amount,
                 'number_of_returns'                  => $record->number_of_returns,
                 'number_of_return_quantities'        => $record->number_of_return_quantities,
                 'number_of_male_returns'             => $record->number_of_male_returns,
@@ -129,6 +130,7 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
     {
         return [
             'id', 'level1', 'level2', 'level3', 'reason', 'date',
+            'return_amount',
             'number_of_returns', 'number_of_return_quantities',
             'number_of_male_returns', 'number_of_female_returns', 'number_of_kids_returns',
             'number_of_male_return_quantities', 'number_of_female_return_quantities', 'number_of_kids_return_quantities',
@@ -145,6 +147,7 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
             'level3'                              => 'Sub Sub Platform',
             'reason'                              => 'Return Reason',
             'date'                                => 'Date',
+            'return_amount'                       => 'Return Amount',
             'number_of_returns'                   => 'Total Returns',
             'number_of_return_quantities'         => 'Total Return Qty',
             'number_of_male_returns'              => 'Male Returns',

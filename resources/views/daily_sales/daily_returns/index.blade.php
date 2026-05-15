@@ -383,6 +383,12 @@
                                             <span class="ds-metric-val">{{ number_format($return->number_of_return_quantities) }}</span>
                                         </div>
                                     </div>
+                                    @if($return->return_amount > 0)
+                                    <div class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 mb-1.5">
+                                        <span class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Return Amount</span>
+                                        <span class="text-[12px] font-bold text-emerald-700 dark:text-emerald-300">{{ number_format($return->return_amount, 2) }}</span>
+                                    </div>
+                                    @endif
 
                                     {{-- Gender breakdown --}}
                                     @if($hasGender)

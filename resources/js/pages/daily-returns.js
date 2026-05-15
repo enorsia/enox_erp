@@ -79,6 +79,18 @@
         return el;
     }
 
+    function makeAmount(name, val) {
+        const el       = document.createElement('input');
+        el.type        = 'number';
+        el.name        = name;
+        el.min         = '0';
+        el.step        = '0.01';
+        el.className   = 'tbl-input w-full';
+        el.placeholder = '0.00';
+        el.value       = (val !== null && val !== undefined && val !== '') ? val : '';
+        return el;
+    }
+
     function updateCount() {
         const n  = document.querySelectorAll('#entries-container .dr-entry-row').length;
         const el = document.getElementById('row-count-label');
@@ -135,6 +147,16 @@
         const reasonSel = makeReasonSelect(`entries[${idx}][return_reason_type_id]`, data.return_reason_type_id || '');
         reasonWrap.appendChild(reasonSel);
         outer.appendChild(reasonWrap);
+
+        // ── Return Amount ──
+        const amountWrap      = document.createElement('div');
+        amountWrap.className  = 'xl:shrink-0 xl:w-[130px]';
+        const amountLbl       = document.createElement('label');
+        amountLbl.className   = 'f-label text-[11px] !text-[11px]';
+        amountLbl.textContent = 'Return Amount';
+        amountWrap.appendChild(amountLbl);
+        amountWrap.appendChild(makeAmount(`entries[${idx}][return_amount]`, data.return_amount));
+        outer.appendChild(amountWrap);
 
         // ── Numeric grid ──
         const numGrid     = document.createElement('div');

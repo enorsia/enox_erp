@@ -9,6 +9,7 @@ class DailyReturn extends BaseModel
     protected $fillable = [
         'sale_platform_id',
         'return_reason_type_id',
+        'return_amount',
         'date',
         'number_of_returns',
         'number_of_return_quantities',

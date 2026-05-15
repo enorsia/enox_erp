@@ -148,6 +148,7 @@ class DailyReturnService
             'entries'                                       => 'required|array|min:1',
             'entries.*.sale_platform_id'                   => 'required|exists:sale_platforms,id',
             'entries.*.return_reason_type_id'              => 'required|exists:return_reason_types,id',
+            'entries.*.return_amount'                      => 'nullable|numeric|min:0',
             'entries.*.number_of_returns'                  => 'required|integer|min:0',
             'entries.*.number_of_return_quantities'        => 'required|integer|min:0',
             'entries.*.number_of_male_returns'             => 'nullable|integer|min:0',
@@ -169,6 +170,7 @@ class DailyReturnService
             'entries'                                       => 'present|array',
             'entries.*.sale_platform_id'                   => 'required_with:entries|exists:sale_platforms,id',
             'entries.*.return_reason_type_id'              => 'required_with:entries|exists:return_reason_types,id',
+            'entries.*.return_amount'                      => 'nullable|numeric|min:0',
             'entries.*.number_of_returns'                  => 'required_with:entries|integer|min:0',
             'entries.*.number_of_return_quantities'        => 'required_with:entries|integer|min:0',
             'entries.*.number_of_male_returns'             => 'nullable|integer|min:0',
@@ -239,6 +241,7 @@ class DailyReturnService
         return [
             'sale_platform_id'                   => 'required|exists:sale_platforms,id',
             'return_reason_type_id'              => 'required|exists:return_reason_types,id',
+            'return_amount'                      => 'nullable|numeric|min:0',
             'date'                               => 'required|date',
             'number_of_returns'                  => 'required|integer|min:0',
             'number_of_return_quantities'        => 'required|integer|min:0',
@@ -287,6 +290,10 @@ class DailyReturnService
 
         foreach ($nullableInts as $field) {
             $data[$field] = $data[$field] ?? 0;
+        }
+
+        if (!isset($data['return_amount']) || $data['return_amount'] === '' || $data['return_amount'] === null) {
+            $data['return_amount'] = 0;
         }
 
         return $data;
