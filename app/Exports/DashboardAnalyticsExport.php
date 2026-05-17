@@ -35,6 +35,8 @@ class DashboardAnalyticsExport
     private const CLR_ROAS       = 'FFFFDDC0'; // light peach – ROI row
     private const CLR_WHITE      = 'FFFFFFFF';
     private const CLR_DARK_TEXT  = 'FF1A3A2A'; // dark green-black – default text
+    private const CLR_AVERAGE_DAILY = 'FFE8D5F2'; // light purple – average sales daily row
+    private const CLR_NEGATIVE   = 'FFFF0000'; // red – negative values
     // Bottom-section colours
     private const CLR_SEC_TITLE  = 'FF003D2B'; // very dark green – section title bg
     private const CLR_SEC_HDR    = 'FF009966'; // accent – section column header bg
@@ -381,7 +383,7 @@ class DashboardAnalyticsExport
 
         // ── Summary rows ─────────────────────────────────────────────
         $summaryColorMap = [
-            'average_daily'  => self::CLR_WHITE,
+            'average_daily'  => self::CLR_AVERAGE_DAILY,
             'total_sale'     => self::CLR_TOTAL,
             'total_spend'    => self::CLR_TOTAL,
             'total_budget'   => self::CLR_BUDGET,
@@ -472,8 +474,71 @@ class DashboardAnalyticsExport
             if ($sRow['female'] !== null) $sheet->setCellValueByColumnAndRow($rsFemaleCol,  $r, $sRow['female']);
             if ($sRow['male']   !== null) $sheet->setCellValueByColumnAndRow($rsMaleCol,    $r, $sRow['male']);
 
+            // Apply row background color
             $this->fillRow($sheet, $r, $mainLastCol, $color);
             $sheet->getStyle('B' . $r)->getFont()->setBold(true);
+
+            // Apply red text color to negative values (after row fill to override)
+            if ($sRow['col_c'] !== null && (float)$sRow['col_c'] < 0) {
+                $sheet->getStyle('C' . $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
+            }
+            if ($sRow['col_e'] !== null && (float)$sRow['col_e'] < 0) {
+                $sheet->getStyle('E' . $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
+            }
+            foreach ($sRow['platform'] as $colKey => $value) {
+                if (!isset($platColMap[$colKey])) continue;
+                if ((float)$value < 0) {
+                    $ci = $platColMap[$colKey];
+                    $sheet->getStyleByColumnAndRow($ci, $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
+                }
+            }
+            foreach ($allPlatCols as $i => $platCol) {
+                if ($platCol['kind'] !== 'summary') continue;
+                $ci  = $platBaseCol + $i;
+                $val = 0;
+                foreach ($platCol['leaf_ids'] as $leafId) {
+                    $key = "{$leafId}_{$platCol['col_type']}";
+                    if (isset($sRow['platform'][$key])) {
+                        $val += $sRow['platform'][$key];
+                    }
+                }
+                if ((float)$val < 0) {
+                    $sheet->getStyleByColumnAndRow($ci, $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
+                }
+            }
+            if (!empty($sRow['root_orders'])) {
+                foreach ($rootPlatforms as $root) {
+                    $rid = $root['id'];
+                    if (isset($sRow['root_orders'][$rid], $rsRootOrderCols[$rid])) {
+                        if ((float)$sRow['root_orders'][$rid] < 0) {
+                            $sheet->getStyleByColumnAndRow($rsRootOrderCols[$rid], $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
+                        }
+                    }
+                }
+            }
+            if (!empty($sRow['total_qty']) && (float)$sRow['total_qty'] < 0) {
+                $sheet->getStyleByColumnAndRow($rsQtyCol, $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
+            }
+            if (!empty($sRow['root_qty'])) {
+                foreach ($rootPlatforms as $root) {
+                    $rid = $root['id'];
+                    if (isset($sRow['root_qty'][$rid], $rsRootQtyCols[$rid])) {
+                        if ((float)$sRow['root_qty'][$rid] < 0) {
+                            $sheet->getStyleByColumnAndRow($rsRootQtyCols[$rid], $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
+                        }
+                    }
+                }
+            }
+            if ($sRow['kids'] !== null && (float)$sRow['kids'] < 0) {
+                $sheet->getStyleByColumnAndRow($rsKidsCol, $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
+            }
+            if ($sRow['female'] !== null && (float)$sRow['female'] < 0) {
+                $sheet->getStyleByColumnAndRow($rsFemaleCol, $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
+            }
+            if ($sRow['male'] !== null && (float)$sRow['male'] < 0) {
+                $sheet->getStyleByColumnAndRow($rsMaleCol, $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
+            }
+
             $r++;
         }
         $lastMainRow = $r - 1;
