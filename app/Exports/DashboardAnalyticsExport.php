@@ -275,16 +275,71 @@ class DashboardAnalyticsExport
 
         // ── Right-section headers (all merged vertically firstHdrRow→colLabelRow) ─
         $rsHdrDefs = [];
-        foreach ($rootPlatforms as $root) {
-            $sn = $this->shortName($root['name']);
-            $rsHdrDefs[$rsRootOrderCols[$root['id']]] = $sn;
-            $rsHdrDefs[$rsRootQtyCols[$root['id']]]   = $sn . ' QTY';
+
+        // Group header for Order QTY across root order columns + Total (e.g., BA2:BH2)
+        if ($numRoots > 0) {
+            $orderStartCol = $rsRootOrderBase;
+            $orderEndCol   = $rsOrdersCol; // include Total
+            $orderStartLtr = Coordinate::stringFromColumnIndex($orderStartCol);
+            $orderEndLtr   = Coordinate::stringFromColumnIndex($orderEndCol);
+
+            $sheet->setCellValue($orderStartLtr . $firstHdrRow, 'Order QTY');
+            $sheet->mergeCells("{$orderStartLtr}{$firstHdrRow}:{$orderEndLtr}{$firstHdrRow}");
+            $this->applyHeaderStyle($sheet, "{$orderStartLtr}{$firstHdrRow}:{$orderEndLtr}{$firstHdrRow}");
+
+            foreach ($rootPlatforms as $root) {
+                $sn = $this->shortName($root['name']);
+                $ci = $rsRootOrderCols[$root['id']];
+                $cl = Coordinate::stringFromColumnIndex($ci);
+                $sheet->setCellValue($cl . $colLabelRow, $sn);
+                $this->applyHeaderStyle($sheet, "{$cl}{$colLabelRow}:{$cl}{$colLabelRow}");
+            }
+            $totalOrderLtr = Coordinate::stringFromColumnIndex($rsOrdersCol);
+            $sheet->setCellValue($totalOrderLtr . $colLabelRow, 'Total');
+            $this->applyHeaderStyle($sheet, "{$totalOrderLtr}{$colLabelRow}:{$totalOrderLtr}{$colLabelRow}");
         }
-        $rsHdrDefs[$rsOrdersCol]  = "No.\nof Order";
-        $rsHdrDefs[$rsQtyCol]     = "No.\nof QTY";
-        $rsHdrDefs[$rsKidsCol]    = 'Kids';
-        $rsHdrDefs[$rsFemaleCol]  = 'Female';
-        $rsHdrDefs[$rsMaleCol]    = 'Male';
+
+        // Group header for Order Item QTY across root qty columns + Total QTY (e.g., BH2:BM2)
+        if ($numRoots > 0) {
+            $itemStartCol = $rsQtyRootBase;
+            $itemEndCol   = $rsQtyCol; // include Total QTY
+            $itemStartLtr = Coordinate::stringFromColumnIndex($itemStartCol);
+            $itemEndLtr   = Coordinate::stringFromColumnIndex($itemEndCol);
+
+            $sheet->setCellValue($itemStartLtr . $firstHdrRow, 'Order Item QTY');
+            $sheet->mergeCells("{$itemStartLtr}{$firstHdrRow}:{$itemEndLtr}{$firstHdrRow}");
+            $this->applyHeaderStyle($sheet, "{$itemStartLtr}{$firstHdrRow}:{$itemEndLtr}{$firstHdrRow}");
+
+            foreach ($rootPlatforms as $root) {
+                $sn = $this->shortName($root['name']);
+                $ci = $rsRootQtyCols[$root['id']];
+                $cl = Coordinate::stringFromColumnIndex($ci);
+                $sheet->setCellValue($cl . $colLabelRow, $sn);
+                $this->applyHeaderStyle($sheet, "{$cl}{$colLabelRow}:{$cl}{$colLabelRow}");
+            }
+            $totalQtyLtr = Coordinate::stringFromColumnIndex($rsQtyCol);
+            $sheet->setCellValue($totalQtyLtr . $colLabelRow, "Total");
+            $this->applyHeaderStyle($sheet, "{$totalQtyLtr}{$colLabelRow}:{$totalQtyLtr}{$colLabelRow}");
+        }
+
+        // Group header for Gender QTY across Kids/Female/Male
+        $genderStartCol = $rsKidsCol;
+        $genderEndCol   = $rsMaleCol;
+        $genderStartLtr = Coordinate::stringFromColumnIndex($genderStartCol);
+        $genderEndLtr   = Coordinate::stringFromColumnIndex($genderEndCol);
+
+        $sheet->setCellValue($genderStartLtr . $firstHdrRow, 'Gender Order QTY');
+        $sheet->mergeCells("{$genderStartLtr}{$firstHdrRow}:{$genderEndLtr}{$firstHdrRow}");
+        $this->applyHeaderStyle($sheet, "{$genderStartLtr}{$firstHdrRow}:{$genderEndLtr}{$firstHdrRow}");
+
+        $sheet->setCellValue($genderStartLtr . $colLabelRow, 'Kids');
+        $this->applyHeaderStyle($sheet, "{$genderStartLtr}{$colLabelRow}:{$genderStartLtr}{$colLabelRow}");
+        $femaleLtr = Coordinate::stringFromColumnIndex($rsFemaleCol);
+        $sheet->setCellValue($femaleLtr . $colLabelRow, 'Female');
+        $this->applyHeaderStyle($sheet, "{$femaleLtr}{$colLabelRow}:{$femaleLtr}{$colLabelRow}");
+        $maleLtr = Coordinate::stringFromColumnIndex($rsMaleCol);
+        $sheet->setCellValue($maleLtr . $colLabelRow, 'Male');
+        $this->applyHeaderStyle($sheet, "{$maleLtr}{$colLabelRow}:{$maleLtr}{$colLabelRow}");
 
         foreach ($rsHdrDefs as $ci => $lbl) {
             $cl = Coordinate::stringFromColumnIndex($ci);
@@ -683,7 +738,21 @@ class DashboardAnalyticsExport
         $this->writeSectionTitle($sheet, $anc, $toqLastCol, $r, 'Total Order QTY');
         $r++;
 
-        // Column headers
+        // Column headers - Row 1: "Order QTY" grouped header
+        $sheet->setCellValueByColumnAndRow($anc, $r, 'Week');
+        // Merge "Order QTY" across platform columns
+        $orderQtyStartCol = $toqRootStart;
+        $orderQtyEndCol   = $toqRootStart + $numRoots - 1;
+        $orderQtyStartLtr = Coordinate::stringFromColumnIndex($orderQtyStartCol);
+        $orderQtyEndLtr   = Coordinate::stringFromColumnIndex($orderQtyEndCol);
+        $sheet->setCellValueByColumnAndRow($orderQtyStartCol, $r, 'Order QTY');
+        $sheet->mergeCells("{$orderQtyStartLtr}{$r}:{$orderQtyEndLtr}{$r}");
+        // Fill row 1 header
+        $this->fillSecRange($sheet, $anc, $toqLastCol, $r, self::CLR_SEC_HDR, true);
+        $this->applySecHdrTextStyle($sheet, $anc, $toqLastCol, $r);
+        $r++;
+
+        // Column headers - Row 2: Platform names and other columns
         $sheet->setCellValueByColumnAndRow($anc,      $r, 'Week');
         foreach ($rootPlatforms as $root) {
             $sheet->setCellValueByColumnAndRow($toqRootCols[$root['id']], $r, $this->shortName($root['name']));
@@ -900,6 +969,14 @@ class DashboardAnalyticsExport
         // Right section in main area
         for ($ci = $rsBase; $ci <= $mainLastCol; $ci++) {
             $sheet->getColumnDimensionByColumn($ci)->setWidth(10);
+        }
+        // Slightly wider columns for Order QTY + Order Item QTY groups
+        $orderChildWidth = 13;
+        for ($ci = $rsRootOrderBase; $ci <= $rsOrdersCol; $ci++) {
+            $sheet->getColumnDimensionByColumn($ci)->setWidth($orderChildWidth);
+        }
+        for ($ci = $rsQtyRootBase; $ci <= $rsQtyCol; $ci++) {
+            $sheet->getColumnDimensionByColumn($ci)->setWidth($orderChildWidth);
         }
         // Bottom sections: label col wider, value cols standard
         $maxSecLastCol = max($wbLastCol, $svLastCol, $toqLastCol, $tiqLastCol, $retLastCol);
@@ -1129,7 +1206,7 @@ class DashboardAnalyticsExport
                         'level'       => $depth,
                         'name'        => $node['name'],
                         'leaf_ids'    => [$node['id']],
-                        'visible'     => ($depth === 0),
+                        'visible'     => ($depth ===  0),
                         'collapsed'   => false,
                     ];
                 }
