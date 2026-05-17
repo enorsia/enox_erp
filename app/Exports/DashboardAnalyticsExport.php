@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Models\DailyReturn;
 use App\Services\DashboardAnalyticsService;
 use Carbon\Carbon;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -67,7 +68,7 @@ class DashboardAnalyticsExport
         // ── Unpack service data ──────────────────────────────────────
         $columnData       = $export['column_data'];
         $columns          = $columnData['columns'];   // leaf cols (kept for summary-row data)
-        $tree             = $columnData['tree'];       // full platform tree
+        $tree             = $columnData['tree'] ?? [];  // full platform tree (safe fallback for empty data)
 
         $rootPlatforms    = $export['root_platforms'];
         $rows             = $export['rows'];
@@ -77,6 +78,26 @@ class DashboardAnalyticsExport
         $totals           = $export['totals'];
 
         $numRoots    = count($rootPlatforms);
+
+        // ── Fetch daily return_amount (Return GBP) directly from DB ────
+        $returnAmountByDate = DailyReturn::whereBetween('date', [$this->dateFrom, $this->dateTo])
+            ->selectRaw('DATE(date) as dt, SUM(return_amount) as total_amount')
+            ->groupBy('dt')
+            ->get()
+            ->mapWithKeys(fn ($r) => [$r->dt => (float)($r->total_amount ?? 0)])
+            ->toArray();
+
+        // Supplement weekly rows with actual returns_gbp from return_amount
+        $weeklyReturnGbpMap = [];
+        foreach ($rows as $row) {
+            $wk = $row['week'];
+            $weeklyReturnGbpMap[$wk] = ($weeklyReturnGbpMap[$wk] ?? 0)
+                + ($returnAmountByDate[$row['date']] ?? 0);
+        }
+        foreach ($weeklyRows as &$wRow) {
+            $wRow['returns_gbp'] = $weeklyReturnGbpMap[$wRow['week']] ?? 0;
+        }
+        unset($wRow);
 
         // ── Column indices ───────────────────────────────────────────
         $platBaseCol = self::COL_SPEND + 1;   // F = 6, first platform column
@@ -91,6 +112,36 @@ class DashboardAnalyticsExport
         foreach ($allPlatCols as $i => $col) {
             if ($col['kind'] === 'leaf') {
                 $platColMap["{$col['platform_id']}_{$col['col_type']}"] = $platBaseCol + $i;
+            }
+        }
+
+        // Root→leaf sales map: root_platform_id => [leaf_platform_ids] for sales columns
+        $rootLeafSalesMap = [];
+        foreach ($allPlatCols as $col) {
+            if ($col['level'] === 0 && $col['col_type'] === 'sales') {
+                $rootLeafSalesMap[$col['platform_id']] = $col['leaf_ids'];
+            }
+        }
+        // Build weekly per-root-platform sales: week_number => [root_id => total_sales]
+        $weeklySalesByRoot = [];
+        foreach ($rows as $row) {
+            $wk = $row['week'];
+            if (!isset($weeklySalesByRoot[$wk])) {
+                $weeklySalesByRoot[$wk] = array_fill_keys(array_column($rootPlatforms, 'id'), 0.0);
+            }
+            foreach ($rootPlatforms as $root) {
+                $rid     = $root['id'];
+                $leafIds = $rootLeafSalesMap[$rid] ?? [$rid];
+                foreach ($leafIds as $leafId) {
+                    $weeklySalesByRoot[$wk][$rid] += (float)($row['platform'][$leafId]['sales'] ?? 0);
+                }
+            }
+        }
+        // Total per root across all weeks
+        $totalSalesByRoot = array_fill_keys(array_column($rootPlatforms, 'id'), 0.0);
+        foreach ($weeklySalesByRoot as $wkData) {
+            foreach ($rootPlatforms as $root) {
+                $totalSalesByRoot[$root['id']] += $wkData[$root['id']] ?? 0;
             }
         }
 
@@ -450,7 +501,7 @@ class DashboardAnalyticsExport
 
         $this->writeSectionTitle($sheet, $anc, $wbLastCol, $r, 'Weekly Breakdown');
         $r++;
-        $this->writeSectionHeaders($sheet, $anc, ['Week', 'Sales', 'Spend', 'Ret PCS', 'Ret GBP'], $r);
+        $this->writeSectionHeaders($sheet, $anc, ['Week', 'Sales Value', 'Spend', 'Ret PCS', 'Ret GBP'], $r);
         $r++;
 
         foreach ($weeklyRows as $wRow) {
@@ -485,14 +536,78 @@ class DashboardAnalyticsExport
         $r++;
 
         // ─────────────────────────────────────────────────────────────
+        // SECTION 1b – Sales Value  (per-root-platform weekly sales)
+        //   F=Week | G=[root1] | … | Total
+        // ─────────────────────────────────────────────────────────────
+        $r += 4;
+
+        $svRootStart = $anc + 1;
+        $svTotal     = $anc + 1 + $numRoots;
+        $svLastCol   = $svTotal;
+
+        $svRootCols = [];
+        foreach ($rootPlatforms as $i => $root) {
+            $svRootCols[$root['id']] = $svRootStart + $i;
+        }
+
+        $svSecStart = $r;
+        $this->writeSectionTitle($sheet, $anc, $svLastCol, $r, 'Sales Value');
+        $r++;
+
+        // Column headers
+        $sheet->setCellValueByColumnAndRow($anc,     $r, 'Week');
+        foreach ($rootPlatforms as $root) {
+            $sheet->setCellValueByColumnAndRow($svRootCols[$root['id']], $r, $this->shortName($root['name']));
+        }
+        $sheet->setCellValueByColumnAndRow($svTotal, $r, 'Total');
+        $this->fillSecRange($sheet, $anc, $svLastCol, $r, self::CLR_SEC_HDR, true);
+        $this->applySecHdrTextStyle($sheet, $anc, $svLastCol, $r);
+        $r++;
+
+        foreach ($weeklyRows as $wRow) {
+            $wk    = $wRow['week'];
+            $sheet->setCellValueByColumnAndRow($anc,     $r, $wRow['label']);
+            foreach ($rootPlatforms as $root) {
+                $rid = $root['id'];
+                $sheet->setCellValueByColumnAndRow($svRootCols[$rid], $r, $weeklySalesByRoot[$wk][$rid] ?? 0);
+            }
+            $sheet->setCellValueByColumnAndRow($svTotal, $r, $wRow['sales']);
+            $this->alignSecRow($sheet, $anc, $svLastCol, $r);
+            if ($r % 2 === 0) $this->fillSecRange($sheet, $anc, $svLastCol, $r, self::CLR_SEC_ALT);
+            $r++;
+        }
+        // Total row
+        $sheet->setCellValueByColumnAndRow($anc,     $r, 'Total');
+        foreach ($rootPlatforms as $root) {
+            $rid = $root['id'];
+            $sheet->setCellValueByColumnAndRow($svRootCols[$rid], $r, $totalSalesByRoot[$rid] ?? 0);
+        }
+        $sheet->setCellValueByColumnAndRow($svTotal, $r, $totals['sales']);
+        $this->fillSecRange($sheet, $anc, $svLastCol, $r, self::CLR_TOTAL, true);
+        $this->alignSecRow($sheet, $anc, $svLastCol, $r);
+        $svSecEnd = $r;
+        $this->sectionBorder($sheet, $anc, $svLastCol, $svSecStart, $svSecEnd);
+        // Money format for all value columns in Sales Value section
+        $svDataStartRow = $svSecStart + 2;
+        for ($ci = $svRootStart; $ci <= $svLastCol; $ci++) {
+            $colLtr = Coordinate::stringFromColumnIndex($ci);
+            $sheet->getStyle($colLtr . $svDataStartRow . ':' . $colLtr . $svSecEnd)
+                ->getNumberFormat()->setFormatCode($moneyFmt);
+        }
+        $r++;
+
+        // ─────────────────────────────────────────────────────────────
         // SECTION 2a – Total Order QTY  (order count per week) ───────
         //   F=Week | G=[root1] | G+1=[root2] | … | G+numRoots=Total Orders
         // ─────────────────────────────────────────────────────────────
         $r += 4;
 
-        $toqRootStart = $anc + 1;           // per-root order cols
-        $toqTotal     = $anc + 1 + $numRoots; // Total Orders col
-        $toqLastCol   = $toqTotal;
+        $toqRootStart = $anc + 1;              // per-root order cols
+        $toqTotal     = $anc + 1 + $numRoots;  // Total Orders col
+        $toqKids      = $anc + 2 + $numRoots;
+        $toqFemale    = $anc + 3 + $numRoots;
+        $toqMale      = $anc + 4 + $numRoots;
+        $toqLastCol   = $toqMale;
 
         $toqRootCols = [];
         foreach ($rootPlatforms as $i => $root) {
@@ -508,7 +623,10 @@ class DashboardAnalyticsExport
         foreach ($rootPlatforms as $root) {
             $sheet->setCellValueByColumnAndRow($toqRootCols[$root['id']], $r, $this->shortName($root['name']));
         }
-        $sheet->setCellValueByColumnAndRow($toqTotal, $r, 'Total');
+        $sheet->setCellValueByColumnAndRow($toqTotal,  $r, 'Total');
+        $sheet->setCellValueByColumnAndRow($toqKids,   $r, 'Kids');
+        $sheet->setCellValueByColumnAndRow($toqFemale, $r, 'Female');
+        $sheet->setCellValueByColumnAndRow($toqMale,   $r, 'Male');
         $this->fillSecRange($sheet, $anc, $toqLastCol, $r, self::CLR_SEC_HDR, true);
         $this->applySecHdrTextStyle($sheet, $anc, $toqLastCol, $r);
         $r++;
@@ -520,7 +638,10 @@ class DashboardAnalyticsExport
                     $toqRootCols[$root['id']], $r, $wRow['root_orders'][$root['id']] ?? 0
                 );
             }
-            $sheet->setCellValueByColumnAndRow($toqTotal, $r, $wRow['orders']);
+            $sheet->setCellValueByColumnAndRow($toqTotal,  $r, $wRow['orders']);
+            $sheet->setCellValueByColumnAndRow($toqKids,   $r, $wRow['kids']);
+            $sheet->setCellValueByColumnAndRow($toqFemale, $r, $wRow['female']);
+            $sheet->setCellValueByColumnAndRow($toqMale,   $r, $wRow['male']);
             $this->alignSecRow($sheet, $anc, $toqLastCol, $r);
             if ($r % 2 === 0) $this->fillSecRange($sheet, $anc, $toqLastCol, $r, self::CLR_SEC_ALT);
             $r++;
@@ -532,12 +653,16 @@ class DashboardAnalyticsExport
             $sum = array_sum(array_column(array_column($weeklyRows, 'root_orders'), $rid));
             $sheet->setCellValueByColumnAndRow($toqRootCols[$rid], $r, $sum);
         }
-        $sheet->setCellValueByColumnAndRow($toqTotal, $r, $totals['orders']);
+        $sheet->setCellValueByColumnAndRow($toqTotal,  $r, $totals['orders']);
+        $sheet->setCellValueByColumnAndRow($toqKids,   $r, $totals['kids']);
+        $sheet->setCellValueByColumnAndRow($toqFemale, $r, $totals['female']);
+        $sheet->setCellValueByColumnAndRow($toqMale,   $r, $totals['male']);
         $this->fillSecRange($sheet, $anc, $toqLastCol, $r, self::CLR_TOTAL, true);
         $this->alignSecRow($sheet, $anc, $toqLastCol, $r);
         $toqSecEnd = $r;
         $this->sectionBorder($sheet, $anc, $toqLastCol, $toqSecStart, $toqSecEnd);
         $r++;
+
 
         // ─────────────────────────────────────────────────────────────
         // SECTION 2b – Total Order Item QTY  (qty/pieces per week) ───
@@ -547,10 +672,7 @@ class DashboardAnalyticsExport
 
         $tiqRootStart = $anc + 1;
         $tiqTotal     = $anc + 1 + $numRoots;
-        $tiqKids      = $anc + 2 + $numRoots;
-        $tiqFemale    = $anc + 3 + $numRoots;
-        $tiqMale      = $anc + 4 + $numRoots;
-        $tiqLastCol   = $tiqMale;
+        $tiqLastCol   = $tiqTotal;   // Kids/Female/Male moved to Total Order QTY section
 
         $tiqRootCols = [];
         foreach ($rootPlatforms as $i => $root) {
@@ -567,9 +689,6 @@ class DashboardAnalyticsExport
             $sheet->setCellValueByColumnAndRow($tiqRootCols[$root['id']], $r, $this->shortName($root['name']));
         }
         $sheet->setCellValueByColumnAndRow($tiqTotal,  $r, 'Total');
-        $sheet->setCellValueByColumnAndRow($tiqKids,   $r, 'Kids');
-        $sheet->setCellValueByColumnAndRow($tiqFemale, $r, 'Female');
-        $sheet->setCellValueByColumnAndRow($tiqMale,   $r, 'Male');
         $this->fillSecRange($sheet, $anc, $tiqLastCol, $r, self::CLR_SEC_HDR, true);
         $this->applySecHdrTextStyle($sheet, $anc, $tiqLastCol, $r);
         $r++;
@@ -582,9 +701,6 @@ class DashboardAnalyticsExport
                 );
             }
             $sheet->setCellValueByColumnAndRow($tiqTotal,  $r, $wRow['qty']);
-            $sheet->setCellValueByColumnAndRow($tiqKids,   $r, $wRow['kids']);
-            $sheet->setCellValueByColumnAndRow($tiqFemale, $r, $wRow['female']);
-            $sheet->setCellValueByColumnAndRow($tiqMale,   $r, $wRow['male']);
             $this->alignSecRow($sheet, $anc, $tiqLastCol, $r);
             if ($r % 2 === 0) $this->fillSecRange($sheet, $anc, $tiqLastCol, $r, self::CLR_SEC_ALT);
             $r++;
@@ -597,9 +713,6 @@ class DashboardAnalyticsExport
             $sheet->setCellValueByColumnAndRow($tiqRootCols[$rid], $r, $sum);
         }
         $sheet->setCellValueByColumnAndRow($tiqTotal,  $r, $totals['qty']);
-        $sheet->setCellValueByColumnAndRow($tiqKids,   $r, $totals['kids']);
-        $sheet->setCellValueByColumnAndRow($tiqFemale, $r, $totals['female']);
-        $sheet->setCellValueByColumnAndRow($tiqMale,   $r, $totals['male']);
         $this->fillSecRange($sheet, $anc, $tiqLastCol, $r, self::CLR_TOTAL, true);
         $this->alignSecRow($sheet, $anc, $tiqLastCol, $r);
         $tiqSecEnd = $r;
@@ -614,14 +727,23 @@ class DashboardAnalyticsExport
 
         $retLabelCol  = $anc;
         $retRootStart = $anc + 1;
-        $retRootCols  = [];
+        // Each root platform gets 2 columns: count + platform percentage
+        $retRootCols    = [];
+        $retRootPctCols = [];
         foreach ($rootPlatforms as $i => $root) {
-            $retRootCols[$root['id']] = $retRootStart + $i;
+            $retRootCols[$root['id']]    = $retRootStart + $i * 2;
+            $retRootPctCols[$root['id']] = $retRootStart + $i * 2 + 1;
         }
-        $retKidsCol   = $retRootStart + $numRoots;
-        $retFemaleCol = $retKidsCol + 1;
-        $retMaleCol   = $retFemaleCol + 1;
-        $retLastCol   = $retMaleCol;
+        $retKidsCol     = $retRootStart + $numRoots * 2;
+        $retFemaleCol   = $retKidsCol + 1;
+        $retMaleCol     = $retFemaleCol + 1;
+        $retTotalCol    = $retMaleCol + 1;
+        $retPctTotalCol = $retTotalCol + 1;
+        $retLastCol     = $retPctTotalCol;
+
+        // Pre-compute grand total and per-root totals for percentages
+        $retGrandTotal = array_sum($returnReasonData['totals_by_root']);
+        $retRootTotals = $returnReasonData['totals_by_root'];
 
         $retSecStart = $r;
         $this->writeSectionTitle($sheet, $anc, $retLastCol, $r, 'Return Breakdown');
@@ -629,25 +751,39 @@ class DashboardAnalyticsExport
 
         $sheet->setCellValueByColumnAndRow($retLabelCol, $r, 'Reason');
         foreach ($rootPlatforms as $root) {
-            $sheet->setCellValueByColumnAndRow($retRootCols[$root['id']], $r, $this->shortName($root['name']));
+            $sn = $this->shortName($root['name']);
+            $sheet->setCellValueByColumnAndRow($retRootCols[$root['id']],    $r, $sn);
+            $sheet->setCellValueByColumnAndRow($retRootPctCols[$root['id']], $r, '%' . $sn);
         }
-        $sheet->setCellValueByColumnAndRow($retKidsCol,   $r, 'Kids');
-        $sheet->setCellValueByColumnAndRow($retFemaleCol, $r, 'Female');
-        $sheet->setCellValueByColumnAndRow($retMaleCol,   $r, 'Male');
+        $sheet->setCellValueByColumnAndRow($retKidsCol,     $r, 'Kids');
+        $sheet->setCellValueByColumnAndRow($retFemaleCol,   $r, 'Female');
+        $sheet->setCellValueByColumnAndRow($retMaleCol,     $r, 'Male');
+        $sheet->setCellValueByColumnAndRow($retTotalCol,    $r, 'Total');
+        $sheet->setCellValueByColumnAndRow($retPctTotalCol, $r, '% Total');
         $this->fillSecRange($sheet, $anc, $retLastCol, $r, self::CLR_SEC_HDR, true);
         $this->applySecHdrTextStyle($sheet, $anc, $retLastCol, $r);
         $r++;
 
+        $pctFmt = '0.0%';
         foreach ($returnReasonData['reasons'] as $reason) {
+            $reasonTotal = array_sum($reason['by_root']);
+            $pctTotal    = $retGrandTotal > 0 ? $reasonTotal / $retGrandTotal : 0;
             $sheet->setCellValueByColumnAndRow($retLabelCol, $r, $reason['name']);
             foreach ($rootPlatforms as $root) {
-                $sheet->setCellValueByColumnAndRow(
-                    $retRootCols[$root['id']], $r, $reason['by_root'][$root['id']] ?? 0
-                );
+                $rootCount = $reason['by_root'][$root['id']] ?? 0;
+                $rootTotal = $retRootTotals[$root['id']] ?? 0;
+                $rootPct   = $rootTotal > 0 ? $rootCount / $rootTotal : 0;
+                $sheet->setCellValueByColumnAndRow($retRootCols[$root['id']],    $r, $rootCount);
+                $sheet->setCellValueByColumnAndRow($retRootPctCols[$root['id']], $r, $rootPct);
+                $sheet->getStyleByColumnAndRow($retRootPctCols[$root['id']], $r)
+                    ->getNumberFormat()->setFormatCode($pctFmt);
             }
-            $sheet->setCellValueByColumnAndRow($retKidsCol,   $r, $reason['kids']);
-            $sheet->setCellValueByColumnAndRow($retFemaleCol, $r, $reason['female']);
-            $sheet->setCellValueByColumnAndRow($retMaleCol,   $r, $reason['male']);
+            $sheet->setCellValueByColumnAndRow($retKidsCol,     $r, $reason['kids']);
+            $sheet->setCellValueByColumnAndRow($retFemaleCol,   $r, $reason['female']);
+            $sheet->setCellValueByColumnAndRow($retMaleCol,     $r, $reason['male']);
+            $sheet->setCellValueByColumnAndRow($retTotalCol,    $r, $reasonTotal);
+            $sheet->setCellValueByColumnAndRow($retPctTotalCol, $r, $pctTotal);
+            $sheet->getStyleByColumnAndRow($retPctTotalCol, $r)->getNumberFormat()->setFormatCode($pctFmt);
             $this->alignSecRow($sheet, $anc, $retLastCol, $r);
             if ($r % 2 === 0) $this->fillSecRange($sheet, $anc, $retLastCol, $r, self::CLR_SEC_ALT);
             $r++;
@@ -657,14 +793,19 @@ class DashboardAnalyticsExport
             $sheet->setCellValueByColumnAndRow(
                 $retRootCols[$root['id']], $r, $returnReasonData['totals_by_root'][$root['id']] ?? 0
             );
+            $sheet->setCellValueByColumnAndRow($retRootPctCols[$root['id']], $r, '');
         }
-        $sheet->setCellValueByColumnAndRow($retKidsCol,   $r, $returnReasonData['totals_kids']);
-        $sheet->setCellValueByColumnAndRow($retFemaleCol, $r, $returnReasonData['totals_female']);
-        $sheet->setCellValueByColumnAndRow($retMaleCol,   $r, $returnReasonData['totals_male']);
+        $sheet->setCellValueByColumnAndRow($retKidsCol,     $r, $returnReasonData['totals_kids']);
+        $sheet->setCellValueByColumnAndRow($retFemaleCol,   $r, $returnReasonData['totals_female']);
+        $sheet->setCellValueByColumnAndRow($retMaleCol,     $r, $returnReasonData['totals_male']);
+        $sheet->setCellValueByColumnAndRow($retTotalCol,    $r, $retGrandTotal);
+        $sheet->setCellValueByColumnAndRow($retPctTotalCol, $r, $retGrandTotal > 0 ? 1 : 0);
+        $sheet->getStyleByColumnAndRow($retPctTotalCol, $r)->getNumberFormat()->setFormatCode($pctFmt);
         $this->fillSecRange($sheet, $anc, $retLastCol, $r, self::CLR_TOTAL, true);
         $this->alignSecRow($sheet, $anc, $retLastCol, $r);
         $retSecEnd = $r;
         $this->sectionBorder($sheet, $anc, $retLastCol, $retSecStart, $retSecEnd);
+
 
         // ── Number formats – main area ───────────────────────────────
         $sheet->getStyle('C' . $dataStartRow . ':C' . $lastMainRow)->getNumberFormat()->setFormatCode($moneyFmt);
@@ -696,7 +837,7 @@ class DashboardAnalyticsExport
             $sheet->getColumnDimensionByColumn($ci)->setWidth(10);
         }
         // Bottom sections: label col wider, value cols standard
-        $maxSecLastCol = max($wbLastCol, $toqLastCol, $tiqLastCol, $retLastCol);
+        $maxSecLastCol = max($wbLastCol, $svLastCol, $toqLastCol, $tiqLastCol, $retLastCol);
         $sheet->getColumnDimensionByColumn($anc)->setWidth(18); // F label col
         for ($ci = $anc + 1; $ci <= $maxSecLastCol; $ci++) {
             $sheet->getColumnDimensionByColumn($ci)->setWidth(12);
@@ -704,6 +845,7 @@ class DashboardAnalyticsExport
 
         // ── Row height for section title rows ────────────────────────
         $sheet->getRowDimension($wbSecStart)->setRowHeight(22);
+        $sheet->getRowDimension($svSecStart)->setRowHeight(22);
         $sheet->getRowDimension($toqSecStart)->setRowHeight(22);
         $sheet->getRowDimension($tiqSecStart)->setRowHeight(22);
         $sheet->getRowDimension($retSecStart)->setRowHeight(22);
