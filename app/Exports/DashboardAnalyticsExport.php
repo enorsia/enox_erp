@@ -611,15 +611,19 @@ class DashboardAnalyticsExport
         $r = $retSecEnd + 4;
 
         // ── Section 2: Weekly Breakdown ───────────────────────────
-        $fixedLabels = ['Week', 'Sales (£)', 'Ad Spend (£)', 'Ret Qty', 'Ret Amt (£)', '% Ret Qty', '% Ret Amt'];
-        $childLabels = ['Sale Amt (£)', 'Orders', 'Items Ord.', 'Total Orders', 'Ret Amt (£)', 'Ret Orders', 'Ret Items', 'Total Items'];
+        // Fixed columns: Week | Sales (£) | Spend (£) | Order | Order Qty | Return Qty | Return Qty % | Return Amount (£) | Return Amount %
+        $fixedLabels = ['Week', 'Sales (£)', 'Spend (£)', 'Order', 'Order Qty', 'Return Qty', 'Return Qty %', 'Return Amount (£)', 'Return Amount %'];
+        // Per-platform children (6): Sales (£) | Orders | Qty | Return Amt (£) | Ret Orders | Ret Qty
+        $childLabels = ['Sales (£)', 'Orders', 'Qty', 'Return (£)', 'Ret Orders', 'Ret Qty'];
         $childCount  = count($childLabels);
 
         $fixedStartCol    = $anc;
         $fixedEndCol      = $fixedStartCol + count($fixedLabels) - 1;
         $platformStartCol = $fixedEndCol + 1;
-        $totalGroupStart  = $platformStartCol + $numRoots * $childCount;
-        $wbLastCol        = $totalGroupStart + $childCount - 1;
+        // No "Total" group at the end
+        $wbLastCol = $numRoots > 0
+            ? $platformStartCol + $numRoots * $childCount - 1
+            : $fixedEndCol;
 
         $wbSecStart = $r;
         $this->writeSectionTitle($sheet, $anc, $wbLastCol, $r, 'Weekly Breakdown : Sale vs Spends vs Return');
@@ -657,42 +661,34 @@ class DashboardAnalyticsExport
             $sheet->getStyle("{$startLtr}{$headerRow1}:{$endLtr}{$headerRow2}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($groupFill);
         }
 
-        $totalStartLtr = Coordinate::stringFromColumnIndex($totalGroupStart);
-        $totalEndLtr   = Coordinate::stringFromColumnIndex($wbLastCol);
-        $sheet->setCellValue($totalStartLtr . $headerRow1, 'Total');
-        $sheet->mergeCells("{$totalStartLtr}{$headerRow1}:{$totalEndLtr}{$headerRow1}");
-        $this->applyHeaderStyle($sheet, "{$totalStartLtr}{$headerRow1}:{$totalEndLtr}{$headerRow1}");
-        foreach ($childLabels as $j => $lbl) {
-            $cl = Coordinate::stringFromColumnIndex($totalGroupStart + $j);
-            $sheet->setCellValue($cl . $headerRow2, $lbl);
-            $this->applyHeaderStyle($sheet, "{$cl}{$headerRow2}:{$cl}{$headerRow2}");
-        }
-
         $r = $headerRow2 + 1;
 
         $totalRetPcs    = 0;
         $totalRetGbp    = 0;
+        $totalOrders    = 0;
+        $totalItems     = 0;
         $platformTotals = array_fill_keys(array_column($rootPlatforms, 'id'), array_fill(0, $childCount, 0.0));
-        $grandTotals    = array_fill(0, $childCount, 0.0);
 
         foreach ($weeklyRows as $wRow) {
-            $wk        = $wRow['week'];
-            $sales     = (float) ($wRow['sales']       ?? 0);
-            $spend     = (float) ($wRow['spend']        ?? 0);
-            $retPcs    = (float) ($wRow['returns_pcs']  ?? 0);
-            $retGbp    = (float) ($wRow['returns_gbp']  ?? 0);
-            $pctRetPcs = $sales > 0 ? $retPcs / $sales : 0;
-            $pctRetGbp = $sales > 0 ? $retGbp / $sales : 0;
+            $wk             = $wRow['week'];
+            $sales          = (float) ($wRow['sales']      ?? 0);
+            $spend          = (float) ($wRow['spend']      ?? 0);
+            $retPcs         = (float) ($wRow['returns_pcs'] ?? 0);
+            $retGbp         = (float) ($wRow['returns_gbp'] ?? 0);
+            $weekOrders     = (float) array_sum($wRow['root_orders'] ?? []);
+            $weekItems      = (float) array_sum($wRow['root_qty']    ?? []);
+            $pctRetPcs      = $weekItems  > 0 ? $retPcs / $weekItems  : 0;
+            $pctRetGbp      = $sales      > 0 ? $retGbp / $sales      : 0;
 
             $sheet->setCellValueByColumnAndRow($fixedStartCol + 0, $r, $wRow['label']);
             $sheet->setCellValueByColumnAndRow($fixedStartCol + 1, $r, $sales);
             $sheet->setCellValueByColumnAndRow($fixedStartCol + 2, $r, $spend);
-            $sheet->setCellValueByColumnAndRow($fixedStartCol + 3, $r, $retPcs);
-            $sheet->setCellValueByColumnAndRow($fixedStartCol + 4, $r, $retGbp);
-            $sheet->setCellValueByColumnAndRow($fixedStartCol + 5, $r, $pctRetPcs);
-            $sheet->setCellValueByColumnAndRow($fixedStartCol + 6, $r, $pctRetGbp);
-
-            $rowTotals = array_fill(0, $childCount, 0.0);
+            $sheet->setCellValueByColumnAndRow($fixedStartCol + 3, $r, $weekOrders);
+            $sheet->setCellValueByColumnAndRow($fixedStartCol + 4, $r, $weekItems);
+            $sheet->setCellValueByColumnAndRow($fixedStartCol + 5, $r, $retPcs);
+            $sheet->setCellValueByColumnAndRow($fixedStartCol + 6, $r, $pctRetPcs);
+            $sheet->setCellValueByColumnAndRow($fixedStartCol + 7, $r, $retGbp);
+            $sheet->setCellValueByColumnAndRow($fixedStartCol + 8, $r, $pctRetGbp);
 
             foreach ($rootPlatforms as $i => $root) {
                 $rid        = $root['id'];
@@ -700,20 +696,18 @@ class DashboardAnalyticsExport
                 $groupEnd   = $groupStart + $childCount - 1;
                 $groupFill  = self::PLATFORM_COLORS[$i % count(self::PLATFORM_COLORS)];
 
+                // Children: Sales (£) | Orders | Qty | Return Amt (£) | Ret Orders | Ret Qty
                 $vals = [
-                    (float) ($weeklySalesByRoot[$wk][$rid]                  ?? 0),
-                    (float) ($wRow['root_orders'][$rid]                     ?? 0),
-                    (float) ($wRow['root_qty'][$rid]                        ?? 0),
-                    (float) ($wRow['root_orders'][$rid]                     ?? 0), // Total Orders = Order Qty
-                    (float) ($weeklyReturnsByRoot[$wk][$rid]['amount']      ?? 0),
-                    (float) ($weeklyReturnsByRoot[$wk][$rid]['order_qty']   ?? 0),
-                    (float) ($weeklyReturnsByRoot[$wk][$rid]['item_qty']    ?? 0),
-                    (float) ($wRow['root_qty'][$rid] ?? 0) + (float) ($weeklyReturnsByRoot[$wk][$rid]['item_qty'] ?? 0),
+                    (float) ($weeklySalesByRoot[$wk][$rid]                ?? 0),  // Sales £
+                    (float) ($wRow['root_orders'][$rid]                   ?? 0),  // Orders (order qty)
+                    (float) ($wRow['root_qty'][$rid]                      ?? 0),  // Qty (item qty)
+                    (float) ($weeklyReturnsByRoot[$wk][$rid]['amount']    ?? 0),  // Return Amt £
+                    (float) ($weeklyReturnsByRoot[$wk][$rid]['order_qty'] ?? 0),  // Ret Orders
+                    (float) ($weeklyReturnsByRoot[$wk][$rid]['item_qty']  ?? 0),  // Ret Qty
                 ];
 
                 foreach ($vals as $j => $val) {
                     $sheet->setCellValueByColumnAndRow($groupStart + $j, $r, $val);
-                    $rowTotals[$j]          += $val;
                     $platformTotals[$rid][$j] += $val;
                 }
                 $startLtr = Coordinate::stringFromColumnIndex($groupStart);
@@ -722,13 +716,10 @@ class DashboardAnalyticsExport
                 $sheet->getStyle("{$startLtr}{$r}:{$endLtr}{$r}")->getFont()->getColor()->setARGB('FF000000');
             }
 
-            foreach ($rowTotals as $j => $val) {
-                $sheet->setCellValueByColumnAndRow($totalGroupStart + $j, $r, $val);
-                $grandTotals[$j] += $val;
-            }
-
             $totalRetPcs += $retPcs;
             $totalRetGbp += $retGbp;
+            $totalOrders += $weekOrders;
+            $totalItems  += $weekItems;
 
             $this->alignSecRow($sheet, $anc, $wbLastCol, $r);
             if ($r % 2 === 0) $this->fillSecRange($sheet, $fixedStartCol, $fixedEndCol, $r, self::CLR_SEC_ALT);
@@ -738,24 +729,23 @@ class DashboardAnalyticsExport
         // Weekly total row
         $totalSales     = (float) ($totals['sales'] ?? 0);
         $totalSpend     = (float) ($totals['spent'] ?? 0);
-        $pctTotalRetPcs = $totalSales > 0 ? $totalRetPcs / $totalSales : 0;
+        $pctTotalRetPcs = $totalItems > 0 ? $totalRetPcs / $totalItems : 0;
         $pctTotalRetGbp = $totalSales > 0 ? $totalRetGbp / $totalSales : 0;
 
         $sheet->setCellValueByColumnAndRow($fixedStartCol + 0, $r, 'Total');
         $sheet->setCellValueByColumnAndRow($fixedStartCol + 1, $r, $totalSales);
         $sheet->setCellValueByColumnAndRow($fixedStartCol + 2, $r, $totalSpend);
-        $sheet->setCellValueByColumnAndRow($fixedStartCol + 3, $r, $totalRetPcs);
-        $sheet->setCellValueByColumnAndRow($fixedStartCol + 4, $r, $totalRetGbp);
-        $sheet->setCellValueByColumnAndRow($fixedStartCol + 5, $r, $pctTotalRetPcs);
-        $sheet->setCellValueByColumnAndRow($fixedStartCol + 6, $r, $pctTotalRetGbp);
+        $sheet->setCellValueByColumnAndRow($fixedStartCol + 3, $r, $totalOrders);
+        $sheet->setCellValueByColumnAndRow($fixedStartCol + 4, $r, $totalItems);
+        $sheet->setCellValueByColumnAndRow($fixedStartCol + 5, $r, $totalRetPcs);
+        $sheet->setCellValueByColumnAndRow($fixedStartCol + 6, $r, $pctTotalRetPcs);
+        $sheet->setCellValueByColumnAndRow($fixedStartCol + 7, $r, $totalRetGbp);
+        $sheet->setCellValueByColumnAndRow($fixedStartCol + 8, $r, $pctTotalRetGbp);
         foreach ($rootPlatforms as $i => $root) {
             $groupStart = $platformStartCol + $i * $childCount;
             foreach ($platformTotals[$root['id']] as $j => $val) {
                 $sheet->setCellValueByColumnAndRow($groupStart + $j, $r, $val);
             }
-        }
-        foreach ($grandTotals as $j => $val) {
-            $sheet->setCellValueByColumnAndRow($totalGroupStart + $j, $r, $val);
         }
 
         $this->fillSecRange($sheet, $anc, $wbLastCol, $r, self::CLR_TOTAL, true);
@@ -767,12 +757,17 @@ class DashboardAnalyticsExport
         $moneyFmt  = '#,##0.00';
         $pctFmt    = '0.00%';
         $dataStart = $headerRow2 + 1;
+        // Fixed: Sales (£) col+1, Spend (£) col+2
         $sheet->getStyle(Coordinate::stringFromColumnIndex($fixedStartCol + 1) . $dataStart . ':' . Coordinate::stringFromColumnIndex($fixedStartCol + 2) . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
-        $sheet->getStyle(Coordinate::stringFromColumnIndex($fixedStartCol + 4) . $dataStart . ':' . Coordinate::stringFromColumnIndex($fixedStartCol + 4) . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
-        $sheet->getStyle(Coordinate::stringFromColumnIndex($fixedStartCol + 5) . $dataStart . ':' . Coordinate::stringFromColumnIndex($fixedStartCol + 6) . $wbSecEnd)->getNumberFormat()->setFormatCode($pctFmt);
+        // Fixed: Return Amount (£) col+7
+        $sheet->getStyle(Coordinate::stringFromColumnIndex($fixedStartCol + 7) . $dataStart . ':' . Coordinate::stringFromColumnIndex($fixedStartCol + 7) . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
+        // Fixed: Return Qty % col+6, Return Amount % col+8
+        $sheet->getStyle(Coordinate::stringFromColumnIndex($fixedStartCol + 6) . $dataStart . ':' . Coordinate::stringFromColumnIndex($fixedStartCol + 6) . $wbSecEnd)->getNumberFormat()->setFormatCode($pctFmt);
+        $sheet->getStyle(Coordinate::stringFromColumnIndex($fixedStartCol + 8) . $dataStart . ':' . Coordinate::stringFromColumnIndex($fixedStartCol + 8) . $wbSecEnd)->getNumberFormat()->setFormatCode($pctFmt);
+        // Platform children: Sales (£) at +0, Return Amt (£) at +3
         for ($ci = $platformStartCol; $ci <= $wbLastCol; $ci += $childCount) {
             $sheet->getStyle(Coordinate::stringFromColumnIndex($ci)     . $dataStart . ':' . Coordinate::stringFromColumnIndex($ci)     . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
-            $sheet->getStyle(Coordinate::stringFromColumnIndex($ci + 4) . $dataStart . ':' . Coordinate::stringFromColumnIndex($ci + 4) . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
+            $sheet->getStyle(Coordinate::stringFromColumnIndex($ci + 3) . $dataStart . ':' . Coordinate::stringFromColumnIndex($ci + 3) . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
         }
 
         // Number formats – main area
