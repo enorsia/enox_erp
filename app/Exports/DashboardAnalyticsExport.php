@@ -53,7 +53,6 @@ class DashboardAnalyticsExport
     private const COL_ROAS  = 4;
     private const COL_SPEND = 5;
 
-    // Rotating platform colour palette (used for weekly breakdown groups)
     private const PLATFORM_COLORS = [
         self::CLR_PLATFORM_1,
         self::CLR_PLATFORM_2,
@@ -88,7 +87,6 @@ class DashboardAnalyticsExport
         $totals           = $export['totals'];
         $numRoots         = count($rootPlatforms);
 
-        // Single query: per-date per-platform return data; derive date totals in PHP (no extra DB hit)
         $returnsByDatePlatform = DailyReturn::whereBetween('date', [$this->dateFrom, $this->dateTo])
             ->selectRaw('DATE(date) as dt, sale_platform_id, SUM(return_amount) as amount, SUM(number_of_returns) as order_qty, SUM(number_of_return_quantities) as item_qty')
             ->groupByRaw('DATE(date), sale_platform_id')
@@ -103,13 +101,11 @@ class DashboardAnalyticsExport
             ])->toArray())
             ->toArray();
 
-        // Derive per-date return_amount totals from per-platform data (no extra DB query)
         $returnAmountByDate = array_map(
             fn ($platforms) => array_sum(array_column($platforms, 'amount')),
             $returnsByDatePlatform
         );
 
-        // Supplement weekly rows with returns_gbp
         $weeklyReturnGbpMap = [];
         foreach ($rows as $row) {
             $wk = $row['week'];
@@ -333,9 +329,9 @@ class DashboardAnalyticsExport
             }
 
             $sheet->setCellValue('B' . $r, Carbon::parse($row['date'])->format('d-M-Y'));
-            $sheet->setCellValue('C' . $r, $row['total_sales']);
-            $sheet->setCellValue('D' . $r, $row['roas']);
-            $sheet->setCellValue('E' . $r, $row['total_spent']);
+            $sheet->setCellValue('C' . $r, round((float) $row['total_sales'], 2));
+            $sheet->setCellValue('D' . $r, $row['roas']); // percentage fraction – format code handles 2 dp display
+            $sheet->setCellValue('E' . $r, round((float) $row['total_spent'], 2));
 
             foreach ($allPlatCols as $i => $platCol) {
                 $ci  = $platBaseCol + $i;
@@ -352,7 +348,7 @@ class DashboardAnalyticsExport
                             : ($row['platform'][$leafId]['sales'] ?? 0);
                     }
                 }
-                $sheet->setCellValueByColumnAndRow($ci, $r, $val);
+                $sheet->setCellValueByColumnAndRow($ci, $r, round((float) $val, 2));
             }
 
             foreach ($rootPlatforms as $root) {
@@ -405,11 +401,13 @@ class DashboardAnalyticsExport
             $sheet->getStyle('B' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
             if ($sRow['col_c'] !== null) {
-                $sheet->setCellValue('C' . $r, $sRow['col_c']);
+                // col_c is always a money/amount value – safe to round to 2 dp
+                $sheet->setCellValue('C' . $r, round((float) $sRow['col_c'], 2));
                 $sheet->getStyle('C' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             }
             if ($sRow['col_e'] !== null) {
-                $sheet->setCellValue('E' . $r, $sRow['col_e']);
+                $colEIsPercent = !empty($sRow['col_e_format']) && str_contains($sRow['col_e_format'], '%');
+                $sheet->setCellValue('E' . $r, $colEIsPercent ? (float) $sRow['col_e'] : round((float) $sRow['col_e'], 2));
                 $sheet->getStyle('E' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                 if (!empty($sRow['col_e_format'])) {
                     $sheet->getStyle('E' . $r)->getNumberFormat()->setFormatCode($sRow['col_e_format']);
@@ -420,7 +418,9 @@ class DashboardAnalyticsExport
             foreach ($sRow['platform'] as $colKey => $value) {
                 if (!isset($platColMap[$colKey])) continue;
                 $ci = $platColMap[$colKey];
-                $sheet->setCellValueByColumnAndRow($ci, $r, $value);
+                // Percentage-formatted platform values are ratio fractions – leave them for the format code.
+                $platIsPercent = !empty($sRow['platform_formats'][$colKey]) && str_contains($sRow['platform_formats'][$colKey], '%');
+                $sheet->setCellValueByColumnAndRow($ci, $r, $platIsPercent ? (float) $value : round((float) $value, 2));
                 $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                 if (!empty($sRow['platform_formats'][$colKey])) {
                     $sheet->getStyleByColumnAndRow($ci, $r)->getNumberFormat()->setFormatCode($sRow['platform_formats'][$colKey]);
@@ -437,7 +437,18 @@ class DashboardAnalyticsExport
                     if (isset($sRow['platform'][$lk])) $val += $sRow['platform'][$lk];
                 }
                 if ($val != 0) {
-                    $sheet->setCellValueByColumnAndRow($ci, $r, $val);
+                    // Detect if any leaf format for this column uses %; if so, don't pre-round.
+                    $summaryIsPercent = false;
+                    if (!empty($sRow['platform_formats'])) {
+                        foreach ($platCol['leaf_ids'] as $leafId) {
+                            $lk = "{$leafId}_{$platCol['col_type']}";
+                            if (!empty($sRow['platform_formats'][$lk]) && str_contains($sRow['platform_formats'][$lk], '%')) {
+                                $summaryIsPercent = true;
+                                break;
+                            }
+                        }
+                    }
+                    $sheet->setCellValueByColumnAndRow($ci, $r, $summaryIsPercent ? (float) $val : round((float) $val, 2));
                     $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                     if (!empty($sRow['platform_formats'])) {
                         foreach ($platCol['leaf_ids'] as $leafId) {
@@ -452,27 +463,27 @@ class DashboardAnalyticsExport
             }
 
             // Right-section summary values
-            if (!empty($sRow['total_orders'])) $sheet->setCellValueByColumnAndRow($rsOrdersCol, $r, $sRow['total_orders']);
+            if (!empty($sRow['total_orders'])) $sheet->setCellValueByColumnAndRow($rsOrdersCol, $r, round((float) $sRow['total_orders'], 2));
             if (!empty($sRow['root_orders'])) {
                 foreach ($rootPlatforms as $root) {
                     $rid = $root['id'];
                     if (isset($sRow['root_orders'][$rid], $rsRootOrderCols[$rid])) {
-                        $sheet->setCellValueByColumnAndRow($rsRootOrderCols[$rid], $r, $sRow['root_orders'][$rid]);
+                        $sheet->setCellValueByColumnAndRow($rsRootOrderCols[$rid], $r, round((float) $sRow['root_orders'][$rid], 2));
                     }
                 }
             }
-            if (!empty($sRow['total_qty'])) $sheet->setCellValueByColumnAndRow($rsQtyCol, $r, $sRow['total_qty']);
+            if (!empty($sRow['total_qty'])) $sheet->setCellValueByColumnAndRow($rsQtyCol, $r, round((float) $sRow['total_qty'], 2));
             if (!empty($sRow['root_qty'])) {
                 foreach ($rootPlatforms as $root) {
                     $rid = $root['id'];
                     if (isset($sRow['root_qty'][$rid], $rsRootQtyCols[$rid])) {
-                        $sheet->setCellValueByColumnAndRow($rsRootQtyCols[$rid], $r, $sRow['root_qty'][$rid]);
+                        $sheet->setCellValueByColumnAndRow($rsRootQtyCols[$rid], $r, round((float) $sRow['root_qty'][$rid], 2));
                     }
                 }
             }
-            if ($sRow['kids']   !== null) $sheet->setCellValueByColumnAndRow($rsKidsCol,   $r, $sRow['kids']);
-            if ($sRow['female'] !== null) $sheet->setCellValueByColumnAndRow($rsFemaleCol,  $r, $sRow['female']);
-            if ($sRow['male']   !== null) $sheet->setCellValueByColumnAndRow($rsMaleCol,    $r, $sRow['male']);
+            if ($sRow['kids']   !== null) $sheet->setCellValueByColumnAndRow($rsKidsCol,   $r, round((float) $sRow['kids'],   2));
+            if ($sRow['female'] !== null) $sheet->setCellValueByColumnAndRow($rsFemaleCol,  $r, round((float) $sRow['female'], 2));
+            if ($sRow['male']   !== null) $sheet->setCellValueByColumnAndRow($rsMaleCol,    $r, round((float) $sRow['male'],   2));
 
             $this->fillRow($sheet, $r, $mainLastCol, $color);
             $sheet->getStyle('B' . $r)->getFont()->setBold(true);
@@ -520,8 +531,6 @@ class DashboardAnalyticsExport
             $r++;
         }
         $lastMainRow = $r - 1;
-
-        // ── Bottom sections: Return Breakdown (upper) + Weekly Breakdown (lower) ──
 
         $r   += 4;
         $anc  = 2;
@@ -611,9 +620,7 @@ class DashboardAnalyticsExport
         $r = $retSecEnd + 4;
 
         // ── Section 2: Weekly Breakdown ───────────────────────────
-        // Fixed columns: Week | Sales (£) | Spend (£) | Order | Order Qty | Return Qty | Return Qty % | Return Amount (£) | Return Amount %
         $fixedLabels = ['Week', 'Sales (£)', 'Spend (£)', 'Order', 'Order Qty', 'Return Qty', 'Return Qty %', 'Return Amount (£)', 'Return Amount %'];
-        // Per-platform children (6): Sales (£) | Orders | Qty | Return Amt (£) | Ret Orders | Ret Qty
         $childLabels = ['Sales (£)', 'Orders', 'Qty', 'Return (£)', 'Ret Orders', 'Ret Qty'];
         $childCount  = count($childLabels);
 
@@ -681,13 +688,13 @@ class DashboardAnalyticsExport
             $pctRetGbp      = $sales      > 0 ? $retGbp / $sales      : 0;
 
             $sheet->setCellValueByColumnAndRow($fixedStartCol + 0, $r, $wRow['label']);
-            $sheet->setCellValueByColumnAndRow($fixedStartCol + 1, $r, $sales);
-            $sheet->setCellValueByColumnAndRow($fixedStartCol + 2, $r, $spend);
+            $sheet->setCellValueByColumnAndRow($fixedStartCol + 1, $r, round($sales, 2));
+            $sheet->setCellValueByColumnAndRow($fixedStartCol + 2, $r, round($spend, 2));
             $sheet->setCellValueByColumnAndRow($fixedStartCol + 3, $r, $weekOrders);
             $sheet->setCellValueByColumnAndRow($fixedStartCol + 4, $r, $weekItems);
             $sheet->setCellValueByColumnAndRow($fixedStartCol + 5, $r, $retPcs);
             $sheet->setCellValueByColumnAndRow($fixedStartCol + 6, $r, $pctRetPcs);
-            $sheet->setCellValueByColumnAndRow($fixedStartCol + 7, $r, $retGbp);
+            $sheet->setCellValueByColumnAndRow($fixedStartCol + 7, $r, round($retGbp, 2));
             $sheet->setCellValueByColumnAndRow($fixedStartCol + 8, $r, $pctRetGbp);
 
             foreach ($rootPlatforms as $i => $root) {
@@ -698,12 +705,12 @@ class DashboardAnalyticsExport
 
                 // Children: Sales (£) | Orders | Qty | Return Amt (£) | Ret Orders | Ret Qty
                 $vals = [
-                    (float) ($weeklySalesByRoot[$wk][$rid]                ?? 0),  // Sales £
-                    (float) ($wRow['root_orders'][$rid]                   ?? 0),  // Orders (order qty)
-                    (float) ($wRow['root_qty'][$rid]                      ?? 0),  // Qty (item qty)
-                    (float) ($weeklyReturnsByRoot[$wk][$rid]['amount']    ?? 0),  // Return Amt £
-                    (float) ($weeklyReturnsByRoot[$wk][$rid]['order_qty'] ?? 0),  // Ret Orders
-                    (float) ($weeklyReturnsByRoot[$wk][$rid]['item_qty']  ?? 0),  // Ret Qty
+                    round((float) ($weeklySalesByRoot[$wk][$rid]                ?? 0), 2),  // Sales £
+                    (float) ($wRow['root_orders'][$rid]                   ?? 0),             // Orders (order qty) – integer
+                    (float) ($wRow['root_qty'][$rid]                      ?? 0),             // Qty (item qty) – integer
+                    round((float) ($weeklyReturnsByRoot[$wk][$rid]['amount']    ?? 0), 2),  // Return Amt £
+                    (float) ($weeklyReturnsByRoot[$wk][$rid]['order_qty'] ?? 0),             // Ret Orders – integer
+                    (float) ($weeklyReturnsByRoot[$wk][$rid]['item_qty']  ?? 0),             // Ret Qty – integer
                 ];
 
                 foreach ($vals as $j => $val) {
@@ -733,18 +740,20 @@ class DashboardAnalyticsExport
         $pctTotalRetGbp = $totalSales > 0 ? $totalRetGbp / $totalSales : 0;
 
         $sheet->setCellValueByColumnAndRow($fixedStartCol + 0, $r, 'Total');
-        $sheet->setCellValueByColumnAndRow($fixedStartCol + 1, $r, $totalSales);
-        $sheet->setCellValueByColumnAndRow($fixedStartCol + 2, $r, $totalSpend);
+        $sheet->setCellValueByColumnAndRow($fixedStartCol + 1, $r, round($totalSales, 2));
+        $sheet->setCellValueByColumnAndRow($fixedStartCol + 2, $r, round($totalSpend, 2));
         $sheet->setCellValueByColumnAndRow($fixedStartCol + 3, $r, $totalOrders);
         $sheet->setCellValueByColumnAndRow($fixedStartCol + 4, $r, $totalItems);
         $sheet->setCellValueByColumnAndRow($fixedStartCol + 5, $r, $totalRetPcs);
         $sheet->setCellValueByColumnAndRow($fixedStartCol + 6, $r, $pctTotalRetPcs);
-        $sheet->setCellValueByColumnAndRow($fixedStartCol + 7, $r, $totalRetGbp);
+        $sheet->setCellValueByColumnAndRow($fixedStartCol + 7, $r, round($totalRetGbp, 2));
         $sheet->setCellValueByColumnAndRow($fixedStartCol + 8, $r, $pctTotalRetGbp);
         foreach ($rootPlatforms as $i => $root) {
             $groupStart = $platformStartCol + $i * $childCount;
             foreach ($platformTotals[$root['id']] as $j => $val) {
-                $sheet->setCellValueByColumnAndRow($groupStart + $j, $r, $val);
+                // Round money columns (+0 Sales £, +3 Return Amt £); leave integer counts as-is
+                $write = in_array($j, [0, 3]) ? round((float) $val, 2) : $val;
+                $sheet->setCellValueByColumnAndRow($groupStart + $j, $r, $write);
             }
         }
 
@@ -902,11 +911,6 @@ class DashboardAnalyticsExport
 
     // ── Grouped-column builder (collapse/expand feature) ──────────
 
-    /**
-     * Walk the platform tree and build a flat ordered column array with SUMMARY columns
-     * for parent nodes (left of their children) and LEAF columns for leaf nodes.
-     * Excel outline levels are set by tree depth for +/− toggle buttons.
-     */
     private function buildGroupedColumns(array $tree, int $depth = 0): array
     {
         $cols = [];
