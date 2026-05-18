@@ -14,10 +14,7 @@ class DashboardAnalyticsService
 {
     // ── Date range resolution ──────────────────────────────────────
 
-    /**
-     * Convert filter inputs into a concrete date range.
-     * Returns ['from' => Carbon, 'to' => Carbon, 'label' => string, 'months' => array of ['year'=>int,'month'=>int]]
-     */
+    /** Convert filter inputs into a concrete date range. */
     public function resolveDateRange(array $filters): array
     {
         $period = $filters['period'] ?? 'this_month';
@@ -51,7 +48,6 @@ class DashboardAnalyticsService
             case 'custom':
                 $fromRaw = $filters['from_year_month'] ?? $now->format('Y-m');
                 $toRaw   = $filters['to_year_month']   ?? $now->format('Y-m');
-                // Ensure from <= to
                 if ($fromRaw > $toRaw) {
                     [$fromRaw, $toRaw] = [$toRaw, $fromRaw];
                 }
@@ -67,7 +63,6 @@ class DashboardAnalyticsService
                 break;
         }
 
-        // Generate sorted list of year-month pairs covered by the range
         $months = [];
         $cursor = $from->copy()->startOfMonth();
         $end    = $to->copy()->startOfMonth();
@@ -107,11 +102,7 @@ class DashboardAnalyticsService
 
         $budgetTotal = 0;
         if (!empty($months)) {
-            $conditions = [];
-            foreach ($months as $m) {
-                $conditions[] = "(year = {$m['year']} AND month = {$m['month']})";
-            }
-            $budgetTotal = MonthlyBudget::whereRaw('(' . implode(' OR ', $conditions) . ')')->sum('budget');
+            $budgetTotal = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))->sum('budget');
         }
 
         $totalSales   = (float) ($sales->total_sales   ?? 0);
@@ -122,7 +113,7 @@ class DashboardAnalyticsService
         $returnRate   = $totalOrders > 0 ? round(($totalReturns / $totalOrders) * 100, 2) : 0;
         $roi          = $totalSpent  > 0 ? round(($netProfit / $totalSpent) * 100, 2) : 0;
         $avgOrderVal  = $totalOrders > 0 ? round($totalSales / $totalOrders, 2) : 0;
-        $budgetUtil   = ($budgetTotal > 0) ? round(($totalSales / $budgetTotal) * 100, 2) : null;
+        $budgetUtil   = $budgetTotal > 0  ? round(($totalSales / $budgetTotal) * 100, 2) : null;
 
         return [
             'total_sales'        => $totalSales,
@@ -144,7 +135,6 @@ class DashboardAnalyticsService
 
     public function getMonthlySalesTrend(string $dateFrom, string $dateTo): array
     {
-        // Group by the raw expression — alias grouping is rejected by MySQL strict mode
         $sales = DailySale::whereBetween('date', [$dateFrom, $dateTo])
             ->selectRaw("DATE_FORMAT(date, '%Y-%m') AS ym, SUM(sales) AS total_sales, SUM(spent) AS total_spent, SUM(number_of_orders) AS total_orders")
             ->groupByRaw("DATE_FORMAT(date, '%Y-%m')")
@@ -159,7 +149,6 @@ class DashboardAnalyticsService
             ->get()
             ->keyBy('ym');
 
-        // Budget: group by year + month (integer columns — safe in strict mode)
         $budgetsByMonth = MonthlyBudget::selectRaw("year, month, SUM(budget) AS total_budget")
             ->groupBy('year', 'month')
             ->get()
@@ -185,8 +174,6 @@ class DashboardAnalyticsService
 
     public function getPlatformSalesBreakdown(string $dateFrom, string $dateTo): array
     {
-        // Include sale_platforms.id in GROUP BY so COALESCE(..., sale_platforms.id) is valid,
-        // OR simply omit the COALESCE column from SELECT (it isn't used further).
         $rows = DailySale::whereBetween('date', [$dateFrom, $dateTo])
             ->join('sale_platforms', 'sale_platforms.id', '=', 'daily_sales.sale_platform_id')
             ->selectRaw('
@@ -285,13 +272,7 @@ class DashboardAnalyticsService
             return ['labels' => [], 'budget' => [], 'actual' => []];
         }
 
-        $conditions = [];
-        foreach ($months as $m) {
-            $conditions[] = "(year = {$m['year']} AND month = {$m['month']})";
-        }
-
-        // Group by integer columns year + month — always safe in strict mode
-        $budgets = MonthlyBudget::whereRaw('(' . implode(' OR ', $conditions) . ')')
+        $budgets = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))
             ->selectRaw('year, month, SUM(budget) AS total_budget')
             ->groupBy('year', 'month')
             ->get()
@@ -361,15 +342,10 @@ class DashboardAnalyticsService
             ->get()
             ->keyBy('yw');
 
-        $labels      = [];
-        $salesData   = [];
-        $spentData   = [];
-        $ordersData  = [];
-        $returnsData = [];
+        $labels = $salesData = $spentData = $ordersData = $returnsData = [];
 
         foreach ($sales as $idx => $row) {
-            $wLabel        = 'W' . ($idx + 1) . ' (' . Carbon::parse($row->week_start)->format('d M') . ')';
-            $labels[]      = $wLabel;
+            $labels[]      = 'W' . ($idx + 1) . ' (' . Carbon::parse($row->week_start)->format('d M') . ')';
             $salesData[]   = (float) $row->total_sales;
             $spentData[]   = (float) $row->total_spent;
             $ordersData[]  = (int) $row->total_orders;
@@ -415,13 +391,7 @@ class DashboardAnalyticsService
             return ['labels' => [], 'budget' => [], 'spent' => [], 'balance' => []];
         }
 
-        $conditions = [];
-        foreach ($months as $m) {
-            $conditions[] = "(year = {$m['year']} AND month = {$m['month']})";
-        }
-        $whereClause = '(' . implode(' OR ', $conditions) . ')';
-
-        $budgets = MonthlyBudget::whereRaw($whereClause)
+        $budgets = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))
             ->join('sale_platforms', 'sale_platforms.id', '=', 'monthly_budgets.sale_platform_id')
             ->selectRaw('sale_platforms.id, sale_platforms.name, SUM(monthly_budgets.budget) AS total_budget')
             ->groupBy('sale_platforms.id', 'sale_platforms.name')
@@ -431,7 +401,7 @@ class DashboardAnalyticsService
         $firstMonth = $months[0];
         $lastMonth  = $months[count($months) - 1];
         $dateFrom   = Carbon::createFromDate($firstMonth['year'], $firstMonth['month'], 1)->startOfMonth()->toDateString();
-        $dateTo     = Carbon::createFromDate($lastMonth['year'], $lastMonth['month'], 1)->endOfMonth()->toDateString();
+        $dateTo     = Carbon::createFromDate($lastMonth['year'],  $lastMonth['month'],  1)->endOfMonth()->toDateString();
 
         $spent = DailySale::whereBetween('date', [$dateFrom, $dateTo])
             ->join('sale_platforms', 'sale_platforms.id', '=', 'daily_sales.sale_platform_id')
@@ -442,17 +412,14 @@ class DashboardAnalyticsService
 
         $all = $budgets->keys()->merge($spent->keys())->unique();
 
-        $labels  = [];
-        $budget  = [];
-        $spentArr = [];
-        $balance = [];
+        $labels = $budget = $spentArr = $balance = [];
 
         foreach ($all as $id) {
-            $b  = (float) ($budgets[$id]->total_budget ?? 0);
-            $s  = (float) ($spent[$id]->total_spent    ?? 0);
-            $name = $budgets[$id]->name ?? ($spent[$id]->name ?? "Platform $id");
-            $labels[]   = $name;
-            $budget[]   = $b;
+            $b        = (float) ($budgets[$id]->total_budget ?? 0);
+            $s        = (float) ($spent[$id]->total_spent    ?? 0);
+            $name     = $budgets[$id]->name ?? ($spent[$id]->name ?? "Platform $id");
+            $labels[] = $name;
+            $budget[] = $b;
             $spentArr[] = $s;
             $balance[]  = $b - $s;
         }
@@ -472,81 +439,65 @@ class DashboardAnalyticsService
         $dataIds = DailySale::whereBetween('date', [$dateFrom, $dateTo])
             ->distinct()->pluck('sale_platform_id')->toArray();
 
-        // 3. Build hierarchical column layout
+        // 3. Hierarchical column layout
         $columnData = $this->buildPlatformColumnData($allPlatforms, $dataIds);
 
-        // 4. Root platforms for order / qty grouping
-        $rootPlatforms   = $allPlatforms->whereNull('parent_id')->values();
-        $childrenByRoot  = $this->buildChildMap($allPlatforms, $rootPlatforms);
+        // 4. Root platforms and child map
+        $rootPlatforms  = $allPlatforms->whereNull('parent_id')->values();
+        $childrenByRoot = $this->buildChildMap($allPlatforms, $rootPlatforms);
 
-        // 5. Daily sales rows
-        $dailyRows = DailySale::whereBetween('date', [$dateFrom, $dateTo])
+        // 5. Daily sales – index by date → platform_id
+        $byDatePlatform = [];
+        DailySale::whereBetween('date', [$dateFrom, $dateTo])
             ->get(['sale_platform_id', 'date', 'spent', 'sales',
                    'number_of_orders', 'number_of_quantities',
                    'number_of_male_orders', 'number_of_female_orders', 'number_of_kids_orders',
-                   'number_of_male_quantities', 'number_of_female_quantities', 'number_of_kids_quantities']);
+                   'number_of_male_quantities', 'number_of_female_quantities', 'number_of_kids_quantities'])
+            ->each(function ($row) use (&$byDatePlatform) {
+                $byDatePlatform[$row->date->toDateString()][$row->sale_platform_id] = $row;
+            });
 
-        $byDatePlatform = [];
-        foreach ($dailyRows as $row) {
-            $d = $row->date->toDateString();
-            $byDatePlatform[$d][$row->sale_platform_id] = $row;
-        }
-
-        // 6. Daily returns by date
-        $dailyReturns    = DailyReturn::whereBetween('date', [$dateFrom, $dateTo])
-            ->get(['date', 'number_of_returns', 'number_of_return_quantities']);
-        $returnsByDate   = [];   // number of return transactions
-        $returnQtyByDate = [];   // number of pieces/items returned (PCS)
-        foreach ($dailyReturns as $r) {
-            $d = $r->date->toDateString();
-            $returnsByDate[$d]   = ($returnsByDate[$d]   ?? 0) + (int) $r->number_of_returns;
-            $returnQtyByDate[$d] = ($returnQtyByDate[$d] ?? 0) + (int) $r->number_of_return_quantities;
-        }
+        // 6. Daily returns – aggregated in SQL (avoids loading all rows into PHP)
+        $dailyReturnAgg  = DailyReturn::whereBetween('date', [$dateFrom, $dateTo])
+            ->selectRaw('DATE(date) as dt, SUM(number_of_returns) as returns, SUM(number_of_return_quantities) as return_qty')
+            ->groupByRaw('DATE(date)')
+            ->get()
+            ->keyBy('dt');
+        $returnsByDate   = $dailyReturnAgg->pluck('returns',    'dt')->map(fn ($v) => (int) $v)->toArray();
+        $returnQtyByDate = $dailyReturnAgg->pluck('return_qty', 'dt')->map(fn ($v) => (int) $v)->toArray();
+        unset($dailyReturnAgg);
 
         // 7. Budget per platform
         $budgetMap = [];
         if (!empty($months)) {
-            $conditions = [];
-            foreach ($months as $m) {
-                $conditions[] = "(year = {$m['year']} AND month = {$m['month']})";
-            }
-            $budgetRows = MonthlyBudget::whereRaw('(' . implode(' OR ', $conditions) . ')')
+            $budgetMap = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))
                 ->selectRaw('sale_platform_id, SUM(budget) AS total_budget')
                 ->groupBy('sale_platform_id')
-                ->pluck('total_budget', 'sale_platform_id');
-            $budgetMap = $budgetRows->toArray();
+                ->pluck('total_budget', 'sale_platform_id')
+                ->toArray();
         }
 
-        // 8. Build ordered date list
-        $dates   = [];
-        $cursor  = Carbon::parse($dateFrom);
-        $end     = Carbon::parse($dateTo);
+        // 8. Ordered date list
+        $dates  = [];
+        $cursor = Carbon::parse($dateFrom);
+        $end    = Carbon::parse($dateTo);
         while ($cursor->lte($end)) {
             $dates[] = $cursor->toDateString();
             $cursor->addDay();
         }
 
         // 9. Build daily data rows
-        $rows            = [];
-        $periodStart     = Carbon::parse($dateFrom);
-
-        // Collect unique platform IDs from leaf columns for fast lookup
+        $rows        = [];
+        $periodStart = Carbon::parse($dateFrom);
         $leafPlatformIds = array_unique(array_column($columnData['columns'], 'platform_id'));
 
         foreach ($dates as $date) {
-            // 7-day weeks from day 1 of the period (week 1 = days 0-6, week 2 = days 7-13, …)
-            $dayOfPeriod = $periodStart->diffInDays(Carbon::parse($date));
-            $weekNumber  = (int) floor($dayOfPeriod / 7) + 1;
-
+            $dayOfPeriod  = $periodStart->diffInDays(Carbon::parse($date));
+            $weekNumber   = (int) floor($dayOfPeriod / 7) + 1;
             $platformData = $byDatePlatform[$date] ?? [];
 
-            $totalSales  = 0;
-            $totalSpent  = 0;
-            $totalOrders = 0;
-            $totalQty    = 0;
-            $totalKids   = 0;
-            $totalFemale = 0;
-            $totalMale   = 0;
+            $totalSales = $totalSpent = $totalOrders = $totalQty = 0;
+            $totalKids  = $totalFemale = $totalMale = 0;
 
             foreach ($platformData as $row) {
                 $totalSales  += (float) $row->sales;
@@ -558,27 +509,21 @@ class DashboardAnalyticsService
                 $totalMale   += (int)   ($row->number_of_male_orders   ?? 0);
             }
 
-            $roas = $totalSpent > 0 ? ($totalSales / $totalSpent) : 0;
-
-            // Per leaf-platform values
             $perPlatform = [];
             foreach ($leafPlatformIds as $pid) {
                 $r = $platformData[$pid] ?? null;
                 $perPlatform[$pid] = [
-                    'cost'   => $r ? (float) $r->spent              : 0,
-                    'sales'  => $r ? (float) $r->sales              : 0,
-                    'orders' => $r ? (int)   $r->number_of_orders   : 0,
+                    'cost'   => $r ? (float) $r->spent               : 0,
+                    'sales'  => $r ? (float) $r->sales               : 0,
+                    'orders' => $r ? (int)   $r->number_of_orders    : 0,
                     'qty'    => $r ? (int)   $r->number_of_quantities : 0,
                 ];
             }
 
-            // Per-root order/qty totals
             $perRoot = [];
             foreach ($rootPlatforms as $root) {
-                $ids    = $childrenByRoot[$root->id] ?? [$root->id];
-                $orders = 0;
-                $qty    = 0;
-                foreach ($ids as $pid) {
+                $orders = $qty = 0;
+                foreach ($childrenByRoot[$root->id] ?? [$root->id] as $pid) {
                     $r = $platformData[$pid] ?? null;
                     if ($r) {
                         $orders += (int) $r->number_of_orders;
@@ -593,26 +538,27 @@ class DashboardAnalyticsService
                 'week'         => $weekNumber,
                 'total_sales'  => $totalSales,
                 'total_spent'  => $totalSpent,
-                'roas'         => $roas,          // decimal fraction
+                'roas'         => $totalSpent > 0 ? ($totalSales / $totalSpent) : 0,
                 'total_orders' => $totalOrders,
                 'total_qty'    => $totalQty,
                 'kids'         => $totalKids,
                 'female'       => $totalFemale,
                 'male'         => $totalMale,
                 'returns'      => $returnsByDate[$date]   ?? 0,
-                'returns_qty'  => $returnQtyByDate[$date] ?? 0,  // pieces/items returned
+                'returns_qty'  => $returnQtyByDate[$date] ?? 0,
                 'platform'     => $perPlatform,
                 'root_groups'  => $perRoot,
             ];
         }
 
-        // 10. Column totals
+        // 10. Column totals + root order/qty totals in a single pass (O(rows × platforms))
         $totals = ['sales' => 0, 'spent' => 0, 'orders' => 0, 'qty' => 0,
                    'kids'  => 0, 'female' => 0, 'male'  => 0];
-        $platformTotals = [];
-        foreach ($leafPlatformIds as $pid) {
-            $platformTotals[$pid] = ['cost' => 0, 'sales' => 0, 'orders' => 0, 'qty' => 0];
-        }
+        $platformTotals  = array_fill_keys($leafPlatformIds, ['cost' => 0, 'sales' => 0, 'orders' => 0, 'qty' => 0]);
+        $rootIds         = $rootPlatforms->pluck('id')->toArray();
+        $rootOrderTotals = array_fill_keys($rootIds, 0);
+        $rootQtyTotals   = array_fill_keys($rootIds, 0);
+
         foreach ($rows as $row) {
             $totals['sales']  += $row['total_sales'];
             $totals['spent']  += $row['total_spent'];
@@ -627,45 +573,26 @@ class DashboardAnalyticsService
                 $platformTotals[$pid]['orders'] += $row['platform'][$pid]['orders'];
                 $platformTotals[$pid]['qty']    += $row['platform'][$pid]['qty'];
             }
-        }
-
-        $dayCount      = max(1, count(array_unique(array_column($rows, 'date'))));
-        $avgDailySales = $totals['sales'] / $dayCount;
-        $avgDailySpent = $totals['spent'] / $dayCount;
-
-        // 11. Root-grouped order/qty totals for summary
-        $rootOrderTotals = [];
-        $rootQtyTotals   = [];
-        foreach ($rootPlatforms as $root) {
-            $rootOrderTotals[$root->id] = 0;
-            $rootQtyTotals[$root->id]   = 0;
-            foreach ($rows as $row) {
-                $rootOrderTotals[$root->id] += ($row['root_groups'][$root->id]['orders'] ?? 0);
-                $rootQtyTotals[$root->id]   += ($row['root_groups'][$root->id]['qty']    ?? 0);
+            foreach ($rootIds as $rid) {
+                $rootOrderTotals[$rid] += ($row['root_groups'][$rid]['orders'] ?? 0);
+                $rootQtyTotals[$rid]   += ($row['root_groups'][$rid]['qty']    ?? 0);
             }
         }
 
-        // 12. Build summary rows (all values pre-computed)
+        $dayCount      = max(1, count($dates));
+        $avgDailySales = $totals['sales'] / $dayCount;
+        $avgDailySpent = $totals['spent'] / $dayCount;
+
+        // 11. Summary rows
         $summaryRows = $this->buildExportSummaryRows(
-            $totals,
-            $platformTotals,
-            $budgetMap,
-            $dayCount,
-            $rootOrderTotals,
-            $rootQtyTotals,
-            $columnData['columns']
+            $totals, $platformTotals, $budgetMap, $dayCount,
+            $rootOrderTotals, $rootQtyTotals, $columnData['columns']
         );
 
-        // 13. Weekly aggregates for bottom section
+        // 12. Weekly aggregates and return-reason breakdown
         $rootPlatformsArray = $rootPlatforms->values()->toArray();
-        $weeklyRows = $this->buildWeeklyAggregates($rows, $rootPlatformsArray);
-
-        // 14. Return-reason breakdown for bottom section
-        $returnReasonData = $this->buildReturnReasonData(
-            $dateFrom, $dateTo,
-            $rootPlatformsArray,
-            $childrenByRoot
-        );
+        $weeklyRows         = $this->buildWeeklyAggregates($rows, $rootPlatformsArray);
+        $returnReasonData   = $this->buildReturnReasonData($dateFrom, $dateTo, $rootPlatformsArray, $childrenByRoot);
 
         return [
             'column_data'        => $columnData,
@@ -679,7 +606,6 @@ class DashboardAnalyticsService
             'summary_rows'       => $summaryRows,
             'weekly_rows'        => $weeklyRows,
             'return_reason_data' => $returnReasonData,
-            // Legacy alias
             'platforms'          => $allPlatforms->whereIn('id', $dataIds)->values()->toArray(),
         ];
     }
@@ -688,18 +614,13 @@ class DashboardAnalyticsService
 
     /**
      * Build hierarchical platform column data for the export.
-     *
-     * Returns:
-     *  columns       – ordered leaf columns [{platform_id, type, name}]
-     *  header_levels – array of header level rows for the platform section
-     *  max_depth     – number of platform-name header rows (does NOT include the Cost/Sales label row)
+     * Returns: columns (leaf cols), header_levels, max_depth, tree.
      */
     private function buildPlatformColumnData($allPlatforms, array $dataIds): array
     {
-        $map = $allPlatforms->keyBy('id');
-
-        // Build tree from roots down, pruning branches with no visible data
+        $map  = $allPlatforms->keyBy('id');
         $tree = [];
+
         foreach ($allPlatforms->whereNull('parent_id') as $root) {
             $node = $this->makePlatformNode($root, $map, $dataIds);
             if ($node !== null) {
@@ -711,17 +632,12 @@ class DashboardAnalyticsService
             return ['columns' => [], 'header_levels' => [], 'max_depth' => 0];
         }
 
-        // Compute how many leaf columns each node spans (bottom-up)
         $this->computeLeafColCounts($tree);
 
-        // Collect ordered leaf columns
         $columns = [];
         $this->collectExportLeafCols($tree, $columns);
 
-        // Max depth of the tree (depth 1 = only root platforms)
-        $maxDepth = $this->calcTreeMaxDepth($tree);
-
-        // Build header levels (one array per depth level)
+        $maxDepth     = $this->calcTreeMaxDepth($tree);
         $headerLevels = [];
         for ($level = 0; $level < $maxDepth; $level++) {
             $colOffset = 0;
@@ -730,28 +646,16 @@ class DashboardAnalyticsService
             $headerLevels[] = $cells;
         }
 
-        return [
-            'columns'       => $columns,
-            'header_levels' => $headerLevels,
-            'max_depth'     => $maxDepth,
-            'tree'          => $tree,   // full platform tree for grouped-column export
-        ];
+        return ['columns' => $columns, 'header_levels' => $headerLevels, 'max_depth' => $maxDepth, 'tree' => $tree];
     }
 
-    /**
-     * Recursively build a tree node. Returns null if the branch has no visible leaf columns.
-     */
+    /** Recursively build a tree node; returns null if branch has no visible leaf columns. */
     private function makePlatformNode($platform, $map, array $dataIds): ?array
     {
-        $id = $platform->id;
-
-        // Build child nodes
+        $id         = $platform->id;
         $childNodes = [];
-        $children   = $map->values()
-            ->filter(fn ($p) => $p->parent_id == $id)
-            ->sortBy('sort_order')
-            ->sortBy('id');
-        foreach ($children as $child) {
+
+        foreach ($map->values()->filter(fn ($p) => $p->parent_id == $id)->sortBy('sort_order')->sortBy('id') as $child) {
             $node = $this->makePlatformNode($child, $map, $dataIds);
             if ($node !== null) {
                 $childNodes[] = $node;
@@ -762,7 +666,7 @@ class DashboardAnalyticsService
         $hasVisibleCols = $hasData && ((bool) $platform->is_spent || (bool) $platform->is_sales);
 
         if (empty($childNodes) && !$hasVisibleCols) {
-            return null; // prune branch
+            return null;
         }
 
         return [
@@ -772,108 +676,70 @@ class DashboardAnalyticsService
             'is_sales'       => (bool) $platform->is_sales,
             'has_data'       => $hasData,
             'children'       => $childNodes,
-            'leaf_col_count' => 0, // set by computeLeafColCounts
+            'leaf_col_count' => 0,
         ];
     }
 
-    /**
-     * Compute leaf_col_count for every node (bottom-up).
-     */
+    /** Compute leaf_col_count for every node (bottom-up). */
     private function computeLeafColCounts(array &$nodes): int
     {
         $total = 0;
         foreach ($nodes as &$node) {
-            if (empty($node['children'])) {
-                $node['leaf_col_count'] = ($node['is_spent'] ? 1 : 0) + ($node['is_sales'] ? 1 : 0);
-            } else {
-                $node['leaf_col_count'] = $this->computeLeafColCounts($node['children']);
-            }
+            $node['leaf_col_count'] = empty($node['children'])
+                ? ($node['is_spent'] ? 1 : 0) + ($node['is_sales'] ? 1 : 0)
+                : $this->computeLeafColCounts($node['children']);
             $total += $node['leaf_col_count'];
         }
         return $total;
     }
 
-    /**
-     * Collect ordered leaf columns from the tree.
-     */
+    /** Collect ordered leaf columns from the tree. */
     private function collectExportLeafCols(array $tree, array &$columns): void
     {
         foreach ($tree as $node) {
             if (empty($node['children'])) {
-                if ($node['is_spent']) {
-                    $columns[] = ['platform_id' => $node['id'], 'type' => 'cost',  'name' => $node['name']];
-                }
-                if ($node['is_sales']) {
-                    $columns[] = ['platform_id' => $node['id'], 'type' => 'sales', 'name' => $node['name']];
-                }
+                if ($node['is_spent'])  $columns[] = ['platform_id' => $node['id'], 'type' => 'cost',  'name' => $node['name']];
+                if ($node['is_sales'])  $columns[] = ['platform_id' => $node['id'], 'type' => 'sales', 'name' => $node['name']];
             } else {
                 $this->collectExportLeafCols($node['children'], $columns);
             }
         }
     }
 
-    /**
-     * Get the maximum depth of the tree (depth 1 = roots only, depth 2 = roots+children, …).
-     */
+    /** Maximum depth of the tree (depth 1 = roots only). */
     private function calcTreeMaxDepth(array $tree, int $current = 0): int
     {
         $max = $current + 1;
         foreach ($tree as $node) {
             if (!empty($node['children'])) {
-                $depth = $this->calcTreeMaxDepth($node['children'], $current + 1);
-                $max   = max($max, $depth);
+                $max = max($max, $this->calcTreeMaxDepth($node['children'], $current + 1));
             }
         }
         return $max;
     }
 
-    /**
-     * Collect cells for a single header level.
-     *
-     * @param int $colOffset  passed by reference, advanced as cells are added
-     */
+    /** Collect cells for a single header level. */
     private function collectHeaderLevelCells(
-        array  $tree,
-        int    $targetLevel,
-        int    $currentLevel,
-        int    $maxDepth,
-        int   &$colOffset,
-        array &$cells
+        array $tree, int $targetLevel, int $currentLevel,
+        int $maxDepth, int &$colOffset, array &$cells
     ): void {
         foreach ($tree as $node) {
-            if ($node['leaf_col_count'] === 0) {
-                continue;
-            }
+            if ($node['leaf_col_count'] === 0) continue;
 
             if ($currentLevel === $targetLevel) {
-                // This node belongs in this header row
                 $isLeafHere = empty($node['children']);
-                // If leaf here, its cell spans down to (but not including) the Cost/Sales label row
-                $rowSpan = $isLeafHere ? ($maxDepth - $currentLevel) : 1;
-
                 $cells[] = [
                     'label'      => $node['name'],
                     'col_offset' => $colOffset,
                     'col_span'   => $node['leaf_col_count'],
-                    'row_span'   => $rowSpan,
+                    'row_span'   => $isLeafHere ? ($maxDepth - $currentLevel) : 1,
                 ];
                 $colOffset += $node['leaf_col_count'];
-
             } elseif ($currentLevel < $targetLevel) {
                 if (empty($node['children'])) {
-                    // Leaf at a shallower level – its columns are already handled via rowSpan,
-                    // just advance the offset so siblings after it land at the right position.
                     $colOffset += $node['leaf_col_count'];
                 } else {
-                    // Descend into children
-                    $this->collectHeaderLevelCells(
-                        $node['children'],
-                        $targetLevel,
-                        $currentLevel + 1,
-                        $maxDepth,
-                        $colOffset,
-                        $cells
-                    );
+                    $this->collectHeaderLevelCells($node['children'], $targetLevel, $currentLevel + 1, $maxDepth, $colOffset, $cells);
                 }
             }
         }
@@ -882,227 +748,135 @@ class DashboardAnalyticsService
     // ── Export summary rows builder ───────────────────────────────
 
     /**
-     * Pre-compute all summary rows so the export class has nothing to calculate.
-     *
-     * Each row is a keyed array of:
-     *   label           string
-     *   col_c           value for "Daily Sales" column (C)
-     *   col_e           value for "Daily Spend" column (E)
-     *   col_d           value for "Daily ROAS" column (D) – null unless a specific row needs it
-     *   platform        [ "{pid}_{type}" => value, … ]  keyed by platform_id + type
-     *   total_orders    int|null
-     *   root_orders     [ root_id => int, … ]|null
-     *   total_qty       int|null
-     *   root_qty        [ root_id => int, … ]|null
-     *   kids            int|null
-     *   female          int|null
-     *   male            int|null
-     *   format_d        number format for col_d (null = default money)
-     *   format_platform [ "{pid}_{type}" => format_code, … ]|null  (e.g. for % rows)
+     * Pre-compute all summary rows (average, totals, budget, ROI, forecast).
+     * Each row: label, col_c, col_e, col_d, platform[], total_orders, root_orders,
+     *           total_qty, root_qty, kids, female, male, col_e_format, platform_formats.
      */
     private function buildExportSummaryRows(
-        array $totals,
-        array $platformTotals,
-        array $budgetMap,
-        int   $dayCount,
-        array $rootOrderTotals,
-        array $rootQtyTotals,
-        array $columns
+        array $totals, array $platformTotals, array $budgetMap,
+        int $dayCount, array $rootOrderTotals, array $rootQtyTotals, array $columns
     ): array {
         $rows = [];
 
-        // ── Average Daily Sales ── (serial 1) ─────────────────
+        // Average Daily
         $avgPlatRow = [];
         foreach ($columns as $col) {
-            $pid  = $col['platform_id'];
-            $type = $col['type'];
-            $key  = "{$pid}_{$type}";
-            $avgPlatRow[$key] = $type === 'cost'
-                ? ($platformTotals[$pid]['cost']  ?? 0) / $dayCount
-                : ($platformTotals[$pid]['sales'] ?? 0) / $dayCount;
+            $key = "{$col['platform_id']}_{$col['type']}";
+            $avgPlatRow[$key] = $col['type'] === 'cost'
+                ? ($platformTotals[$col['platform_id']]['cost']  ?? 0) / $dayCount
+                : ($platformTotals[$col['platform_id']]['sales'] ?? 0) / $dayCount;
         }
         $rows['average_daily'] = [
-            'label'        => 'Average Sales Daily',
-            'col_c'        => $totals['sales'] / $dayCount,
-            'col_e'        => $totals['spent'] / $dayCount,
-            'col_d'        => null,
-            'platform'     => $avgPlatRow,
-            'total_orders' => $totals['orders'] / $dayCount,
-            'root_orders'  => null,
-            'total_qty'    => null,
-            'root_qty'     => null,
-            'kids'         => null,
-            'female'       => null,
-            'male'         => null,
+            'label' => 'Average Sales Daily', 'col_c' => $totals['sales'] / $dayCount,
+            'col_e' => $totals['spent'] / $dayCount, 'col_d' => null,
+            'platform' => $avgPlatRow, 'total_orders' => $totals['orders'] / $dayCount,
+            'root_orders' => null, 'total_qty' => null, 'root_qty' => null,
+            'kids' => null, 'female' => null, 'male' => null,
         ];
 
-        // ── Total Sale ── (serial 2) ───────────────────────────
+        // Total Sale
         $totalSalePlatRow = [];
         foreach ($columns as $col) {
-            $pid  = $col['platform_id'];
-            $type = $col['type'];
-            $key  = "{$pid}_{$type}";
-            if ($type === 'sales') {
-                $totalSalePlatRow[$key] = $platformTotals[$pid]['sales'] ?? 0;
+            if ($col['type'] === 'sales') {
+                $totalSalePlatRow["{$col['platform_id']}_sales"] = $platformTotals[$col['platform_id']]['sales'] ?? 0;
             }
         }
         $rows['total_sale'] = [
-            'label'        => 'Total Sale',
-            'col_c'        => $totals['sales'],
-            'col_e'        => null,
-            'col_d'        => null,
-            'platform'     => $totalSalePlatRow,
-            'total_orders' => null,
-            'root_orders'  => null,
-            'total_qty'    => null,
-            'root_qty'     => null,
-            'kids'         => null,
-            'female'       => null,
-            'male'         => null,
+            'label' => 'Total Sale', 'col_c' => $totals['sales'], 'col_e' => null, 'col_d' => null,
+            'platform' => $totalSalePlatRow, 'total_orders' => null, 'root_orders' => null,
+            'total_qty' => null, 'root_qty' => null, 'kids' => null, 'female' => null, 'male' => null,
         ];
 
-        // ── Total Spend ── (serial 3) ──────────────────────────
+        // Total Spend
         $platRow = [];
         foreach ($columns as $col) {
             $pid  = $col['platform_id'];
-            $type = $col['type'];
-            $key  = "{$pid}_{$type}";
-            $platRow[$key] = $type === 'cost'
+            $key  = "{$pid}_{$col['type']}";
+            $platRow[$key] = $col['type'] === 'cost'
                 ? ($platformTotals[$pid]['cost']  ?? 0)
                 : ($platformTotals[$pid]['sales'] ?? 0);
         }
         $rows['total_spend'] = [
-            'label'        => 'Total Spend',
-            'col_c'        => $totals['sales'],
-            'col_e'        => $totals['spent'],
-            'col_d'        => null,
-            'platform'     => $platRow,
-            'total_orders' => $totals['orders'],
-            'root_orders'  => $rootOrderTotals,
-            'total_qty'    => $totals['qty'],
-            'root_qty'     => $rootQtyTotals,
-            'kids'         => $totals['kids'],
-            'female'       => $totals['female'],
-            'male'         => $totals['male'],
+            'label' => 'Total Spend', 'col_c' => $totals['sales'], 'col_e' => $totals['spent'], 'col_d' => null,
+            'platform' => $platRow, 'total_orders' => $totals['orders'], 'root_orders' => $rootOrderTotals,
+            'total_qty' => $totals['qty'], 'root_qty' => $rootQtyTotals,
+            'kids' => $totals['kids'], 'female' => $totals['female'], 'male' => $totals['male'],
         ];
 
-        // ── ROI (ROAS) ─────────────────────────────────────────
+        // ROI per platform (cost columns only)
         $roiRow = [];
         $roiFmt = [];
         foreach ($columns as $col) {
-            $pid  = $col['platform_id'];
-            $type = $col['type'];
-            $key  = "{$pid}_{$type}";
-            if ($type === 'cost') {
+            if ($col['type'] === 'cost') {
+                $pid   = $col['platform_id'];
                 $cost  = $platformTotals[$pid]['cost']  ?? 0;
                 $sales = $platformTotals[$pid]['sales'] ?? 0;
                 if ($cost > 0) {
-                    $roiRow[$key] = $sales / $cost;
-                    $roiFmt[$key] = '0.00%';
+                    $roiRow["{$pid}_cost"] = $sales / $cost;
+                    $roiFmt["{$pid}_cost"] = '0.00%';
                 }
             }
         }
-        // ── Total Budget ── (serial 4) ────────────────────────
-        $budgetPlatRow = [];
+
+        // Total Budget
         $totalBudget   = array_sum($budgetMap);
+        $budgetPlatRow = [];
         foreach ($columns as $col) {
-            $pid  = $col['platform_id'];
-            $type = $col['type'];
-            $key  = "{$pid}_{$type}";
-            if ($type === 'cost') {
-                $b = $budgetMap[$pid] ?? 0;
-                if ($b > 0) {
-                    $budgetPlatRow[$key] = $b;
-                }
+            if ($col['type'] === 'cost') {
+                $b = $budgetMap[$col['platform_id']] ?? 0;
+                if ($b > 0) $budgetPlatRow["{$col['platform_id']}_cost"] = $b;
             }
         }
         $rows['total_budget'] = [
-            'label'        => 'Total Budget',
-            'col_c'        => null,
-            'col_e'        => $totalBudget,
-            'col_d'        => null,
-            'platform'     => $budgetPlatRow,
-            'total_orders' => null,
-            'root_orders'  => null,
-            'total_qty'    => null,
-            'root_qty'     => null,
-            'kids'         => null,
-            'female'       => null,
-            'male'         => null,
+            'label' => 'Total Budget', 'col_c' => null, 'col_e' => $totalBudget, 'col_d' => null,
+            'platform' => $budgetPlatRow, 'total_orders' => null, 'root_orders' => null,
+            'total_qty' => null, 'root_qty' => null, 'kids' => null, 'female' => null, 'male' => null,
         ];
 
-        // ── Balance Budget ── (serial 5) ──────────────────────
+        // Balance Budget
         $balancePlatRow = [];
         foreach ($columns as $col) {
-            $pid  = $col['platform_id'];
-            $type = $col['type'];
-            $key  = "{$pid}_{$type}";
-            if ($type === 'cost') {
+            if ($col['type'] === 'cost') {
+                $pid  = $col['platform_id'];
                 $b    = $budgetMap[$pid] ?? 0;
                 $cost = $platformTotals[$pid]['cost'] ?? 0;
-                if ($b > 0 || $cost > 0) {
-                    $balancePlatRow[$key] = $b - $cost;
-                }
+                if ($b > 0 || $cost > 0) $balancePlatRow["{$pid}_cost"] = $b - $cost;
             }
         }
         $rows['balance_budget'] = [
-            'label'        => 'Balance Budget',
-            'col_c'        => null,
-            'col_e'        => $totalBudget - $totals['spent'],
-            'col_d'        => null,
-            'platform'     => $balancePlatRow,
-            'total_orders' => null,
-            'root_orders'  => null,
-            'total_qty'    => null,
-            'root_qty'     => null,
-            'kids'         => null,
-            'female'       => null,
-            'male'         => null,
+            'label' => 'Balance Budget', 'col_c' => null,
+            'col_e' => $totalBudget - $totals['spent'], 'col_d' => null,
+            'platform' => $balancePlatRow, 'total_orders' => null, 'root_orders' => null,
+            'total_qty' => null, 'root_qty' => null, 'kids' => null, 'female' => null, 'male' => null,
         ];
 
-        // ── ROI % ── (serial 6) ────────────────────────────────
-        $overallRoi = $totals['spent'] > 0 ? ($totals['sales'] / $totals['spent']) : null;
+        // ROI %
         $rows['roi'] = [
-            'label'            => 'ROI %',
-            'col_c'            => null,
-            'col_e'            => $overallRoi,
-            'col_d'            => null,
-            'col_e_format'     => '0.00%',
-            'platform'         => $roiRow,
-            'platform_formats' => $roiFmt,
-            'total_orders'     => null,
-            'root_orders'      => null,
-            'total_qty'        => null,
-            'root_qty'         => null,
-            'kids'             => null,
-            'female'           => null,
-            'male'             => null,
+            'label' => 'ROI %', 'col_c' => null,
+            'col_e' => $totals['spent'] > 0 ? ($totals['sales'] / $totals['spent']) : null,
+            'col_d' => null, 'col_e_format' => '0.00%',
+            'platform' => $roiRow, 'platform_formats' => $roiFmt,
+            'total_orders' => null, 'root_orders' => null, 'total_qty' => null, 'root_qty' => null,
+            'kids' => null, 'female' => null, 'male' => null,
         ];
 
-        // ── Forecasting (30 days) ── (serial 7) ───────────────
+        // Forecasting (30 days)
         $forecastPlatRow = [];
         foreach ($columns as $col) {
             $pid  = $col['platform_id'];
-            $type = $col['type'];
-            $key  = "{$pid}_{$type}";
-            $avg  = $type === 'cost'
+            $key  = "{$pid}_{$col['type']}";
+            $avg  = $col['type'] === 'cost'
                 ? ($platformTotals[$pid]['cost']  ?? 0) / $dayCount
                 : ($platformTotals[$pid]['sales'] ?? 0) / $dayCount;
             $forecastPlatRow[$key] = $avg * 30;
         }
         $rows['forecasting'] = [
-            'label'        => 'Forecasting (30 days)',
-            'col_c'        => ($totals['sales'] / $dayCount) * 30,
-            'col_e'        => ($totals['spent'] / $dayCount) * 30,
-            'col_d'        => null,
-            'platform'     => $forecastPlatRow,
-            'total_orders' => ($totals['orders'] / $dayCount) * 30,
-            'root_orders'  => null,
-            'total_qty'    => null,
-            'root_qty'     => null,
-            'kids'         => null,
-            'female'       => null,
-            'male'         => null,
+            'label' => 'Forecasting (30 days)',
+            'col_c' => ($totals['sales'] / $dayCount) * 30,
+            'col_e' => ($totals['spent'] / $dayCount) * 30, 'col_d' => null,
+            'platform' => $forecastPlatRow, 'total_orders' => ($totals['orders'] / $dayCount) * 30,
+            'root_orders' => null, 'total_qty' => null, 'root_qty' => null,
+            'kids' => null, 'female' => null, 'male' => null,
         ];
 
         return $rows;
@@ -1110,11 +884,7 @@ class DashboardAnalyticsService
 
     // ── Weekly aggregate rows for the bottom breakdown section ────
 
-    /**
-     * Aggregate daily rows into per-week summaries.
-     * Each item: week, label, spend, sales, orders, qty, kids, female, male,
-     *            returns_pcs, root_orders[root_id], root_qty[root_id]
-     */
+    /** Aggregate daily rows into per-week summaries. */
     private function buildWeeklyAggregates(array $dailyRows, array $rootPlatforms): array
     {
         $rootIds = array_column($rootPlatforms, 'id');
@@ -1126,15 +896,9 @@ class DashboardAnalyticsService
                 $weeks[$wk] = [
                     'week'        => $wk,
                     'label'       => 'week ' . $wk,
-                    'spend'       => 0,
-                    'sales'       => 0,
-                    'orders'      => 0,
-                    'qty'         => 0,
-                    'kids'        => 0,
-                    'female'      => 0,
-                    'male'        => 0,
-                    'returns_pcs' => 0,
-                    'returns_gbp' => 0,   // monetary return value (placeholder, not in DB)
+                    'spend'       => 0, 'sales' => 0, 'orders' => 0, 'qty' => 0,
+                    'kids'        => 0, 'female' => 0, 'male'  => 0,
+                    'returns_pcs' => 0, 'returns_gbp' => 0,
                     'root_orders' => array_fill_keys($rootIds, 0),
                     'root_qty'    => array_fill_keys($rootIds, 0),
                 ];
@@ -1146,7 +910,7 @@ class DashboardAnalyticsService
             $weeks[$wk]['kids']        += $row['kids'];
             $weeks[$wk]['female']      += $row['female'];
             $weeks[$wk]['male']        += $row['male'];
-            $weeks[$wk]['returns_pcs'] += ($row['returns_qty'] ?? $row['returns'] ?? 0); // pieces
+            $weeks[$wk]['returns_pcs'] += ($row['returns_qty'] ?? $row['returns'] ?? 0);
             foreach ($rootPlatforms as $root) {
                 $rid = $root['id'];
                 $weeks[$wk]['root_orders'][$rid] += ($row['root_groups'][$rid]['orders'] ?? 0);
@@ -1160,70 +924,59 @@ class DashboardAnalyticsService
     // ── Return-reason breakdown for the bottom section ─────────────
 
     /**
-     * Query DailyReturn records and group by reason type and root platform.
-     *
-     * Returns:
-     *   reasons       – [{ id, name, by_root[root_id=>count], kids, female, male }]
-     *   totals_by_root  – [root_id => total_count]
-     *   totals_kids / totals_female / totals_male  – int
+     * Aggregate DailyReturn records by reason type and root platform using SQL GROUP BY,
+     * avoiding loading all individual rows into PHP memory.
      */
     private function buildReturnReasonData(
-        string $dateFrom,
-        string $dateTo,
-        array  $rootPlatforms,
-        array  $childrenByRoot
+        string $dateFrom, string $dateTo,
+        array $rootPlatforms, array $childrenByRoot
     ): array {
         $reasonTypes = ReturnReasonType::orderBy('sort_order')->orderBy('id')->get(['id', 'name']);
 
+        // SQL-level aggregation: one row per (platform, reason)
         $returnRows = DailyReturn::whereBetween('date', [$dateFrom, $dateTo])
             ->whereNotNull('return_reason_type_id')
-            ->get([
-                'sale_platform_id', 'return_reason_type_id',
-                'number_of_returns',
-                'number_of_male_returns', 'number_of_female_returns', 'number_of_kids_returns',
-            ]);
+            ->selectRaw('
+                sale_platform_id,
+                return_reason_type_id,
+                SUM(number_of_returns)          AS cnt,
+                SUM(number_of_male_returns)     AS male,
+                SUM(number_of_female_returns)   AS female,
+                SUM(number_of_kids_returns)     AS kids
+            ')
+            ->groupBy('sale_platform_id', 'return_reason_type_id')
+            ->get();
 
-        // platform_id => root_id map
+        // Build platform → root map
         $platformToRoot = [];
         foreach ($rootPlatforms as $root) {
-            foreach (($childrenByRoot[$root['id']] ?? [$root['id']]) as $pid) {
+            foreach ($childrenByRoot[$root['id']] ?? [$root['id']] as $pid) {
                 $platformToRoot[$pid] = $root['id'];
             }
         }
 
-        $rootIds = array_column($rootPlatforms, 'id');
+        $rootIds     = array_column($rootPlatforms, 'id');
+        $reasons     = [];
+        $reasonIndex = [];
 
-        // Build empty per-reason buckets
-        $reasons      = [];
-        $reasonIndex  = [];   // reason_type_id => index in $reasons
         foreach ($reasonTypes as $i => $rt) {
-            $reasons[]          = [
-                'id'      => $rt->id,
-                'name'    => $rt->name,
-                'by_root' => array_fill_keys($rootIds, 0),
-                'kids'    => 0,
-                'female'  => 0,
-                'male'    => 0,
-            ];
+            $reasons[]          = ['id' => $rt->id, 'name' => $rt->name, 'by_root' => array_fill_keys($rootIds, 0), 'kids' => 0, 'female' => 0, 'male' => 0];
             $reasonIndex[$rt->id] = $i;
         }
 
         $totalsByRoot = array_fill_keys($rootIds, 0);
-        $totalKids    = 0;
-        $totalFemale  = 0;
-        $totalMale    = 0;
+        $totalKids = $totalFemale = $totalMale = 0;
 
         foreach ($returnRows as $ret) {
             $rid = $ret->return_reason_type_id;
-            if (!isset($reasonIndex[$rid])) {
-                continue;
-            }
+            if (!isset($reasonIndex[$rid])) continue;
+
             $idx    = $reasonIndex[$rid];
             $rootId = $platformToRoot[$ret->sale_platform_id] ?? null;
-            $count  = (int) $ret->number_of_returns;
-            $male   = (int) ($ret->number_of_male_returns   ?? 0);
-            $female = (int) ($ret->number_of_female_returns ?? 0);
-            $kids   = (int) ($ret->number_of_kids_returns   ?? 0);
+            $count  = (int) $ret->cnt;
+            $male   = (int) ($ret->male   ?? 0);
+            $female = (int) ($ret->female ?? 0);
+            $kids   = (int) ($ret->kids   ?? 0);
 
             if ($rootId !== null && isset($totalsByRoot[$rootId])) {
                 $reasons[$idx]['by_root'][$rootId] += $count;
@@ -1246,29 +999,41 @@ class DashboardAnalyticsService
         ];
     }
 
-    // ── Private: build child-id map for root platforms ────────────
+    // ── Build child-id map for root platforms ─────────────────────
 
     private function buildChildMap($allPlatforms, $roots): array
     {
         $childrenByParent = $allPlatforms->groupBy('parent_id');
         $map = [];
+
         foreach ($roots as $root) {
             $ids   = [$root->id];
             $queue = [$root->id];
             while (!empty($queue)) {
-                $pid      = array_shift($queue);
-                $children = $childrenByParent->get($pid) ?? collect();
-                foreach ($children as $child) {
+                $pid = array_shift($queue);
+                foreach ($childrenByParent->get($pid) ?? [] as $child) {
                     $ids[]   = $child->id;
                     $queue[] = $child->id;
                 }
             }
             $map[$root->id] = $ids;
         }
+
         return $map;
     }
 
-    // ── Main entry point ──────────────────────────────────────────
+    // ── Build SQL WHERE clause for a set of year/month pairs ──────
+
+    /** Returns e.g. "(year=2026 AND month=1) OR (year=2026 AND month=2)" wrapped in parens. */
+    private function buildMonthWhereClause(array $months): string
+    {
+        return '(' . implode(' OR ', array_map(
+            fn ($m) => "(year = {$m['year']} AND month = {$m['month']})",
+            $months
+        )) . ')';
+    }
+
+    // ── Main dashboard entry point ────────────────────────────────
 
     public function getDashboardData(array $filters): array
     {
@@ -1278,18 +1043,18 @@ class DashboardAnalyticsService
         $months   = $range['months'];
 
         return [
-            'range'              => $range,
-            'summary'            => $this->getSummaryCards($dateFrom, $dateTo, $months),
-            'monthlySales'       => $this->getMonthlySalesTrend($dateFrom, $dateTo),
-            'platformSales'      => $this->getPlatformSalesBreakdown($dateFrom, $dateTo),
-            'platformReturns'    => $this->getPlatformReturnsBreakdown($dateFrom, $dateTo),
-            'returnReasons'      => $this->getReturnReasonsBreakdown($dateFrom, $dateTo),
-            'genderBreakdown'    => $this->getGenderBreakdown($dateFrom, $dateTo),
-            'budgetVsActual'     => $this->getBudgetVsActual($months),
-            'platformCostVsSales'=> $this->getPlatformCostVsSales($dateFrom, $dateTo),
-            'weeklyTrend'        => $this->getWeeklyTrend($dateFrom, $dateTo),
-            'forecasting'        => $this->getForecasting($dateFrom, $dateTo),
-            'platformBudgets'    => $this->getPlatformBudgets($months),
+            'range'               => $range,
+            'summary'             => $this->getSummaryCards($dateFrom, $dateTo, $months),
+            'monthlySales'        => $this->getMonthlySalesTrend($dateFrom, $dateTo),
+            'platformSales'       => $this->getPlatformSalesBreakdown($dateFrom, $dateTo),
+            'platformReturns'     => $this->getPlatformReturnsBreakdown($dateFrom, $dateTo),
+            'returnReasons'       => $this->getReturnReasonsBreakdown($dateFrom, $dateTo),
+            'genderBreakdown'     => $this->getGenderBreakdown($dateFrom, $dateTo),
+            'budgetVsActual'      => $this->getBudgetVsActual($months),
+            'platformCostVsSales' => $this->getPlatformCostVsSales($dateFrom, $dateTo),
+            'weeklyTrend'         => $this->getWeeklyTrend($dateFrom, $dateTo),
+            'forecasting'         => $this->getForecasting($dateFrom, $dateTo),
+            'platformBudgets'     => $this->getPlatformBudgets($months),
         ];
     }
 }
