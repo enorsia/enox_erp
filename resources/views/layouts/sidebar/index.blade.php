@@ -189,8 +189,14 @@
                         <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
                             @can('general.dashboard.index')
                                 <a href="{{ route('admin.sales.analytics') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales/analytics*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales/analytics*') && !Request::is('admin/sales/analytics-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Analytics Dashboard
+                                </a>
+                            @endcan
+                            @can('general.dashboard.index')
+                                <a href="{{ route('admin.sales.analytics.report') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales/analytics-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    Sales Report Export
                                 </a>
                             @endcan
                             @can('general.return_reason_type.index')

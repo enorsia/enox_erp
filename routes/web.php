@@ -34,6 +34,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/sales/analytics', [DashboardAnalyticsController::class, 'index'])->name('sales.analytics');
     Route::get('/sales/analytics/export', [DashboardAnalyticsController::class, 'export'])->name('sales.analytics.export');
+    Route::get('/sales/analytics-report', [DashboardAnalyticsController::class, 'reportExport'])->name('sales.analytics.report');
     Route::resource('users', UserController::class);
     Route::resource('roles', RoleController::class);
     Route::resource('platforms', PlatformController::class);

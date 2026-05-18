@@ -66,15 +66,84 @@ class DashboardAnalyticsExport
         private string $dateTo,
         private array  $months,
         private array  $label,
+        private array  $tables = ['daily_report', 'return_breakdown', 'weekly_breakdown'],
     ) {}
 
     public function download(DashboardAnalyticsService $service): StreamedResponse
     {
-        $export = $service->getDailyExportData($this->dateFrom, $this->dateTo, $this->months);
-
         $spreadsheet = new Spreadsheet();
-        $sheet       = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Sales Report');
+        $spreadsheet->removeSheetByIndex(0); // remove default blank sheet
+
+        if (count($this->months) > 1) {
+            // ── Multiple months → one sheet per month ──────────────────
+            foreach ($this->months as $month) {
+                // $month is ['year' => int, 'month' => int]
+                $monthCarbon = Carbon::createFromDate($month['year'], $month['month'], 1);
+                $monthStart  = $monthCarbon->copy()->startOfMonth()->toDateString();
+                $monthEnd    = $monthCarbon->copy()->endOfMonth()->toDateString();
+
+                // Clamp to the overall date range
+                if ($monthStart < $this->dateFrom) $monthStart = $this->dateFrom;
+                if ($monthEnd   > $this->dateTo)   $monthEnd   = $this->dateTo;
+
+                $monthTitle = $monthCarbon->format('M-Y'); // e.g. "Mar-2026"
+                $sheet      = $spreadsheet->createSheet();
+                $sheet->setTitle($monthTitle);
+
+                $this->writeSheetData($sheet, $service, $monthStart, $monthEnd, [$month], ['label' => $monthTitle]);
+            }
+        } else {
+            // ── Single month / period → single sheet ───────────────────
+            $sheetTitle = mb_substr($this->label['label'] ?? 'Report', 0, 31); // Excel max 31 chars
+            $sheet      = $spreadsheet->createSheet();
+            $sheet->setTitle($sheetTitle);
+            $this->writeSheetData($sheet, $service, $this->dateFrom, $this->dateTo, $this->months, $this->label);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $filename = 'analytics-'
+            . str_replace(' ', '_', strtolower($this->label['label'] ?? 'report'))
+            . '-' . now()->format('Y-m-d') . '.xlsx';
+
+        return new StreamedResponse(function () use ($spreadsheet) {
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control'       => 'max-age=0',
+        ]);
+    }
+
+    /**
+     * Write all selected report sections onto a single worksheet.
+     * Extracted so multiple monthly sheets can each call this method.
+     */
+    private function writeSheetData(
+        $sheet,
+        DashboardAnalyticsService $service,
+        string $dateFrom,
+        string $dateTo,
+        array  $months,
+        array  $label,
+    ): void {
+        $includeDailyReport     = in_array('daily_report',      $this->tables);
+        $includeReturnBreakdown = in_array('return_breakdown',   $this->tables);
+        $includeWeeklyBreakdown = in_array('weekly_breakdown',   $this->tables);
+
+        // Default values (overwritten when sections are written)
+        $lastMainRow  = 0;
+        $dataStartRow = 0;
+        $dataEndRow   = 0;
+        $wbLastCol    = 0;
+        $retLastCol   = 0;
+        $wbSecStart   = 0;
+        $retSecStart  = 0;
+        $moneyFmt     = '#,##0.00';
+
+        $export = $service->getDailyExportData($dateFrom, $dateTo, $months);
+
 
         // Unpack service data
         $columnData       = $export['column_data'];
@@ -87,7 +156,7 @@ class DashboardAnalyticsExport
         $totals           = $export['totals'];
         $numRoots         = count($rootPlatforms);
 
-        $returnsByDatePlatform = DailyReturn::whereBetween('date', [$this->dateFrom, $this->dateTo])
+        $returnsByDatePlatform = DailyReturn::whereBetween('date', [$dateFrom, $dateTo])
             ->selectRaw('DATE(date) as dt, sale_platform_id, SUM(return_amount) as amount, SUM(number_of_returns) as order_qty, SUM(number_of_return_quantities) as item_qty')
             ->groupByRaw('DATE(date), sale_platform_id')
             ->get()
@@ -188,8 +257,9 @@ class DashboardAnalyticsExport
         $colLabelRow  = $numAllPlatCols > 0 ? $firstHdrRow + 1 : $firstHdrRow;
         $dataStartRow = $colLabelRow + 1;
 
-        // Row 1: title + accent fill on A1/B1
-        $titleStr      = 'Tracking Digital Marketing COST VS Allocation – ' . ($this->label['label'] ?? '');
+        // Row 1: title + accent fill on A1/B1 — only if daily report included
+        if ($includeDailyReport) {
+        $titleStr      = 'Tracking Digital Marketing COST VS Allocation – ' . ($label['label'] ?? '');
         $titleStartCol = Coordinate::stringFromColumnIndex(self::COL_SALES);
         $titleEndCol   = Coordinate::stringFromColumnIndex($mainLastCol);
         $sheet->setCellValue($titleStartCol . '1', $titleStr);
@@ -531,11 +601,16 @@ class DashboardAnalyticsExport
             $r++;
         }
         $lastMainRow = $r - 1;
-
         $r   += 4;
-        $anc  = 2;
+        } else {
+            // daily report skipped – start secondary sections from row 2
+            $r = 2;
+        } // end if ($includeDailyReport)
+
+        $anc = 2;
 
         // ── Section 1: Return Breakdown ───────────────────────────
+        if ($includeReturnBreakdown) {
         $retLabelCol  = $anc;
         $retRootStart = $anc + 1;
         $retRootCols    = [];
@@ -616,10 +691,11 @@ class DashboardAnalyticsExport
         $this->alignSecRow($sheet, $anc, $retLastCol, $r);
         $retSecEnd = $r;
         $this->sectionBorder($sheet, $anc, $retLastCol, $retSecStart, $retSecEnd);
-
         $r = $retSecEnd + 4;
+        } // end if ($includeReturnBreakdown)
 
         // ── Section 2: Weekly Breakdown ───────────────────────────
+        if ($includeWeeklyBreakdown) {
         $fixedLabels = ['Week', 'Sales (£)', 'Spend (£)', 'Order', 'Order Qty', 'Return Qty', 'Return Qty %', 'Return Amount (£)', 'Return Amount %'];
         $childLabels = ['Sales (£)', 'Orders', 'Qty', 'Return (£)', 'Ret Orders', 'Ret Qty'];
         $childCount  = count($childLabels);
@@ -778,63 +854,60 @@ class DashboardAnalyticsExport
             $sheet->getStyle(Coordinate::stringFromColumnIndex($ci)     . $dataStart . ':' . Coordinate::stringFromColumnIndex($ci)     . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
             $sheet->getStyle(Coordinate::stringFromColumnIndex($ci + 3) . $dataStart . ':' . Coordinate::stringFromColumnIndex($ci + 3) . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
         }
+        } // end if ($includeWeeklyBreakdown)
 
         // Number formats – main area
-        $sheet->getStyle('C' . $dataStartRow . ':C' . $lastMainRow)->getNumberFormat()->setFormatCode($moneyFmt);
-        $sheet->getStyle('E' . $dataStartRow . ':E' . $lastMainRow)->getNumberFormat()->setFormatCode($moneyFmt);
-        if ($dataEndRow >= $dataStartRow) {
-            $sheet->getStyle('D' . $dataStartRow . ':D' . $dataEndRow)->getNumberFormat()->setFormatCode('0.00%');
+        if ($includeDailyReport) {
+            $sheet->getStyle('C' . $dataStartRow . ':C' . $lastMainRow)->getNumberFormat()->setFormatCode($moneyFmt);
+            $sheet->getStyle('E' . $dataStartRow . ':E' . $lastMainRow)->getNumberFormat()->setFormatCode($moneyFmt);
+            if ($dataEndRow >= $dataStartRow) {
+                $sheet->getStyle('D' . $dataStartRow . ':D' . $dataEndRow)->getNumberFormat()->setFormatCode('0.00%');
+            }
+            if ($numAllPlatCols > 0) {
+                $pStart = Coordinate::stringFromColumnIndex($platBaseCol);
+                $pEnd   = Coordinate::stringFromColumnIndex($platBaseCol + $numAllPlatCols - 1);
+                $sheet->getStyle("{$pStart}{$dataStartRow}:{$pEnd}{$lastMainRow}")->getNumberFormat()->setFormatCode($moneyFmt);
+            }
+            // Borders – main area
+            $mainRange = 'A1:' . Coordinate::stringFromColumnIndex($mainLastCol) . $lastMainRow;
+            $sheet->getStyle($mainRange)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
         }
-        if ($numAllPlatCols > 0) {
-            $pStart = Coordinate::stringFromColumnIndex($platBaseCol);
-            $pEnd   = Coordinate::stringFromColumnIndex($platBaseCol + $numAllPlatCols - 1);
-            $sheet->getStyle("{$pStart}{$dataStartRow}:{$pEnd}{$lastMainRow}")->getNumberFormat()->setFormatCode($moneyFmt);
-        }
-
-        // Borders – main area
-        $mainRange = 'A1:' . Coordinate::stringFromColumnIndex($mainLastCol) . $lastMainRow;
-        $sheet->getStyle($mainRange)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
         // Column widths
-        $sheet->getColumnDimension('A')->setWidth(10);
-        $sheet->getColumnDimension('B')->setWidth(14);
-        $sheet->getColumnDimension('C')->setWidth(14);
-        $sheet->getColumnDimension('D')->setWidth(12);
-        $sheet->getColumnDimension('E')->setWidth(14);
-        for ($ci = $platBaseCol; $ci < $platBaseCol + $numAllPlatCols; $ci++) {
-            $sheet->getColumnDimensionByColumn($ci)->setWidth(13);
+        if ($includeDailyReport) {
+            $sheet->getColumnDimension('A')->setWidth(10);
+            $sheet->getColumnDimension('B')->setWidth(14);
+            $sheet->getColumnDimension('C')->setWidth(14);
+            $sheet->getColumnDimension('D')->setWidth(12);
+            $sheet->getColumnDimension('E')->setWidth(14);
+            for ($ci = $platBaseCol; $ci < $platBaseCol + $numAllPlatCols; $ci++) {
+                $sheet->getColumnDimensionByColumn($ci)->setWidth(13);
+            }
+            for ($ci = $rsBase; $ci <= $mainLastCol; $ci++) {
+                $sheet->getColumnDimensionByColumn($ci)->setWidth(10);
+            }
+            for ($ci = $rsRootOrderBase; $ci <= $rsOrdersCol; $ci++) {
+                $sheet->getColumnDimensionByColumn($ci)->setWidth(13);
+            }
+            for ($ci = $rsQtyRootBase; $ci <= $rsQtyCol; $ci++) {
+                $sheet->getColumnDimensionByColumn($ci)->setWidth(13);
+            }
+            $sheet->freezePane('C' . $dataStartRow);
         }
-        for ($ci = $rsBase; $ci <= $mainLastCol; $ci++) {
-            $sheet->getColumnDimensionByColumn($ci)->setWidth(10);
+        if ($includeReturnBreakdown || $includeWeeklyBreakdown) {
+            $secLastCol = max($wbLastCol, $retLastCol);
+            $sheet->getColumnDimensionByColumn($anc)->setWidth(18);
+            for ($ci = $anc + 1; $ci <= $secLastCol; $ci++) {
+                $sheet->getColumnDimensionByColumn($ci)->setWidth(12);
+            }
         }
-        for ($ci = $rsRootOrderBase; $ci <= $rsOrdersCol; $ci++) {
-            $sheet->getColumnDimensionByColumn($ci)->setWidth(13);
+        if ($includeReturnBreakdown && $retSecStart > 0) {
+            $sheet->getRowDimension($retSecStart)->setRowHeight(22);
         }
-        for ($ci = $rsQtyRootBase; $ci <= $rsQtyCol; $ci++) {
-            $sheet->getColumnDimensionByColumn($ci)->setWidth(13);
+        if ($includeWeeklyBreakdown && $wbSecStart > 0) {
+            $sheet->getRowDimension($wbSecStart)->setRowHeight(22);
         }
-        $maxSecLastCol = max($wbLastCol, $retLastCol);
-        $sheet->getColumnDimensionByColumn($anc)->setWidth(18);
-        for ($ci = $anc + 1; $ci <= $maxSecLastCol; $ci++) {
-            $sheet->getColumnDimensionByColumn($ci)->setWidth(12);
-        }
-
-        $sheet->getRowDimension($wbSecStart)->setRowHeight(22);
-        $sheet->getRowDimension($retSecStart)->setRowHeight(22);
-        $sheet->freezePane('C' . $dataStartRow);
-
-        $filename = 'analytics-'
-            . str_replace(' ', '_', strtolower($this->label['label'] ?? 'report'))
-            . '-' . now()->format('Y-m-d') . '.xlsx';
-
-        return new StreamedResponse(function () use ($spreadsheet) {
-            $writer = new Xlsx($spreadsheet);
-            $writer->save('php://output');
-        }, 200, [
-            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-            'Cache-Control'       => 'max-age=0',
-        ]);
+        // writeSheetData complete – caller handles save/response
     }
 
     // ── Style helpers ───────────────────────────────────────────────
