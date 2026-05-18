@@ -25,7 +25,7 @@ class DashboardAnalyticsExport
     private const CLR_PLAT_FG       = 'FFFFFFFF';
     private const CLR_COLLABEL      = 'FFCCEEDD';
     private const CLR_COLLABEL_FG   = 'FF003D2B';
-    private const CLR_WEEK          = 'FFFFBF00';
+    private const CLR_WEEK          = 'FFE6F3F0';
     private const CLR_WEEK_FG       = 'FF3D2B00';
     private const CLR_ROW_ALT       = 'FFF0FAF5';
     private const CLR_TOTAL         = 'FFB3E6CC';
