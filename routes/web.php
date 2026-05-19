@@ -17,6 +17,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SalesChartController;
 use App\Http\Controllers\SellingChartExpenseController;
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\SaleTrackingController;
 use Illuminate\Support\Facades\Auth;
 
 
@@ -44,6 +45,17 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('sales/daily-sales', DailySaleController::class);
     Route::resource('sales/daily-returns', DailyReturnController::class);
 
+    // Sale Tracking
+    Route::prefix('sales/sale-tracking')->name('sale-tracking.')->controller(SaleTrackingController::class)->group(function () {
+        Route::get('/',              'index')->name('index');
+        Route::get('/create',        'create')->name('create');
+        Route::post('/',             'store')->name('store');
+        Route::get('/{saleTracking}/edit', 'edit')->name('edit');
+        Route::put('/{saleTracking}',      'update')->name('update');
+        Route::delete('/{saleTracking}',   'destroy')->name('destroy');
+        Route::get('/export',        'export')->name('export');
+        Route::get('/excel-preview', 'excelPreview')->name('excel-preview');
+    });
 
     // Export routes
     Route::get('sales/return-reason-types-export', [ReturnReasonTypeController::class, 'export'])->name('return-reason-types.export');

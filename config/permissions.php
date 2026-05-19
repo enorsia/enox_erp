@@ -71,6 +71,10 @@ return [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'show', 'delete'],
             ],
+            'sale_tracking' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'delete'],
+            ],
         ],
 
         // SETTINGS MODULE

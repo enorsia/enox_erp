@@ -38,3 +38,4 @@ if (has('#daily-sales-page-content'))         import('./pages/daily-sales');
 if (has('#daily-returns-page-content'))       import('./pages/daily-returns');
 if (has('#monthly-budget-page-content'))      import('./pages/monthly-budgets');
 if (has('#analytics-dashboard-content'))      import('./pages/analytics-dashboard');
+if (has('#sale-tracking-page'))               import('./pages/sale-tracking');

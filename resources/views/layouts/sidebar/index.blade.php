@@ -193,6 +193,12 @@
                                     Analytics Dashboard
                                 </a>
                             @endcan
+                            @can('general.sale_tracking.index')
+                                <a href="{{ route('admin.sale-tracking.index') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales/sale-tracking*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    Sale Tracking
+                                </a>
+                            @endcan
                             @can('general.dashboard.index')
                                 <a href="{{ route('admin.sales.analytics.report') }}"
                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales/analytics-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
