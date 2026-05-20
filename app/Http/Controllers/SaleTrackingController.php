@@ -16,7 +16,6 @@ use Illuminate\View\View;
 class SaleTrackingController extends Controller
 {
     const ROUTES = ['index' => 'admin.sale-tracking.index'];
-    const EXCEL_PATH = 'public/enorsia_tracking.xlsx';
 
     public function __construct(
         private SaleTrackingService $service,
@@ -166,14 +165,5 @@ class SaleTrackingController extends Controller
     {
         Gate::authorize('general.sale_tracking.index');
         return (new SaleTrackingExport($request->except(['page'])))->download($this->service);
-    }
-
-    public function excelPreview(): View
-    {
-        Gate::authorize('general.sale_tracking.index');
-        $filePath = base_path(self::EXCEL_PATH);
-        $columns  = $this->service->getExcelColumns($filePath);
-        $rows     = array_slice($this->service->readExcelFile($filePath), 0, 30);
-        return view('daily_sales.sale_tracking.excel_preview', compact('columns', 'rows'));
     }
 }

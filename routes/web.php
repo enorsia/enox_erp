@@ -54,7 +54,6 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
         Route::put('/{saleTracking}',      'update')->name('update');
         Route::delete('/{saleTracking}',   'destroy')->name('destroy');
         Route::get('/export',        'export')->name('export');
-        Route::get('/excel-preview', 'excelPreview')->name('excel-preview');
     });
 
     // Export routes

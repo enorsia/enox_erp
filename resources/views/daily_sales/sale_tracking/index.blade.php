@@ -115,13 +115,6 @@
                     Export Excel
                 </a>
 
-                {{-- Excel Preview --}}
-                <a href="{{ route('admin.sale-tracking.excel-preview') }}"
-                   class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-blue-200 dark:border-blue-700 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 transition-colors font-medium">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    Source Excel
-                </a>
-
                 {{-- Filters --}}
                 @php
                     $hasDateFilter = request('date_range') || request('date_from') || request('date_to');
