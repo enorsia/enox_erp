@@ -15,6 +15,7 @@ use PhpOffice\PhpSpreadsheet\Chart\DataSeriesValues;
 use PhpOffice\PhpSpreadsheet\Chart\PlotArea;
 use PhpOffice\PhpSpreadsheet\Chart\Legend;
 use PhpOffice\PhpSpreadsheet\Chart\Title;
+use PhpOffice\PhpSpreadsheet\Chart\Layout;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SaleTrackingExport
@@ -33,6 +34,12 @@ class SaleTrackingExport
     private const CLR_SUMHDR_FG  = 'FFFFFFFF';
     private const CLR_SUM_ALT    = 'FFE6F3F0';
     private const CLR_SUM_TOTAL  = 'FFCCEEDD';
+
+    // Cycling background colours for main-table month groups — two-colour even/odd
+    private const MONTH_BG_COLORS = [
+        'FFFFFFFF',   // white  (even months)
+        'FFE0F5EB',   // light green (odd months)
+    ];
 
     // Per-platform header colour cycle
     private const PLAT_COLORS = [
@@ -181,8 +188,9 @@ class SaleTrackingExport
         $sheet->getRowDimension(2)->setRowHeight(32);
 
         // ── Data rows (with month cell merging) ───────────────
-        $r      = 3;
-        $sl     = 1;
+        $r          = 3;
+        $sl         = 1;
+        $monthIndex = 0;
         $totals = array_fill_keys(
             ['reach','impressions','clicks','sessions','engaged_sessions','users',
              'net_cost','ads_tax_payments','total_cost','number_of_orders','number_of_products',
@@ -193,9 +201,9 @@ class SaleTrackingExport
         foreach ($monthGroups as $mk => $monthRecs) {
             $monthStartRow = $r;
             $monthLabel    = optional($monthRecs[0]->month)->format('M Y') ?? '';
+            $monthBg       = self::MONTH_BG_COLORS[$monthIndex % count(self::MONTH_BG_COLORS)];
 
             foreach ($monthRecs as $rec) {
-                $isAlt = ($r % 2 === 0);
                 $sheet->setCellValue('A' . $r, $sl++);
                 $sheet->setCellValue('B' . $r, $monthLabel);
                 $sheet->setCellValue('C' . $r, $rec->salePlatform?->name ?? '—');
@@ -218,10 +226,10 @@ class SaleTrackingExport
                 $sheet->setCellValue('T' . $r, $rec->roi   !== null ? $rec->roi   / 100 : null);
                 $sheet->setCellValue('U' . $r, $rec->roas);
 
-                if ($isAlt) {
-                    $sheet->getStyle('A' . $r . ':' . self::LAST_COL . $r)
-                        ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_ROW_ALT);
-                }
+                // Apply the month-group background to every row in this month
+                $sheet->getStyle('A' . $r . ':' . self::LAST_COL . $r)
+                    ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($monthBg);
+
                 $sheet->getStyle('D' . $r . ':' . self::LAST_COL . $r)
                     ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
 
@@ -241,6 +249,8 @@ class SaleTrackingExport
                 ->getAlignment()
                 ->setHorizontal(Alignment::HORIZONTAL_CENTER)
                 ->setVertical(Alignment::VERTICAL_CENTER);
+
+            $monthIndex++;
         }
 
         $dataEndRow = $r - 1;
@@ -482,18 +492,17 @@ class SaleTrackingExport
             $sheet->getRowDimension($r)->setRowHeight(22);
             $r++;
 
-            // ── Table header row — B=Month C=Reach D=Impressions E=Clicks F=Orders ──
+            // ── Table header row — B=Month C=Reach D=Impressions E=Clicks ──
             $hdrRow = $r;
             foreach ([
-                'B' => 'Month', 'C' => 'Reach', 'D' => 'Impressions',
-                'E' => 'Clicks', 'F' => 'Orders',
+                'B' => 'Month', 'C' => 'Reach', 'D' => 'Impressions', 'E' => 'Clicks',
             ] as $col => $label) {
                 $sheet->setCellValue($col . $r, $label);
             }
-            $sheet->getStyle('B' . $r . ':F' . $r)
+            $sheet->getStyle('B' . $r . ':E' . $r)
                 ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SUMHDR_BG);
-            $sheet->getStyle('B' . $r . ':F' . $r)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_SUMHDR_FG);
-            $sheet->getStyle('B' . $r . ':F' . $r)->getAlignment()
+            $sheet->getStyle('B' . $r . ':E' . $r)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_SUMHDR_FG);
+            $sheet->getStyle('B' . $r . ':E' . $r)->getAlignment()
                 ->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
             $sheet->getRowDimension($r)->setRowHeight(20);
             $r++;
@@ -501,23 +510,22 @@ class SaleTrackingExport
             // ── Data rows ──────────────────────────────────────
             $dataStart = $r;
             $si        = 0;
-            $totReach  = $totImp = $totClk = $totOrd = 0;
+            $totReach  = $totImp = $totClk = 0;
 
             foreach ($months as $m) {
                 $isAlt = ($si % 2 === 1);
                 if ($isAlt) {
-                    $sheet->getStyle('B' . $r . ':F' . $r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SUM_ALT);
+                    $sheet->getStyle('B' . $r . ':E' . $r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SUM_ALT);
                 }
                 $sheet->setCellValue('B' . $r, $m['label']);
                 $sheet->setCellValue('C' . $r, $m['reach']       ?: null);
                 $sheet->setCellValue('D' . $r, $m['impressions'] ?: null);
                 $sheet->setCellValue('E' . $r, $m['clicks']      ?: null);
-                $sheet->setCellValue('F' . $r, $m['orders']      ?: null);
-                $sheet->getStyle('C' . $r . ':F' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-                $sheet->getStyle('C' . $r . ':F' . $r)->getNumberFormat()->setFormatCode($numFmt);
+                $sheet->getStyle('C' . $r . ':E' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                $sheet->getStyle('C' . $r . ':E' . $r)->getNumberFormat()->setFormatCode($numFmt);
 
                 $totReach += $m['reach'];  $totImp += $m['impressions'];
-                $totClk   += $m['clicks']; $totOrd += $m['orders'];
+                $totClk   += $m['clicks'];
                 $si++;
                 $r++;
             }
@@ -529,15 +537,14 @@ class SaleTrackingExport
             $sheet->setCellValue('C' . $r, $totReach ?: null);
             $sheet->setCellValue('D' . $r, $totImp   ?: null);
             $sheet->setCellValue('E' . $r, $totClk   ?: null);
-            $sheet->setCellValue('F' . $r, $totOrd   ?: null);
-            $sheet->getStyle('B' . $r . ':F' . $r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SUM_TOTAL);
-            $sheet->getStyle('B' . $r . ':F' . $r)->getFont()->setBold(true);
-            $sheet->getStyle('C' . $r . ':F' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-            $sheet->getStyle('C' . $r . ':F' . $r)->getNumberFormat()->setFormatCode($numFmt);
+            $sheet->getStyle('B' . $r . ':E' . $r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SUM_TOTAL);
+            $sheet->getStyle('B' . $r . ':E' . $r)->getFont()->setBold(true);
+            $sheet->getStyle('C' . $r . ':E' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet->getStyle('C' . $r . ':E' . $r)->getNumberFormat()->setFormatCode($numFmt);
             $tableEndRow = $r;
 
             // ── Borders ────────────────────────────────────────
-            $sheet->getStyle('B' . $titleRow . ':F' . $r)
+            $sheet->getStyle('B' . $titleRow . ':E' . $r)
                 ->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
             // ── Chart to the right of the table ───────────────
@@ -573,9 +580,11 @@ class SaleTrackingExport
         $dataSeries = new DataSeries(DataSeries::TYPE_BARCHART, DataSeries::GROUPING_CLUSTERED,
             range(0, count($series) - 1), $labels, $xLabels, $values);
         $dataSeries->setPlotDirection(DataSeries::DIRECTION_COL);
+        $layout = new Layout();
+        $layout->setShowVal(true);
         return new Chart($title, new Title($title),
             new Legend(Legend::POSITION_BOTTOM, null, false),
-            new PlotArea(null, [$dataSeries]), true, 0, null, null);
+            new PlotArea($layout, [$dataSeries]), true, 0, null, null);
     }
 
     private function buildLineChart(string $sn, string $title, array $series, array $xLabels, int $ds, int $de, int $mc): Chart
@@ -592,9 +601,11 @@ class SaleTrackingExport
         $dataSeries = new DataSeries(DataSeries::TYPE_LINECHART, DataSeries::GROUPING_STANDARD,
             range(0, count($series) - 1), $labels, $xLabels, $values);
         $dataSeries->setPlotDirection(DataSeries::DIRECTION_COL);
+        $layout = new Layout();
+        $layout->setShowVal(true);
         return new Chart($title, new Title($title),
             new Legend(Legend::POSITION_BOTTOM, null, false),
-            new PlotArea(null, [$dataSeries]), true, 0, null, null);
+            new PlotArea($layout, [$dataSeries]), true, 0, null, null);
     }
 
     /**
@@ -625,11 +636,14 @@ class SaleTrackingExport
             range(0, 2), $labels, $xLabels, $values);
         $ds->setPlotDirection(DataSeries::DIRECTION_COL);
 
+        $layout = new Layout();
+        $layout->setShowVal(true);
+
         return new Chart(
             $platName,
             new Title($platName . ' — Reach / Impressions / Clicks'),
             new Legend(Legend::POSITION_BOTTOM, null, false),
-            new PlotArea(null, [$ds]), true, 0, null, null
+            new PlotArea($layout, [$ds]), true, 0, null, null
         );
     }
 }
