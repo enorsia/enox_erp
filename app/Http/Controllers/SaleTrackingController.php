@@ -29,7 +29,7 @@ class SaleTrackingController extends Controller
         $paginator          = $this->service->getList($request->all());
         $data['records']    = $paginator;
         $data['monthGroups']= $this->service->buildMonthViewGroups($paginator);
-        $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
+        $data['salePlatforms'] = $this->salePlatformService->getSaleTrackingPlatformOptions();
 
         return view('daily_sales.sale_tracking.index', $data);
     }
@@ -38,7 +38,7 @@ class SaleTrackingController extends Controller
     {
         Gate::authorize('general.sale_tracking.create');
 
-        $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
+        $data['salePlatforms'] = $this->salePlatformService->getSaleTrackingPlatformOptions();
 
         return view('daily_sales.sale_tracking.create', $data);
     }
@@ -102,7 +102,7 @@ class SaleTrackingController extends Controller
 
         $data['saleTracking']    = $saleTracking;
         $data['month']           = $month;
-        $data['salePlatforms']   = $this->salePlatformService->getParentOptions();
+        $data['salePlatforms']   = $this->salePlatformService->getSaleTrackingPlatformOptions();
         $data['existingEntries'] = $existingEntries;
 
         return view('daily_sales.sale_tracking.edit', $data);

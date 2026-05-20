@@ -103,17 +103,37 @@ class SalePlatformService
             $pad       = str_repeat("\xE3\x80\x80", $node->depth); // U+3000 ideographic space
             $arrow     = $node->depth > 0 ? '└ ' : '';
             $options[] = [
-                'id'                  => $node->id,
-                'parent_id'           => $node->parent_id,
-                'name'                => $node->name,
-                'depth'               => $node->depth,
-                'label'               => $pad . $arrow . $node->name,
-                'is_spent'            => (bool) $node->is_spent,
-                'is_sales'            => (bool) $node->is_sales,
-                'allows_direct_entry' => (bool) $node->allows_direct_entry,
+                'id'                    => $node->id,
+                'parent_id'             => $node->parent_id,
+                'name'                  => $node->name,
+                'depth'                 => $node->depth,
+                'label'                 => $pad . $arrow . $node->name,
+                'is_spent'              => (bool) $node->is_spent,
+                'is_sales'              => (bool) $node->is_sales,
+                'allows_direct_entry'   => (bool) $node->allows_direct_entry,
+                'show_in_analytics'     => (bool) $node->show_in_analytics,
+                'show_in_sale_tracking' => (bool) $node->show_in_sale_tracking,
             ];
         }
         return $options;
+    }
+
+    /**
+     * Return parent options filtered to platforms with show_in_analytics = true.
+     */
+    public function getAnalyticsPlatformOptions(?int $excludeId = null): array
+    {
+        $options = $this->getParentOptions($excludeId);
+        return array_values(array_filter($options, fn($o) => $o['show_in_analytics']));
+    }
+
+    /**
+     * Return parent options filtered to platforms with show_in_sale_tracking = true.
+     */
+    public function getSaleTrackingPlatformOptions(?int $excludeId = null): array
+    {
+        $options = $this->getParentOptions($excludeId);
+        return array_values(array_filter($options, fn($o) => $o['show_in_sale_tracking']));
     }
 
     /**
@@ -199,13 +219,15 @@ class SalePlatformService
     public function getStats(): array
     {
         return [
-            'total'              => SalePlatform::count(),
-            'active'             => SalePlatform::where('is_active', true)->count(),
-            'inactive'           => SalePlatform::where('is_active', false)->count(),
-            'with_spent'         => SalePlatform::where('is_spent', true)->count(),
-            'with_sales'         => SalePlatform::where('is_sales', true)->count(),
-            'allow_direct_entry' => SalePlatform::where('allows_direct_entry', true)->count(),
-            'types'              => SalePlatform::selectRaw('type, count(*) as count')
+            'total'                 => SalePlatform::count(),
+            'active'                => SalePlatform::where('is_active', true)->count(),
+            'inactive'              => SalePlatform::where('is_active', false)->count(),
+            'with_spent'            => SalePlatform::where('is_spent', true)->count(),
+            'with_sales'            => SalePlatform::where('is_sales', true)->count(),
+            'allow_direct_entry'    => SalePlatform::where('allows_direct_entry', true)->count(),
+            'show_in_analytics'     => SalePlatform::where('show_in_analytics', true)->count(),
+            'show_in_sale_tracking' => SalePlatform::where('show_in_sale_tracking', true)->count(),
+            'types'                 => SalePlatform::selectRaw('type, count(*) as count')
                 ->groupBy('type')
                 ->pluck('count', 'type'),
         ];

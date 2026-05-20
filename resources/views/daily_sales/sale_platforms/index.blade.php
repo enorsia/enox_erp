@@ -67,6 +67,24 @@
                         <option value="0" {{ request('is_active') == '0' ? 'selected' : '' }}>Inactive</option>
                     </select>
                 </div>
+                <hr class="border-slate-100 dark:border-slate-700"/>
+                <div>
+                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Show in Analytics</p>
+                    <select name="show_in_analytics" class="tom-select w-full text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" data-placeholder="All">
+                        <option value="">All</option>
+                        <option value="1" {{ request('show_in_analytics') == '1' ? 'selected' : '' }}>Yes</option>
+                        <option value="0" {{ request('show_in_analytics') == '0' ? 'selected' : '' }}>No</option>
+                    </select>
+                </div>
+                <hr class="border-slate-100 dark:border-slate-700"/>
+                <div>
+                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Show in Sale Tracking</p>
+                    <select name="show_in_sale_tracking" class="tom-select w-full text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" data-placeholder="All">
+                        <option value="">All</option>
+                        <option value="1" {{ request('show_in_sale_tracking') == '1' ? 'selected' : '' }}>Yes</option>
+                        <option value="0" {{ request('show_in_sale_tracking') == '0' ? 'selected' : '' }}>No</option>
+                    </select>
+                </div>
             </div>
             <div class="flex gap-2.5 px-5 py-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
                 <a href="{{ route('admin.sale-platforms.index') }}" class="flex-1 py-2.5 text-[13px] text-center border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors font-medium">Reset</a>
@@ -139,7 +157,7 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                     Export
                 </button>
-                @php $activeFilters = collect([request('search'), request('type'), request('is_active')])->filter(fn($v) => $v !== null && $v !== '')->count(); @endphp
+                @php $activeFilters = collect([request('search'), request('type'), request('is_active'), request('show_in_analytics'), request('show_in_sale_tracking')])->filter(fn($v) => $v !== null && $v !== '')->count(); @endphp
                 <button type="button" @click="drawerOpen = true"
                         class="flex items-center gap-2 px-3.5 py-2 text-[13px] border rounded-lg transition-colors {{ $activeFilters > 0 ? 'border-accent-200 bg-accent-400/10 text-accent-600 dark:text-accent-200' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' }}">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 4h18M7 8h10M11 12h2"/></svg>
@@ -159,7 +177,7 @@
         </div>
 
         {{-- ── STATS ROW ── --}}
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
             <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5">
                 <p class="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-medium mb-1">Total</p>
                 <p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{{ $stats['total'] }}</p>
@@ -176,10 +194,18 @@
                 <p class="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-medium mb-1">Types</p>
                 <p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{{ $stats['types']->count() }}</p>
             </div>
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5">
+                <p class="text-[11px] uppercase tracking-wider text-blue-400 dark:text-blue-500 font-medium mb-1">In Analytics</p>
+                <p class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ $stats['show_in_analytics'] }}</p>
+            </div>
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5">
+                <p class="text-[11px] uppercase tracking-wider text-violet-400 dark:text-violet-500 font-medium mb-1">In Sale Tracking</p>
+                <p class="text-2xl font-bold text-violet-600 dark:text-violet-400">{{ $stats['show_in_sale_tracking'] }}</p>
+            </div>
         </div>
 
         {{-- ── ACTIVE FILTER TAGS ── --}}
-        @if(request('search') || request('type') || (request('is_active') !== null && request('is_active') !== ''))
+        @if(request('search') || request('type') || (request('is_active') !== null && request('is_active') !== '') || (request('show_in_analytics') !== null && request('show_in_analytics') !== '') || (request('show_in_sale_tracking') !== null && request('show_in_sale_tracking') !== ''))
             <div class="flex flex-wrap gap-2 mb-4">
                 @if(request('search'))
                     <div class="flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700">
@@ -197,6 +223,18 @@
                     <div class="flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700">
                         <span class="font-semibold">Status:</span> {{ request('is_active') == '1' ? 'Active' : 'Inactive' }}
                         <a href="{{ request()->fullUrlWithQuery(['is_active' => null]) }}" class="ml-0.5 opacity-60 hover:opacity-100 text-[13px] leading-none">&times;</a>
+                    </div>
+                @endif
+                @if(request('show_in_analytics') !== null && request('show_in_analytics') !== '')
+                    <div class="flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700">
+                        <span class="font-semibold">Analytics:</span> {{ request('show_in_analytics') == '1' ? 'Yes' : 'No' }}
+                        <a href="{{ request()->fullUrlWithQuery(['show_in_analytics' => null]) }}" class="ml-0.5 opacity-60 hover:opacity-100 text-[13px] leading-none">&times;</a>
+                    </div>
+                @endif
+                @if(request('show_in_sale_tracking') !== null && request('show_in_sale_tracking') !== '')
+                    <div class="flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700">
+                        <span class="font-semibold">Sale Tracking:</span> {{ request('show_in_sale_tracking') == '1' ? 'Yes' : 'No' }}
+                        <a href="{{ request()->fullUrlWithQuery(['show_in_sale_tracking' => null]) }}" class="ml-0.5 opacity-60 hover:opacity-100 text-[13px] leading-none">&times;</a>
                     </div>
                 @endif
                 <a href="{{ route('admin.sale-platforms.index') }}" class="flex items-center gap-1 text-[11px] text-slate-400 hover:text-red-500 px-2 py-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
@@ -288,14 +326,26 @@
                                     </span>
                                 @endif
                             </div>
-                            <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                                <span class="text-[11px] text-slate-400 dark:text-slate-500 font-mono">{{ $platform->slug }}</span>
-                                <span class="text-[11px] text-slate-400 dark:text-slate-500">Sort: {{ $platform->sort_order }}</span>
-                                @if (!empty($platform->ancestor_names))
-                                    <span class="text-[11px] text-slate-400 dark:text-slate-500 truncate max-w-[200px]">{{ implode(' › ', $platform->ancestor_names) }}</span>
-                                @endif
-                                <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ $platform->created_at?->diffForHumans() }}</span>
-                            </div>
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                                    <span class="text-[11px] text-slate-400 dark:text-slate-500 font-mono">{{ $platform->slug }}</span>
+                                    <span class="text-[11px] text-slate-400 dark:text-slate-500">Sort: {{ $platform->sort_order }}</span>
+                                    @if ($platform->show_in_analytics)
+                                        <span class="inline-flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-100 dark:border-blue-800/40">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                            Analytics
+                                        </span>
+                                    @endif
+                                    @if ($platform->show_in_sale_tracking)
+                                        <span class="inline-flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 px-1.5 py-0.5 rounded border border-violet-100 dark:border-violet-800/40">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
+                                            Sale Tracking
+                                        </span>
+                                    @endif
+                                    @if (!empty($platform->ancestor_names))
+                                        <span class="text-[11px] text-slate-400 dark:text-slate-500 truncate max-w-[200px]">{{ implode(' › ', $platform->ancestor_names) }}</span>
+                                    @endif
+                                    <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ $platform->created_at?->diffForHumans() }}</span>
+                                </div>
                         </div>
 
                         <div class="flex gap-1 flex-shrink-0">

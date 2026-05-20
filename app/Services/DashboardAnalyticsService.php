@@ -176,6 +176,7 @@ class DashboardAnalyticsService
     {
         $rows = DailySale::whereBetween('date', [$dateFrom, $dateTo])
             ->join('sale_platforms', 'sale_platforms.id', '=', 'daily_sales.sale_platform_id')
+            ->where('sale_platforms.show_in_analytics', true)
             ->selectRaw('
                 sale_platforms.id   AS platform_id,
                 sale_platforms.name AS platform_name,
@@ -252,6 +253,7 @@ class DashboardAnalyticsService
     {
         $rows = DailyReturn::whereBetween('date', [$dateFrom, $dateTo])
             ->join('sale_platforms', 'sale_platforms.id', '=', 'daily_returns.sale_platform_id')
+            ->where('sale_platforms.show_in_analytics', true)
             ->selectRaw('sale_platforms.id, sale_platforms.name AS platform_name, SUM(daily_returns.number_of_returns) AS total_returns')
             ->groupBy('sale_platforms.id', 'sale_platforms.name')
             ->orderByDesc('total_returns')
@@ -306,6 +308,7 @@ class DashboardAnalyticsService
     {
         $rows = DailySale::whereBetween('date', [$dateFrom, $dateTo])
             ->join('sale_platforms', 'sale_platforms.id', '=', 'daily_sales.sale_platform_id')
+            ->where('sale_platforms.show_in_analytics', true)
             ->selectRaw('sale_platforms.id, sale_platforms.name,
                 SUM(daily_sales.spent) AS total_cost,
                 SUM(daily_sales.sales) AS total_sales,
@@ -393,6 +396,7 @@ class DashboardAnalyticsService
 
         $budgets = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))
             ->join('sale_platforms', 'sale_platforms.id', '=', 'monthly_budgets.sale_platform_id')
+            ->where('sale_platforms.show_in_analytics', true)
             ->selectRaw('sale_platforms.id, sale_platforms.name, SUM(monthly_budgets.budget) AS total_budget')
             ->groupBy('sale_platforms.id', 'sale_platforms.name')
             ->get()
@@ -405,6 +409,7 @@ class DashboardAnalyticsService
 
         $spent = DailySale::whereBetween('date', [$dateFrom, $dateTo])
             ->join('sale_platforms', 'sale_platforms.id', '=', 'daily_sales.sale_platform_id')
+            ->where('sale_platforms.show_in_analytics', true)
             ->selectRaw('sale_platforms.id, sale_platforms.name, SUM(daily_sales.spent) AS total_spent')
             ->groupBy('sale_platforms.id', 'sale_platforms.name')
             ->get()
@@ -431,9 +436,10 @@ class DashboardAnalyticsService
 
     public function getDailyExportData(string $dateFrom, string $dateTo, array $months): array
     {
-        // 1. All platforms with hierarchy flags
-        $allPlatforms = SalePlatform::orderBy('sort_order')->orderBy('id')
-            ->get(['id', 'name', 'parent_id', 'is_spent', 'is_sales']);
+        // 1. All platforms with hierarchy flags (only analytics-enabled)
+        $allPlatforms = SalePlatform::where('show_in_analytics', true)
+            ->orderBy('sort_order')->orderBy('id')
+            ->get(['id', 'name', 'parent_id', 'is_spent', 'is_sales', 'show_in_analytics']);
 
         // 2. Platform IDs that have data in the range
         $dataIds = DailySale::whereBetween('date', [$dateFrom, $dateTo])

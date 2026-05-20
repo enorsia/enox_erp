@@ -39,6 +39,7 @@ class SaleTrackingService
     public function getList(array $filters): LengthAwarePaginator
     {
         return DailyAdPerformance::with('salePlatform')
+            ->whereHas('salePlatform', fn ($q) => $q->where('show_in_sale_tracking', true))
             ->filter($filters)
             ->orderByDesc('month')
             ->orderBy('id')
@@ -161,6 +162,7 @@ class SaleTrackingService
     public function getExportQuery(array $filters): Builder
     {
         return DailyAdPerformance::with('salePlatform')
+            ->whereHas('salePlatform', fn ($q) => $q->where('show_in_sale_tracking', true))
             ->filter($filters)
             ->orderByDesc('month')
             ->orderBy('id');

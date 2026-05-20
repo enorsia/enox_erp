@@ -15,16 +15,20 @@ class SalePlatform extends BaseModel
         'is_spent',
         'is_sales',
         'allows_direct_entry',
+        'show_in_analytics',
+        'show_in_sale_tracking',
         'sort_order',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean',
-            'is_spent' => 'boolean',
-            'is_sales' => 'boolean',
-            'allows_direct_entry' => 'boolean',
+            'is_active'             => 'boolean',
+            'is_spent'              => 'boolean',
+            'is_sales'              => 'boolean',
+            'allows_direct_entry'   => 'boolean',
+            'show_in_analytics'     => 'boolean',
+            'show_in_sale_tracking' => 'boolean',
         ];
     }
 
@@ -97,6 +101,14 @@ class SalePlatform extends BaseModel
 
         if (isset($filters['allows_direct_entry']) && $filters['allows_direct_entry'] !== '' && $filters['allows_direct_entry'] !== null) {
             $query->where('allows_direct_entry', (bool) $filters['allows_direct_entry']);
+        }
+
+        if (isset($filters['show_in_analytics']) && $filters['show_in_analytics'] !== '' && $filters['show_in_analytics'] !== null) {
+            $query->where('show_in_analytics', (bool) $filters['show_in_analytics']);
+        }
+
+        if (isset($filters['show_in_sale_tracking']) && $filters['show_in_sale_tracking'] !== '' && $filters['show_in_sale_tracking'] !== null) {
+            $query->where('show_in_sale_tracking', (bool) $filters['show_in_sale_tracking']);
         }
 
         return $query;

@@ -232,6 +232,56 @@
                     </div>
                 </div>
 
+                {{-- Module Visibility --}}
+                <div class="section-card">
+                    <div class="section-title">
+                        <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        Module Visibility
+                    </div>
+
+                    <div class="space-y-3">
+                        {{-- Show in Analytics --}}
+                        <div class="flex items-start gap-3 p-3 rounded-lg border {{ $salePlatform->show_in_analytics ? 'border-blue-100 dark:border-blue-800/30 bg-blue-50 dark:bg-blue-900/10' : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/20' }}">
+                            <div class="mt-0.5 shrink-0">
+                                @if ($salePlatform->show_in_analytics)
+                                    <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                @else
+                                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                @endif
+                            </div>
+                            <div>
+                                <p class="text-[13px] font-medium {{ $salePlatform->show_in_analytics ? 'text-blue-700 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400' }}">
+                                    Show in Analytics
+                                </p>
+                                <p class="text-[11px] {{ $salePlatform->show_in_analytics ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400' }}">
+                                    {{ $salePlatform->show_in_analytics ? 'Visible in Analytics Dashboard, Daily Sales & Daily Returns' : 'Hidden from Analytics modules' }}
+                                </p>
+                            </div>
+                        </div>
+
+                        {{-- Show in Sale Tracking --}}
+                        <div class="flex items-start gap-3 p-3 rounded-lg border {{ $salePlatform->show_in_sale_tracking ? 'border-violet-100 dark:border-violet-800/30 bg-violet-50 dark:bg-violet-900/10' : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/20' }}">
+                            <div class="mt-0.5 shrink-0">
+                                @if ($salePlatform->show_in_sale_tracking)
+                                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                @else
+                                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                @endif
+                            </div>
+                            <div>
+                                <p class="text-[13px] font-medium {{ $salePlatform->show_in_sale_tracking ? 'text-violet-700 dark:text-violet-300' : 'text-slate-500 dark:text-slate-400' }}">
+                                    Show in Sale Tracking
+                                </p>
+                                <p class="text-[11px] {{ $salePlatform->show_in_sale_tracking ? 'text-violet-500 dark:text-violet-400' : 'text-slate-400' }}">
+                                    {{ $salePlatform->show_in_sale_tracking ? 'Visible in Sale Tracking module' : 'Hidden from Sale Tracking module' }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {{-- Parent Platform --}}
                 @if ($salePlatform->parent)
                     <div class="section-card">

@@ -187,6 +187,41 @@
                                 </label>
                                 <p class="f-hint mt-1 ml-11">If enabled, sales/spent can be added directly to this platform. If disabled, entries can only be added to sub-platforms.</p>
                             </div>
+
+                            <!-- Show in Analytics -->
+                            <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
+                                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Module Visibility</p>
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <div class="toggle-track {{ old('show_in_analytics', $salePlatform->show_in_analytics) ? 'on' : '' }}" id="showInAnalyticsToggle"
+                                         onclick="toggleSwitch('showInAnalyticsToggle')">
+                                        <div class="toggle-thumb"></div>
+                                    </div>
+                                    <div>
+                                        <span class="text-sm text-slate-600 dark:text-slate-300 font-medium"
+                                              onclick="toggleSwitch('showInAnalyticsToggle')">Show in Analytics</span>
+                                    </div>
+                                    <input type="checkbox" name="show_in_analytics" id="showInAnalyticsCheckbox" class="hidden"
+                                            {{ old('show_in_analytics', $salePlatform->show_in_analytics) ? 'checked' : '' }}>
+                                </label>
+                                <p class="f-hint mt-1 ml-11">When enabled, this platform appears in the Analytics Dashboard, Daily Sales, and Daily Returns modules.</p>
+                            </div>
+
+                            <!-- Show in Sale Tracking -->
+                            <div>
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <div class="toggle-track {{ old('show_in_sale_tracking', $salePlatform->show_in_sale_tracking) ? 'on' : '' }}" id="showInSaleTrackingToggle"
+                                         onclick="toggleSwitch('showInSaleTrackingToggle')">
+                                        <div class="toggle-thumb"></div>
+                                    </div>
+                                    <div>
+                                        <span class="text-sm text-slate-600 dark:text-slate-300 font-medium"
+                                              onclick="toggleSwitch('showInSaleTrackingToggle')">Show in Sale Tracking</span>
+                                    </div>
+                                    <input type="checkbox" name="show_in_sale_tracking" id="showInSaleTrackingCheckbox" class="hidden"
+                                            {{ old('show_in_sale_tracking', $salePlatform->show_in_sale_tracking) ? 'checked' : '' }}>
+                                </label>
+                                <p class="f-hint mt-1 ml-11">When enabled, this platform appears in the Sale Tracking module.</p>
+                            </div>
                         </div>
                     </div>
 

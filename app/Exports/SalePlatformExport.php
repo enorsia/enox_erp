@@ -98,15 +98,17 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
     private function makeRow(string $l1, string $l2, string $l3, $platform): array
     {
         return [
-            'id'         => 0,
-            'level1'     => $l1,
-            'level2'     => $l2,
-            'level3'     => $l3,
-            'type'       => ucfirst(str_replace('_', ' ', $platform->type ?? '')),
-            'is_active'  => ($platform->is_active ?? false) ? 'Active' : 'Inactive',
-            'sort_order' => $platform->sort_order ?? 0,
-            'created_at' => $platform->created_at?->format('d M Y'),
-            'updated_at' => $platform->updated_at?->format('d M Y'),
+            'id'                    => 0,
+            'level1'                => $l1,
+            'level2'                => $l2,
+            'level3'                => $l3,
+            'type'                  => ucfirst(str_replace('_', ' ', $platform->type ?? '')),
+            'is_active'             => ($platform->is_active ?? false) ? 'Active' : 'Inactive',
+            'show_in_analytics'     => ($platform->show_in_analytics ?? true) ? 'Yes' : 'No',
+            'show_in_sale_tracking' => ($platform->show_in_sale_tracking ?? true) ? 'Yes' : 'No',
+            'sort_order'            => $platform->sort_order ?? 0,
+            'created_at'            => $platform->created_at?->format('d M Y'),
+            'updated_at'            => $platform->updated_at?->format('d M Y'),
         ];
     }
 
@@ -121,21 +123,23 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
 
     public static function allColumns(): array
     {
-        return ['id', 'level1', 'level2', 'level3', 'type', 'is_active', 'sort_order', 'created_at', 'updated_at'];
+        return ['id', 'level1', 'level2', 'level3', 'type', 'is_active', 'show_in_analytics', 'show_in_sale_tracking', 'sort_order', 'created_at', 'updated_at'];
     }
 
     public static function columnLabels(): array
     {
         return [
-            'id'         => 'SL',
-            'level1'     => 'Platform',
-            'level2'     => 'Sub Platform',
-            'level3'     => 'Sub Sub Platform',
-            'type'       => 'Type',
-            'is_active'  => 'Status',
-            'sort_order' => 'Sort Order',
-            'created_at' => 'Created At',
-            'updated_at' => 'Updated At',
+            'id'                    => 'SL',
+            'level1'                => 'Platform',
+            'level2'                => 'Sub Platform',
+            'level3'                => 'Sub Sub Platform',
+            'type'                  => 'Type',
+            'is_active'             => 'Status',
+            'show_in_analytics'     => 'Show in Analytics',
+            'show_in_sale_tracking' => 'Show in Sale Tracking',
+            'sort_order'            => 'Sort Order',
+            'created_at'            => 'Created At',
+            'updated_at'            => 'Updated At',
         ];
     }
 
