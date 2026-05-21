@@ -85,19 +85,7 @@ class SaleTrackingController extends Controller
             'sessions'           => $r->sessions,
             'engaged_sessions'   => $r->engaged_sessions,
             'users'              => $r->users,
-            'net_cost'           => $r->net_cost,
             'ads_tax_payments'   => $r->ads_tax_payments,
-            'total_cost'         => $r->total_cost,
-            'number_of_orders'   => $r->number_of_orders,
-            'number_of_products' => $r->number_of_products,
-            'sales_grow_percent' => $r->sales_grow_percent,
-            'revenue'            => $r->revenue,
-            'total_revenue'      => $r->total_revenue,
-            'total_return'       => $r->total_return,
-            'net_revenue'        => $r->net_revenue,
-            'roi'                => $r->roi,
-            'roas'               => $r->roas,
-            'notes'              => $r->notes,
         ])->values()->toArray();
 
         $data['saleTracking']    = $saleTracking;

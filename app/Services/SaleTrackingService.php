@@ -24,18 +24,7 @@ class SaleTrackingService
     private const COL_SESSIONS   = 'G'; // Sessions
     private const COL_ENGAGED    = 'H'; // Engaged sessions
     private const COL_USERS      = 'I'; // Users
-    private const COL_NET_COST   = 'J'; // Net Cost
     private const COL_ADS_TAX    = 'K'; // Ads in.tax Payments
-    private const COL_TOTAL_COST = 'L'; // Total Cost
-    private const COL_ORDERS     = 'M'; // Number of Order
-    private const COL_PRODUCTS   = 'N'; // Number of Product
-    private const COL_SALES_GROW = 'O'; // sales grow %
-    private const COL_REVENUE    = 'P'; // Revenue
-    private const COL_TOTAL_REV  = 'Q'; // Total Revenue
-    private const COL_RETURN     = 'R'; // Total Return
-    private const COL_NET_REV    = 'S'; // Net Revenue
-    private const COL_ROI        = 'T'; // ROI
-    private const COL_ROAS       = 'U'; // ROAS
 
     // ── List / index ─────────────────────────────────────────────
 
@@ -52,32 +41,70 @@ class SaleTrackingService
 
     /**
      * Build month-wise card groups for the index page.
-     * Returns: monthGroups[] with monthKey, monthFormatted, totals, entries, platformCards[]
+     * Financial metrics (revenue, net_cost, total_return, etc.) are computed from
+     * DailySale and DailyReturn — they are no longer stored on the model.
      */
     public function buildMonthViewGroups(LengthAwarePaginator $paginator): array
     {
+        $allRecords = $paginator->getCollection();
+
+        $platformIds = $allRecords->pluck('sale_platform_id')->filter()->unique()->values()->toArray();
+        $monthKeys   = $allRecords->map(fn ($r) => optional($r->month)->format('Y-m'))->filter()->unique()->values()->toArray();
+
+        $saleLookup   = $this->getSaleDataForExport($platformIds, $monthKeys);
+        $returnLookup = $this->getReturnDataForExport($monthKeys);
+
         $monthGroups = [];
 
         foreach (
-            $paginator->getCollection()
-                ->groupBy(fn($r) => optional($r->month)->format('Y-m') ?? '')
-                ->sortKeys()        // oldest first, latest last
+            $allRecords
+                ->groupBy(fn ($r) => optional($r->month)->format('Y-m') ?? '')
+                ->sortKeys()
             as $monthKey => $monthRecords
         ) {
             $platformCards = [];
+            $monthRevenue  = 0.0;
+            $monthCost     = 0.0;   // sum of ads_tax_payments per month
+            $monthOrders   = 0;
+
             foreach ($monthRecords as $rec) {
+                $platId  = $rec->sale_platform_id;
+                $netCost = (float) ($saleLookup[$platId][$monthKey]['net_cost']    ?? 0);
+                $revenue = (float) ($saleLookup[$platId][$monthKey]['revenue']     ?? 0);
+                $orders  = (int)   ($saleLookup[$platId][$monthKey]['orders']      ?? 0);
+                $prods   = (int)   ($saleLookup[$platId][$monthKey]['quantities']  ?? 0);
+                $adsTax  = (float) ($rec->ads_tax_payments ?? 0);
+
+                // Attach computed values as dynamic properties for easy display in view
+                $rec->computed_net_cost  = $netCost;
+                $rec->computed_revenue   = $revenue;
+                $rec->computed_orders    = $orders;
+                $rec->computed_products  = $prods;
+
+                $monthRevenue += $revenue;
+                $monthCost    += $adsTax;   // total_cost = SUM(ads_tax) per month
+                $monthOrders  += $orders;
+
                 $platformCards[] = $rec;
             }
+
+            $totalReturn = (float) ($returnLookup[$monthKey] ?? 0);
+            $netRevenue  = $monthRevenue - $totalReturn;
+            $roas        = $monthCost > 0 ? round(($monthRevenue / $monthCost) * 100, 4) : null;
+            $roi         = $roas !== null ? (int) round($roas) : null;
 
             $monthGroups[] = [
                 'monthKey'       => $monthKey,
                 'monthFormatted' => $monthRecords->first()->month
                     ? Carbon::parse($monthKey . '-01')->format('F Y')
                     : '—',
-                'totalRevenue'   => $monthRecords->sum('total_revenue'),
-                'totalCost'      => $monthRecords->sum('total_cost'),
-                'totalOrders'    => $monthRecords->sum('number_of_orders'),
-                'totalNetRev'    => $monthRecords->sum('net_revenue'),
+                'totalRevenue'   => $monthRevenue,
+                'totalCost'      => $monthCost,
+                'totalReturn'    => $totalReturn,
+                'totalNetRev'    => $netRevenue,
+                'totalOrders'    => $monthOrders,
+                'roas'           => $roas,
+                'roi'            => $roi,
                 'entries'        => $monthRecords->values(),
                 'platformCards'  => $platformCards,
             ];
@@ -91,12 +118,6 @@ class SaleTrackingService
     /**
      * Returns a lookup of DailySale aggregates grouped by platform and month.
      * Result: [sale_platform_id][Y-m] => ['net_cost' => float, 'revenue' => float]
-     *
-     * – net_cost = SUM(spent)   (ad spend recorded in DailySale)
-     * – revenue  = SUM(sales)   (revenue recorded in DailySale)
-     *
-     * @param int[]    $platformIds  Platform IDs to include
-     * @param string[] $monthKeys    Month keys in 'Y-m' format (e.g. ['2025-03', '2025-04'])
      */
     public function getSaleDataForExport(array $platformIds, array $monthKeys): array
     {
@@ -108,8 +129,10 @@ class SaleTrackingService
             'sale_platform_id,
              YEAR(date)  AS yr,
              MONTH(date) AS mn,
-             SUM(spent)  AS total_spent,
-             SUM(sales)  AS total_sales'
+             SUM(spent)              AS total_spent,
+             SUM(sales)              AS total_sales,
+             SUM(number_of_orders)     AS total_orders,
+             SUM(number_of_quantities) AS total_quantities'
         )
         ->whereIn('sale_platform_id', $platformIds)
         ->groupBy('sale_platform_id', DB::raw('YEAR(date)'), DB::raw('MONTH(date)'))
@@ -127,8 +150,10 @@ class SaleTrackingService
         foreach ($query->get() as $row) {
             $mk = $row->yr . '-' . str_pad($row->mn, 2, '0', STR_PAD_LEFT);
             $lookup[$row->sale_platform_id][$mk] = [
-                'net_cost' => (float) ($row->total_spent ?? 0),
-                'revenue'  => (float) ($row->total_sales ?? 0),
+                'net_cost'   => (float) ($row->total_spent      ?? 0),
+                'revenue'    => (float) ($row->total_sales      ?? 0),
+                'orders'     => (int)   ($row->total_orders     ?? 0),
+                'quantities' => (int)   ($row->total_quantities ?? 0),
             ];
         }
 
@@ -138,8 +163,6 @@ class SaleTrackingService
     /**
      * Returns a lookup of DailyReturn aggregates grouped by month (all platforms combined).
      * Result: [Y-m] => total_return (float)
-     *
-     * @param string[] $monthKeys  Month keys in 'Y-m' format
      */
     public function getReturnDataForExport(array $monthKeys): array
     {
@@ -194,13 +217,7 @@ class SaleTrackingService
             }
             if (empty($platform)) continue;
 
-            $netCost   = $this->toFloat($sheet->getCell(self::COL_NET_COST . $row)->getCalculatedValue());
-            $adsTax    = $this->toFloat($sheet->getCell(self::COL_ADS_TAX . $row)->getCalculatedValue());
-            $totalCost = $this->toFloat($sheet->getCell(self::COL_TOTAL_COST . $row)->getCalculatedValue());
-
-            if ($totalCost === null && $netCost !== null && $adsTax !== null) {
-                $totalCost = $netCost + $adsTax;
-            }
+            $adsTax = $this->toFloat($sheet->getCell(self::COL_ADS_TAX . $row)->getCalculatedValue());
 
             $records[] = [
                 'month'              => $this->excelDateToCarbon($currentMonth),
@@ -211,18 +228,7 @@ class SaleTrackingService
                 'sessions'           => $this->toInt($sheet->getCell(self::COL_SESSIONS . $row)->getCalculatedValue()),
                 'engaged_sessions'   => $this->toInt($sheet->getCell(self::COL_ENGAGED . $row)->getCalculatedValue()),
                 'users'              => $this->toInt($sheet->getCell(self::COL_USERS . $row)->getCalculatedValue()),
-                'net_cost'           => $netCost,
                 'ads_tax_payments'   => $adsTax,
-                'total_cost'         => $totalCost,
-                'number_of_orders'   => $this->toInt($sheet->getCell(self::COL_ORDERS . $row)->getCalculatedValue()),
-                'number_of_products' => $this->toInt($sheet->getCell(self::COL_PRODUCTS . $row)->getCalculatedValue()),
-                'sales_grow_percent' => $this->toFloat($sheet->getCell(self::COL_SALES_GROW . $row)->getCalculatedValue()),
-                'revenue'            => $this->toFloat($sheet->getCell(self::COL_REVENUE . $row)->getCalculatedValue()),
-                'total_revenue'      => $this->toFloat($sheet->getCell(self::COL_TOTAL_REV . $row)->getCalculatedValue()),
-                'total_return'       => $this->toFloat($sheet->getCell(self::COL_RETURN . $row)->getCalculatedValue()),
-                'net_revenue'        => $this->toFloat($sheet->getCell(self::COL_NET_REV . $row)->getCalculatedValue()),
-                'roi'                => $this->toFloat($sheet->getCell(self::COL_ROI . $row)->getCalculatedValue()),
-                'roas'               => $this->toFloat($sheet->getCell(self::COL_ROAS . $row)->getCalculatedValue()),
             ];
         }
 
@@ -248,12 +254,37 @@ class SaleTrackingService
 
     // ── Export ────────────────────────────────────────────────────
 
+    /**
+     * Get total revenue for a given month to use as the Sales Growth % baseline.
+     */
+    public function getPrevMonthRevenueForGrowth(array $platformIds, string $monthKey): float
+    {
+        if (empty($platformIds) || empty($monthKey)) {
+            return 0.0;
+        }
+
+        [$year, $month] = explode('-', $monthKey);
+        $year  = (int) $year;
+        $month = (int) $month;
+
+        // ── 1. Try DailySale ─────────────────────────────────────────
+        $row = DailySale::selectRaw('SUM(sales) AS total')
+            ->whereIn('sale_platform_id', $platformIds)
+            ->whereYear('date', $year)
+            ->whereMonth('date', $month)
+            ->first();
+        $total = (float) ($row->total ?? 0);
+
+        // ── 2. Fallback: DailyAdPerformance (no revenue column anymore — return 0) ─
+        return $total;
+    }
+
     public function getExportQuery(array $filters): Builder
     {
         return DailyAdPerformance::with('salePlatform')
             ->whereHas('salePlatform', fn ($q) => $q->where('show_in_sale_tracking', true))
             ->filter($filters)
-            ->orderBy('month')   // oldest first, latest last
+            ->orderBy('month')
             ->orderBy('id');
     }
 
@@ -282,19 +313,7 @@ class SaleTrackingService
             'entries.*.sessions'                 => 'nullable|integer|min:0',
             'entries.*.engaged_sessions'         => 'nullable|integer|min:0',
             'entries.*.users'                    => 'nullable|integer|min:0',
-            'entries.*.net_cost'                 => 'nullable|numeric|min:0',
             'entries.*.ads_tax_payments'         => 'nullable|numeric|min:0',
-            'entries.*.total_cost'               => 'nullable|numeric|min:0',
-            'entries.*.number_of_orders'         => 'nullable|integer|min:0',
-            'entries.*.number_of_products'       => 'nullable|integer|min:0',
-            'entries.*.sales_grow_percent'       => 'nullable|numeric',
-            'entries.*.revenue'                  => 'nullable|numeric|min:0',
-            'entries.*.total_revenue'            => 'nullable|numeric|min:0',
-            'entries.*.total_return'             => 'nullable|numeric|min:0',
-            'entries.*.net_revenue'              => 'nullable|numeric',
-            'entries.*.roi'                      => 'nullable|numeric',
-            'entries.*.roas'                     => 'nullable|numeric',
-            'entries.*.notes'                    => 'nullable|string|max:1000',
         ];
     }
 
@@ -310,19 +329,7 @@ class SaleTrackingService
             'entries.*.sessions'                 => 'nullable|integer|min:0',
             'entries.*.engaged_sessions'         => 'nullable|integer|min:0',
             'entries.*.users'                    => 'nullable|integer|min:0',
-            'entries.*.net_cost'                 => 'nullable|numeric|min:0',
             'entries.*.ads_tax_payments'         => 'nullable|numeric|min:0',
-            'entries.*.total_cost'               => 'nullable|numeric|min:0',
-            'entries.*.number_of_orders'         => 'nullable|integer|min:0',
-            'entries.*.number_of_products'       => 'nullable|integer|min:0',
-            'entries.*.sales_grow_percent'       => 'nullable|numeric',
-            'entries.*.revenue'                  => 'nullable|numeric|min:0',
-            'entries.*.total_revenue'            => 'nullable|numeric|min:0',
-            'entries.*.total_return'             => 'nullable|numeric|min:0',
-            'entries.*.net_revenue'              => 'nullable|numeric',
-            'entries.*.roi'                      => 'nullable|numeric',
-            'entries.*.roas'                     => 'nullable|numeric',
-            'entries.*.notes'                    => 'nullable|string|max:1000',
         ];
     }
 
@@ -339,19 +346,7 @@ class SaleTrackingService
             'sessions'           => 'nullable|integer|min:0',
             'engaged_sessions'   => 'nullable|integer|min:0',
             'users'              => 'nullable|integer|min:0',
-            'net_cost'           => 'nullable|numeric|min:0',
             'ads_tax_payments'   => 'nullable|numeric|min:0',
-            'total_cost'         => 'nullable|numeric|min:0',
-            'number_of_orders'   => 'nullable|integer|min:0',
-            'number_of_products' => 'nullable|integer|min:0',
-            'sales_grow_percent' => 'nullable|numeric',
-            'revenue'            => 'nullable|numeric|min:0',
-            'total_revenue'      => 'nullable|numeric|min:0',
-            'total_return'       => 'nullable|numeric|min:0',
-            'net_revenue'        => 'nullable|numeric',
-            'roi'                => 'nullable|numeric',
-            'roas'               => 'nullable|numeric',
-            'notes'              => 'nullable|string|max:1000',
         ];
     }
 
@@ -359,12 +354,11 @@ class SaleTrackingService
 
     public function bulkCreate(string $month, array $entries): array
     {
-        // Store as first of month
         $monthDate = Carbon::parse($month)->startOfMonth()->toDateString();
         $created   = [];
         foreach ($entries as $entry) {
             $entry['month'] = $monthDate;
-            $created[]      = DailyAdPerformance::create($this->computeDerived($this->normalise($entry)));
+            $created[]      = DailyAdPerformance::create($this->normalise($entry));
         }
         return $created;
     }
@@ -397,7 +391,7 @@ class SaleTrackingService
 
         foreach ($entries as $entry) {
             $entry['month'] = $monthDate;
-            $data           = $this->computeDerived($this->normalise($entry));
+            $data           = $this->normalise($entry);
 
             if (!empty($data['id'])) {
                 $id = (int) $data['id'];
@@ -415,7 +409,7 @@ class SaleTrackingService
         if (!empty($data['month'])) {
             $data['month'] = Carbon::parse($data['month'])->startOfMonth()->toDateString();
         }
-        return DailyAdPerformance::create($this->computeDerived($this->normalise($data)));
+        return DailyAdPerformance::create($this->normalise($data));
     }
 
     public function update(DailyAdPerformance $record, array $data): DailyAdPerformance
@@ -423,49 +417,13 @@ class SaleTrackingService
         if (!empty($data['month'])) {
             $data['month'] = Carbon::parse($data['month'])->startOfMonth()->toDateString();
         }
-        $record->update($this->computeDerived($this->normalise($data)));
+        $record->update($this->normalise($data));
         return $record;
     }
 
     public function delete(DailyAdPerformance $record): void
     {
         $record->delete();
-    }
-
-    // ── Computed fields ───────────────────────────────────────────
-
-    public function computeDerived(array $data): array
-    {
-        $netCost  = isset($data['net_cost'])         ? (float) $data['net_cost']         : null;
-        $adsTax   = isset($data['ads_tax_payments']) ? (float) $data['ads_tax_payments'] : null;
-
-        if (empty($data['total_cost']) && $netCost !== null && $adsTax !== null) {
-            $data['total_cost'] = round($netCost + $adsTax, 2);
-        }
-
-        $totalCost   = !empty($data['total_cost'])   ? (float) $data['total_cost']   : null;
-        $revenue     = isset($data['revenue'])       ? (float) $data['revenue']       : null;
-        $totalReturn = isset($data['total_return'])  ? (float) $data['total_return']  : null;
-
-        if (empty($data['total_revenue']) && $revenue !== null) {
-            $data['total_revenue'] = $revenue;
-        }
-
-        $totalRevenue = !empty($data['total_revenue']) ? (float) $data['total_revenue'] : null;
-
-        if (empty($data['net_revenue']) && $totalRevenue !== null && $totalReturn !== null) {
-            $data['net_revenue'] = round($totalRevenue - $totalReturn, 2);
-        }
-
-        if (empty($data['roi']) && $totalCost !== null && $totalCost > 0 && $revenue !== null) {
-            $data['roi'] = round(($revenue / $totalCost) * 100, 4);
-        }
-
-        if (empty($data['roas']) && $totalCost !== null && $totalCost > 0 && $revenue !== null) {
-            $data['roas'] = round($revenue / $totalCost, 4);
-        }
-
-        return $data;
     }
 
     // ── Helpers ───────────────────────────────────────────────────
@@ -475,8 +433,7 @@ class SaleTrackingService
         foreach ($data as $key => $val) {
             if ($val === '') $data[$key] = null;
         }
-        $ints = ['reach','impressions','clicks','sessions','engaged_sessions','users',
-                 'number_of_orders','number_of_products'];
+        $ints = ['reach','impressions','clicks','sessions','engaged_sessions','users'];
         foreach ($ints as $f) {
             if (isset($data[$f]) && $data[$f] !== null) $data[$f] = (int) $data[$f];
         }

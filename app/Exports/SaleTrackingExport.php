@@ -93,6 +93,21 @@ class SaleTrackingExport
         $saleLookup   = $service->getSaleDataForExport($platformIds, $monthKeys);
         $returnLookup = $service->getReturnDataForExport($monthKeys);
 
+        // ── Compute previous-month revenue for Sales Growth % of the FIRST exported month ──
+        // When a filter window is active, the first exported month has no $prevQRow, but we can
+        // compare it against the month immediately before the window (even if that month is not
+        // shown in the export).  We try DailySale first, then fall back to DailyAdPerformance.revenue
+        // via the service so we always have a baseline even when DailySale records are absent.
+        $prevMonthTotalRevenue = null;
+        $sortedMonthKeys = collect($monthKeys)->sort()->values()->toArray();
+        if (!empty($sortedMonthKeys) && !empty($platformIds)) {
+            $firstMk   = $sortedMonthKeys[0];
+            $prevMk    = Carbon::parse($firstMk . '-01')->subMonth()->format('Y-m');
+            $prevTotal = $service->getPrevMonthRevenueForGrowth($platformIds, $prevMk);
+            // Store regardless of whether it is 0 — writeSheet will write 0% when it's 0
+            $prevMonthTotalRevenue = $prevTotal;
+        }
+
         $spreadsheet = new Spreadsheet();
         $spreadsheet->removeSheetByIndex(0);
         $sheet = $spreadsheet->createSheet(0);
@@ -101,7 +116,7 @@ class SaleTrackingExport
         if ($records->isEmpty()) {
             $sheet->setCellValue('A1', 'No data found for the selected filters.');
         } else {
-            $this->writeSheet($sheet, $records, $saleLookup, $returnLookup);
+            $this->writeSheet($sheet, $records, $saleLookup, $returnLookup, $prevMonthTotalRevenue);
         }
 
         $spreadsheet->setActiveSheetIndex(0);
@@ -264,7 +279,7 @@ class SaleTrackingExport
      *  – ROAS           (U) ← MERGED per month  = =IFERROR((Q/L)*100,"")               (Excel formula)
      *  – ROI            (T) ← MERGED per month  = =IFERROR(ROUND(U,0),"")              (Excel formula)
      */
-    private function writeSheet($sheet, $records, array $saleLookup, array $returnLookup): void
+    private function writeSheet($sheet, $records, array $saleLookup, array $returnLookup, ?float $prevMonthTotalRevenue = null): void
     {
         $sheetName = 'Ad Performance';
         $moneyFmt  = '#,##0.00';
@@ -281,9 +296,11 @@ class SaleTrackingExport
             $monthLabel = optional($rec->month)->format('M Y') ?? $mk;
             $platId     = $rec->sale_platform_id;
 
-            // Net Cost and Revenue come from DailySale
-            $netCost = (float) ($saleLookup[$platId][$mk]['net_cost'] ?? 0);
-            $revenue = (float) ($saleLookup[$platId][$mk]['revenue']  ?? 0);
+            // Net Cost, Revenue, Orders and Products come from DailySale
+            $netCost = (float) ($saleLookup[$platId][$mk]['net_cost']    ?? 0);
+            $revenue = (float) ($saleLookup[$platId][$mk]['revenue']     ?? 0);
+            $orders  = (int)   ($saleLookup[$platId][$mk]['orders']      ?? 0);
+            $prods   = (int)   ($saleLookup[$platId][$mk]['quantities']  ?? 0);
             $adsTax  = (float) ($rec->ads_tax_payments ?? 0);
 
             if (!isset($monthGroups[$mk])) {
@@ -294,6 +311,8 @@ class SaleTrackingExport
                 'net_cost' => $netCost,
                 'revenue'  => $revenue,
                 'ads_tax'  => $adsTax,
+                'orders'   => $orders,
+                'products' => $prods,
             ];
 
             // Per-platform engagement data (engagement metrics only — no financial changes)
@@ -313,7 +332,7 @@ class SaleTrackingExport
             $platformData[$platName]['months'][$mk]['sessions']         += (int) ($rec->sessions ?? 0);
             $platformData[$platName]['months'][$mk]['engaged_sessions'] += (int) ($rec->engaged_sessions ?? 0);
             $platformData[$platName]['months'][$mk]['users']            += (int) ($rec->users ?? 0);
-            $platformData[$platName]['months'][$mk]['orders']           += (int) ($rec->number_of_orders ?? 0);
+            $platformData[$platName]['months'][$mk]['orders']           += $orders;
         }
 
         // ── Phase 2: Compute month-level financials (used for summary table + return lookup) ──
@@ -346,7 +365,7 @@ class SaleTrackingExport
                 'revenue'     => $mt['total_revenue'],
                 'total_cost'  => $mt['total_cost'],
                 'net_revenue' => $mt['net_revenue'],
-                'orders'      => array_sum(array_map(fn ($e) => (int) ($e['rec']->number_of_orders ?? 0), $group['entries'])),
+                'orders'      => array_sum(array_column($group['entries'], 'orders')),
                 'clicks'      => array_sum(array_map(fn ($e) => (int) ($e['rec']->clicks         ?? 0), $group['entries'])),
                 'impressions' => array_sum(array_map(fn ($e) => (int) ($e['rec']->impressions    ?? 0), $group['entries'])),
                 'roi_sum'     => $mt['roi']  !== null ? $mt['roi']  : 0,
@@ -417,8 +436,8 @@ class SaleTrackingExport
                 // K: Ads Tax — from DailyAdPerformance.ads_tax_payments (PHP value)
                 $sheet->setCellValue('K' . $r, $entry['ads_tax']  ?: null);
                 // L: Total Cost — Excel formula written after inner loop (merged cell)
-                $sheet->setCellValue('M' . $r, $rec->number_of_orders);
-                $sheet->setCellValue('N' . $r, $rec->number_of_products);
+                $sheet->setCellValue('M' . $r, $entry['orders']   ?: null);
+                $sheet->setCellValue('N' . $r, $entry['products'] ?: null);
                 // O: Sales Growth % — Excel formula written after inner loop (merged cell)
                 // P: Revenue — from DailySale.sales (PHP value)
                 $sheet->setCellValue('P' . $r, $entry['revenue']  ?: null);
@@ -449,11 +468,22 @@ class SaleTrackingExport
             // R: Total Return — PHP value (DailyReturn, no sheet reference possible)
             $sheet->setCellValue('R' . $ms, $mt['total_return'] ?: null);
 
-            // O: Sales Growth % = (This Month Total Revenue − Prev Month Total Revenue) / Prev Month Total Revenue
+            // O: Sales Growth %
             if ($prevQRow !== null) {
+                // Month 2+ : Excel formula comparing against previous month's Q cell in the sheet
                 $sheet->setCellValue('O' . $ms, "=IFERROR((Q{$ms}-Q{$prevQRow})/Q{$prevQRow},\"\")");
+            } else {
+                // First month in the export — compare against the month BEFORE the filter window.
+                // $prevMonthTotalRevenue is 0.0 when no prior data exists at all.
+                $firstMonthRevenue = (float) array_sum(array_column($group['entries'], 'revenue'));
+                if ($prevMonthTotalRevenue !== null && $prevMonthTotalRevenue > 0) {
+                    // Prior-month baseline found → compute real growth %
+                    $sheet->setCellValue('O' . $ms, ($firstMonthRevenue - $prevMonthTotalRevenue) / $prevMonthTotalRevenue);
+                } else {
+                    // No prior data (truly the first tracked month) → show 0 %
+                    $sheet->setCellValue('O' . $ms, 0.0);
+                }
             }
-            // else: first month — leave O empty (no previous month to compare against)
 
             // S: Net Revenue = Total Revenue − Total Return
             $sheet->setCellValue('S' . $ms, "=IFERROR(Q{$ms}-R{$ms},\"\")");

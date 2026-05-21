@@ -9,7 +9,49 @@
  * };
  */
 
+import flatpickr from 'flatpickr';
+import 'flatpickr/dist/flatpickr.min.css';
+
 (function () {
+
+    // ── Index page: custom date range pickers ─────────────────────
+    const fromEl = document.getElementById('filter-date-from');
+    const toEl   = document.getElementById('filter-date-to');
+
+    if (fromEl || toEl) {
+        const commonOpts = {
+            dateFormat  : 'Y-m-d',
+            allowInput  : true,
+            disableMobile: true,
+            theme       : 'light',
+        };
+
+        const fpTo = toEl ? flatpickr(toEl, {
+            ...commonOpts,
+            defaultDate: toEl.getAttribute('data-default') || null,
+        }) : null;
+
+        const fpFrom = fromEl ? flatpickr(fromEl, {
+            ...commonOpts,
+            defaultDate: fromEl.getAttribute('data-default') || null,
+            onChange([date]) {
+                if (fpTo && date) fpTo.set('minDate', date);
+            },
+        }) : null;
+
+        if (fpTo && fpFrom) {
+            fpTo._fp_onChange_orig = fpTo.config.onChange;
+            fpTo.config.onChange = [function([date]) {
+                if (fpFrom && date) fpFrom.set('maxDate', date);
+            }];
+        }
+
+        // Expose globally so Alpine can clear them
+        window._fpFrom = fpFrom;
+        window._fpTo   = fpTo;
+    }
+
+    // ── Create / Edit page ─────────────────────────────────────────
     const ST = window.ST || {};
     if (!ST.platforms) return;
 
@@ -47,41 +89,10 @@
         return cell;
     }
 
-    function autoCell(labelText, inputEl, extraCellCls) {
-        inputEl.classList.add('bg-slate-50', 'dark:bg-slate-700/40');
-        return fieldCell(labelText + ' (auto)', inputEl, extraCellCls);
-    }
-
     function updateCount() {
         const count = document.querySelectorAll('#entries-container .st-entry-card').length;
         const el    = document.getElementById('row-count-label');
         if (el) el.textContent = count > 1 ? count + ' platform entries' : '';
-    }
-
-    // ── Derived field computation within a card ───────────────
-
-    function computeCard(card, idx) {
-        const g   = id => card.querySelector(`[name="entries[${idx}][${id}]"]`);
-        const net = parseFloat(g('net_cost')?.value)        || 0;
-        const tax = parseFloat(g('ads_tax_payments')?.value) || 0;
-        const rev = parseFloat(g('revenue')?.value)          || 0;
-        const ret = parseFloat(g('total_return')?.value)     || 0;
-
-        let totalCost = parseFloat(g('total_cost')?.value) || 0;
-        if ((net > 0 || tax > 0) && g('total_cost')) {
-            totalCost = net + tax;
-            g('total_cost').value = totalCost.toFixed(2);
-        }
-        if (g('total_revenue')) {
-            g('total_revenue').value = rev > 0 ? rev.toFixed(2) : '';
-        }
-        if (g('net_revenue')) {
-            g('net_revenue').value = rev > 0 ? (rev - ret).toFixed(2) : '';
-        }
-        if (totalCost > 0 && rev > 0) {
-            if (g('roi'))  g('roi').value  = ((rev / totalCost) * 100).toFixed(4);
-            if (g('roas')) g('roas').value = (rev / totalCost).toFixed(4);
-        }
     }
 
     // ── Build a single entry card ─────────────────────────────
@@ -116,69 +127,34 @@
         platWrap.appendChild(selectEl);
         outer.appendChild(platWrap);
 
-        // ── All fields flat grid (max 2 rows at lg: 10 + 9) ──
-        const grid = n('div', 'flex-1 grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2');
+        // ── Fields grid ──
+        const grid = n('div', 'flex-1 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2');
 
-        // Reach & Engagement (6)
-        const reachEl    = inp(`entries[${idx}][reach]`,            data.reach,            'number', '1',      '0', '0');
-        const impressEl  = inp(`entries[${idx}][impressions]`,      data.impressions,      'number', '1',      '0', '0');
-        const clicksEl   = inp(`entries[${idx}][clicks]`,           data.clicks,           'number', '1',      '0', '0');
-        const sessEl     = inp(`entries[${idx}][sessions]`,         data.sessions,         'number', '1',      '0', '0');
-        const engSessEl  = inp(`entries[${idx}][engaged_sessions]`, data.engaged_sessions, 'number', '1',      '0', '0');
-        const usersEl    = inp(`entries[${idx}][users]`,            data.users,            'number', '1',      '0', '0');
+        // Engagement (6)
+        const reachEl    = inp(`entries[${idx}][reach]`,            data.reach,            'number', '1',    '0', '0');
+        const impressEl  = inp(`entries[${idx}][impressions]`,      data.impressions,      'number', '1',    '0', '0');
+        const clicksEl   = inp(`entries[${idx}][clicks]`,           data.clicks,           'number', '1',    '0', '0');
+        const sessEl     = inp(`entries[${idx}][sessions]`,         data.sessions,         'number', '1',    '0', '0');
+        const engSessEl  = inp(`entries[${idx}][engaged_sessions]`, data.engaged_sessions, 'number', '1',    '0', '0');
+        const usersEl    = inp(`entries[${idx}][users]`,            data.users,            'number', '1',    '0', '0');
 
-        // Cost (3)
-        const netCostEl   = inp(`entries[${idx}][net_cost]`,         data.net_cost,         'number', '0.01', '0', '0.00');
-        const adsTaxEl    = inp(`entries[${idx}][ads_tax_payments]`, data.ads_tax_payments, 'number', '0.01', '0', '0.00');
-        const totalCostEl = inp(`entries[${idx}][total_cost]`,       data.total_cost,       'number', '0.01', '0', 'Auto');
+        // Ads Tax (direct entry)
+        const adsTaxEl   = inp(`entries[${idx}][ads_tax_payments]`, data.ads_tax_payments, 'number', '0.01', '0', '0.00');
 
-        // Orders & Revenue (7)
-        const ordersEl    = inp(`entries[${idx}][number_of_orders]`,   data.number_of_orders,   'number', '1',      '0',   '0');
-        const prodsEl     = inp(`entries[${idx}][number_of_products]`,  data.number_of_products, 'number', '1',      '0',   '0');
-        const growthEl    = inp(`entries[${idx}][sales_grow_percent]`,  data.sales_grow_percent, 'number', '0.0001', null,  '0.00');
-        const revenueEl   = inp(`entries[${idx}][revenue]`,             data.revenue,            'number', '0.01',   '0',   '0.00');
-        const totRevEl    = inp(`entries[${idx}][total_revenue]`,       data.total_revenue,      'number', '0.01',   '0',   'Auto');
-        const returnEl    = inp(`entries[${idx}][total_return]`,        data.total_return,       'number', '0.01',   '0',   '0.00');
-        const netRevEl    = inp(`entries[${idx}][net_revenue]`,         data.net_revenue,        'number', '0.01',   null,  'Auto');
-
-        // Performance & Notes (3)
-        const roiEl   = inp(`entries[${idx}][roi]`,   data.roi,   'number', '0.0001', null, 'Auto');
-        const roasEl  = inp(`entries[${idx}][roas]`,  data.roas,  'number', '0.0001', null, 'Auto');
-        const notesEl = inp(`entries[${idx}][notes]`, data.notes, 'text',   null,     null, 'Notes…');
-
-        // Wire auto-compute
-        netCostEl.addEventListener('input',  () => computeCard(card, idx));
-        adsTaxEl.addEventListener('input',   () => computeCard(card, idx));
-        revenueEl.addEventListener('input',  () => computeCard(card, idx));
-        returnEl.addEventListener('input',   () => computeCard(card, idx));
-
-        // Row 1: reach(1) impressions(2) clicks(3) sessions(4) engaged(5) users(6) net_cost(7) ads_tax(8) total_cost(9) orders(10)
+        // Row: reach impressions clicks sessions engaged users ads_tax
         grid.appendChild(fieldCell('Reach',            reachEl));
         grid.appendChild(fieldCell('Impressions',      impressEl));
         grid.appendChild(fieldCell('Clicks',           clicksEl));
         grid.appendChild(fieldCell('Sessions',         sessEl));
         grid.appendChild(fieldCell('Engaged Sessions', engSessEl));
         grid.appendChild(fieldCell('Users',            usersEl));
-        grid.appendChild(fieldCell('Net Cost',         netCostEl));
-        grid.appendChild(fieldCell('Ads Tax',          adsTaxEl));
-        grid.appendChild(autoCell( 'Total Cost',       totalCostEl));
-        grid.appendChild(fieldCell('Orders',           ordersEl));
+        grid.appendChild(fieldCell('Ads Tax (£)',      adsTaxEl));
 
-        // Row 2: products(1) growth(2) revenue(3) total_rev(4) total_return(5) net_rev(6) roi(7) roas(8) notes(9)
-        grid.appendChild(fieldCell('Products',        prodsEl));
-        grid.appendChild(fieldCell('Sales Growth %',  growthEl));
-        grid.appendChild(fieldCell('Revenue (£)',     revenueEl));
-        grid.appendChild(autoCell( 'Total Revenue',   totRevEl));
-        grid.appendChild(fieldCell('Total Return',    returnEl));
-        grid.appendChild(autoCell( 'Net Revenue',     netRevEl));
-        grid.appendChild(autoCell( 'ROI (%)',         roiEl));
-        grid.appendChild(autoCell( 'ROAS',            roasEl));
-        grid.appendChild(fieldCell('Notes',           notesEl));
 
         outer.appendChild(grid);
 
         // ── Remove button ──
-        const removeBtn = n('button', 'xl:mb-0.5 xl:shrink-0 flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors', { type: 'button', title: 'Remove' });
+        const removeBtn = n('button', 'xl:mb-0.5 xl:shrink-0 flex justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors', { type: 'button', title: 'Remove' });
         removeBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>';
         removeBtn.addEventListener('click', () => {
             if (isEdit && data.id) {

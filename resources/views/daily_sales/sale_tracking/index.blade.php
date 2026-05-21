@@ -8,7 +8,16 @@
 <div x-data="{
     drawerOpen: false,
     dateRange: '{{ request('date_range', '') }}',
-    get isCustom() { return this.dateRange === 'custom'; }
+    get isCustom() { return this.dateRange === 'custom'; },
+    setRange(val) {
+        this.dateRange = val;
+        if (val !== 'custom') {
+            if (window._fpFrom) window._fpFrom.clear();
+            else { const el = document.getElementById('filter-date-from'); if (el) el.value = ''; }
+            if (window._fpTo)   window._fpTo.clear();
+            else { const el = document.getElementById('filter-date-to');   if (el) el.value = ''; }
+        }
+    }
 }" @keydown.escape.window="drawerOpen = false">
 
     {{-- ── FILTER DRAWER BACKDROP ── --}}
@@ -56,36 +65,77 @@
                             'last_3_months' => 'Last 3 Months',
                             'last_6_months' => 'Last 6 Months',
                             'last_year'     => 'Last 1 Year',
-                            'custom'        => 'Custom',
+                            'custom'        => 'Custom Range',
                         ] as $val => $label)
                         <button type="button"
-                                @click="dateRange = '{{ $val }}'"
+                                @click="setRange('{{ $val }}')"
                                 :class="dateRange === '{{ $val }}'
-                                    ? 'bg-accent-400 text-white border-accent-400 font-semibold'
+                                    ? 'bg-accent-400 text-white border-accent-400 font-semibold shadow-sm'
                                     : 'bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'"
-                                class="px-2.5 py-2 text-[12px] rounded-lg border transition-colors text-center {{ $val === 'custom' ? 'col-span-2' : '' }} {{ request('date_range') === $val ? 'bg-accent-400 text-white border-accent-400 font-semibold' : '' }}">
+                                class="px-2.5 py-2 text-[12px] rounded-lg border transition-colors text-center {{ $val === 'custom' ? 'col-span-2' : '' }}">
                             {{ $label }}
                         </button>
                         @endforeach
                         <button type="button"
-                                @click="dateRange = ''"
+                                @click="setRange('')"
                                 :class="dateRange === ''
-                                    ? 'bg-accent-400 text-white border-accent-400 font-semibold'
+                                    ? 'bg-accent-400 text-white border-accent-400 font-semibold shadow-sm'
                                     : 'bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'"
-                                class="col-span-2 px-2.5 py-2 text-[12px] rounded-lg border transition-colors text-center {{ !request('date_range') ? 'bg-accent-400 text-white border-accent-400 font-semibold' : '' }}">
+                                class="col-span-2 px-2.5 py-2 text-[12px] rounded-lg border transition-colors text-center">
                             All Time
                         </button>
                     </div>
-                    <div x-show="isCustom" x-transition class="space-y-3">
-                        <div>
-                            <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-1.5">From</p>
-                            <input type="date" name="date_from" value="{{ request('date_from') }}"
-                                   class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400"/>
-                        </div>
-                        <div>
-                            <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-1.5">To</p>
-                            <input type="date" name="date_to" value="{{ request('date_to') }}"
-                                   class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400"/>
+
+                    {{-- Custom date range — flatpickr-powered date pickers --}}
+                    <div x-show="isCustom" x-transition style="display:none;">
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden bg-white dark:bg-slate-800 shadow-sm">
+
+                            {{-- Start Date --}}
+                            <div class="px-3.5 pt-3 pb-2.5">
+                                <div class="flex items-center gap-1.5 mb-2">
+                                    <div class="w-5 h-5 rounded-md bg-accent-400/15 flex items-center justify-center flex-shrink-0">
+                                        <svg class="w-3 h-3 text-accent-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                        </svg>
+                                    </div>
+                                    <span class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500">Start Date</span>
+                                </div>
+                                <input type="text" id="filter-date-from" name="date_from"
+                                       data-default="{{ request('date_from') }}"
+                                       value="{{ request('date_from') }}"
+                                       placeholder="Select start date…"
+                                       readonly
+                                       class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 transition cursor-pointer"/>
+                            </div>
+
+                            {{-- Divider arrow --}}
+                            <div class="flex items-center gap-2.5 px-3.5 py-0.5">
+                                <div class="flex-1 h-px bg-slate-100 dark:bg-slate-700"></div>
+                                <div class="w-6 h-6 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                </div>
+                                <div class="flex-1 h-px bg-slate-100 dark:bg-slate-700"></div>
+                            </div>
+
+                            {{-- End Date --}}
+                            <div class="px-3.5 pt-2.5 pb-3">
+                                <div class="flex items-center gap-1.5 mb-2">
+                                    <div class="w-5 h-5 rounded-md bg-accent-400/15 flex items-center justify-center flex-shrink-0">
+                                        <svg class="w-3 h-3 text-accent-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                        </svg>
+                                    </div>
+                                    <span class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500">End Date</span>
+                                </div>
+                                <input type="text" id="filter-date-to" name="date_to"
+                                       data-default="{{ request('date_to') }}"
+                                       value="{{ request('date_to') }}"
+                                       placeholder="Select end date…"
+                                       readonly
+                                       class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 transition cursor-pointer"/>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -211,8 +261,13 @@
                             Rev £{{ number_format($mg['totalRevenue'], 2) }}
                         </span>
                         <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded-full">
-                            Cost £{{ number_format($mg['totalCost'], 2) }}
+                            Ads Tax £{{ number_format($mg['totalCost'], 2) }}
                         </span>
+                        @if($mg['totalReturn'] > 0)
+                            <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 px-2.5 py-1 rounded-full">
+                                Return £{{ number_format($mg['totalReturn'], 2) }}
+                            </span>
+                        @endif
                         @if($mg['totalNetRev'] >= 0)
                             <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-[#E6F3F0] dark:bg-accent-900/30 text-[#003D2B] dark:text-accent-300 px-2.5 py-1 rounded-full">
                                 Net £{{ number_format($mg['totalNetRev'], 2) }}
@@ -220,6 +275,11 @@
                         @else
                             <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-2.5 py-1 rounded-full">
                                 Net £{{ number_format($mg['totalNetRev'], 2) }}
+                            </span>
+                        @endif
+                        @if($mg['roi'] !== null)
+                            <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-[#FFDDC0] dark:bg-orange-900/30 text-[#7A3B00] dark:text-orange-300 px-2.5 py-1 rounded-full">
+                                ROI {{ number_format($mg['roi']) }}%
                             </span>
                         @endif
                         <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 px-2.5 py-1 rounded-full">
@@ -240,9 +300,11 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                     @foreach($mg['platformCards'] as $rec)
                     @php
-                        $roas      = $rec->roas;
-                        $roi       = $rec->roi;
-                        $netPos    = ($rec->net_revenue ?? 0) >= 0;
+                        $recRevenue    = $rec->computed_revenue ?? 0;
+                        $recNetCost    = $rec->computed_net_cost ?? 0;
+                        $recAdsTax     = (float) ($rec->ads_tax_payments ?? 0);
+                        $recOrders     = $rec->computed_orders ?? 0;
+                        $recProducts   = $rec->computed_products ?? 0;
                     @endphp
                     <div class="group bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700 rounded-xl p-3.5 hover:border-accent-200 dark:hover:border-accent-700 hover:shadow-sm transition-all">
 
@@ -283,29 +345,17 @@
                         <div class="grid grid-cols-2 gap-1.5 mb-1.5">
                             <div class="bg-emerald-50 dark:bg-emerald-900/10 rounded-lg px-2.5 py-1.5">
                                 <p class="text-[9px] font-semibold uppercase tracking-[1px] text-emerald-600/70 dark:text-emerald-400/70">Revenue</p>
-                                <p class="text-[13px] font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">£{{ number_format($rec->revenue ?? 0, 2) }}</p>
+                                <p class="text-[13px] font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">£{{ number_format($recRevenue, 2) }}</p>
                             </div>
                             <div class="bg-amber-50 dark:bg-amber-900/10 rounded-lg px-2.5 py-1.5">
-                                <p class="text-[9px] font-semibold uppercase tracking-[1px] text-amber-600/70 dark:text-amber-400/70">Total Cost</p>
-                                <p class="text-[13px] font-bold text-amber-700 dark:text-amber-400 tabular-nums">£{{ number_format($rec->total_cost ?? 0, 2) }}</p>
+                                <p class="text-[9px] font-semibold uppercase tracking-[1px] text-amber-600/70 dark:text-amber-400/70">Net Cost</p>
+                                <p class="text-[13px] font-bold text-amber-700 dark:text-amber-400 tabular-nums">£{{ number_format($recNetCost, 2) }}</p>
                             </div>
-                            <div class="{{ $netPos ? 'bg-[#E6F3F0] dark:bg-accent-900/10' : 'bg-red-50 dark:bg-red-900/10' }} rounded-lg px-2.5 py-1.5 col-span-2">
-                                <p class="text-[9px] font-semibold uppercase tracking-[1px] {{ $netPos ? 'text-accent-600/70' : 'text-red-500/70' }}">Net Revenue</p>
-                                <p class="text-[13px] font-bold {{ $netPos ? 'text-[#003D2B] dark:text-accent-300' : 'text-red-600 dark:text-red-400' }} tabular-nums">£{{ number_format($rec->net_revenue ?? 0, 2) }}</p>
+                            @if($recAdsTax > 0)
+                            <div class="bg-slate-50 dark:bg-slate-700/30 rounded-lg px-2.5 py-1.5 col-span-2">
+                                <p class="text-[9px] font-semibold uppercase tracking-[1px] text-slate-500/70 dark:text-slate-400/70">Ads Tax</p>
+                                <p class="text-[13px] font-bold text-slate-700 dark:text-slate-300 tabular-nums">£{{ number_format($recAdsTax, 2) }}</p>
                             </div>
-                        </div>
-
-                        {{-- ROI + ROAS badges --}}
-                        <div class="flex items-center gap-1.5 flex-wrap mt-2 mb-2">
-                            @if($roi !== null)
-                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full {{ $roi >= 0 ? 'bg-[#FFDDC0] text-[#7A3B00]' : 'bg-red-50 text-red-500' }}">
-                                    ROI {{ number_format($roi, 2) }}%
-                                </span>
-                            @endif
-                            @if($roas !== null)
-                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                                    ROAS {{ number_format($roas, 2) }}
-                                </span>
                             @endif
                         </div>
 
@@ -313,14 +363,17 @@
                         @php
                             $platform = $rec->salePlatform;
                             $statsToShow = [];
+                            // Orders and Products come from DailySale
+                            if ($recOrders > 0 || $recProducts > 0) {
+                                if ($recOrders > 0)   $statsToShow[] = ['label' => 'Orders',   'val' => $recOrders];
+                                if ($recProducts > 0) $statsToShow[] = ['label' => 'Products', 'val' => $recProducts];
+                            }
                             if ($platform?->track_reach           ?? true) $statsToShow[] = ['label' => 'Reach',      'val' => $rec->reach];
                             if ($platform?->track_impressions      ?? true) $statsToShow[] = ['label' => 'Impressions','val' => $rec->impressions];
                             if ($platform?->track_clicks           ?? true) $statsToShow[] = ['label' => 'Clicks',     'val' => $rec->clicks];
                             if ($platform?->track_sessions         ?? true) $statsToShow[] = ['label' => 'Sessions',   'val' => $rec->sessions];
                             if ($platform?->track_engaged_sessions ?? true) $statsToShow[] = ['label' => 'Eng.Sess',   'val' => $rec->engaged_sessions];
                             if ($platform?->track_users            ?? true) $statsToShow[] = ['label' => 'Users',      'val' => $rec->users];
-                            // Always show Orders (not part of tracking flags)
-                            array_unshift($statsToShow, ['label' => 'Orders', 'val' => $rec->number_of_orders]);
                         @endphp
                         @if(count($statsToShow) > 0)
                         <div class="grid gap-1 pt-2 border-t border-slate-100 dark:border-slate-700"
@@ -334,9 +387,6 @@
                         </div>
                         @endif
 
-                        @if($rec->notes)
-                            <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-2 truncate italic">{{ $rec->notes }}</p>
-                        @endif
                     </div>
                     @endforeach
                     </div>
@@ -361,4 +411,3 @@ function deleteSaleTracking(id) {
 }
 </script>
 @endpush
-

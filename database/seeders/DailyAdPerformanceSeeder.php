@@ -100,26 +100,15 @@ class DailyAdPerformanceSeeder extends Seeder
 
             // Extract metrics (use 0 for empty values)
             $data = [
-                'sale_platform_id' => $platformId,
-                'month' => $currentMonth,
-                'reach' => $this->parseNumber($row[3] ?? 0, true),
-                'impressions' => $this->parseNumber($row[4] ?? 0, true),
-                'clicks' => $this->parseNumber($row[5] ?? 0, true),
-                'sessions' => $this->parseNumber($row[7] ?? 0, true),
-                'engaged_sessions' => $this->parseNumber($row[8] ?? 0, true),
-                'users' => $this->parseNumber($row[9] ?? 0, true),
-                'net_cost' => $this->parseNumber($row[10] ?? 0),
-                'ads_tax_payments' => $this->parseNumber($row[11] ?? 0),
-                'total_cost' => $this->parseNumber($row[12] ?? 0),
-                'number_of_orders' => $this->parseNumber($row[13] ?? 0, true),
-                'number_of_products' => $this->parseNumber($row[14] ?? 0, true),
-                'sales_grow_percent' => $this->parsePercentage($row[15] ?? 0),
-                'revenue' => $this->parseNumber($row[16] ?? 0),
-                'total_revenue' => $this->parseNumber($row[17] ?? 0),
-                'total_return' => $this->parseNumber($row[18] ?? 0),
-                'net_revenue' => $this->parseNumber($row[19] ?? 0),
-                'roi' => $this->parsePercentage($row[20] ?? 0),
-                'roas' => $this->parseNumber($row[21] ?? 0),
+                'sale_platform_id'   => $platformId,
+                'month'              => $currentMonth,
+                'reach'              => $this->parseNumber($row[3] ?? 0, true),
+                'impressions'        => $this->parseNumber($row[4] ?? 0, true),
+                'clicks'             => $this->parseNumber($row[5] ?? 0, true),
+                'sessions'           => $this->parseNumber($row[7] ?? 0, true),
+                'engaged_sessions'   => $this->parseNumber($row[8] ?? 0, true),
+                'users'              => $this->parseNumber($row[9] ?? 0, true),
+                'ads_tax_payments'   => $this->parseNumber($row[11] ?? 0),
             ];
 
             // Store for this platform + month

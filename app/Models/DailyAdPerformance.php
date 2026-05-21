@@ -17,19 +17,7 @@ class DailyAdPerformance extends BaseModel
         'sessions',
         'engaged_sessions',
         'users',
-        'net_cost',
         'ads_tax_payments',
-        'total_cost',
-        'number_of_orders',
-        'number_of_products',
-        'sales_grow_percent',
-        'revenue',
-        'total_revenue',
-        'total_return',
-        'net_revenue',
-        'roi',
-        'roas',
-        'notes',
     ];
 
     protected function casts(): array
@@ -74,27 +62,36 @@ class DailyAdPerformance extends BaseModel
         $range = $filters['date_range'] ?? null;
         if ($range && $range !== 'custom') {
             $now = Carbon::now();
+            $currentMonthEnd = $now->copy()->endOfMonth()->toDateString();
             match ($range) {
-                'last_month'   => $query
+                // Previous calendar month only
+                'last_month' => $query
                     ->where('daily_ad_performances.month', '>=', $now->copy()->subMonth()->startOfMonth()->toDateString())
                     ->where('daily_ad_performances.month', '<=', $now->copy()->subMonth()->endOfMonth()->toDateString()),
+                // Last 3 months up to and including current month
                 'last_3_months' => $query
-                    ->where('daily_ad_performances.month', '>=', $now->copy()->subMonths(3)->startOfMonth()->toDateString()),
+                    ->where('daily_ad_performances.month', '>=', $now->copy()->subMonths(3)->startOfMonth()->toDateString())
+                    ->where('daily_ad_performances.month', '<=', $currentMonthEnd),
+                // Last 6 months up to and including current month
                 'last_6_months' => $query
-                    ->where('daily_ad_performances.month', '>=', $now->copy()->subMonths(6)->startOfMonth()->toDateString()),
-                'last_year'    => $query
-                    ->where('daily_ad_performances.month', '>=', $now->copy()->subYear()->startOfMonth()->toDateString()),
-                default        => null,
+                    ->where('daily_ad_performances.month', '>=', $now->copy()->subMonths(6)->startOfMonth()->toDateString())
+                    ->where('daily_ad_performances.month', '<=', $currentMonthEnd),
+                // Last 12 months up to and including current month
+                'last_year' => $query
+                    ->where('daily_ad_performances.month', '>=', $now->copy()->subYear()->startOfMonth()->toDateString())
+                    ->where('daily_ad_performances.month', '<=', $currentMonthEnd),
+                default => null,
             };
         }
 
         // ── Custom date range ──────────────────────────────────────
-        if ((!$range || $range === 'custom')) {
+        // Apply when range is empty OR explicitly set to 'custom'
+        if (!$range || $range === 'custom') {
             if (!empty($filters['date_from'])) {
-                $query->where('daily_ad_performances.month', '>=', $filters['date_from']);
+                $query->where('daily_ad_performances.month', '>=', Carbon::parse($filters['date_from'])->startOfMonth()->toDateString());
             }
             if (!empty($filters['date_to'])) {
-                $query->where('daily_ad_performances.month', '<=', $filters['date_to']);
+                $query->where('daily_ad_performances.month', '<=', Carbon::parse($filters['date_to'])->endOfMonth()->toDateString());
             }
         }
 

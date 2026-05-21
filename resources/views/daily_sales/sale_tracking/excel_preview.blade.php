@@ -51,18 +51,9 @@
                         <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Sessions</th>
                         <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Engaged</th>
                         <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Users</th>
-                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Net Cost</th>
                         <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Ads Tax</th>
-                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Total Cost</th>
                         <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Orders</th>
                         <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Products</th>
-                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Growth %</th>
-                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Revenue</th>
-                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Total Rev</th>
-                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Return</th>
-                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Net Rev</th>
-                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">ROI %</th>
-                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">ROAS</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -80,18 +71,7 @@
                         <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['sessions'] !== null ? number_format($row['sessions']) : '—' }}</td>
                         <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['engaged_sessions'] !== null ? number_format($row['engaged_sessions']) : '—' }}</td>
                         <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['users'] !== null ? number_format($row['users']) : '—' }}</td>
-                        <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['net_cost'] !== null ? '£'.number_format($row['net_cost'], 2) : '—' }}</td>
                         <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['ads_tax_payments'] !== null ? '£'.number_format($row['ads_tax_payments'], 2) : '—' }}</td>
-                        <td class="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200 tabular-nums bg-[#CCEEDD]/30">{{ $row['total_cost'] !== null ? '£'.number_format($row['total_cost'], 2) : '—' }}</td>
-                        <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['number_of_orders'] !== null ? number_format($row['number_of_orders']) : '—' }}</td>
-                        <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['number_of_products'] !== null ? number_format($row['number_of_products']) : '—' }}</td>
-                        <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['sales_grow_percent'] !== null ? number_format($row['sales_grow_percent'], 4).'%' : '—' }}</td>
-                        <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['revenue'] !== null ? '£'.number_format($row['revenue'], 2) : '—' }}</td>
-                        <td class="px-3 py-2 text-right font-semibold text-slate-600 tabular-nums">{{ $row['total_revenue'] !== null ? '£'.number_format($row['total_revenue'], 2) : '—' }}</td>
-                        <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['total_return'] !== null ? '£'.number_format($row['total_return'], 2) : '—' }}</td>
-                        <td class="px-3 py-2 text-right font-semibold tabular-nums {{ ($row['net_revenue'] ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-500' }}">{{ $row['net_revenue'] !== null ? '£'.number_format($row['net_revenue'], 2) : '—' }}</td>
-                        <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['roi'] !== null ? number_format($row['roi'], 4).'%' : '—' }}</td>
-                        <td class="px-3 py-2 text-right text-slate-500 tabular-nums">{{ $row['roas'] !== null ? number_format($row['roas'], 4) : '—' }}</td>
                     </tr>
                     @endforeach
                 </tbody>
