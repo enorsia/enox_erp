@@ -33,19 +33,15 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
 
     public function startCell(): string { return 'A6'; }
 
-    // ── Collection ────────────────────────────────────────────────
-
     public function collection(): Collection
     {
         $this->dataRowIdx  = 0;
         $this->mergeRanges = [];
 
-        // Eager-load full 3-level platform hierarchy
         $records = $this->query
             ->with(['salePlatform.parent.parent'])
             ->get();
 
-        // Sort by platform hierarchy (sort_order at each level) then year DESC, month ASC, id DESC
         $sorted = $records->sort(function ($a, $b) {
             $ka = $this->buildSortKey($a);
             $kb = $this->buildSortKey($b);
@@ -100,12 +96,10 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
             ];
         }
 
-        // Close final open ranges
         $this->closeMerge('level1', $l1Start, $this->dataRowIdx);
         $this->closeMerge('level2', $l2Start, $this->dataRowIdx);
         $this->closeMerge('level3', $l3Start, $this->dataRowIdx);
 
-        // Assign sequential SL numbers
         foreach ($rows as $i => &$row) { $row['id'] = $i + 1; }
         unset($row);
 
@@ -116,16 +110,12 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
         ));
     }
 
-    // ── Headings ──────────────────────────────────────────────────
-
     public function headings(): array
     {
         $cols   = $this->columns ?: self::allColumns();
         $labels = self::columnLabels();
         return array_values(array_intersect_key($labels, array_flip($cols)));
     }
-
-    // ── Column definitions ────────────────────────────────────────
 
     public static function allColumns(): array
     {
@@ -149,8 +139,6 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
         ];
     }
 
-    // ── Events ────────────────────────────────────────────────────
-
     public function registerEvents(): array
     {
         return [
@@ -167,8 +155,6 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
             },
         ];
     }
-
-    // ── Private helpers ───────────────────────────────────────────
 
     private function resolvePlatformLevels($platform): array
     {
@@ -203,7 +189,6 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
             $s0 = $p->sort_order ?? 0;
         }
 
-        // Within same platform: year DESC, month ASC, id DESC
         return [$s0, $s1, $s2, -($record->year ?? 0), $record->month ?? 0, -$record->id];
     }
 
@@ -264,7 +249,6 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
 
     private function applyHeadingStyle($sheet, string $endCol, array $activeCols): void
     {
-        // Base style: blue background, white bold text, center-aligned
         $sheet->getStyle("A6:{$endCol}6")->applyFromArray([
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
             'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
@@ -275,7 +259,6 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
         ]);
         $sheet->getRowDimension(6)->setRowHeight(20);
 
-        // Left-align heading cells for long-text columns
         $leftCols = ['level1', 'level2', 'level3', 'notes'];
         foreach ($activeCols as $idx => $colKey) {
             if (in_array($colKey, $leftCols)) {
@@ -294,7 +277,6 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
             return;
         }
 
-        // Center-align all data rows by default
         $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
             'alignment' => [
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -302,7 +284,6 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
             ],
         ]);
 
-        // Left-align long-text data columns
         $leftCols = ['level1', 'level2', 'level3', 'notes'];
         foreach ($activeCols as $idx => $colKey) {
             if (in_array($colKey, $leftCols)) {
@@ -313,7 +294,6 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
             }
         }
 
-        // Sticky heading row
         $sheet->freezePane('A7');
     }
 }

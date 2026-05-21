@@ -15,7 +15,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DashboardAnalyticsExport
 {
-    // Colour palette
     private const CLR_ACCENT        = 'FF009966';
     private const CLR_TITLE_BG      = 'FF005C3E';
     private const CLR_TITLE_FG      = 'FFFFFFFF';
@@ -40,13 +39,12 @@ class DashboardAnalyticsExport
     private const CLR_SEC_TITLE     = 'FF003D2B';
     private const CLR_SEC_HDR       = 'FF009966';
     private const CLR_SEC_ALT       = 'FFF0FAF5';
-    private const CLR_PLATFORM_1    = 'FFE8F0FE'; // Light blue
-    private const CLR_PLATFORM_2    = 'FFFEF3E2'; // Light orange
-    private const CLR_PLATFORM_3    = 'FFE6F7E6'; // Light green
-    private const CLR_PLATFORM_4    = 'FFFFE6E6'; // Light red
-    private const CLR_PLATFORM_5    = 'FFF5E6FF'; // Light purple
+    private const CLR_PLATFORM_1    = 'FFE8F0FE';
+    private const CLR_PLATFORM_2    = 'FFFEF3E2';
+    private const CLR_PLATFORM_3    = 'FFE6F7E6';
+    private const CLR_PLATFORM_4    = 'FFFFE6E6';
+    private const CLR_PLATFORM_5    = 'FFF5E6FF';
 
-    // Fixed column indices (1-based)
     private const COL_WEEK  = 1;
     private const COL_DATE  = 2;
     private const COL_SALES = 3;
@@ -72,29 +70,25 @@ class DashboardAnalyticsExport
     public function download(DashboardAnalyticsService $service): StreamedResponse
     {
         $spreadsheet = new Spreadsheet();
-        $spreadsheet->removeSheetByIndex(0); // remove default blank sheet
+        $spreadsheet->removeSheetByIndex(0);
 
         if (count($this->months) > 1) {
-            // ── Multiple months → one sheet per month ──────────────────
             foreach ($this->months as $month) {
-                // $month is ['year' => int, 'month' => int]
                 $monthCarbon = Carbon::createFromDate($month['year'], $month['month'], 1);
                 $monthStart  = $monthCarbon->copy()->startOfMonth()->toDateString();
                 $monthEnd    = $monthCarbon->copy()->endOfMonth()->toDateString();
 
-                // Clamp to the overall date range
                 if ($monthStart < $this->dateFrom) $monthStart = $this->dateFrom;
                 if ($monthEnd   > $this->dateTo)   $monthEnd   = $this->dateTo;
 
-                $monthTitle = $monthCarbon->format('M-Y'); // e.g. "Mar-2026"
+                $monthTitle = $monthCarbon->format('M-Y');
                 $sheet      = $spreadsheet->createSheet();
                 $sheet->setTitle($monthTitle);
 
                 $this->writeSheetData($sheet, $service, $monthStart, $monthEnd, [$month], ['label' => $monthTitle]);
             }
         } else {
-            // ── Single month / period → single sheet ───────────────────
-            $sheetTitle = mb_substr($this->label['label'] ?? 'Report', 0, 31); // Excel max 31 chars
+            $sheetTitle = mb_substr($this->label['label'] ?? 'Report', 0, 31);
             $sheet      = $spreadsheet->createSheet();
             $sheet->setTitle($sheetTitle);
             $this->writeSheetData($sheet, $service, $this->dateFrom, $this->dateTo, $this->months, $this->label);
@@ -116,10 +110,6 @@ class DashboardAnalyticsExport
         ]);
     }
 
-    /**
-     * Write all selected report sections onto a single worksheet.
-     * Extracted so multiple monthly sheets can each call this method.
-     */
     private function writeSheetData(
         $sheet,
         DashboardAnalyticsService $service,
@@ -132,7 +122,6 @@ class DashboardAnalyticsExport
         $includeReturnBreakdown = in_array('return_breakdown',   $this->tables);
         $includeWeeklyBreakdown = in_array('weekly_breakdown',   $this->tables);
 
-        // Default values (overwritten when sections are written)
         $lastMainRow  = 0;
         $dataStartRow = 0;
         $dataEndRow   = 0;
@@ -145,7 +134,6 @@ class DashboardAnalyticsExport
         $export = $service->getDailyExportData($dateFrom, $dateTo, $months);
 
 
-        // Unpack service data
         $columnData       = $export['column_data'];
         $tree             = $columnData['tree'] ?? [];
         $rootPlatforms    = $export['root_platforms'];
@@ -186,12 +174,10 @@ class DashboardAnalyticsExport
         }
         unset($wRow);
 
-        // Column indices
         $platBaseCol    = self::COL_SPEND + 1;
         $allPlatCols    = $this->buildGroupedColumns($tree);
         $numAllPlatCols = count($allPlatCols);
 
-        // Leaf-only map: "pid_type" => Excel column index
         $platColMap = [];
         foreach ($allPlatCols as $i => $col) {
             if ($col['kind'] === 'leaf') {
@@ -199,7 +185,6 @@ class DashboardAnalyticsExport
             }
         }
 
-        // Root → leaf sales map and weekly per-root sales+returns in a single pass
         $rootLeafSalesMap = [];
         foreach ($allPlatCols as $col) {
             if ($col['level'] === 0 && $col['col_type'] === 'sales') {
@@ -234,7 +219,6 @@ class DashboardAnalyticsExport
             }
         }
 
-        // Right section column positions (after all platform columns)
         $rsBase          = $platBaseCol + $numAllPlatCols;
         $rsRootOrderBase = $rsBase;
         $rsOrdersCol     = $rsBase + $numRoots;
@@ -252,12 +236,10 @@ class DashboardAnalyticsExport
             $rsRootQtyCols[$root['id']]   = $rsQtyRootBase   + $i;
         }
 
-        // Row positions (2 header rows: platform names + Spend/Sales label)
         $firstHdrRow  = 2;
         $colLabelRow  = $numAllPlatCols > 0 ? $firstHdrRow + 1 : $firstHdrRow;
         $dataStartRow = $colLabelRow + 1;
 
-        // Row 1: title + accent fill on A1/B1 — only if daily report included
         if ($includeDailyReport) {
         $titleStr      = 'Tracking Digital Marketing COST VS Allocation – ' . ($label['label'] ?? '');
         $titleStartCol = Coordinate::stringFromColumnIndex(self::COL_SALES);
@@ -270,7 +252,6 @@ class DashboardAnalyticsExport
                 ->getStartColor()->setARGB(self::CLR_ACCENT);
         }
 
-        // Fixed column headers (A–E)
         foreach ([
             self::COL_WEEK  => 'Week',
             self::COL_DATE  => 'Date',
@@ -286,7 +267,6 @@ class DashboardAnalyticsExport
             $this->applyHeaderStyle($sheet, "{$cl}{$firstHdrRow}:{$cl}{$colLabelRow}");
         }
 
-        // Platform headers + outline grouping (collapse/expand)
         $sheet->setShowSummaryRight(false);
 
         if ($numAllPlatCols > 0) {
@@ -316,7 +296,6 @@ class DashboardAnalyticsExport
                     $sheet->getStyleByColumnAndRow($ci, $firstHdrRow)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
                 }
 
-                // Spend / Sales sub-label
                 $sheet->setCellValueByColumnAndRow($ci, $colLabelRow, $col['col_type'] === 'cost' ? 'Spend' : 'Sales');
                 $sheet->getStyleByColumnAndRow($ci, $colLabelRow)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_COLLABEL);
                 $sheet->getStyleByColumnAndRow($ci, $colLabelRow)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_COLLABEL_FG);
@@ -325,7 +304,6 @@ class DashboardAnalyticsExport
                 $sheet->getColumnDimensionByColumn($ci)->setOutlineLevel($col['level']);
             }
 
-            // Close last platform merge
             if ($mergeStart !== null) {
                 $lastCi = $platBaseCol + $numAllPlatCols - 1;
                 if ($mergeStart < $lastCi) {
@@ -334,7 +312,6 @@ class DashboardAnalyticsExport
             }
         }
 
-        // Right-section group headers
         if ($numRoots > 0) {
             $orderStartLtr = Coordinate::stringFromColumnIndex($rsRootOrderBase);
             $orderEndLtr   = Coordinate::stringFromColumnIndex($rsOrdersCol);
@@ -383,7 +360,6 @@ class DashboardAnalyticsExport
             $sheet->getRowDimension($hr)->setRowHeight(28);
         }
 
-        // Data rows
         $r          = $dataStartRow;
         $weekRanges = [];
         $prevWeek   = null;
@@ -400,7 +376,7 @@ class DashboardAnalyticsExport
 
             $sheet->setCellValue('B' . $r, Carbon::parse($row['date'])->format('d-M-Y'));
             $sheet->setCellValue('C' . $r, round((float) $row['total_sales'], 2));
-            $sheet->setCellValue('D' . $r, $row['roas']); // percentage fraction – format code handles 2 dp display
+            $sheet->setCellValue('D' . $r, $row['roas']);
             $sheet->setCellValue('E' . $r, round((float) $row['total_spent'], 2));
 
             foreach ($allPlatCols as $i => $platCol) {
@@ -441,7 +417,6 @@ class DashboardAnalyticsExport
         }
         $dataEndRow = $r - 1;
 
-        // Merge week-label cells in column A
         foreach ($weekRanges as $wRange) {
             if ($wRange['end'] > $wRange['start']) {
                 $sheet->mergeCells('A' . $wRange['start'] . ':A' . $wRange['end']);
@@ -454,7 +429,6 @@ class DashboardAnalyticsExport
                 ->getColor()->setARGB(self::CLR_WEEK_FG);
         }
 
-        // Summary rows
         $summaryColorMap = [
             'average_daily'  => self::CLR_AVERAGE_DAILY,
             'total_sale'     => self::CLR_TOTAL,
@@ -471,7 +445,6 @@ class DashboardAnalyticsExport
             $sheet->getStyle('B' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
             if ($sRow['col_c'] !== null) {
-                // col_c is always a money/amount value – safe to round to 2 dp
                 $sheet->setCellValue('C' . $r, round((float) $sRow['col_c'], 2));
                 $sheet->getStyle('C' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             }
@@ -484,11 +457,9 @@ class DashboardAnalyticsExport
                 }
             }
 
-            // Leaf platform columns
             foreach ($sRow['platform'] as $colKey => $value) {
                 if (!isset($platColMap[$colKey])) continue;
                 $ci = $platColMap[$colKey];
-                // Percentage-formatted platform values are ratio fractions – leave them for the format code.
                 $platIsPercent = !empty($sRow['platform_formats'][$colKey]) && str_contains($sRow['platform_formats'][$colKey], '%');
                 $sheet->setCellValueByColumnAndRow($ci, $r, $platIsPercent ? (float) $value : round((float) $value, 2));
                 $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
@@ -497,7 +468,6 @@ class DashboardAnalyticsExport
                 }
             }
 
-            // Summary (parent) platform columns
             foreach ($allPlatCols as $i => $platCol) {
                 if ($platCol['kind'] !== 'summary') continue;
                 $ci  = $platBaseCol + $i;
@@ -507,7 +477,6 @@ class DashboardAnalyticsExport
                     if (isset($sRow['platform'][$lk])) $val += $sRow['platform'][$lk];
                 }
                 if ($val != 0) {
-                    // Detect if any leaf format for this column uses %; if so, don't pre-round.
                     $summaryIsPercent = false;
                     if (!empty($sRow['platform_formats'])) {
                         foreach ($platCol['leaf_ids'] as $leafId) {
@@ -532,7 +501,6 @@ class DashboardAnalyticsExport
                 }
             }
 
-            // Right-section summary values
             if (!empty($sRow['total_orders'])) $sheet->setCellValueByColumnAndRow($rsOrdersCol, $r, round((float) $sRow['total_orders'], 2));
             if (!empty($sRow['root_orders'])) {
                 foreach ($rootPlatforms as $root) {
@@ -558,7 +526,6 @@ class DashboardAnalyticsExport
             $this->fillRow($sheet, $r, $mainLastCol, $color);
             $sheet->getStyle('B' . $r)->getFont()->setBold(true);
 
-            // Red text for negative values
             if ($sRow['col_c'] !== null && (float) $sRow['col_c'] < 0) $sheet->getStyle('C' . $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
             if ($sRow['col_e'] !== null && (float) $sRow['col_e'] < 0) $sheet->getStyle('E' . $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
             foreach ($sRow['platform'] as $colKey => $value) {
@@ -603,13 +570,11 @@ class DashboardAnalyticsExport
         $lastMainRow = $r - 1;
         $r   += 4;
         } else {
-            // daily report skipped – start secondary sections from row 2
             $r = 2;
-        } // end if ($includeDailyReport)
+        }
 
         $anc = 2;
 
-        // ── Section 1: Return Breakdown ───────────────────────────
         if ($includeReturnBreakdown) {
         $retLabelCol  = $anc;
         $retRootStart = $anc + 1;
@@ -655,7 +620,6 @@ class DashboardAnalyticsExport
             $sheet->setCellValueByColumnAndRow($retLabelCol, $r, $reason['name']);
             foreach ($rootPlatforms as $root) {
                 $rootCount = $reason['by_root'][$root['id']] ?? 0;
-                // %Platform = count for this reason / grand total
                 $rootPct   = $retGrandTotal > 0 ? $rootCount / $retGrandTotal : 0;
                 $sheet->setCellValueByColumnAndRow($retRootCols[$root['id']],    $r, $rootCount);
                 $sheet->setCellValueByColumnAndRow($retRootPctCols[$root['id']], $r, $rootPct);
@@ -672,7 +636,6 @@ class DashboardAnalyticsExport
             $r++;
         }
 
-        // Total row: %Platform = platform total / grand total
         $sheet->setCellValueByColumnAndRow($retLabelCol, $r, 'Total');
         foreach ($rootPlatforms as $root) {
             $rootTotal      = $returnReasonData['totals_by_root'][$root['id']] ?? 0;
@@ -692,9 +655,8 @@ class DashboardAnalyticsExport
         $retSecEnd = $r;
         $this->sectionBorder($sheet, $anc, $retLastCol, $retSecStart, $retSecEnd);
         $r = $retSecEnd + 4;
-        } // end if ($includeReturnBreakdown)
+        }
 
-        // ── Section 2: Weekly Breakdown ───────────────────────────
         if ($includeWeeklyBreakdown) {
         $fixedLabels = ['Week', 'Sales (£)', 'Spend (£)', 'Order', 'Order Qty', 'Return Qty', 'Return Qty %', 'Return Amount (£)', 'Return Amount %'];
         $childLabels = ['Sales (£)', 'Orders', 'Qty', 'Return (£)', 'Ret Orders', 'Ret Qty'];
@@ -703,7 +665,6 @@ class DashboardAnalyticsExport
         $fixedStartCol    = $anc;
         $fixedEndCol      = $fixedStartCol + count($fixedLabels) - 1;
         $platformStartCol = $fixedEndCol + 1;
-        // No "Total" group at the end
         $wbLastCol = $numRoots > 0
             ? $platformStartCol + $numRoots * $childCount - 1
             : $fixedEndCol;
@@ -779,14 +740,13 @@ class DashboardAnalyticsExport
                 $groupEnd   = $groupStart + $childCount - 1;
                 $groupFill  = self::PLATFORM_COLORS[$i % count(self::PLATFORM_COLORS)];
 
-                // Children: Sales (£) | Orders | Qty | Return Amt (£) | Ret Orders | Ret Qty
                 $vals = [
-                    round((float) ($weeklySalesByRoot[$wk][$rid]                ?? 0), 2),  // Sales £
-                    (float) ($wRow['root_orders'][$rid]                   ?? 0),             // Orders (order qty) – integer
-                    (float) ($wRow['root_qty'][$rid]                      ?? 0),             // Qty (item qty) – integer
-                    round((float) ($weeklyReturnsByRoot[$wk][$rid]['amount']    ?? 0), 2),  // Return Amt £
-                    (float) ($weeklyReturnsByRoot[$wk][$rid]['order_qty'] ?? 0),             // Ret Orders – integer
-                    (float) ($weeklyReturnsByRoot[$wk][$rid]['item_qty']  ?? 0),             // Ret Qty – integer
+                    round((float) ($weeklySalesByRoot[$wk][$rid]                ?? 0), 2),
+                                    (float) ($wRow['root_orders'][$rid]                   ?? 0),
+                                    (float) ($wRow['root_qty'][$rid]                      ?? 0),
+                    round((float) ($weeklyReturnsByRoot[$wk][$rid]['amount']    ?? 0), 2),
+                                    (float) ($weeklyReturnsByRoot[$wk][$rid]['order_qty'] ?? 0),
+                                    (float) ($weeklyReturnsByRoot[$wk][$rid]['item_qty']  ?? 0),
                 ];
 
                 foreach ($vals as $j => $val) {
@@ -809,7 +769,6 @@ class DashboardAnalyticsExport
             $r++;
         }
 
-        // Weekly total row
         $totalSales     = (float) ($totals['sales'] ?? 0);
         $totalSpend     = (float) ($totals['spent'] ?? 0);
         $pctTotalRetPcs = $totalItems > 0 ? $totalRetPcs / $totalItems : 0;
@@ -827,7 +786,6 @@ class DashboardAnalyticsExport
         foreach ($rootPlatforms as $i => $root) {
             $groupStart = $platformStartCol + $i * $childCount;
             foreach ($platformTotals[$root['id']] as $j => $val) {
-                // Round money columns (+0 Sales £, +3 Return Amt £); leave integer counts as-is
                 $write = in_array($j, [0, 3]) ? round((float) $val, 2) : $val;
                 $sheet->setCellValueByColumnAndRow($groupStart + $j, $r, $write);
             }
@@ -838,25 +796,19 @@ class DashboardAnalyticsExport
         $wbSecEnd = $r;
         $this->sectionBorder($sheet, $anc, $wbLastCol, $wbSecStart, $wbSecEnd);
 
-        // Number formats – Weekly Breakdown
         $moneyFmt  = '#,##0.00';
         $pctFmt    = '0.00%';
         $dataStart = $headerRow2 + 1;
-        // Fixed: Sales (£) col+1, Spend (£) col+2
         $sheet->getStyle(Coordinate::stringFromColumnIndex($fixedStartCol + 1) . $dataStart . ':' . Coordinate::stringFromColumnIndex($fixedStartCol + 2) . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
-        // Fixed: Return Amount (£) col+7
         $sheet->getStyle(Coordinate::stringFromColumnIndex($fixedStartCol + 7) . $dataStart . ':' . Coordinate::stringFromColumnIndex($fixedStartCol + 7) . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
-        // Fixed: Return Qty % col+6, Return Amount % col+8
         $sheet->getStyle(Coordinate::stringFromColumnIndex($fixedStartCol + 6) . $dataStart . ':' . Coordinate::stringFromColumnIndex($fixedStartCol + 6) . $wbSecEnd)->getNumberFormat()->setFormatCode($pctFmt);
         $sheet->getStyle(Coordinate::stringFromColumnIndex($fixedStartCol + 8) . $dataStart . ':' . Coordinate::stringFromColumnIndex($fixedStartCol + 8) . $wbSecEnd)->getNumberFormat()->setFormatCode($pctFmt);
-        // Platform children: Sales (£) at +0, Return Amt (£) at +3
         for ($ci = $platformStartCol; $ci <= $wbLastCol; $ci += $childCount) {
             $sheet->getStyle(Coordinate::stringFromColumnIndex($ci)     . $dataStart . ':' . Coordinate::stringFromColumnIndex($ci)     . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
             $sheet->getStyle(Coordinate::stringFromColumnIndex($ci + 3) . $dataStart . ':' . Coordinate::stringFromColumnIndex($ci + 3) . $wbSecEnd)->getNumberFormat()->setFormatCode($moneyFmt);
         }
-        } // end if ($includeWeeklyBreakdown)
+        }
 
-        // Number formats – main area
         if ($includeDailyReport) {
             $sheet->getStyle('C' . $dataStartRow . ':C' . $lastMainRow)->getNumberFormat()->setFormatCode($moneyFmt);
             $sheet->getStyle('E' . $dataStartRow . ':E' . $lastMainRow)->getNumberFormat()->setFormatCode($moneyFmt);
@@ -868,12 +820,10 @@ class DashboardAnalyticsExport
                 $pEnd   = Coordinate::stringFromColumnIndex($platBaseCol + $numAllPlatCols - 1);
                 $sheet->getStyle("{$pStart}{$dataStartRow}:{$pEnd}{$lastMainRow}")->getNumberFormat()->setFormatCode($moneyFmt);
             }
-            // Borders – main area
             $mainRange = 'A1:' . Coordinate::stringFromColumnIndex($mainLastCol) . $lastMainRow;
             $sheet->getStyle($mainRange)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
         }
 
-        // Column widths
         if ($includeDailyReport) {
             $sheet->getColumnDimension('A')->setWidth(10);
             $sheet->getColumnDimension('B')->setWidth(14);
@@ -907,10 +857,7 @@ class DashboardAnalyticsExport
         if ($includeWeeklyBreakdown && $wbSecStart > 0) {
             $sheet->getRowDimension($wbSecStart)->setRowHeight(22);
         }
-        // writeSheetData complete – caller handles save/response
     }
-
-    // ── Style helpers ───────────────────────────────────────────────
 
     private function styleTitle($sheet, string $range): void
     {
@@ -982,7 +929,7 @@ class DashboardAnalyticsExport
         return mb_strlen($name) > 10 ? mb_substr($name, 0, 9) . '.' : $name;
     }
 
-    // ── Grouped-column builder (collapse/expand feature) ──────────
+    // Build grouped platform columns
 
     private function buildGroupedColumns(array $tree, int $depth = 0): array
     {
@@ -1022,7 +969,7 @@ class DashboardAnalyticsExport
         return $cols;
     }
 
-    /** Recursively collect IDs of all leaf nodes. */
+    // Collect leaf ids
     private function collectLeafIdsFromTree(array $nodes, array &$ids): void
     {
         foreach ($nodes as $node) {

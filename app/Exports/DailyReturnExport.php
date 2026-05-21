@@ -26,19 +26,15 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
 
     public function startCell(): string { return 'A6'; }
 
-    // ── Collection ────────────────────────────────────────────────
-
     public function collection(): Collection
     {
         $this->dataRowIdx  = 0;
         $this->mergeRanges = [];
 
-        // Eager-load full 3-level platform hierarchy + reason type
         $records = $this->query
             ->with(['salePlatform.parent.parent', 'returnReasonType'])
             ->get();
 
-        // Sort by platform hierarchy (sort_order at each level) then date DESC, id DESC
         $sorted = $records->sort(function ($a, $b) {
             $ka = $this->buildSortKey($a);
             $kb = $this->buildSortKey($b);
@@ -99,12 +95,10 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
             ];
         }
 
-        // Close final open ranges
         $this->closeMerge('level1', $l1Start, $this->dataRowIdx);
         $this->closeMerge('level2', $l2Start, $this->dataRowIdx);
         $this->closeMerge('level3', $l3Start, $this->dataRowIdx);
 
-        // Assign sequential SL numbers
         foreach ($rows as $i => &$row) { $row['id'] = $i + 1; }
         unset($row);
 
@@ -115,16 +109,12 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
         ));
     }
 
-    // ── Headings ──────────────────────────────────────────────────
-
     public function headings(): array
     {
         $cols   = $this->columns ?: self::allColumns();
         $labels = self::columnLabels();
         return array_values(array_intersect_key($labels, array_flip($cols)));
     }
-
-    // ── Column definitions ────────────────────────────────────────
 
     public static function allColumns(): array
     {
@@ -161,8 +151,6 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
         ];
     }
 
-    // ── Events ────────────────────────────────────────────────────
-
     public function registerEvents(): array
     {
         return [
@@ -179,8 +167,6 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
             },
         ];
     }
-
-    // ── Private helpers ───────────────────────────────────────────
 
     private function resolvePlatformLevels($platform): array
     {
@@ -215,7 +201,6 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
             $s0 = $p->sort_order ?? 0;
         }
 
-        // Within same platform: date DESC, id DESC (use negatives for descending)
         $ts = $record->date ? $record->date->timestamp : 0;
         return [$s0, $s1, $s2, -$ts, -$record->id];
     }
@@ -277,7 +262,6 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
 
     private function applyHeadingStyle($sheet, string $endCol, array $activeCols): void
     {
-        // Base style: blue background, white bold text, center-aligned
         $sheet->getStyle("A6:{$endCol}6")->applyFromArray([
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
             'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
@@ -288,7 +272,6 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
         ]);
         $sheet->getRowDimension(6)->setRowHeight(20);
 
-        // Left-align heading cells for long-text columns
         $leftCols = ['level1', 'level2', 'level3', 'reason'];
         foreach ($activeCols as $idx => $colKey) {
             if (in_array($colKey, $leftCols)) {
@@ -307,7 +290,6 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
             return;
         }
 
-        // Center-align all data rows by default
         $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
             'alignment' => [
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -315,7 +297,6 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
             ],
         ]);
 
-        // Left-align long-text data columns
         $leftCols = ['level1', 'level2', 'level3', 'reason'];
         foreach ($activeCols as $idx => $colKey) {
             if (in_array($colKey, $leftCols)) {
@@ -326,7 +307,6 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
             }
         }
 
-        // Sticky heading row
         $sheet->freezePane('A7');
     }
 }

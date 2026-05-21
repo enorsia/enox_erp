@@ -127,7 +127,6 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
             return;
         }
 
-        // Center-align all data cells by default
         $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
             'alignment' => [
                 'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
@@ -135,7 +134,6 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
             ],
         ]);
 
-        // Left-align & wrap long text columns
         $leftCols = ['name', 'slug', 'description'];
         foreach ($activeCols as $idx => $colKey) {
             if (in_array($colKey, $leftCols)) {
