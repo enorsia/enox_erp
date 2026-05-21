@@ -577,7 +577,8 @@ class SaleTrackingExport
         $dataEnd   = $summaryEnd - 1;
         if ($dataEnd < $dataStart) return $chartTopRow;
 
-        $chartH = max(38, $mc * 4 + 8);
+//        $chartH = max(38, $mc * 4 + 8);
+        $chartH = 28;
 
         $row2Top    = $chartTopRow + $chartH + 2;
         $row2Bottom = $row2Top + $chartH;
