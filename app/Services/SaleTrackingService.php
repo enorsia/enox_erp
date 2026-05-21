@@ -304,7 +304,7 @@ class SaleTrackingService
     public function bulkStoreRules(): array
     {
         return [
-            'month'                              => 'required|date',
+            'month'                              => 'required|date_format:Y-m',
             'entries'                            => 'required|array|min:1',
             'entries.*.sale_platform_id'         => 'nullable|exists:sale_platforms,id',
             'entries.*.reach'                    => 'nullable|integer|min:0',
@@ -320,7 +320,7 @@ class SaleTrackingService
     public function bulkUpdateRules(): array
     {
         return [
-            'month'                              => 'required|date',
+            'month'                              => 'required|date_format:Y-m',
             'entries'                            => 'present|array',
             'entries.*.sale_platform_id'         => 'nullable|exists:sale_platforms,id',
             'entries.*.reach'                    => 'nullable|integer|min:0',
@@ -339,7 +339,7 @@ class SaleTrackingService
     {
         return [
             'sale_platform_id'   => 'nullable|exists:sale_platforms,id',
-            'month'              => 'required|date',
+            'month'              => 'required|date_format:Y-m',
             'reach'              => 'nullable|integer|min:0',
             'impressions'        => 'nullable|integer|min:0',
             'clicks'             => 'nullable|integer|min:0',

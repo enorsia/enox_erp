@@ -74,7 +74,7 @@ class SaleTrackingController extends Controller
     {
         Gate::authorize('general.sale_tracking.edit');
 
-        $month = optional($saleTracking->month)->format('Y-m-d');
+        $month = optional($saleTracking->month)->format('Y-m');
 
         $existingEntries = $this->service->getByMonth($month)->map(fn($r) => [
             'id'                 => $r->id,

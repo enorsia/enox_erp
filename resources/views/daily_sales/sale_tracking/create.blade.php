@@ -31,9 +31,9 @@
             <div class="flex flex-wrap items-end gap-5">
                 <div class="w-56">
                     <label class="f-label">Month <span class="f-required">*</span></label>
-                    <input type="date" name="month" id="st-month"
+                    <input type="month" name="month" id="st-month"
                            class="f-input @error('month') border-red-400 @enderror"
-                           value="{{ old('month', date('Y-m-01')) }}" required />
+                           value="{{ old('month', date('Y-m')) }}" required />
                     @error('month') <p class="f-error">{{ $message }}</p> @enderror
                 </div>
                 <p class="text-xs text-slate-400 dark:text-slate-500 pb-1.5">

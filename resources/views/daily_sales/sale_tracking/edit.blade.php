@@ -29,19 +29,14 @@
     <form method="POST" action="{{ route('admin.sale-tracking.update', $saleTracking->id) }}" id="stForm">
         @csrf @method('PUT')
 
-        <!-- Hidden month — locked to original record's month -->
-        <input type="hidden" name="month" value="{{ $month }}" />
-
-        <!-- Container for delete IDs -->
-        <div id="delete-ids-container"></div>
-
         <!-- ── MONTH ROW (read-only display) ── -->
         <div class="section-card !mb-4">
             <div class="flex flex-wrap items-end gap-5">
                 <div class="w-56">
-                    <label class="f-label">Month</label>
-                    <input type="text" class="f-input bg-slate-50 dark:bg-slate-700/50 cursor-default"
-                           value="{{ \Carbon\Carbon::parse($month)->format('F Y') }}" readonly />
+                    <label class="f-label">Month <span class="f-required">*</span></label>
+                    <input type="month" name="month" id="st-month"
+                           class="f-input bg-slate-50 dark:bg-slate-700/50 cursor-default"
+                           value="{{ $month }}" readonly required />
                 </div>
                 <div class="text-xs text-slate-400 dark:text-slate-500 pb-1.5">
                     <span class="font-medium text-slate-500 dark:text-slate-400">Record #{{ $saleTracking->id }}</span>
@@ -51,6 +46,9 @@
                 </div>
             </div>
         </div>
+
+        <!-- Container for delete IDs -->
+        <div id="delete-ids-container"></div>
 
         <!-- ── ENTRIES CONTAINER ── -->
         <div id="entries-container" class="space-y-2"></div>
@@ -100,4 +98,3 @@ window.ST = {
 };
 </script>
 @endpush
-
