@@ -19,8 +19,6 @@ return new class extends Migration
             $table->integer('engaged_sessions')->nullable();
             $table->integer('users')->nullable();
             $table->decimal('ads_tax_payments', 15, 2)->nullable();
-            $table->integer('number_of_orders')->nullable();
-            $table->integer('number_of_products')->nullable();
             $table->timestamps();
 
             $table->foreign('sale_platform_id')->references('id')->on('sale_platforms')->nullOnDelete();

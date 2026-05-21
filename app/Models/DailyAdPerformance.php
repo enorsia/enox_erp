@@ -68,17 +68,17 @@ class DailyAdPerformance extends BaseModel
                 'last_month' => $query
                     ->where('daily_ad_performances.month', '>=', $now->copy()->subMonth()->startOfMonth()->toDateString())
                     ->where('daily_ad_performances.month', '<=', $now->copy()->subMonth()->endOfMonth()->toDateString()),
-                // Last 3 months up to and including current month
+                // Last 3 months up to and including current month (current + 2 previous = 3 total)
                 'last_3_months' => $query
-                    ->where('daily_ad_performances.month', '>=', $now->copy()->subMonths(3)->startOfMonth()->toDateString())
+                    ->where('daily_ad_performances.month', '>=', $now->copy()->subMonths(2)->startOfMonth()->toDateString())
                     ->where('daily_ad_performances.month', '<=', $currentMonthEnd),
-                // Last 6 months up to and including current month
+                // Last 6 months up to and including current month (current + 5 previous = 6 total)
                 'last_6_months' => $query
-                    ->where('daily_ad_performances.month', '>=', $now->copy()->subMonths(6)->startOfMonth()->toDateString())
+                    ->where('daily_ad_performances.month', '>=', $now->copy()->subMonths(5)->startOfMonth()->toDateString())
                     ->where('daily_ad_performances.month', '<=', $currentMonthEnd),
-                // Last 12 months up to and including current month
+                // Last 12 months up to and including current month (current + 11 previous = 12 total)
                 'last_year' => $query
-                    ->where('daily_ad_performances.month', '>=', $now->copy()->subYear()->startOfMonth()->toDateString())
+                    ->where('daily_ad_performances.month', '>=', $now->copy()->subMonths(11)->startOfMonth()->toDateString())
                     ->where('daily_ad_performances.month', '<=', $currentMonthEnd),
                 default => null,
             };

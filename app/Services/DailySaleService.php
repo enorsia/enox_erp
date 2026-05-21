@@ -19,7 +19,6 @@ class DailySaleService
             ->join('sale_platforms as sp',       'sp.id',     '=', 'daily_sales.sale_platform_id')
             ->leftJoin('sale_platforms as sp_p', 'sp_p.id',   '=', 'sp.parent_id')
             ->leftJoin('sale_platforms as sp_g', 'sp_g.id',   '=', 'sp_p.parent_id')
-            ->where('sp.show_in_analytics', true)
             ->select('daily_sales.*')
             ->filter($filters)
             // PRIMARY: date DESC — keeps all records for the same date together for pagination
@@ -220,7 +219,6 @@ class DailySaleService
     public function getExportQuery(array $filters): Builder
     {
         return DailySale::with('salePlatform')
-            ->whereHas('salePlatform', fn ($q) => $q->where('show_in_analytics', true))
             ->filter($filters)
             ->latest('date')
             ->latest('id');

@@ -182,12 +182,17 @@ class SaleTrackingExport
 
     /**
      * For every vertical clustered bar chart (<c:barDir val="col"/>)
-     * that already has data-labels shown (<c:showVal val="1"/>),
-     * inject a <c:txPr> block with <a:bodyPr rot="-2700000"/> (= -45°)
-     * so that the bar-top numbers are rotated and never overlap.
+     * that already has data-labels shown (<c:showVal val="1"/>):
      *
-     * Also adds the missing showLegendKey/showCatName/showSerName flags
-     * that Excel requires to consider the dLbls element valid.
+     *  1. Injects a <c:txPr> block with a rotated <a:bodyPr> so bar-top
+     *     numbers are angled and don't crowd each other horizontally.
+     *
+     *  2. Adds the required showLegendKey/showCatName/showSerName flags.
+     *
+     *  3. Injects a <c:manualLayout> inside <c:plotArea> that pushes the
+     *     plot area's top edge down by ~20% of the chart height, creating
+     *     a guaranteed gap between the chart title and the tallest bar so
+     *     rotated value labels can never overlap the title text.
      */
     private function patchChartXml(string $xml): string
     {
@@ -204,6 +209,7 @@ class SaleTrackingExport
         // -45 degrees expressed in OOXML units (degrees × 60 000)
         $rotVal = '-5400000';
 
+        // ── 1 & 2: data-label rotation + required flags ───────────────
         $xml = preg_replace_callback(
             '/<c:dLbls>(.*?)<\/c:dLbls>/s',
             function (array $m) use ($rotVal): string {
@@ -254,7 +260,35 @@ class SaleTrackingExport
             $xml
         );
 
-        return (string)$xml;
+        // ── 3. Inject plot-area manual layout ────────────────────────────
+        // Push the inner plot area down 20 % from the chart top.
+        // This reserves space for the chart title AND gives the rotated
+        // value labels above each bar room to breathe without touching
+        // the title text — regardless of how few or how many months are shown.
+        //
+        //  y = 0.20  →  top of bars starts 20 % from the chart top edge
+        //  h = 0.58  →  plot area height; leaves 22 % for x-axis + legend
+        //  x = 0.08  →  left offset for y-axis labels
+        //  w = 0.86  →  plot area width
+        if (strpos($xml, '<c:manualLayout>') === false
+            && strpos($xml, '<c:plotArea>') !== false) {
+
+            $manualLayout = '<c:layout>'
+                . '<c:manualLayout>'
+                . '<c:layoutTarget val="inner"/>'
+                . '<c:xMode val="factor"/>'
+                . '<c:yMode val="factor"/>'
+                . '<c:x val="0.08"/>'
+                . '<c:y val="0.20"/>'
+                . '<c:w val="0.86"/>'
+                . '<c:h val="0.58"/>'
+                . '</c:manualLayout>'
+                . '</c:layout>';
+
+            $xml = str_replace('<c:plotArea>', '<c:plotArea>' . $manualLayout, $xml);
+        }
+
+        return (string) $xml;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -696,11 +730,15 @@ class SaleTrackingExport
         $dataEnd   = $summaryEnd - 1;
         if ($dataEnd < $dataStart) return $chartTopRow;
 
-        // ── Minimum chart height ────────────────────────────────
-        // Each month needs ~2 rows for its bar + rotated label.
-        // Floor at 22 so even a single-month chart has enough
-        // vertical room for the title, plot area and x-axis labels.
-        $chartH = max(22, $mc * 2 + 10);
+        // ── Chart height ────────────────────────────────────────────
+        // When there are only a few months the bars are wide and tall relative to the
+        // plot area, so the rotated value labels protrude well above the bar tops.
+        // We need enough vertical room so those labels never overlap the chart title.
+        //
+        //  • Minimum of 38 rows (≈ 570 px at 15 px/row) ensures adequate headroom
+        //    for 1–9 months where the floor otherwise kicks in.
+        //  • Beyond ~10 months the per-month term takes over and scales naturally.
+        $chartH = max(38, $mc * 4 + 8);
 
         // Row 1 of charts: top = $chartTopRow,  bottom = $chartTopRow + $chartH
         // Gap between rows: 2 rows

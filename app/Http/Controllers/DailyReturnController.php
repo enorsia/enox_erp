@@ -32,7 +32,7 @@ class DailyReturnController extends Controller
         Gate::authorize('general.daily_return.index');
 
         $data['dailyReturns']  = $this->service->getList($request->all());
-        $data['salePlatforms'] = $this->salePlatformService->getAnalyticsPlatformOptions();
+        $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
         $data['reasonTypes']   = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
         $data['dateGroups']    = $this->service->buildDateViewGroups($data['dailyReturns']);
 
@@ -43,7 +43,7 @@ class DailyReturnController extends Controller
     {
         Gate::authorize('general.daily_return.create');
 
-        $data['salePlatforms'] = $this->salePlatformService->getAnalyticsPlatformOptions();
+        $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
         $data['reasonTypes']   = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
 
         return view('daily_sales.daily_returns.create', $data);
@@ -134,7 +134,7 @@ class DailyReturnController extends Controller
 
         $data['dailyReturn']     = $dailyReturn;
         $data['date']            = $date;
-        $data['salePlatforms']   = $this->salePlatformService->getAnalyticsPlatformOptions();
+        $data['salePlatforms']   = $this->salePlatformService->getParentOptions();
         $data['reasonTypes']     = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
         $data['existingEntries'] = $existingEntries;
 
