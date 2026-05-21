@@ -127,91 +127,123 @@
                         <div class="space-y-3">
                             <!-- Active Status -->
                             <div>
-                                <label class="flex items-center gap-3 cursor-pointer">
+                                <div class="flex items-center gap-3 cursor-pointer">
                                     <div class="toggle-track {{ old('is_active') ? 'on' : '' }}" id="statusToggle"
-                                         onclick="toggleSwitch('statusToggle')">
+                                         onclick="toggleSwitch('statusToggle', event)">
                                         <div class="toggle-thumb"></div>
                                     </div>
-                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">Active status</span>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                          onclick="toggleSwitch('statusToggle', event)">Active status</span>
                                     <input type="checkbox" name="is_active" id="statusCheckbox" class="hidden"
                                             {{ old('is_active') ? 'checked' : '' }}>
-                                </label>
+                                </div>
                                 <p class="f-hint mt-1 ml-11">Enable to make this sale platform active.</p>
                             </div>
 
                             <!-- Is Spent -->
                             <div>
-                                <label class="flex items-center gap-3 cursor-pointer">
+                                <div class="flex items-center gap-3 cursor-pointer">
                                     <div class="toggle-track {{ old('is_spent', true) ? 'on' : '' }}" id="isSpentToggle"
-                                         onclick="toggleSwitch('isSpentToggle')">
+                                         onclick="toggleSwitch('isSpentToggle', event)">
                                         <div class="toggle-thumb"></div>
                                     </div>
-                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">Can track spent</span>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                          onclick="toggleSwitch('isSpentToggle', event)">Can track spent</span>
                                     <input type="checkbox" name="is_spent" id="isSpentCheckbox" class="hidden"
                                             {{ old('is_spent', true) ? 'checked' : '' }}>
-                                </label>
+                                </div>
                                 <p class="f-hint mt-1 ml-11">Allow recording spending/cost data on this platform.</p>
                             </div>
 
                             <!-- Is Sales -->
                             <div>
-                                <label class="flex items-center gap-3 cursor-pointer">
+                                <div class="flex items-center gap-3 cursor-pointer">
                                     <div class="toggle-track {{ old('is_sales', true) ? 'on' : '' }}" id="isSalesToggle"
-                                         onclick="toggleSwitch('isSalesToggle')">
+                                         onclick="toggleSwitch('isSalesToggle', event)">
                                         <div class="toggle-thumb"></div>
                                     </div>
-                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">Can track sales</span>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                          onclick="toggleSwitch('isSalesToggle', event)">Can track sales</span>
                                     <input type="checkbox" name="is_sales" id="isSalesCheckbox" class="hidden"
                                             {{ old('is_sales', true) ? 'checked' : '' }}>
-                                </label>
+                                </div>
                                 <p class="f-hint mt-1 ml-11">Allow recording sales data on this platform.</p>
                             </div>
 
                             <!-- Allows Direct Entry -->
                             <div>
-                                <label class="flex items-center gap-3 cursor-pointer">
+                                <div class="flex items-center gap-3 cursor-pointer">
                                     <div class="toggle-track {{ old('allows_direct_entry', true) ? 'on' : '' }}" id="allowsDirectEntryToggle"
-                                         onclick="toggleSwitch('allowsDirectEntryToggle')">
+                                         onclick="toggleSwitch('allowsDirectEntryToggle', event)">
                                         <div class="toggle-thumb"></div>
                                     </div>
-                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">Allow direct entry</span>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                          onclick="toggleSwitch('allowsDirectEntryToggle', event)">Allow direct entry</span>
                                     <input type="checkbox" name="allows_direct_entry" id="allowsDirectEntryCheckbox" class="hidden"
                                             {{ old('allows_direct_entry', true) ? 'checked' : '' }}>
-                                </label>
+                                </div>
                                 <p class="f-hint mt-1 ml-11">If enabled, sales/spent can be added directly to this platform. If disabled, entries can only be added to sub-platforms.</p>
                             </div>
 
                             <!-- Show in Analytics -->
                             <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
                                 <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Module Visibility</p>
-                                <label class="flex items-center gap-3 cursor-pointer">
+                                <div class="flex items-center gap-3 cursor-pointer">
                                     <div class="toggle-track {{ old('show_in_analytics', true) ? 'on' : '' }}" id="showInAnalyticsToggle"
-                                         onclick="toggleSwitch('showInAnalyticsToggle')">
+                                         onclick="toggleSwitch('showInAnalyticsToggle', event)">
                                         <div class="toggle-thumb"></div>
                                     </div>
-                                    <div>
-                                        <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">Show in Analytics</span>
-                                    </div>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                          onclick="toggleSwitch('showInAnalyticsToggle', event)">Show in Analytics</span>
                                     <input type="checkbox" name="show_in_analytics" id="showInAnalyticsCheckbox" class="hidden"
                                             {{ old('show_in_analytics', true) ? 'checked' : '' }}>
-                                </label>
+                                </div>
                                 <p class="f-hint mt-1 ml-11">When enabled, this platform appears in the Analytics Dashboard, Daily Sales, and Daily Returns modules.</p>
                             </div>
 
                             <!-- Show in Sale Tracking -->
-                            <div>
-                                <label class="flex items-center gap-3 cursor-pointer">
+                            <div id="saleTrackingSection">
+                                <div class="flex items-center gap-3 cursor-pointer">
                                     <div class="toggle-track {{ old('show_in_sale_tracking', true) ? 'on' : '' }}" id="showInSaleTrackingToggle"
-                                         onclick="toggleSwitch('showInSaleTrackingToggle')">
+                                         onclick="toggleSwitch('showInSaleTrackingToggle', event); toggleTrackingColumns()">
                                         <div class="toggle-thumb"></div>
                                     </div>
-                                    <div>
-                                        <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">Show in Sale Tracking</span>
-                                    </div>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                          onclick="toggleSwitch('showInSaleTrackingToggle', event); toggleTrackingColumns()">Show in Sale Tracking</span>
                                     <input type="checkbox" name="show_in_sale_tracking" id="showInSaleTrackingCheckbox" class="hidden"
                                             {{ old('show_in_sale_tracking', true) ? 'checked' : '' }}>
-                                </label>
+                                </div>
                                 <p class="f-hint mt-1 ml-11">When enabled, this platform appears in the Sale Tracking module.</p>
+                            </div>
+
+                            <!-- Tracking Columns (shown only when Show in Sale Tracking is ON) -->
+                            <div id="trackingColumnsSection"
+                                 class="{{ old('show_in_sale_tracking', true) ? '' : 'hidden' }} ml-1 mt-1 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30">
+                                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2.5">
+                                    Engagement Columns in Sale Tracking
+                                </p>
+                                <p class="text-[11px] text-slate-400 dark:text-slate-500 mb-3 leading-relaxed">
+                                    Choose which metrics are visible for this platform in the Sale Tracking module and its export.
+                                </p>
+                                <div class="grid grid-cols-2 gap-y-2 gap-x-3">
+                                    @foreach([
+                                        'track_reach'            => 'Reach',
+                                        'track_impressions'      => 'Impressions',
+                                        'track_clicks'           => 'Clicks',
+                                        'track_sessions'         => 'Sessions',
+                                        'track_engaged_sessions' => 'Engaged Sessions',
+                                        'track_users'            => 'Users',
+                                    ] as $field => $label)
+                                    <div class="flex items-center gap-2">
+                                        <input type="checkbox" name="{{ $field }}" id="{{ $field }}Checkbox"
+                                               class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-accent-400 focus:ring-accent-400"
+                                               {{ old($field, true) ? 'checked' : '' }}>
+                                        <label for="{{ $field }}Checkbox" class="text-[12px] text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+                                            {{ $label }}
+                                        </label>
+                                    </div>
+                                    @endforeach
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -263,3 +295,18 @@
         </form>
     </div>
 @endsection
+
+@push('js')
+<script>
+function toggleTrackingColumns() {
+    const checkbox = document.getElementById('showInSaleTrackingCheckbox');
+    const section  = document.getElementById('trackingColumnsSection');
+    if (!section) return;
+    // Use a short defer so toggleSwitch() has time to update the checkbox first
+    setTimeout(function () {
+        section.classList.toggle('hidden', !checkbox.checked);
+    }, 0);
+}
+</script>
+@endpush
+

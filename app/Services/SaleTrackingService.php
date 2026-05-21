@@ -3,10 +3,13 @@
 namespace App\Services;
 
 use App\Models\DailyAdPerformance;
+use App\Models\DailyReturn;
+use App\Models\DailySale;
 use App\Models\SalePlatform;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Reader\Xlsx as XlsxReader;
 
 class SaleTrackingService
@@ -41,7 +44,7 @@ class SaleTrackingService
         return DailyAdPerformance::with('salePlatform')
             ->whereHas('salePlatform', fn ($q) => $q->where('show_in_sale_tracking', true))
             ->filter($filters)
-            ->orderByDesc('month')
+            ->orderBy('month')   // oldest first, latest last
             ->orderBy('id')
             ->paginate(50)
             ->withQueryString();
@@ -58,7 +61,7 @@ class SaleTrackingService
         foreach (
             $paginator->getCollection()
                 ->groupBy(fn($r) => optional($r->month)->format('Y-m') ?? '')
-                ->sortKeysDesc()
+                ->sortKeys()        // oldest first, latest last
             as $monthKey => $monthRecords
         ) {
             $platformCards = [];
@@ -81,6 +84,92 @@ class SaleTrackingService
         }
 
         return $monthGroups;
+    }
+
+    // ── Additional export data from DailySale / DailyReturn ──────
+
+    /**
+     * Returns a lookup of DailySale aggregates grouped by platform and month.
+     * Result: [sale_platform_id][Y-m] => ['net_cost' => float, 'revenue' => float]
+     *
+     * – net_cost = SUM(spent)   (ad spend recorded in DailySale)
+     * – revenue  = SUM(sales)   (revenue recorded in DailySale)
+     *
+     * @param int[]    $platformIds  Platform IDs to include
+     * @param string[] $monthKeys    Month keys in 'Y-m' format (e.g. ['2025-03', '2025-04'])
+     */
+    public function getSaleDataForExport(array $platformIds, array $monthKeys): array
+    {
+        if (empty($platformIds) || empty($monthKeys)) {
+            return [];
+        }
+
+        $query = DailySale::selectRaw(
+            'sale_platform_id,
+             YEAR(date)  AS yr,
+             MONTH(date) AS mn,
+             SUM(spent)  AS total_spent,
+             SUM(sales)  AS total_sales'
+        )
+        ->whereIn('sale_platform_id', $platformIds)
+        ->groupBy('sale_platform_id', DB::raw('YEAR(date)'), DB::raw('MONTH(date)'))
+        ->where(function ($q) use ($monthKeys) {
+            foreach ($monthKeys as $mk) {
+                [$year, $month] = explode('-', $mk);
+                $q->orWhere(function ($inner) use ($year, $month) {
+                    $inner->whereYear('date', (int) $year)
+                          ->whereMonth('date', (int) $month);
+                });
+            }
+        });
+
+        $lookup = [];
+        foreach ($query->get() as $row) {
+            $mk = $row->yr . '-' . str_pad($row->mn, 2, '0', STR_PAD_LEFT);
+            $lookup[$row->sale_platform_id][$mk] = [
+                'net_cost' => (float) ($row->total_spent ?? 0),
+                'revenue'  => (float) ($row->total_sales ?? 0),
+            ];
+        }
+
+        return $lookup;
+    }
+
+    /**
+     * Returns a lookup of DailyReturn aggregates grouped by month (all platforms combined).
+     * Result: [Y-m] => total_return (float)
+     *
+     * @param string[] $monthKeys  Month keys in 'Y-m' format
+     */
+    public function getReturnDataForExport(array $monthKeys): array
+    {
+        if (empty($monthKeys)) {
+            return [];
+        }
+
+        $query = DailyReturn::selectRaw(
+            'YEAR(date)         AS yr,
+             MONTH(date)        AS mn,
+             SUM(return_amount) AS total_return'
+        )
+        ->groupBy(DB::raw('YEAR(date)'), DB::raw('MONTH(date)'))
+        ->where(function ($q) use ($monthKeys) {
+            foreach ($monthKeys as $mk) {
+                [$year, $month] = explode('-', $mk);
+                $q->orWhere(function ($inner) use ($year, $month) {
+                    $inner->whereYear('date', (int) $year)
+                          ->whereMonth('date', (int) $month);
+                });
+            }
+        });
+
+        $lookup = [];
+        foreach ($query->get() as $row) {
+            $mk = $row->yr . '-' . str_pad($row->mn, 2, '0', STR_PAD_LEFT);
+            $lookup[$mk] = (float) ($row->total_return ?? 0);
+        }
+
+        return $lookup;
     }
 
     // ── Excel reader ──────────────────────────────────────────────
@@ -164,7 +253,7 @@ class SaleTrackingService
         return DailyAdPerformance::with('salePlatform')
             ->whereHas('salePlatform', fn ($q) => $q->where('show_in_sale_tracking', true))
             ->filter($filters)
-            ->orderByDesc('month')
+            ->orderBy('month')   // oldest first, latest last
             ->orderBy('id');
     }
 

@@ -103,16 +103,22 @@ class SalePlatformService
             $pad       = str_repeat("\xE3\x80\x80", $node->depth); // U+3000 ideographic space
             $arrow     = $node->depth > 0 ? '└ ' : '';
             $options[] = [
-                'id'                    => $node->id,
-                'parent_id'             => $node->parent_id,
-                'name'                  => $node->name,
-                'depth'                 => $node->depth,
-                'label'                 => $pad . $arrow . $node->name,
-                'is_spent'              => (bool) $node->is_spent,
-                'is_sales'              => (bool) $node->is_sales,
-                'allows_direct_entry'   => (bool) $node->allows_direct_entry,
-                'show_in_analytics'     => (bool) $node->show_in_analytics,
-                'show_in_sale_tracking' => (bool) $node->show_in_sale_tracking,
+                'id'                     => $node->id,
+                'parent_id'              => $node->parent_id,
+                'name'                   => $node->name,
+                'depth'                  => $node->depth,
+                'label'                  => $pad . $arrow . $node->name,
+                'is_spent'               => (bool) $node->is_spent,
+                'is_sales'               => (bool) $node->is_sales,
+                'allows_direct_entry'    => (bool) $node->allows_direct_entry,
+                'show_in_analytics'      => (bool) $node->show_in_analytics,
+                'show_in_sale_tracking'  => (bool) $node->show_in_sale_tracking,
+                'track_reach'            => (bool) $node->track_reach,
+                'track_impressions'      => (bool) $node->track_impressions,
+                'track_clicks'           => (bool) $node->track_clicks,
+                'track_sessions'         => (bool) $node->track_sessions,
+                'track_engaged_sessions' => (bool) $node->track_engaged_sessions,
+                'track_users'            => (bool) $node->track_users,
             ];
         }
         return $options;

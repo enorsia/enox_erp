@@ -50,10 +50,17 @@ window.closeSidebar = function () {
 /* ══════════════════════════════════════
    TOGGLE SWITCH (status toggles)
 ══════════════════════════════════════ */
-window.toggleSwitch = function (id) {
+window.toggleSwitch = function (id, event) {
+    if (event) event.stopPropagation();
     const track = document.getElementById(id);
     if (!track) return;
     track.classList.toggle('on');
+    // Sync the hidden checkbox (naming convention: replace 'Toggle' with 'Checkbox')
+    const checkboxId = id.replace('Toggle', 'Checkbox');
+    const checkbox = document.getElementById(checkboxId);
+    if (checkbox) {
+        checkbox.checked = track.classList.contains('on');
+    }
 };
 
 /* ══════════════════════════════════════

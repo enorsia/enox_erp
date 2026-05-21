@@ -16,6 +16,8 @@ use PhpOffice\PhpSpreadsheet\Chart\PlotArea;
 use PhpOffice\PhpSpreadsheet\Chart\Legend;
 use PhpOffice\PhpSpreadsheet\Chart\Title;
 use PhpOffice\PhpSpreadsheet\Chart\Layout;
+use PhpOffice\PhpSpreadsheet\Chart\Axis;
+use PhpOffice\PhpSpreadsheet\Chart\AxisText;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SaleTrackingExport
@@ -49,7 +51,7 @@ class SaleTrackingExport
 
     // ── Main data column definitions ────────────────────────────
     private const COLUMNS = [
-        'A' => ['label' => 'Sl. No',           'width' => 7],
+        'A' => ['label' => 'Sl. No',            'width' => 7],
         'B' => ['label' => 'Month',             'width' => 13],
         'C' => ['label' => 'Platform',          'width' => 28],
         'D' => ['label' => 'Reach',             'width' => 13],
@@ -68,7 +70,7 @@ class SaleTrackingExport
         'Q' => ['label' => 'Total Revenue (£)', 'width' => 16],
         'R' => ['label' => 'Total Return (£)',  'width' => 15],
         'S' => ['label' => 'Net Revenue (£)',   'width' => 15],
-        'T' => ['label' => 'ROI (%)',           'width' => 11],
+        'T' => ['label' => 'ROI',               'width' => 11],
         'U' => ['label' => 'ROAS',              'width' => 10],
     ];
     private const LAST_COL = 'U';
@@ -83,6 +85,14 @@ class SaleTrackingExport
     {
         $records = $service->getExportQuery($this->filters)->get();
 
+        // ── Pre-fetch DailySale / DailyReturn aggregates via service ──
+        $platformIds = $records->pluck('sale_platform_id')->filter()->unique()->values()->toArray();
+        $monthKeys   = $records->map(fn ($r) => optional($r->month)->format('Y-m'))
+                               ->filter()->unique()->values()->toArray();
+
+        $saleLookup   = $service->getSaleDataForExport($platformIds, $monthKeys);
+        $returnLookup = $service->getReturnDataForExport($monthKeys);
+
         $spreadsheet = new Spreadsheet();
         $spreadsheet->removeSheetByIndex(0);
         $sheet = $spreadsheet->createSheet(0);
@@ -91,16 +101,29 @@ class SaleTrackingExport
         if ($records->isEmpty()) {
             $sheet->setCellValue('A1', 'No data found for the selected filters.');
         } else {
-            $this->writeSheet($sheet, $records);
+            $this->writeSheet($sheet, $records, $saleLookup, $returnLookup);
         }
 
         $spreadsheet->setActiveSheetIndex(0);
         $filename = 'ad-tracking-' . now()->format('Y-m-d') . '.xlsx';
 
         return new StreamedResponse(function () use ($spreadsheet) {
-            $writer = new Xlsx($spreadsheet);
-            $writer->setIncludeCharts(true);
-            $writer->save('php://output');
+            // Save to a temp file so we can post-process the chart XML
+            $tempFile = tempnam(sys_get_temp_dir(), 'xlsx_');
+            try {
+                $writer = new Xlsx($spreadsheet);
+                $writer->setIncludeCharts(true);
+                $writer->save($tempFile);
+
+                // Inject data-label rotation into vertical-bar charts to prevent overlapping text
+                $this->postProcessChartLabels($tempFile);
+
+                readfile($tempFile);
+            } finally {
+                if (file_exists($tempFile)) {
+                    unlink($tempFile);
+                }
+            }
         }, 200, [
             'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
@@ -109,60 +132,231 @@ class SaleTrackingExport
     }
 
     // ─────────────────────────────────────────────────────────────
+    //  POST-PROCESS: inject data-label text rotation into chart XML
+    //  XLSX is a ZIP archive; we open it, patch every chart*.xml
+    //  that is a vertical clustered bar chart (barDir val="col")
+    //  so that the value labels are rotated -45° and never overlap.
+    // ─────────────────────────────────────────────────────────────
+
+    private function postProcessChartLabels(string $filePath): void
+    {
+        $zip = new \ZipArchive();
+        if ($zip->open($filePath, \ZipArchive::CHECKCONS) !== true) {
+            return;
+        }
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = $zip->getNameIndex($i);
+            if (!preg_match('#^xl/charts/chart\d+\.xml$#i', $name)) {
+                continue;
+            }
+
+            $xml = $zip->getFromName($name);
+            if ($xml === false) {
+                continue;
+            }
+
+            $patched = $this->patchChartXml($xml);
+            if ($patched !== $xml) {
+                $zip->addFromString($name, $patched);
+            }
+        }
+
+        $zip->close();
+    }
+
+    /**
+     * For every vertical clustered bar chart (<c:barDir val="col"/>)
+     * that already has data-labels shown (<c:showVal val="1"/>),
+     * inject a <c:txPr> block with <a:bodyPr rot="-2700000"/> (= -45°)
+     * so that the bar-top numbers are rotated and never overlap.
+     *
+     * Also adds the missing showLegendKey/showCatName/showSerName flags
+     * that Excel requires to consider the dLbls element valid.
+     */
+    private function patchChartXml(string $xml): string
+    {
+        // Only touch vertical bar charts
+        if (strpos($xml, '<c:barDir val="col"/>') === false) {
+            return $xml;
+        }
+
+        // Only process charts that currently show values
+        if (strpos($xml, '<c:showVal val="1"/>') === false) {
+            return $xml;
+        }
+
+        // -45 degrees expressed in OOXML units (degrees × 60 000)
+        $rotVal = '-5400000';
+
+        $xml = preg_replace_callback(
+            '/<c:dLbls>(.*?)<\/c:dLbls>/s',
+            function (array $m) use ($rotVal): string {
+                $inner = $m[1];
+
+                // Only rotate labels in blocks that actually show values
+                if (strpos($inner, '<c:showVal val="1"/>') === false) {
+                    return $m[0];
+                }
+
+                // ── 1. Ensure all required boolean flags are present ──────
+                foreach ([
+                    'showLegendKey' => '0',
+                    'showCatName'   => '0',
+                    'showSerName'   => '0',
+                ] as $flag => $defaultVal) {
+                    if (strpos($inner, "<c:{$flag}") === false) {
+                        $inner .= "<c:{$flag} val=\"{$defaultVal}\"/>";
+                    }
+                }
+
+                // ── 2. Inject / update txPr with body rotation ────────────
+                if (strpos($inner, '<c:txPr>') !== false) {
+                    // txPr already exists — add rot to a:bodyPr if missing
+                    $inner = preg_replace(
+                        '/<a:bodyPr(?![^>]*\brot=)([^>]*)\/>/',
+                        '<a:bodyPr rot="' . $rotVal . '"$1/>',
+                        $inner
+                    );
+                    $inner = preg_replace(
+                        '/<a:bodyPr(?![^>]*\brot=)([^>]*)>/',
+                        '<a:bodyPr rot="' . $rotVal . '"$1>',
+                        $inner
+                    );
+                } else {
+                    // No txPr at all — insert one right before <c:showVal
+                    $txPr = '<c:txPr>'
+                          . '<a:bodyPr rot="' . $rotVal . '"/>'
+                          . '<a:lstStyle/>'
+                          . '<a:p><a:pPr><a:defRPr b="0"/></a:pPr></a:p>'
+                          . '</c:txPr>';
+
+                    $inner = str_replace('<c:showVal', $txPr . '<c:showVal', $inner);
+                }
+
+                return '<c:dLbls>' . $inner . '</c:dLbls>';
+            },
+            $xml
+        );
+
+        return (string)$xml;
+    }
+
+    // ─────────────────────────────────────────────────────────────
     //  SHEET WRITER — main entry point
     // ─────────────────────────────────────────────────────────────
 
-    private function writeSheet($sheet, $records): void
+    /**
+     * @param \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet
+     * @param \Illuminate\Support\Collection                $records      DailyAdPerformance records
+     * @param array                                         $saleLookup   [platform_id][Y-m] => ['net_cost','revenue']
+     * @param array                                         $returnLookup [Y-m] => total_return
+     *
+     * Business rules (all equations also embedded as Excel formulas):
+     *  – Net Cost  (J)          = DailySale.spent SUM per platform per month            (PHP value)
+     *  – Ads Tax   (K)          = DailyAdPerformance.ads_tax_payments                   (PHP value)
+     *  – Total Cost     (L) ← MERGED per month  = =SUM(K_start:K_end)                  (Excel formula)
+     *  – Revenue   (P)          = DailySale.sales SUM per platform per month            (PHP value)
+     *  – Total Revenue  (Q) ← MERGED per month  = =SUM(P_start:P_end)                  (Excel formula)
+     *  – Total Return   (R) ← MERGED per month  = DailyReturn.return_amount SUM        (PHP value)
+     *  – Sales Growth % (O) ← MERGED per month  = =(Q_curr−Q_prev)/Q_prev              (Excel formula)
+     *  – Net Revenue    (S) ← MERGED per month  = =IFERROR(Q−R,"")                     (Excel formula)
+     *  – ROAS           (U) ← MERGED per month  = =IFERROR((Q/L)*100,"")               (Excel formula)
+     *  – ROI            (T) ← MERGED per month  = =IFERROR(ROUND(U,0),"")              (Excel formula)
+     */
+    private function writeSheet($sheet, $records, array $saleLookup, array $returnLookup): void
     {
         $sheetName = 'Ad Performance';
         $moneyFmt  = '#,##0.00';
         $pctFmt    = '0.00%';
         $numFmt    = '#,##0';
 
-        // ── Group records by month (preserves month-desc query order) ──
-        $monthGroups   = [];  // [Y-m => [records]]
-        $platformData  = [];  // [platName => [Y-m => [label,reach,imp,clicks,sessions,orders]]]
-        $monthAgg      = [];  // [Y-m => aggregate for summary]
+        // ── Phase 1: Group records; augment with DailySale-derived values ──────
+        $monthGroups  = [];   // [Y-m => ['label'=>string, 'entries'=>[...]]]
+        $platformData = [];   // for per-platform engagement sections (charts)
 
         foreach ($records as $rec) {
-            $mk       = optional($rec->month)->format('Y-m') ?? 'unknown';
-            $platName = $rec->salePlatform?->name ?? '—';
+            $mk         = optional($rec->month)->format('Y-m') ?? 'unknown';
+            $platName   = $rec->salePlatform?->name ?? '—';
             $monthLabel = optional($rec->month)->format('M Y') ?? $mk;
+            $platId     = $rec->sale_platform_id;
 
-            $monthGroups[$mk][] = $rec;
+            // Net Cost and Revenue come from DailySale
+            $netCost = (float) ($saleLookup[$platId][$mk]['net_cost'] ?? 0);
+            $revenue = (float) ($saleLookup[$platId][$mk]['revenue']  ?? 0);
+            $adsTax  = (float) ($rec->ads_tax_payments ?? 0);
 
-            // Per-platform data
-            if (!isset($platformData[$platName][$mk])) {
-                $platformData[$platName][$mk] = [
+            if (!isset($monthGroups[$mk])) {
+                $monthGroups[$mk] = ['label' => $monthLabel, 'entries' => []];
+            }
+            $monthGroups[$mk]['entries'][] = [
+                'rec'      => $rec,
+                'net_cost' => $netCost,
+                'revenue'  => $revenue,
+                'ads_tax'  => $adsTax,
+            ];
+
+            // Per-platform engagement data (engagement metrics only — no financial changes)
+            if (!isset($platformData[$platName])) {
+                $platformData[$platName] = ['platform' => $rec->salePlatform, 'months' => []];
+            }
+            if (!isset($platformData[$platName]['months'][$mk])) {
+                $platformData[$platName]['months'][$mk] = [
                     'label' => $monthLabel, 'reach' => 0, 'impressions' => 0,
-                    'clicks' => 0, 'sessions' => 0, 'orders' => 0,
+                    'clicks' => 0, 'sessions' => 0, 'engaged_sessions' => 0,
+                    'users' => 0, 'orders' => 0,
                 ];
             }
-            $platformData[$platName][$mk]['reach']       += (int)($rec->reach ?? 0);
-            $platformData[$platName][$mk]['impressions'] += (int)($rec->impressions ?? 0);
-            $platformData[$platName][$mk]['clicks']      += (int)($rec->clicks ?? 0);
-            $platformData[$platName][$mk]['sessions']    += (int)($rec->sessions ?? 0);
-            $platformData[$platName][$mk]['orders']      += (int)($rec->number_of_orders ?? 0);
-
-            // Monthly aggregates
-            if (!isset($monthAgg[$mk])) {
-                $monthAgg[$mk] = [
-                    'label' => $monthLabel, 'revenue' => 0, 'total_cost' => 0,
-                    'net_revenue' => 0, 'orders' => 0, 'clicks' => 0, 'impressions' => 0,
-                    'roi_sum' => 0, 'roi_count' => 0, 'roas_sum' => 0, 'roas_count' => 0,
-                ];
-            }
-            $monthAgg[$mk]['revenue']     += (float)($rec->revenue ?? 0);
-            $monthAgg[$mk]['total_cost']  += (float)($rec->total_cost ?? 0);
-            $monthAgg[$mk]['net_revenue'] += (float)($rec->net_revenue ?? 0);
-            $monthAgg[$mk]['orders']      += (int)($rec->number_of_orders ?? 0);
-            $monthAgg[$mk]['clicks']      += (int)($rec->clicks ?? 0);
-            $monthAgg[$mk]['impressions'] += (int)($rec->impressions ?? 0);
-            if ($rec->roi  !== null) { $monthAgg[$mk]['roi_sum']   += (float)$rec->roi;  $monthAgg[$mk]['roi_count']++; }
-            if ($rec->roas !== null) { $monthAgg[$mk]['roas_sum']  += (float)$rec->roas; $monthAgg[$mk]['roas_count']++; }
+            $platformData[$platName]['months'][$mk]['reach']            += (int) ($rec->reach ?? 0);
+            $platformData[$platName]['months'][$mk]['impressions']      += (int) ($rec->impressions ?? 0);
+            $platformData[$platName]['months'][$mk]['clicks']           += (int) ($rec->clicks ?? 0);
+            $platformData[$platName]['months'][$mk]['sessions']         += (int) ($rec->sessions ?? 0);
+            $platformData[$platName]['months'][$mk]['engaged_sessions'] += (int) ($rec->engaged_sessions ?? 0);
+            $platformData[$platName]['months'][$mk]['users']            += (int) ($rec->users ?? 0);
+            $platformData[$platName]['months'][$mk]['orders']           += (int) ($rec->number_of_orders ?? 0);
         }
 
-        // ── Row 1: Title (CENTERED) ───────────────────────────
+        // ── Phase 2: Compute month-level financials (used for summary table + return lookup) ──
+        // Note: Total Cost = SUM(Ads Tax) only per month (not net_cost + ads_tax)
+        // Note: ROAS = (Total Revenue / Total Cost) × 100 ; ROI = ROUND(ROAS)
+        $monthTotals = [];
+        foreach ($monthGroups as $mk => $group) {
+            $tc   = array_sum(array_column($group['entries'], 'ads_tax'));  // Only Ads Tax
+            $tr   = array_sum(array_column($group['entries'], 'revenue'));
+            $tt   = $returnLookup[$mk] ?? 0;
+            $nr   = $tr - $tt;
+            $roas = $tc > 0 ? round(($tr / $tc) * 100, 4) : null;         // ROAS = (Rev/Cost)×100
+            $roi  = $roas !== null ? (int) round($roas) : null;            // ROI  = ROUND(ROAS)
+            $monthTotals[$mk] = [
+                'total_cost'    => $tc,
+                'total_revenue' => $tr,
+                'total_return'  => $tt,
+                'net_revenue'   => $nr,
+                'roas'          => $roas,
+                'roi'           => $roi,
+            ];
+        }
+
+        // ── Phase 3: Build monthAgg for the Monthly Summary table ─────────────
+        $monthAgg = [];
+        foreach ($monthGroups as $mk => $group) {
+            $mt = $monthTotals[$mk];
+            $monthAgg[$mk] = [
+                'label'       => $group['label'],
+                'revenue'     => $mt['total_revenue'],
+                'total_cost'  => $mt['total_cost'],
+                'net_revenue' => $mt['net_revenue'],
+                'orders'      => array_sum(array_map(fn ($e) => (int) ($e['rec']->number_of_orders ?? 0), $group['entries'])),
+                'clicks'      => array_sum(array_map(fn ($e) => (int) ($e['rec']->clicks         ?? 0), $group['entries'])),
+                'impressions' => array_sum(array_map(fn ($e) => (int) ($e['rec']->impressions    ?? 0), $group['entries'])),
+                'roi_sum'     => $mt['roi']  !== null ? $mt['roi']  : 0,
+                'roi_count'   => $mt['roi']  !== null ? 1 : 0,
+                'roas_sum'    => $mt['roas'] !== null ? $mt['roas'] : 0,
+                'roas_count'  => $mt['roas'] !== null ? 1 : 0,
+            ];
+        }
+
+        // ── Row 1: Title ──────────────────────────────────────
         $titleRange = 'A1:' . self::LAST_COL . '1';
         $sheet->setCellValue('A1', 'Enorsia Digital Ad Performance Tracking');
         $sheet->mergeCells($titleRange);
@@ -187,23 +381,28 @@ class SaleTrackingExport
             ->setWrapText(true);
         $sheet->getRowDimension(2)->setRowHeight(32);
 
-        // ── Data rows (with month cell merging) ───────────────
+        // ── Phase 4: Data rows ────────────────────────────────
         $r          = 3;
         $sl         = 1;
         $monthIndex = 0;
-        $totals = array_fill_keys(
-            ['reach','impressions','clicks','sessions','engaged_sessions','users',
-             'net_cost','ads_tax_payments','total_cost','number_of_orders','number_of_products',
-             'revenue','total_revenue','total_return','net_revenue'],
-            0.0
-        );
+        $prevQRow   = null;   // Row number of previous month's merged Q cell (for Sales Growth formula)
+        $grandTotalReturn = 0.0;
 
-        foreach ($monthGroups as $mk => $monthRecs) {
+        // Columns merged per-month: value/formula in first row, blank rows merged into it
+        // O (Sales Growth%), L (Total Cost), Q (Total Revenue), R (Total Return),
+        // S (Net Revenue), T (ROI), U (ROAS)
+        $mergedCols = ['O', 'L', 'Q', 'R', 'S', 'T', 'U'];
+
+        foreach ($monthGroups as $mk => $group) {
             $monthStartRow = $r;
-            $monthLabel    = optional($monthRecs[0]->month)->format('M Y') ?? '';
+            $monthLabel    = $group['label'];
             $monthBg       = self::MONTH_BG_COLORS[$monthIndex % count(self::MONTH_BG_COLORS)];
+            $mt            = $monthTotals[$mk];
 
-            foreach ($monthRecs as $rec) {
+            // ── Write per-platform rows (J, K, M, N, P are per-row; merged cols written after) ──
+            foreach ($group['entries'] as $entry) {
+                $rec = $entry['rec'];
+
                 $sheet->setCellValue('A' . $r, $sl++);
                 $sheet->setCellValue('B' . $r, $monthLabel);
                 $sheet->setCellValue('C' . $r, $rec->salePlatform?->name ?? '—');
@@ -213,66 +412,118 @@ class SaleTrackingExport
                 $sheet->setCellValue('G' . $r, $rec->sessions);
                 $sheet->setCellValue('H' . $r, $rec->engaged_sessions);
                 $sheet->setCellValue('I' . $r, $rec->users);
-                $sheet->setCellValue('J' . $r, $rec->net_cost);
-                $sheet->setCellValue('K' . $r, $rec->ads_tax_payments);
-                $sheet->setCellValue('L' . $r, $rec->total_cost);
+                // J: Net Cost — from DailySale.spent (PHP value)
+                $sheet->setCellValue('J' . $r, $entry['net_cost'] ?: null);
+                // K: Ads Tax — from DailyAdPerformance.ads_tax_payments (PHP value)
+                $sheet->setCellValue('K' . $r, $entry['ads_tax']  ?: null);
+                // L: Total Cost — Excel formula written after inner loop (merged cell)
                 $sheet->setCellValue('M' . $r, $rec->number_of_orders);
                 $sheet->setCellValue('N' . $r, $rec->number_of_products);
-                $sheet->setCellValue('O' . $r, $rec->sales_grow_percent !== null ? $rec->sales_grow_percent / 100 : null);
-                $sheet->setCellValue('P' . $r, $rec->revenue);
-                $sheet->setCellValue('Q' . $r, $rec->total_revenue);
-                $sheet->setCellValue('R' . $r, $rec->total_return);
-                $sheet->setCellValue('S' . $r, $rec->net_revenue);
-                $sheet->setCellValue('T' . $r, $rec->roi   !== null ? $rec->roi   / 100 : null);
-                $sheet->setCellValue('U' . $r, $rec->roas);
+                // O: Sales Growth % — Excel formula written after inner loop (merged cell)
+                // P: Revenue — from DailySale.sales (PHP value)
+                $sheet->setCellValue('P' . $r, $entry['revenue']  ?: null);
+                // Q, R, S, T, U: Excel formulas / PHP value written after inner loop (merged cells)
 
-                // Apply the month-group background to every row in this month
                 $sheet->getStyle('A' . $r . ':' . self::LAST_COL . $r)
                     ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($monthBg);
-
                 $sheet->getStyle('D' . $r . ':' . self::LAST_COL . $r)
                     ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-
-                foreach (array_keys($totals) as $key) {
-                    $totals[$key] += (float)($rec->$key ?? 0);
-                }
                 $r++;
             }
 
             $monthEndRow = $r - 1;
 
-            // Merge & center month cell in column B
-            if ($monthEndRow > $monthStartRow) {
-                $sheet->mergeCells('B' . $monthStartRow . ':B' . $monthEndRow);
+            // Accumulate grand total_return (once per month — not per platform row)
+            $grandTotalReturn += $mt['total_return'];
+
+            // ── Write merged-column values / Excel formulas into the first row of the month ──
+            $ms = $monthStartRow;  // shorthand
+            $me = $monthEndRow;
+
+            // L: Total Cost = SUM of Ads Tax for all platforms in this month
+            $sheet->setCellValue('L' . $ms, "=SUM(K{$ms}:K{$me})");
+
+            // Q: Total Revenue = SUM of Revenue for all platforms in this month
+            $sheet->setCellValue('Q' . $ms, "=SUM(P{$ms}:P{$me})");
+
+            // R: Total Return — PHP value (DailyReturn, no sheet reference possible)
+            $sheet->setCellValue('R' . $ms, $mt['total_return'] ?: null);
+
+            // O: Sales Growth % = (This Month Total Revenue − Prev Month Total Revenue) / Prev Month Total Revenue
+            if ($prevQRow !== null) {
+                $sheet->setCellValue('O' . $ms, "=IFERROR((Q{$ms}-Q{$prevQRow})/Q{$prevQRow},\"\")");
             }
-            $sheet->getStyle('B' . $monthStartRow)
+            // else: first month — leave O empty (no previous month to compare against)
+
+            // S: Net Revenue = Total Revenue − Total Return
+            $sheet->setCellValue('S' . $ms, "=IFERROR(Q{$ms}-R{$ms},\"\")");
+
+            // U: ROAS = (Total Revenue / Total Cost) × 100
+            $sheet->setCellValue('U' . $ms, "=IFERROR((Q{$ms}/L{$ms})*100,\"\")");
+
+            // T: ROI = ROUND(ROAS, 0)
+            $sheet->setCellValue('T' . $ms, "=IFERROR(ROUND(U{$ms},0),\"\")");
+
+            // Track this month's Q row for next month's Sales Growth formula
+            $prevQRow = $ms;
+
+            // ── Merge column B (month label) ──────────────────────
+            if ($monthEndRow > $monthStartRow) {
+                $sheet->mergeCells('B' . $ms . ':B' . $me);
+            }
+            $sheet->getStyle('B' . $ms)
                 ->getAlignment()
                 ->setHorizontal(Alignment::HORIZONTAL_CENTER)
                 ->setVertical(Alignment::VERTICAL_CENTER);
+
+            // ── Merge month-level columns (O, L, Q, R, S, T, U) ──────────────
+            foreach ($mergedCols as $col) {
+                if ($monthEndRow > $monthStartRow) {
+                    $sheet->mergeCells($col . $ms . ':' . $col . $me);
+                }
+                $sheet->getStyle($col . $ms)
+                    ->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+                    ->setVertical(Alignment::VERTICAL_CENTER);
+            }
 
             $monthIndex++;
         }
 
         $dataEndRow = $r - 1;
 
-        // ── Totals row ─────────────────────────────────────────
-        $sheet->setCellValue('C' . $r, 'TOTAL');
-        $sheet->setCellValue('D' . $r, $totals['reach']              ?: null);
-        $sheet->setCellValue('E' . $r, $totals['impressions']        ?: null);
-        $sheet->setCellValue('F' . $r, $totals['clicks']             ?: null);
-        $sheet->setCellValue('G' . $r, $totals['sessions']           ?: null);
-        $sheet->setCellValue('H' . $r, $totals['engaged_sessions']   ?: null);
-        $sheet->setCellValue('I' . $r, $totals['users']              ?: null);
-        $sheet->setCellValue('J' . $r, $totals['net_cost']           ?: null);
-        $sheet->setCellValue('K' . $r, $totals['ads_tax_payments']   ?: null);
-        $sheet->setCellValue('L' . $r, $totals['total_cost']         ?: null);
-        $sheet->setCellValue('M' . $r, $totals['number_of_orders']   ?: null);
-        $sheet->setCellValue('N' . $r, $totals['number_of_products'] ?: null);
-        $sheet->setCellValue('P' . $r, $totals['revenue']            ?: null);
-        $sheet->setCellValue('Q' . $r, $totals['total_revenue']      ?: null);
-        $sheet->setCellValue('R' . $r, $totals['total_return']       ?: null);
-        $sheet->setCellValue('S' . $r, $totals['net_revenue']        ?: null);
+        // ── Grand Total row (all numeric columns use Excel formulas) ──────────
         $totalsRow = $r;
+
+        $sheet->setCellValue('C' . $r, 'TOTAL');
+
+        // D–I: engagement SUM formulas
+        foreach (['D','E','F','G','H','I'] as $col) {
+            $sheet->setCellValue($col . $r, "=SUM({$col}3:{$col}{$dataEndRow})");
+        }
+        // J: Net Cost total
+        $sheet->setCellValue('J' . $r, "=SUM(J3:J{$dataEndRow})");
+        // K: Ads Tax total
+        $sheet->setCellValue('K' . $r, "=SUM(K3:K{$dataEndRow})");
+        // L: Total Cost total = SUM of all Ads Tax = SUM(K)
+        $sheet->setCellValue('L' . $r, "=SUM(K3:K{$dataEndRow})");
+        // M, N: order / product totals
+        $sheet->setCellValue('M' . $r, "=SUM(M3:M{$dataEndRow})");
+        $sheet->setCellValue('N' . $r, "=SUM(N3:N{$dataEndRow})");
+        // O: no meaningful total for Sales Growth %
+        // P: Revenue total
+        $sheet->setCellValue('P' . $r, "=SUM(P3:P{$dataEndRow})");
+        // Q: Total Revenue total = SUM of all platform revenues
+        $sheet->setCellValue('Q' . $r, "=SUM(P3:P{$dataEndRow})");
+        // R: Total Return total — PHP value (grand sum of monthly returns)
+        $sheet->setCellValue('R' . $r, $grandTotalReturn ?: null);
+        // S: Net Revenue total
+        $sheet->setCellValue('S' . $r, "=IFERROR(Q{$r}-R{$r},\"\")");
+        // U: ROAS total = (Total Revenue / Total Cost) × 100
+        $sheet->setCellValue('U' . $r, "=IFERROR((Q{$r}/L{$r})*100,\"\")");
+        // T: ROI total = ROUND(ROAS)
+        $sheet->setCellValue('T' . $r, "=IFERROR(ROUND(U{$r},0),\"\")");
+
         $sheet->getStyle('A' . $r . ':' . self::LAST_COL . $r)
             ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_TOTAL);
         $sheet->getStyle('A' . $r . ':' . self::LAST_COL . $r)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_TOTAL_FG);
@@ -286,10 +537,12 @@ class SaleTrackingExport
             foreach (['D','E','F','G','H','I','M','N'] as $col) {
                 $sheet->getStyle($col . '3:' . $col . $totalsRow)->getNumberFormat()->setFormatCode($numFmt);
             }
-            foreach (['O','T'] as $col) {
-                $sheet->getStyle($col . '3:' . $col . $totalsRow)->getNumberFormat()->setFormatCode($pctFmt);
-            }
-            $sheet->getStyle('U3:U' . $totalsRow)->getNumberFormat()->setFormatCode('0.00');
+            // O: Sales Growth %  → percentage format
+            $sheet->getStyle('O3:O' . $totalsRow)->getNumberFormat()->setFormatCode($pctFmt);
+            // T: ROI  → integer with literal % suffix (e.g. 50%) — "%" in quotes avoids ×100
+            $sheet->getStyle('T3:T' . $totalsRow)->getNumberFormat()->setFormatCode('0"%"');
+            // U: ROAS → 2-decimal with literal % suffix (e.g. 49.65%) — no ×100 multiplication
+            $sheet->getStyle('U3:U' . $totalsRow)->getNumberFormat()->setFormatCode('0.00"%"');
         }
 
         // ── Borders + freeze ───────────────────────────────────
@@ -304,12 +557,13 @@ class SaleTrackingExport
         // ── Overview Charts (2×2 grid) ─────────────────────────
         $chartStart   = $summaryEnd + 3;
         $monthCount   = count($monthAgg);
+        $overviewEnd  = $chartStart; // fallback when no charts
         if ($monthCount >= 1) {
-            $this->writeOverviewCharts($sheet, $sheetName, $summaryStart, $summaryEnd, $monthCount, $chartStart);
+            $overviewEnd = $this->writeOverviewCharts($sheet, $sheetName, $summaryStart, $summaryEnd, $monthCount, $chartStart);
         }
 
         // ── Per-Platform Reach/Impressions/Clicks Tables + Charts ──
-        $platformStart = $chartStart + 40; // after the 2-row overview charts
+        $platformStart = $overviewEnd + 3;
         $this->writePlatformSections($sheet, $sheetName, $platformData, $platformStart);
     }
 
@@ -337,7 +591,7 @@ class SaleTrackingExport
         foreach ([
             'B' => 'Month', 'C' => 'Revenue (£)', 'D' => 'Total Cost (£)',
             'E' => 'Net Revenue (£)', 'F' => 'Orders', 'G' => 'Clicks',
-            'H' => 'Impressions', 'I' => 'Avg ROI (%)', 'J' => 'Avg ROAS',
+            'H' => 'Impressions', 'I' => 'Avg ROI', 'J' => 'Avg ROAS',
         ] as $col => $label) {
             $sheet->setCellValue($col . $hdrRow, $label);
         }
@@ -402,13 +656,27 @@ class SaleTrackingExport
 
     // ─────────────────────────────────────────────────────────────
     //  OVERVIEW CHARTS  (2×2 grid — Revenue/Cost, Orders, ROI, ROAS)
+    //  Returns the spreadsheet row number directly below the last chart,
+    //  so the caller can position subsequent content correctly.
     // ─────────────────────────────────────────────────────────────
 
-    private function writeOverviewCharts($sheet, string $sn, int $summaryStart, int $summaryEnd, int $mc, int $chartTopRow): void
+    private function writeOverviewCharts($sheet, string $sn, int $summaryStart, int $summaryEnd, int $mc, int $chartTopRow): int
     {
         $dataStart = $summaryStart + 2;
         $dataEnd   = $summaryEnd - 1;
-        if ($dataEnd < $dataStart) return;
+        if ($dataEnd < $dataStart) return $chartTopRow;
+
+        // ── Minimum chart height ────────────────────────────────
+        // Each month needs ~2 rows for its bar + rotated label.
+        // Floor at 22 so even a single-month chart has enough
+        // vertical room for the title, plot area and x-axis labels.
+        $chartH = max(22, $mc * 2 + 10);
+
+        // Row 1 of charts: top = $chartTopRow,  bottom = $chartTopRow + $chartH
+        // Gap between rows: 2 rows
+        // Row 2 of charts: top = $chartTopRow + $chartH + 2
+        $row2Top    = $chartTopRow + $chartH + 2;
+        $row2Bottom = $row2Top + $chartH;
 
         $xLabels = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING,
             "'$sn'" . '!$B$' . $dataStart . ':$B$' . $dataEnd, null, $mc)];
@@ -417,29 +685,32 @@ class SaleTrackingExport
             [['col'=>'C','label'=>'Revenue (£)'],['col'=>'D','label'=>'Total Cost (£)'],['col'=>'E','label'=>'Net Revenue (£)']],
             $xLabels, $dataStart, $dataEnd, $mc);
         $c1->setTopLeftPosition('A' . $chartTopRow);
-        $c1->setBottomRightPosition('K' . ($chartTopRow + 16));
+        $c1->setBottomRightPosition('K' . ($chartTopRow + $chartH));
         $sheet->addChart($c1);
 
         $c2 = $this->buildBarChart($sn, 'Orders by Month',
             [['col'=>'F','label'=>'Orders']],
             $xLabels, $dataStart, $dataEnd, $mc);
         $c2->setTopLeftPosition('L' . $chartTopRow);
-        $c2->setBottomRightPosition('V' . ($chartTopRow + 16));
+        $c2->setBottomRightPosition('V' . ($chartTopRow + $chartH));
         $sheet->addChart($c2);
 
-        $c3 = $this->buildLineChart($sn, 'Avg ROI (%) by Month',
-            [['col'=>'I','label'=>'Avg ROI %']],
-            $xLabels, $dataStart, $dataEnd, $mc);
-        $c3->setTopLeftPosition('A' . ($chartTopRow + 18));
-        $c3->setBottomRightPosition('K' . ($chartTopRow + 34));
+        $c3 = $this->buildLineChart($sn, title: 'Avg ROI by Month',
+            series: [['col'=>'I','label'=>'Avg ROI']],
+            xLabels: $xLabels, ds: $dataStart, de: $dataEnd, mc: $mc);
+        $c3->setTopLeftPosition('A' . $row2Top);
+        $c3->setBottomRightPosition('K' . $row2Bottom);
         $sheet->addChart($c3);
 
         $c4 = $this->buildLineChart($sn, 'Avg ROAS by Month',
             [['col'=>'J','label'=>'Avg ROAS']],
             $xLabels, $dataStart, $dataEnd, $mc);
-        $c4->setTopLeftPosition('L' . ($chartTopRow + 18));
-        $c4->setBottomRightPosition('V' . ($chartTopRow + 34));
+        $c4->setTopLeftPosition('L' . $row2Top);
+        $c4->setBottomRightPosition('V' . $row2Bottom);
         $sheet->addChart($c4);
+
+        // Return the row just below the last chart row
+        return $row2Bottom;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -453,11 +724,10 @@ class SaleTrackingExport
         if (empty($platformData)) return;
 
         $numFmt   = '#,##0';
-        $colorIdx = 0;
 
-        // Section banner — starts at col B
+        // Section banner — starts at col B, wide enough to cover any chart area
         $sheet->setCellValue('B' . $startRow, 'Per-Platform Engagement — Reach · Impressions · Clicks (Monthly)');
-        $sheet->mergeCells('B' . $startRow . ':R' . $startRow);
+        $sheet->mergeCells('B' . $startRow . ':W' . $startRow);
         $sheet->getStyle('B' . $startRow)->getFont()->setBold(true)->setSize(12)->getColor()->setARGB(self::CLR_TITLE_FG);
         $sheet->getStyle('B' . $startRow)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_TITLE_BG);
         $sheet->getStyle('B' . $startRow)->getAlignment()
@@ -466,99 +736,148 @@ class SaleTrackingExport
 
         $r = $startRow + 2;
 
-        foreach ($platformData as $platName => $months) {
-            // Only include platforms that have at least some reach/impressions/clicks data
+        foreach ($platformData as $platName => $platEntry) {
+            $platform = $platEntry['platform'];
+            $months   = $platEntry['months'];
+
+            // Determine which columns to show for this platform
+            $showReach    = $platform ? (bool)$platform->track_reach            : true;
+            $showImp      = $platform ? (bool)$platform->track_impressions       : true;
+            $showClicks   = $platform ? (bool)$platform->track_clicks            : true;
+            $showSessions = $platform ? (bool)$platform->track_sessions          : true;
+            $showEngaged  = $platform ? (bool)$platform->track_engaged_sessions  : true;
+            $showUsers    = $platform ? (bool)$platform->track_users             : true;
+
+            // Build column map: letter => [label, dataKey]
+            $nextCol = 'C';
+            $colMap  = [];
+            foreach ([
+                'reach'            => ['Reach',            $showReach],
+                'impressions'      => ['Impressions',       $showImp],
+                'clicks'           => ['Clicks',            $showClicks],
+                'sessions'         => ['Sessions',          $showSessions],
+                'engaged_sessions' => ['Engaged Sessions',  $showEngaged],
+                'users'            => ['Users',             $showUsers],
+            ] as $key => [$label, $show]) {
+                if ($show) {
+                    $colMap[$nextCol] = ['label' => $label, 'key' => $key];
+                    $nextCol = chr(ord($nextCol) + 1);
+                }
+            }
+            $lastDataCol = empty($colMap) ? 'B' : chr(ord($nextCol) - 1);
+
+            if (empty($colMap)) {
+                // Platform has all columns disabled — skip engagement table
+                continue;
+            }
+
+            // Only include platforms that have at least some engagement data
             $hasEngagement = false;
             foreach ($months as $m) {
-                if ($m['reach'] > 0 || $m['impressions'] > 0 || $m['clicks'] > 0) {
-                    $hasEngagement = true;
-                    break;
+                foreach (array_keys($colMap) as $colLetter) {
+                    $key = $colMap[$colLetter]['key'];
+                    if (($m[$key] ?? 0) > 0) { $hasEngagement = true; break 2; }
                 }
             }
             if (!$hasEngagement) continue;
 
-            $bgColor     = self::PLAT_COLORS[$colorIdx % count(self::PLAT_COLORS)];
-            $monthCount  = count($months);
-            $colorIdx++;
+            $monthCount = count($months);
 
-            // ── Platform title row — starts at col B ──────────
+            // ── Dynamic chart column placement ───────────────────
+            // Chart starts 2 columns after the last data column so there is one
+            // blank spacer column between the table and the chart.
+            $chartStartCol = chr(ord($lastDataCol) + 2);   // e.g. 'J' when lastDataCol='H'
+            $chartEndCol   = chr(ord($chartStartCol) + 12); // 13-column wide chart area
+
+            // Chart height:
+            // • Horizontal bar charts give one "row" per month per metric series.
+            //   Each month-row needs ~4 spreadsheet rows to render comfortably.
+            // • Floor at 25 rows so even a single-month chart looks clean.
+            $minChartRows = max(25, $monthCount * 4 + 12);
+            $chartBottomRow = 0; // filled in after tableEndRow is known
+
+            // ── Platform title row — spans table columns only, same style as main header ──
             $titleRow = $r;
             $sheet->setCellValue('B' . $r, $platName);
-            $sheet->mergeCells('B' . $r . ':R' . $r);
-            $sheet->getStyle('B' . $r)->getFont()->setBold(true)->setSize(11)->getColor()->setARGB('FFFFFFFF');
-            $sheet->getStyle('B' . $r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($bgColor);
-            $sheet->getStyle('B' . $r)->getAlignment()
-                ->setHorizontal(Alignment::HORIZONTAL_LEFT)->setVertical(Alignment::VERTICAL_CENTER);
+            $sheet->mergeCells('B' . $r . ':' . $lastDataCol . $r);
+            $sheet->getStyle('B' . $r . ':' . $lastDataCol . $r)
+                ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_HDR_BG);
+            $sheet->getStyle('B' . $r . ':' . $lastDataCol . $r)
+                ->getFont()->setBold(true)->setSize(11)->getColor()->setARGB(self::CLR_HDR_FG);
+            $sheet->getStyle('B' . $r . ':' . $lastDataCol . $r)->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
             $sheet->getRowDimension($r)->setRowHeight(22);
             $r++;
 
-            // ── Table header row — B=Month C=Reach D=Impressions E=Clicks ──
+            // ── Table header row ──────────────────────────────
             $hdrRow = $r;
-            foreach ([
-                'B' => 'Month', 'C' => 'Reach', 'D' => 'Impressions', 'E' => 'Clicks',
-            ] as $col => $label) {
-                $sheet->setCellValue($col . $r, $label);
+            $sheet->setCellValue('B' . $r, 'Month');
+            foreach ($colMap as $col => $def) {
+                $sheet->setCellValue($col . $r, $def['label']);
             }
-            $sheet->getStyle('B' . $r . ':E' . $r)
+            $sheet->getStyle('B' . $r . ':' . $lastDataCol . $r)
                 ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SUMHDR_BG);
-            $sheet->getStyle('B' . $r . ':E' . $r)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_SUMHDR_FG);
-            $sheet->getStyle('B' . $r . ':E' . $r)->getAlignment()
+            $sheet->getStyle('B' . $r . ':' . $lastDataCol . $r)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_SUMHDR_FG);
+            $sheet->getStyle('B' . $r . ':' . $lastDataCol . $r)->getAlignment()
                 ->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
             $sheet->getRowDimension($r)->setRowHeight(20);
             $r++;
 
-            // ── Data rows ──────────────────────────────────────
+            // ── Data rows ────────────────────────────────────
             $dataStart = $r;
             $si        = 0;
-            $totReach  = $totImp = $totClk = 0;
+            $totals    = array_fill_keys(array_keys($colMap), 0);
 
             foreach ($months as $m) {
                 $isAlt = ($si % 2 === 1);
                 if ($isAlt) {
-                    $sheet->getStyle('B' . $r . ':E' . $r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SUM_ALT);
+                    $sheet->getStyle('B' . $r . ':' . $lastDataCol . $r)
+                        ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SUM_ALT);
                 }
                 $sheet->setCellValue('B' . $r, $m['label']);
-                $sheet->setCellValue('C' . $r, $m['reach']       ?: null);
-                $sheet->setCellValue('D' . $r, $m['impressions'] ?: null);
-                $sheet->setCellValue('E' . $r, $m['clicks']      ?: null);
-                $sheet->getStyle('C' . $r . ':E' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-                $sheet->getStyle('C' . $r . ':E' . $r)->getNumberFormat()->setFormatCode($numFmt);
-
-                $totReach += $m['reach'];  $totImp += $m['impressions'];
-                $totClk   += $m['clicks'];
+                foreach ($colMap as $col => $def) {
+                    $val = $m[$def['key']] ?? 0;
+                    $sheet->setCellValue($col . $r, $val ?: null);
+                    $totals[$col] += $val;
+                }
+                $sheet->getStyle('C' . $r . ':' . $lastDataCol . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                $sheet->getStyle('C' . $r . ':' . $lastDataCol . $r)->getNumberFormat()->setFormatCode($numFmt);
                 $si++;
                 $r++;
             }
 
             $dataEnd = $r - 1;
 
-            // ── Totals row ─────────────────────────────────────
+            // ── Totals row ───────────────────────────────────
             $sheet->setCellValue('B' . $r, 'TOTAL');
-            $sheet->setCellValue('C' . $r, $totReach ?: null);
-            $sheet->setCellValue('D' . $r, $totImp   ?: null);
-            $sheet->setCellValue('E' . $r, $totClk   ?: null);
-            $sheet->getStyle('B' . $r . ':E' . $r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SUM_TOTAL);
-            $sheet->getStyle('B' . $r . ':E' . $r)->getFont()->setBold(true);
-            $sheet->getStyle('C' . $r . ':E' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-            $sheet->getStyle('C' . $r . ':E' . $r)->getNumberFormat()->setFormatCode($numFmt);
+            foreach ($colMap as $col => $def) {
+                $sheet->setCellValue($col . $r, $totals[$col] ?: null);
+            }
+            $sheet->getStyle('B' . $r . ':' . $lastDataCol . $r)
+                ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_SUM_TOTAL);
+            $sheet->getStyle('B' . $r . ':' . $lastDataCol . $r)->getFont()->setBold(true);
+            $sheet->getStyle('C' . $r . ':' . $lastDataCol . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet->getStyle('C' . $r . ':' . $lastDataCol . $r)->getNumberFormat()->setFormatCode($numFmt);
             $tableEndRow = $r;
 
-            // ── Borders ────────────────────────────────────────
-            $sheet->getStyle('B' . $titleRow . ':E' . $r)
+            // ── Borders ──────────────────────────────────────
+            $sheet->getStyle('B' . $titleRow . ':' . $lastDataCol . $r)
                 ->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
-            // ── Chart to the right of the table ───────────────
-            if ($monthCount >= 1 && $dataEnd >= $dataStart) {
-                $chart = $this->buildPlatformChart(
-                    $sheetName, $platName, $hdrRow, $dataStart, $dataEnd, $monthCount
+            // ── Chart — placed right after the table columns ──
+            $chartBottomRow = max($r, $titleRow + $minChartRows);
+
+            if ($monthCount >= 1 && $dataEnd >= $dataStart && !empty($colMap)) {
+                $chart = $this->buildPlatformChartDynamic(
+                    $sheetName, $platName, $hdrRow, $dataStart, $dataEnd, $monthCount, $colMap
                 );
-                // Chart spans H→R, from title row to total row
-                $chart->setTopLeftPosition('H' . $titleRow);
-                $chart->setBottomRightPosition('R' . $tableEndRow);
+                $chart->setTopLeftPosition($chartStartCol . $titleRow);
+                $chart->setBottomRightPosition($chartEndCol . $chartBottomRow);
                 $sheet->addChart($chart);
             }
 
-            $r = $tableEndRow + 3; // gap between platforms
+            // Advance row pointer past whichever is taller: table or chart
+            $r = $chartBottomRow + 3;
         }
     }
 
@@ -580,11 +899,23 @@ class SaleTrackingExport
         $dataSeries = new DataSeries(DataSeries::TYPE_BARCHART, DataSeries::GROUPING_CLUSTERED,
             range(0, count($series) - 1), $labels, $xLabels, $values);
         $dataSeries->setPlotDirection(DataSeries::DIRECTION_COL);
+
+        // Explicitly set all dLbls boolean flags so Excel doesn't consider the XML incomplete
         $layout = new Layout();
         $layout->setShowVal(true);
+        $layout->setShowLegendKey(false);
+        $layout->setShowCatName(false);
+        $layout->setShowSerName(false);
+
+        $xAxis = new Axis();
+        if ($mc > 5) {
+            // Rotate x-axis tick labels when there are many months to prevent overlap
+            $xAxis->setAxisOption('textRotation', '-45');
+        }
+
         return new Chart($title, new Title($title),
             new Legend(Legend::POSITION_BOTTOM, null, false),
-            new PlotArea($layout, [$dataSeries]), true, 0, null, null);
+            new PlotArea($layout, [$dataSeries]), true, 0, null, null, $xAxis);
     }
 
     private function buildLineChart(string $sn, string $title, array $series, array $xLabels, int $ds, int $de, int $mc): Chart
@@ -601,11 +932,76 @@ class SaleTrackingExport
         $dataSeries = new DataSeries(DataSeries::TYPE_LINECHART, DataSeries::GROUPING_STANDARD,
             range(0, count($series) - 1), $labels, $xLabels, $values);
         $dataSeries->setPlotDirection(DataSeries::DIRECTION_COL);
+
+        // Explicitly set all dLbls boolean flags so Excel doesn't consider the XML incomplete
         $layout = new Layout();
         $layout->setShowVal(true);
+        $layout->setShowLegendKey(false);
+        $layout->setShowCatName(false);
+        $layout->setShowSerName(false);
+
+        $xAxis = new Axis();
+        if ($mc > 5) {
+            $xAxis->setAxisOption('textRotation', '-45');
+        }
+
         return new Chart($title, new Title($title),
             new Legend(Legend::POSITION_BOTTOM, null, false),
-            new PlotArea($layout, [$dataSeries]), true, 0, null, null);
+            new PlotArea($layout, [$dataSeries]), true, 0, null, null, $xAxis);
+    }
+
+    /**
+     * Build platform bar chart: Reach + Impressions + Clicks per month
+     *
+     * Layout choice: horizontal bar chart (DIRECTION_BAR).
+     * Each bar occupies its own horizontal lane so bar-end value labels
+     * never overlap regardless of how many months or metrics are present.
+     * Values are always shown.
+     *
+     * $colMap: [colLetter => ['label' => ..., 'key' => ...]]
+     */
+    private function buildPlatformChartDynamic(string $sn, string $platName, int $hdrRow, int $dataStart, int $dataEnd, int $mc, array $colMap): Chart
+    {
+        $qsn     = "'$sn'";
+        $xLabels = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING,
+            $qsn . '!$B$' . $dataStart . ':$B$' . $dataEnd, null, $mc)];
+
+        $labels = [];
+        $values = [];
+        $idx    = 0;
+        foreach ($colMap as $col => $def) {
+            $labels[] = new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING,
+                $qsn . '!$' . $col . '$' . $hdrRow, null, 1);
+            $values[] = new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_NUMBER,
+                $qsn . '!$' . $col . '$' . $dataStart . ':$' . $col . '$' . $dataEnd, null, $mc);
+            $idx++;
+        }
+
+        $ds = new DataSeries(
+            DataSeries::TYPE_BARCHART,
+            DataSeries::GROUPING_CLUSTERED,
+            range(0, $idx - 1),
+            $labels,
+            $xLabels,
+            $values
+        );
+        // DIRECTION_BAR = horizontal bars:
+        //   • Category labels (months) sit on the Y-axis — one per row, never crowded.
+        //   • Value labels sit at the END of each bar on the X-axis — no overlap.
+        $ds->setPlotDirection(DataSeries::DIRECTION_BAR);
+
+        $layout = new Layout();
+        $layout->setShowVal(true);          // always display bar-end values
+        $layout->setShowCatName(false);
+        $layout->setShowSerName(false);
+        $layout->setShowLegendKey(false);
+
+        return new Chart(
+            $platName,
+            new Title($platName . ' — Engagement Metrics'),
+            new Legend(Legend::POSITION_BOTTOM, null, false),
+            new PlotArea($layout, [$ds]), true, 0, null, null
+        );
     }
 
     /**

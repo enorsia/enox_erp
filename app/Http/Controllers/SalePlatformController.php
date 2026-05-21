@@ -64,32 +64,44 @@ class SalePlatformController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'                  => 'required|string|max:100|unique:sale_platforms,name',
-            'slug'                  => 'nullable|string|max:100|unique:sale_platforms,slug',
-            'parent_id'             => 'nullable|exists:sale_platforms,id',
-            'type'                  => 'required|in:channel,sub_channel,marketplace,region',
-            'is_active'             => 'nullable|in:on,off',
-            'is_spent'              => 'nullable|in:on,off',
-            'is_sales'              => 'nullable|in:on,off',
-            'allows_direct_entry'   => 'nullable|in:on,off',
-            'show_in_analytics'     => 'nullable|in:on,off',
-            'show_in_sale_tracking' => 'nullable|in:on,off',
-            'sort_order'            => 'nullable|integer|min:0|max:255',
+            'name'                   => 'required|string|max:100|unique:sale_platforms,name',
+            'slug'                   => 'nullable|string|max:100|unique:sale_platforms,slug',
+            'parent_id'              => 'nullable|exists:sale_platforms,id',
+            'type'                   => 'required|in:channel,sub_channel,marketplace,region',
+            'is_active'              => 'nullable|in:on,off',
+            'is_spent'               => 'nullable|in:on,off',
+            'is_sales'               => 'nullable|in:on,off',
+            'allows_direct_entry'    => 'nullable|in:on,off',
+            'show_in_analytics'      => 'nullable|in:on,off',
+            'show_in_sale_tracking'  => 'nullable|in:on,off',
+            'track_reach'            => 'nullable|in:on,off',
+            'track_impressions'      => 'nullable|in:on,off',
+            'track_clicks'           => 'nullable|in:on,off',
+            'track_sessions'         => 'nullable|in:on,off',
+            'track_engaged_sessions' => 'nullable|in:on,off',
+            'track_users'            => 'nullable|in:on,off',
+            'sort_order'             => 'nullable|integer|min:0|max:255',
         ]);
 
         try {
             $platform = SalePlatform::create([
-                'name'                  => $validated['name'],
-                'slug'                  => $validated['slug'] ?? Str::slug($validated['name']),
-                'parent_id'             => $validated['parent_id'] ?? null,
-                'type'                  => $validated['type'],
-                'is_active'             => $request->has('is_active'),
-                'is_spent'              => $request->has('is_spent'),
-                'is_sales'              => $request->has('is_sales'),
-                'allows_direct_entry'   => $request->has('allows_direct_entry'),
-                'show_in_analytics'     => $request->has('show_in_analytics'),
-                'show_in_sale_tracking' => $request->has('show_in_sale_tracking'),
-                'sort_order'            => $validated['sort_order'] ?? 0,
+                'name'                   => $validated['name'],
+                'slug'                   => $validated['slug'] ?? Str::slug($validated['name']),
+                'parent_id'              => $validated['parent_id'] ?? null,
+                'type'                   => $validated['type'],
+                'is_active'              => $request->has('is_active'),
+                'is_spent'               => $request->has('is_spent'),
+                'is_sales'               => $request->has('is_sales'),
+                'allows_direct_entry'    => $request->has('allows_direct_entry'),
+                'show_in_analytics'      => $request->has('show_in_analytics'),
+                'show_in_sale_tracking'  => $request->has('show_in_sale_tracking'),
+                'track_reach'            => $request->has('track_reach'),
+                'track_impressions'      => $request->has('track_impressions'),
+                'track_clicks'           => $request->has('track_clicks'),
+                'track_sessions'         => $request->has('track_sessions'),
+                'track_engaged_sessions' => $request->has('track_engaged_sessions'),
+                'track_users'            => $request->has('track_users'),
+                'sort_order'             => $validated['sort_order'] ?? 0,
             ]);
 
             activity()
@@ -148,37 +160,49 @@ class SalePlatformController extends Controller
     public function update(Request $request, SalePlatform $salePlatform)
     {
         $validated = $request->validate([
-            'name'                  => 'required|string|max:100|unique:sale_platforms,name,' . $salePlatform->id,
-            'slug'                  => 'nullable|string|max:100|unique:sale_platforms,slug,' . $salePlatform->id,
-            'parent_id'             => 'nullable|exists:sale_platforms,id',
-            'type'                  => 'required|in:channel,sub_channel,marketplace,region',
-            'is_active'             => 'nullable|in:on,off',
-            'is_spent'              => 'nullable|in:on,off',
-            'is_sales'              => 'nullable|in:on,off',
-            'allows_direct_entry'   => 'nullable|in:on,off',
-            'show_in_analytics'     => 'nullable|in:on,off',
-            'show_in_sale_tracking' => 'nullable|in:on,off',
-            'sort_order'            => 'nullable|integer|min:0|max:255',
+            'name'                   => 'required|string|max:100|unique:sale_platforms,name,' . $salePlatform->id,
+            'slug'                   => 'nullable|string|max:100|unique:sale_platforms,slug,' . $salePlatform->id,
+            'parent_id'              => 'nullable|exists:sale_platforms,id',
+            'type'                   => 'required|in:channel,sub_channel,marketplace,region',
+            'is_active'              => 'nullable|in:on,off',
+            'is_spent'               => 'nullable|in:on,off',
+            'is_sales'               => 'nullable|in:on,off',
+            'allows_direct_entry'    => 'nullable|in:on,off',
+            'show_in_analytics'      => 'nullable|in:on,off',
+            'show_in_sale_tracking'  => 'nullable|in:on,off',
+            'track_reach'            => 'nullable|in:on,off',
+            'track_impressions'      => 'nullable|in:on,off',
+            'track_clicks'           => 'nullable|in:on,off',
+            'track_sessions'         => 'nullable|in:on,off',
+            'track_engaged_sessions' => 'nullable|in:on,off',
+            'track_users'            => 'nullable|in:on,off',
+            'sort_order'             => 'nullable|integer|min:0|max:255',
         ]);
 
         try {
-            $oldValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'is_spent', 'is_sales', 'allows_direct_entry', 'show_in_analytics', 'show_in_sale_tracking', 'sort_order']);
+            $oldValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'is_spent', 'is_sales', 'allows_direct_entry', 'show_in_analytics', 'show_in_sale_tracking', 'track_reach', 'track_impressions', 'track_clicks', 'track_sessions', 'track_engaged_sessions', 'track_users', 'sort_order']);
 
             $salePlatform->update([
-                'name'                  => $validated['name'],
-                'slug'                  => $validated['slug'] ?? Str::slug($validated['name']),
-                'parent_id'             => $validated['parent_id'] ?? null,
-                'type'                  => $validated['type'],
-                'is_active'             => $request->has('is_active'),
-                'is_spent'              => $request->has('is_spent'),
-                'is_sales'              => $request->has('is_sales'),
-                'allows_direct_entry'   => $request->has('allows_direct_entry'),
-                'show_in_analytics'     => $request->has('show_in_analytics'),
-                'show_in_sale_tracking' => $request->has('show_in_sale_tracking'),
-                'sort_order'            => $validated['sort_order'] ?? 0,
+                'name'                   => $validated['name'],
+                'slug'                   => $validated['slug'] ?? Str::slug($validated['name']),
+                'parent_id'              => $validated['parent_id'] ?? null,
+                'type'                   => $validated['type'],
+                'is_active'              => $request->has('is_active'),
+                'is_spent'               => $request->has('is_spent'),
+                'is_sales'               => $request->has('is_sales'),
+                'allows_direct_entry'    => $request->has('allows_direct_entry'),
+                'show_in_analytics'      => $request->has('show_in_analytics'),
+                'show_in_sale_tracking'  => $request->has('show_in_sale_tracking'),
+                'track_reach'            => $request->has('track_reach'),
+                'track_impressions'      => $request->has('track_impressions'),
+                'track_clicks'           => $request->has('track_clicks'),
+                'track_sessions'         => $request->has('track_sessions'),
+                'track_engaged_sessions' => $request->has('track_engaged_sessions'),
+                'track_users'            => $request->has('track_users'),
+                'sort_order'             => $validated['sort_order'] ?? 0,
             ]);
 
-            $newValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'is_spent', 'is_sales', 'allows_direct_entry', 'show_in_analytics', 'show_in_sale_tracking', 'sort_order']);
+            $newValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'is_spent', 'is_sales', 'allows_direct_entry', 'show_in_analytics', 'show_in_sale_tracking', 'track_reach', 'track_impressions', 'track_clicks', 'track_sessions', 'track_engaged_sessions', 'track_users', 'sort_order']);
             $changes   = array_filter($newValues, fn($v, $k) => $v != $oldValues[$k], ARRAY_FILTER_USE_BOTH);
 
             if (!empty($changes)) {

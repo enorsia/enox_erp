@@ -310,20 +310,29 @@
                         </div>
 
                         {{-- Reach / clicks / orders mini stats --}}
-                        <div class="grid grid-cols-3 gap-1 pt-2 border-t border-slate-100 dark:border-slate-700">
+                        @php
+                            $platform = $rec->salePlatform;
+                            $statsToShow = [];
+                            if ($platform?->track_reach           ?? true) $statsToShow[] = ['label' => 'Reach',      'val' => $rec->reach];
+                            if ($platform?->track_impressions      ?? true) $statsToShow[] = ['label' => 'Impressions','val' => $rec->impressions];
+                            if ($platform?->track_clicks           ?? true) $statsToShow[] = ['label' => 'Clicks',     'val' => $rec->clicks];
+                            if ($platform?->track_sessions         ?? true) $statsToShow[] = ['label' => 'Sessions',   'val' => $rec->sessions];
+                            if ($platform?->track_engaged_sessions ?? true) $statsToShow[] = ['label' => 'Eng.Sess',   'val' => $rec->engaged_sessions];
+                            if ($platform?->track_users            ?? true) $statsToShow[] = ['label' => 'Users',      'val' => $rec->users];
+                            // Always show Orders (not part of tracking flags)
+                            array_unshift($statsToShow, ['label' => 'Orders', 'val' => $rec->number_of_orders]);
+                        @endphp
+                        @if(count($statsToShow) > 0)
+                        <div class="grid gap-1 pt-2 border-t border-slate-100 dark:border-slate-700"
+                             style="grid-template-columns: repeat({{ min(count($statsToShow), 4) }}, minmax(0, 1fr));">
+                            @foreach($statsToShow as $stat)
                             <div class="text-center">
-                                <p class="text-[9px] text-slate-400 uppercase tracking-[1px]">Orders</p>
-                                <p class="text-[12px] font-bold text-slate-700 dark:text-slate-300 tabular-nums">{{ $rec->number_of_orders !== null ? number_format($rec->number_of_orders) : '—' }}</p>
+                                <p class="text-[9px] text-slate-400 uppercase tracking-[1px]">{{ $stat['label'] }}</p>
+                                <p class="text-[12px] font-bold text-slate-700 dark:text-slate-300 tabular-nums">{{ $stat['val'] !== null ? number_format($stat['val']) : '—' }}</p>
                             </div>
-                            <div class="text-center">
-                                <p class="text-[9px] text-slate-400 uppercase tracking-[1px]">Clicks</p>
-                                <p class="text-[12px] font-bold text-slate-700 dark:text-slate-300 tabular-nums">{{ $rec->clicks !== null ? number_format($rec->clicks) : '—' }}</p>
-                            </div>
-                            <div class="text-center">
-                                <p class="text-[9px] text-slate-400 uppercase tracking-[1px]">Impressions</p>
-                                <p class="text-[12px] font-bold text-slate-700 dark:text-slate-300 tabular-nums">{{ $rec->impressions !== null ? number_format($rec->impressions) : '—' }}</p>
-                            </div>
+                            @endforeach
                         </div>
+                        @endif
 
                         @if($rec->notes)
                             <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-2 truncate italic">{{ $rec->notes }}</p>

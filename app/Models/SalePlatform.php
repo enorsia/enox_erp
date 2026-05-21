@@ -17,18 +17,30 @@ class SalePlatform extends BaseModel
         'allows_direct_entry',
         'show_in_analytics',
         'show_in_sale_tracking',
+        'track_reach',
+        'track_impressions',
+        'track_clicks',
+        'track_sessions',
+        'track_engaged_sessions',
+        'track_users',
         'sort_order',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active'             => 'boolean',
-            'is_spent'              => 'boolean',
-            'is_sales'              => 'boolean',
-            'allows_direct_entry'   => 'boolean',
-            'show_in_analytics'     => 'boolean',
-            'show_in_sale_tracking' => 'boolean',
+            'is_active'              => 'boolean',
+            'is_spent'               => 'boolean',
+            'is_sales'               => 'boolean',
+            'allows_direct_entry'    => 'boolean',
+            'show_in_analytics'      => 'boolean',
+            'show_in_sale_tracking'  => 'boolean',
+            'track_reach'            => 'boolean',
+            'track_impressions'      => 'boolean',
+            'track_clicks'           => 'boolean',
+            'track_sessions'         => 'boolean',
+            'track_engaged_sessions' => 'boolean',
+            'track_users'            => 'boolean',
         ];
     }
 
