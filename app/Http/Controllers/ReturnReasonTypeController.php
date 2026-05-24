@@ -115,7 +115,7 @@ class ReturnReasonTypeController extends Controller
         }
     }
 
-    public function export(Request $request)
+    public function export(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
     {
         Gate::authorize('general.return_reason_type.index');
 

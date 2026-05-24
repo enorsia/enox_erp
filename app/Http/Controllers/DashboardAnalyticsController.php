@@ -4,8 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Exports\DashboardAnalyticsExport;
 use App\Services\DashboardAnalyticsService;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DashboardAnalyticsController extends Controller
 {
@@ -38,7 +39,7 @@ class DashboardAnalyticsController extends Controller
         return view('sales.analytics_report', ['filters' => $filters]);
     }
 
-    public function export(Request $request)
+    public function export(Request $request): StreamedResponse
     {
         $filters = $request->only(['period', 'from_year_month', 'to_year_month']);
 

@@ -225,7 +225,7 @@ class DailySaleController extends Controller
         }
     }
 
-    public function export(Request $request)
+    public function export(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
     {
         Gate::authorize('general.daily_sale.index');
 

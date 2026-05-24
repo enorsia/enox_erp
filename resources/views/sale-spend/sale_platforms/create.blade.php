@@ -61,11 +61,11 @@
 
                             <!-- Type -->
                             <div>
-                                <label class="f-label">Type <span class="f-required">*</span></label>
+                                <label class="f-label">Channel <span class="f-required">*</span></label>
                                 <select name="type" class="tom-select f-input @error('type') border-red-400 @enderror" required>
-                                    <option value="">Select Type</option>
-                                    @foreach ($types as $type)
-                                        <option value="{{ $type }}" {{ old('type') == $type ? 'selected' : '' }}>
+                                    <option value="">Select Channel</option>
+                                    @foreach ($types as $key => $type)
+                                        <option value="{{ $key }}" {{ old('type') == $key ? 'selected' : '' }}>
                                             {{ ucfirst(str_replace('_', ' ', $type)) }}
                                         </option>
                                     @endforeach

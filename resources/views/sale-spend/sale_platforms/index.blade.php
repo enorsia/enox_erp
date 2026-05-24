@@ -52,8 +52,8 @@
                     <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Type</p>
                     <select name="type" class="tom-select w-full text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" data-placeholder="All Types">
                         <option value="">All Types</option>
-                        @foreach($channel_lists as $item)
-                            <option value="{{ $item }}" {{ request('type') == $item ? 'selected' : '' }}>{{ ucfirst(str_replace('_', ' ', $item)) }}</option>
+                        @foreach($channel_lists as $key => $item)
+                            <option value="{{ $key }}" {{ request('type') == $key ? 'selected' : '' }}>{{ ucfirst(str_replace('_', ' ', $item)) }}</option>
                         @endforeach
                     </select>
                 </div>

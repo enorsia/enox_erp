@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class SalePlatform extends BaseModel
 {
     const CHANNEL_LIST = [
-        'Channel',
-        'Sub Channel',
-        'Region'
+        'channel' => 'Channel',
+        'sub_channel' => 'Sub Channel',
+        'region' => 'Region'
     ];
 
     protected $fillable = [

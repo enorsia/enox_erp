@@ -161,7 +161,7 @@ class MonthlyBudgetController extends Controller
         }
     }
 
-    public function export(Request $request)
+    public function export(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
     {
         Gate::authorize('general.monthly_budget.index');
 

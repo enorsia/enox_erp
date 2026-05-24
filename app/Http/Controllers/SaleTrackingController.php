@@ -149,7 +149,7 @@ class SaleTrackingController extends Controller
         return redirect()->back();
     }
 
-    public function export(Request $request)
+    public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
     {
         Gate::authorize('general.sale_tracking.index');
         return (new SaleTrackingExport($request->except(['page'])))->download($this->service);
