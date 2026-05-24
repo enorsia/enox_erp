@@ -1,22 +1,20 @@
 @extends('layouts.app')
 
-@section('title', 'Edit Return Reason Type')
+@section('title', 'Create Return Reason Type')
 
 @section('content')
     <div id="return-reason-type-page-content"></div>
     <div class="max-w-5xl mx-auto px-5 py-6 pb-28">
-
         <!-- PAGE HEADER -->
         <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
             <div>
-                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Edit Return Reason Type</h1>
-                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Update details for {{ $returnReasonType->name }}</p>
+                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Create New Return Reason Type</h1>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Fill in the details below to create a new return reason type</p>
             </div>
         </div>
 
-        <form method="POST" action="{{ route('admin.return-reason-types.update', $returnReasonType->id) }}" id="EditValidateForm">
+        <form method="POST" action="{{ route('admin.return-reason.store') }}" id="validateForm">
             @csrf
-            @method('PUT')
 
             <div class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
 
@@ -32,7 +30,7 @@
                             </svg>
                             Basic Information
                         </div>
-                        <p class="section-desc">Update the return reason type details.</p>
+                        <p class="section-desc">Enter the basic details for this return reason type.</p>
 
                         <div class="grid grid-cols-1 gap-4">
                             <!-- Name -->
@@ -40,7 +38,7 @@
                                 <label class="f-label">Name <span class="f-required">*</span></label>
                                 <input type="text" name="name"
                                        class="f-input @error('name') border-red-400 @enderror"
-                                       value="{{ $returnReasonType->name ?? old('name') }}" required />
+                                       placeholder="e.g. Damaged Product" value="{{ old('name') }}" required />
                                 @error('name')
                                     <p class="f-error">{{ $message }}</p>
                                 @enderror
@@ -51,7 +49,7 @@
                                 <label class="f-label">Slug</label>
                                 <input type="text" name="slug" id="slug"
                                        class="f-input @error('slug') border-red-400 @enderror"
-                                       value="{{ $returnReasonType->slug ?? old('slug') }}" />
+                                       placeholder="Auto-generated from name" value="{{ old('slug') }}" />
                                 <p class="f-hint">Leave blank to auto-generate from name.</p>
                                 @error('slug')
                                     <p class="f-error">{{ $message }}</p>
@@ -63,7 +61,7 @@
                                 <label class="f-label">Description</label>
                                 <textarea name="description"
                                           class="f-input @error('description') border-red-400 @enderror"
-                                          rows="5">{{ $returnReasonType->description ?? old('description') }}</textarea>
+                                          placeholder="Add a detailed description..." rows="5">{{ old('description') }}</textarea>
                                 @error('description')
                                     <p class="f-error">{{ $message }}</p>
                                 @enderror
@@ -74,7 +72,7 @@
                                 <label class="f-label">Sort Order</label>
                                 <input type="number" name="sort_order" min="0" max="255"
                                        class="f-input @error('sort_order') border-red-400 @enderror"
-                                       value="{{ $returnReasonType->sort_order ?? old('sort_order', 0) }}" />
+                                       placeholder="0" value="{{ old('sort_order', 0) }}" />
                                 <p class="f-hint">Used to order the return reason types in the list.</p>
                                 @error('sort_order')
                                     <p class="f-error">{{ $message }}</p>
@@ -101,12 +99,13 @@
                             <!-- Active Status -->
                             <div>
                                 <label class="flex items-center gap-3 cursor-pointer">
-                                    <div class="toggle-track {{ $returnReasonType->is_active ? 'on' : '' }}" id="statusToggle" onclick="toggleSwitch('statusToggle')">
+                                    <div class="toggle-track {{ old('is_active') ? 'on' : '' }}" id="statusToggle"
+                                         onclick="toggleSwitch('statusToggle')">
                                         <div class="toggle-thumb"></div>
                                     </div>
-                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium" onclick="toggleSwitch('statusToggle')">Active status</span>
-                                    <input type="checkbox" name="is_active" id="statusCheckbox" class="hidden"
-                                           {{ $returnReasonType->is_active ? 'checked' : '' }}>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">Active status</span>
+                                    <input type="checkbox" name="is_active" class="hidden" id="statusCheckbox"
+                                           {{ old('is_active') ? 'checked' : '' }}>
                                 </label>
                                 <p class="f-hint mt-1">Enable to make this return reason type active.</p>
                             </div>
@@ -126,7 +125,7 @@
                         Fields marked <span class="text-red-400 mx-1">*</span> are required
                     </div>
                     <div class="flex gap-2.5">
-                        <a href="{{ route('admin.return-reason-types.index') }}"
+                        <a href="{{ route('admin.return-reason.index') }}"
                            class="px-4 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
                             Cancel
                         </a>
@@ -135,7 +134,7 @@
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" d="M5 13l4 4L19 7" />
                             </svg>
-                            Update Return Reason Type
+                            Create Return Reason Type
                         </button>
                     </div>
                 </div>
@@ -143,3 +142,4 @@
         </form>
     </div>
 @endsection
+

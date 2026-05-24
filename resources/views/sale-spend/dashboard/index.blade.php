@@ -1,36 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Analytics Dashboard')
-
-@push('css')
-<style>
-    .an-card {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 14px;
-        transition: border-color 200ms, box-shadow 200ms;
-    }
-    .dark .an-card { background: #1e293b; border-color: #334155; }
-    .an-card:hover  { box-shadow: 0 4px 24px rgba(0,0,0,0.07); }
-
-    .kpi-card {
-        border-radius: 14px;
-        padding: 20px;
-        position: relative;
-        overflow: hidden;
-        transition: transform 180ms, box-shadow 180ms;
-    }
-    .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.12); }
-    .kpi-value { font-size: 26px; font-weight: 800; line-height: 1.1; }
-    .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; opacity: 0.75; margin-top: 4px; }
-    .kpi-sub   { font-size: 11px; margin-top: 6px; opacity: 0.65; }
-
-    .chart-title { font-size: 13px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 6px; }
-    .dark .chart-title { color: #f1f5f9; }
-    .chart-subtitle { font-size: 11px; color: #94a3b8; margin-top: 2px; }
-    .sec-heading { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: #94a3b8; }
-</style>
-@endpush
+@section('title', 'Dashboard')
 
 @section('content')
 <div id="analytics-dashboard-content" class="p-5 lg:p-6 space-y-5">
@@ -44,7 +14,7 @@
                         <path stroke-linecap="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
                     </svg>
                 </span>
-                Analytics Dashboard
+                Dashboard
             </h1>
             <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5 ml-10">{{ $range['label'] }}</p>
         </div>

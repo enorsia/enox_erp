@@ -47,8 +47,9 @@ class SalePlatformController extends Controller
         }
 
         $data['stats'] = $this->service->getStats();
+        $data['channel_lists'] = SalePlatform::CHANNEL_LIST;
 
-        return view('daily_sales.sale_platforms.index', $data);
+        return view('sale-spend.sale_platforms.index', $data);
     }
 
     public function create()
@@ -56,9 +57,9 @@ class SalePlatformController extends Controller
         Gate::authorize('general.sale_platform.create');
 
         $data['parentOptions'] = $this->service->getParentOptions();
-        $data['types']         = ['channel', 'sub_channel', 'marketplace', 'region'];
+        $data['types']         = SalePlatform::CHANNEL_LIST;
 
-        return view('daily_sales.sale_platforms.create', $data);
+        return view('sale-spend.sale_platforms.create', $data);
     }
 
     public function store(Request $request)
@@ -67,7 +68,7 @@ class SalePlatformController extends Controller
             'name'                   => 'required|string|max:100|unique:sale_platforms,name',
             'slug'                   => 'nullable|string|max:100|unique:sale_platforms,slug',
             'parent_id'              => 'nullable|exists:sale_platforms,id',
-            'type'                   => 'required|in:channel,sub_channel,marketplace,region',
+            'type'                   => 'required|in:' . implode(',', SalePlatform::CHANNEL_LIST),
             'is_active'              => 'nullable|in:on,off',
             'is_spent'               => 'nullable|in:on,off',
             'is_sales'               => 'nullable|in:on,off',
@@ -139,7 +140,7 @@ class SalePlatformController extends Controller
             ->where('id', '!=', $salePlatform->id)
             ->count();
 
-        return view('daily_sales.sale_platforms.show', [
+        return view('sale-spend.sale_platforms.show', [
             'salePlatform'  => $salePlatform,
             'breadcrumbs'   => $breadcrumbs,
             'siblingsCount' => $siblingsCount,
@@ -152,9 +153,9 @@ class SalePlatformController extends Controller
 
         $data['salePlatform']  = $salePlatform;
         $data['parentOptions'] = $this->service->getParentOptions($salePlatform->id);
-        $data['types']         = ['channel', 'sub_channel', 'marketplace', 'region'];
+        $data['types']         = SalePlatform::CHANNEL_LIST;
 
-        return view('daily_sales.sale_platforms.edit', $data);
+        return view('sale-spend.sale_platforms.edit', $data);
     }
 
     public function update(Request $request, SalePlatform $salePlatform)
@@ -163,7 +164,7 @@ class SalePlatformController extends Controller
             'name'                   => 'required|string|max:100|unique:sale_platforms,name,' . $salePlatform->id,
             'slug'                   => 'nullable|string|max:100|unique:sale_platforms,slug,' . $salePlatform->id,
             'parent_id'              => 'nullable|exists:sale_platforms,id',
-            'type'                   => 'required|in:channel,sub_channel,marketplace,region',
+            'type'                   => 'required|in:' . implode(',', SalePlatform::CHANNEL_LIST),
             'is_active'              => 'nullable|in:on,off',
             'is_spent'               => 'nullable|in:on,off',
             'is_sales'               => 'nullable|in:on,off',

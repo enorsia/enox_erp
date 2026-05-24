@@ -6,6 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class SalePlatform extends BaseModel
 {
+    const CHANNEL_LIST = [
+        'Channel',
+        'Sub Channel',
+        'Region'
+    ];
+
     protected $fillable = [
         'name',
         'slug',

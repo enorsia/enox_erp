@@ -33,37 +33,9 @@ Route::prefix('admin')->name('admin.')->controller(AuthController::class)->group
 
 Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    Route::get('/sales/analytics', [DashboardAnalyticsController::class, 'index'])->name('sales.analytics');
-    Route::get('/sales/analytics/export', [DashboardAnalyticsController::class, 'export'])->name('sales.analytics.export');
-    Route::get('/sales/analytics-report', [DashboardAnalyticsController::class, 'reportExport'])->name('sales.analytics.report');
     Route::resource('users', UserController::class);
     Route::resource('roles', RoleController::class);
     Route::resource('platforms', PlatformController::class);
-    Route::resource('sales/return-reason-types', ReturnReasonTypeController::class);
-    Route::resource('sales/sale-platforms', SalePlatformController::class);
-    Route::resource('sales/monthly-budgets', MonthlyBudgetController::class);
-    Route::resource('sales/daily-sales', DailySaleController::class);
-    Route::resource('sales/daily-returns', DailyReturnController::class);
-
-    // Sale Tracking
-    Route::prefix('sales/sale-tracking')->name('sale-tracking.')->controller(SaleTrackingController::class)->group(function () {
-        Route::get('/',              'index')->name('index');
-        Route::get('/create',        'create')->name('create');
-        Route::post('/',             'store')->name('store');
-        Route::get('/{saleTracking}/edit', 'edit')->name('edit');
-        Route::put('/{saleTracking}',      'update')->name('update');
-        Route::delete('/{saleTracking}',   'destroy')->name('destroy');
-        Route::get('/export',        'export')->name('export');
-    });
-
-    // Export routes
-    Route::get('sales/return-reason-types-export', [ReturnReasonTypeController::class, 'export'])->name('return-reason-types.export');
-    Route::get('sales/sale-platforms-export', [SalePlatformController::class, 'export'])->name('sale-platforms.export');
-    Route::get('sales/monthly-budgets-export', [MonthlyBudgetController::class, 'export'])->name('monthly-budgets.export');
-    Route::get('sales/daily-sales-export', [DailySaleController::class, 'export'])->name('daily-sales.export');
-    Route::get('sales/daily-returns-export', [DailyReturnController::class, 'export'])->name('daily-returns.export');
-    // Returns platform IDs already saved for a given date (used by JS to block duplicates)
-    Route::get('sales/daily-sales-used-platforms', [DailySaleController::class, 'usedPlatformsForDate'])->name('daily-sales.usedPlatforms');
     Route::resource('activity-logs', ActivityLogController::class)->only(['index', 'show']);
 
     Route::controller(SalesChartController::class)->group(function () {
@@ -104,10 +76,41 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     });
     Route::controller(ProfileController::class)->group(function () {
         /*~~~~~~~~~~~~~~ PROFILE AND PASSWORD MANAGE ~~~~~~~~~~~~~~*/
-        Route::get('profile',  'index')->name('profile');
+        Route::get('profile', 'index')->name('profile');
         // Route::get('profile/edit', 'edit')->name('profile.edit');
         // Route::post('profile/update', 'update')->name('profile.update');
         Route::get('change-password', 'changePassword')->name('change.password');
         Route::post('password/update', 'passwordUpdate')->name('password.update.post');
+    });
+
+
+    Route::prefix('sales-spends')->group(function () {
+        Route::get('dashboard', [DashboardAnalyticsController::class, 'index'])->name('sales.analytics');
+        Route::get('analytics/export', [DashboardAnalyticsController::class, 'export'])->name('sales.analytics.export');
+        Route::get('sales-report', [DashboardAnalyticsController::class, 'reportExport'])->name('sales.analytics.report');
+        Route::resource('return-reason', ReturnReasonTypeController::class);
+        Route::resource('sale-platforms', SalePlatformController::class);
+        Route::resource('monthly-budgets', MonthlyBudgetController::class);
+        Route::resource('daily-sales', DailySaleController::class);
+        Route::resource('daily-returns', DailyReturnController::class);
+
+        Route::prefix('ads-performance')->name('ads-performance.')->controller(SaleTrackingController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('/create', 'create')->name('create');
+            Route::post('/', 'store')->name('store');
+            Route::get('/{saleTracking}/edit', 'edit')->name('edit');
+            Route::put('/{saleTracking}', 'update')->name('update');
+            Route::delete('/{saleTracking}', 'destroy')->name('destroy');
+            Route::get('/export', 'export')->name('export');
+        });
+
+        // Export routes
+        Route::get('return-reason-types-export', [ReturnReasonTypeController::class, 'export'])->name('return-reason.export');
+        Route::get('sale-platforms-export', [SalePlatformController::class, 'export'])->name('sale-platforms.export');
+        Route::get('monthly-budgets-export', [MonthlyBudgetController::class, 'export'])->name('monthly-budgets.export');
+        Route::get('daily-sales-export', [DailySaleController::class, 'export'])->name('daily-sales.export');
+        Route::get('daily-returns-export', [DailyReturnController::class, 'export'])->name('daily-returns.export');
+        // Returns platform IDs already saved for a given date (used by JS to block duplicates)
+        Route::get('daily-sales-used-platforms', [DailySaleController::class, 'usedPlatformsForDate'])->name('daily-sales.usedPlatforms');
     });
 });

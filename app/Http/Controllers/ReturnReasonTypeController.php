@@ -16,7 +16,7 @@ use Maatwebsite\Excel\Facades\Excel;
 class ReturnReasonTypeController extends Controller
 {
     const ROUTES = [
-        'index' => 'admin.return-reason-types.index',
+        'index' => 'admin.return-reason.index',
     ];
 
     public function __construct(private ReturnReasonTypeService $service) {}
@@ -28,14 +28,14 @@ class ReturnReasonTypeController extends Controller
         $data['reasonTypes'] = $this->service->getList($request->all());
         $data['start']       = ($data['reasonTypes']->currentPage() - 1) * $data['reasonTypes']->perPage() + 1;
 
-        return view('daily_sales.return_reason_types.index', $data);
+        return view('sale-spend.return_reason_types.index', $data);
     }
 
     public function create() : View
     {
         Gate::authorize('general.return_reason_type.create');
 
-        return view('daily_sales.return_reason_types.create');
+        return view('sale-spend.return_reason_types.create');
     }
 
     public function store(Request $request) : RedirectResponse
@@ -70,29 +70,29 @@ class ReturnReasonTypeController extends Controller
     {
         Gate::authorize('general.return_reason_type.show');
 
-        return view('daily_sales.return_reason_types.show', compact('returnReasonType'));
+        return view('sale-spend.return_reason_types.show', compact('returnReasonType'));
     }
 
-    public function edit(ReturnReasonType $returnReasonType) : View
+    public function edit(ReturnReasonType $return_reason) : View
     {
         Gate::authorize('general.return_reason_type.edit');
 
-        return view('daily_sales.return_reason_types.edit', compact('returnReasonType'));
+        return view('sale-spend.return_reason_types.edit', compact('return_reason'));
     }
 
-    public function update(Request $request, ReturnReasonType $returnReasonType) : RedirectResponse
+    public function update(Request $request, ReturnReasonType $return_reason) : RedirectResponse
     {
         $validated = $request->validate([
-            'name'        => 'required|string|max:150|unique:return_reason_types,name,' . $returnReasonType->id,
-            'slug'        => 'nullable|string|max:150|unique:return_reason_types,slug,' . $returnReasonType->id,
+            'name'        => 'required|string|max:150|unique:return_reason_types,name,' . $return_reason->id,
+            'slug'        => 'nullable|string|max:150|unique:return_reason_types,slug,' . $return_reason->id,
             'description' => 'nullable|string',
             'is_active'   => 'nullable|in:on,off',
             'sort_order'  => 'nullable|integer|min:0|max:255',
         ]);
 
         try {
-            $oldValues  = $returnReasonType->only(['name', 'slug', 'description', 'is_active', 'sort_order']);
-            $reasonType = $this->service->update($returnReasonType, $validated, $request->has('is_active'));
+            $oldValues  = $return_reason->only(['name', 'slug', 'description', 'is_active', 'sort_order']);
+            $reasonType = $this->service->update($return_reason, $validated, $request->has('is_active'));
             $newValues  = $reasonType->only(['name', 'slug', 'description', 'is_active', 'sort_order']);
 
             $changes = array_filter($newValues, fn($v, $k) => $v != $oldValues[$k], ARRAY_FILTER_USE_BOTH);

@@ -217,7 +217,14 @@ class DailyReturnService
                 DailyReturn::where('id', $id)->where('date', $date)->update($data);
             } else {
                 unset($data['id']);
-                DailyReturn::create($data);
+                DailyReturn::updateOrCreate(
+                    [
+                        'sale_platform_id'      => $data['sale_platform_id'],
+                        'date'                  => $data['date'],
+                        'return_reason_type_id' => $data['return_reason_type_id'],
+                    ],
+                    $data
+                );
             }
         }
     }

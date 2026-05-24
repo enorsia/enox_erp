@@ -24,7 +24,7 @@ class DashboardAnalyticsController extends Controller
 
         $data = $this->service->getDashboardData($filters);
 
-        return view('dashboard.analytics', array_merge($data, ['filters' => $filters]));
+        return view('sale-spend.dashboard.index', array_merge($data, ['filters' => $filters]));
     }
 
     public function reportExport(Request $request): View

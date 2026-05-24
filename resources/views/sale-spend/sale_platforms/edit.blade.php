@@ -9,7 +9,7 @@
         <!-- PAGE HEADER -->
         <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
             <div>
-                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Edit Sale Platform</h1>
+                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Edit Platform</h1>
                 <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Update details for {{ $salePlatform->name }}</p>
             </div>
         </div>
@@ -31,7 +31,7 @@
                             </svg>
                             Basic Information
                         </div>
-                        <p class="section-desc">Update the sale platform details.</p>
+                        <p class="section-desc">Update the platform details.</p>
 
                         <div class="grid grid-cols-1 gap-4">
 
@@ -140,7 +140,7 @@
                                     <input type="checkbox" name="is_active" id="statusCheckbox" class="hidden"
                                             {{ old('is_active', $salePlatform->is_active) ? 'checked' : '' }}>
                                 </div>
-                                <p class="f-hint mt-1 ml-11">Enable to make this sale platform active.</p>
+                                <p class="f-hint mt-1 ml-11">Enable to make this platform active.</p>
                             </div>
 
                             <!-- Is Spent -->
@@ -325,7 +325,7 @@
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" d="M5 13l4 4L19 7"/>
                             </svg>
-                            Update Sale Platform
+                            Update Platform
                         </button>
                     </div>
                 </div>

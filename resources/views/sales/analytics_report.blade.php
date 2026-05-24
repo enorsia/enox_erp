@@ -65,7 +65,7 @@
                         </svg>
                     </div>
                     <div>
-                        <h3 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">Export Sales Report</h3>
+                        <h3 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">Export Sales</h3>
                         <p class="text-[11px] text-slate-400 dark:text-slate-500">Choose which sections to include</p>
                     </div>
                 </div>
@@ -153,7 +153,7 @@
                         <path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                     </svg>
                 </span>
-                Sales Report Export
+                Sales Report
             </h1>
             <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5 ml-10">Select a period, choose report sections, then export to Excel</p>
         </div>

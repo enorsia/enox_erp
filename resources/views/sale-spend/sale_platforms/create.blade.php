@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Create Sale Platform')
+@section('title', 'Create Platform')
 
 @section('content')
     <div id="sale-platform-page-content"></div>
@@ -9,8 +9,8 @@
         <!-- PAGE HEADER -->
         <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
             <div>
-                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Create New Sale Platform</h1>
-                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Fill in the details below to create a new sale platform</p>
+                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Create New Platform</h1>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Fill in the details below to create a new platform</p>
             </div>
         </div>
 
@@ -30,7 +30,7 @@
                             </svg>
                             Basic Information
                         </div>
-                        <p class="section-desc">Enter the basic details for this sale platform.</p>
+                        <p class="section-desc">Enter the basic details for this platform.</p>
 
                         <div class="grid grid-cols-1 gap-4">
 
@@ -137,7 +137,7 @@
                                     <input type="checkbox" name="is_active" id="statusCheckbox" class="hidden"
                                             {{ old('is_active') ? 'checked' : '' }}>
                                 </div>
-                                <p class="f-hint mt-1 ml-11">Enable to make this sale platform active.</p>
+                                <p class="f-hint mt-1 ml-11">Enable to make this platform active.</p>
                             </div>
 
                             <!-- Is Spent -->
@@ -286,7 +286,7 @@
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" d="M5 13l4 4L19 7"/>
                             </svg>
-                            Create Sale Platform
+                            Create Platform
                         </button>
                     </div>
                 </div>

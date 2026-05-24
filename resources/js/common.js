@@ -51,7 +51,10 @@ window.closeSidebar = function () {
    TOGGLE SWITCH (status toggles)
 ══════════════════════════════════════ */
 window.toggleSwitch = function (id, event) {
-    if (event) event.stopPropagation();
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault(); // prevent label's native activation of the associated checkbox
+    }
     const track = document.getElementById(id);
     if (!track) return;
     track.classList.toggle('on');

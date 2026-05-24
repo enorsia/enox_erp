@@ -102,8 +102,6 @@
                     <p class="text-[12px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Select Columns</p>
                     <div class="flex gap-2">
                         <button type="button" @click="toggleAll(true)" class="text-[11px] text-accent-500 hover:text-accent-700 font-medium">All</button>
-                        <span class="text-slate-300">|</span>
-                        <button type="button" @click="toggleAll(false)" class="text-[11px] text-slate-400 hover:text-slate-600 font-medium">None</button>
                     </div>
                 </div>
                 @php $exportLabels = \App\Exports\MonthlyBudgetExport::columnLabels(); $exportCols = \App\Exports\MonthlyBudgetExport::allColumns(); @endphp

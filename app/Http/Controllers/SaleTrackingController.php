@@ -15,7 +15,7 @@ use Illuminate\View\View;
 
 class SaleTrackingController extends Controller
 {
-    const ROUTES = ['index' => 'admin.sale-tracking.index'];
+    const ROUTES = ['index' => 'admin.ads-performance.index'];
 
     public function __construct(
         private SaleTrackingService $service,
@@ -31,7 +31,7 @@ class SaleTrackingController extends Controller
         $data['monthGroups']= $this->service->buildMonthViewGroups($paginator);
         $data['salePlatforms'] = $this->salePlatformService->getSaleTrackingPlatformOptions();
 
-        return view('daily_sales.sale_tracking.index', $data);
+        return view('sale-spend.sale_tracking.index', $data);
     }
 
     public function create(): View
@@ -40,7 +40,7 @@ class SaleTrackingController extends Controller
 
         $data['salePlatforms'] = $this->salePlatformService->getSaleTrackingPlatformOptions();
 
-        return view('daily_sales.sale_tracking.create', $data);
+        return view('sale-spend.sale_tracking.create', $data);
     }
 
     public function store(Request $request): RedirectResponse
@@ -93,7 +93,7 @@ class SaleTrackingController extends Controller
         $data['salePlatforms']   = $this->salePlatformService->getSaleTrackingPlatformOptions();
         $data['existingEntries'] = $existingEntries;
 
-        return view('daily_sales.sale_tracking.edit', $data);
+        return view('sale-spend.sale_tracking.edit', $data);
     }
 
     /**

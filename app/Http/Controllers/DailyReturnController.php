@@ -36,7 +36,7 @@ class DailyReturnController extends Controller
         $data['reasonTypes']   = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
         $data['dateGroups']    = $this->service->buildDateViewGroups($data['dailyReturns']);
 
-        return view('daily_sales.daily_returns.index', $data);
+        return view('sale-spend.daily_returns.index', $data);
     }
 
     public function create(): View
@@ -46,7 +46,7 @@ class DailyReturnController extends Controller
         $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
         $data['reasonTypes']   = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
 
-        return view('daily_sales.daily_returns.create', $data);
+        return view('sale-spend.daily_returns.create', $data);
     }
 
     public function store(Request $request): RedirectResponse
@@ -105,7 +105,7 @@ class DailyReturnController extends Controller
 
         $dailyReturn->load(['salePlatform', 'returnReasonType']);
 
-        return view('daily_sales.daily_returns.show', compact('dailyReturn'));
+        return view('sale-spend.daily_returns.show', compact('dailyReturn'));
     }
 
     /**
@@ -138,7 +138,7 @@ class DailyReturnController extends Controller
         $data['reasonTypes']     = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
         $data['existingEntries'] = $existingEntries;
 
-        return view('daily_sales.daily_returns.edit', $data);
+        return view('sale-spend.daily_returns.edit', $data);
     }
 
     /**

@@ -157,12 +157,12 @@
                     <span>ID: <code class="font-mono text-slate-500">{{ $returnReasonType->id }}</code></span>
                 </div>
                 <div class="flex gap-2.5">
-                    <a href="{{ route('admin.return-reason-types.index') }}"
+                    <a href="{{ route('admin.return-reason.index') }}"
                        class="px-4 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
                         Back to List
                     </a>
                     @can('general.return_reason_type.edit')
-                        <a href="{{ route('admin.return-reason-types.edit', $returnReasonType->id) }}"
+                        <a href="{{ route('admin.return-reason.edit', $returnReasonType->id) }}"
                            class="px-5 py-2.5 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors flex items-center gap-2">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>

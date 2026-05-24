@@ -36,7 +36,7 @@ class DailySaleController extends Controller
         $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
         $data['dateGroups']    = $this->service->buildDateViewGroups($data['dailySales']);
 
-        return view('daily_sales.daily_sales.index', $data);
+        return view('sale-spend.daily_sales.index', $data);
     }
 
     public function create(): View
@@ -53,7 +53,7 @@ class DailySaleController extends Controller
         $data['salePlatforms']    = $this->salePlatformService->getParentOptions();
         $data['usedPlatformIds']  = $usedPlatformIds;
 
-        return view('daily_sales.daily_sales.create', $data);
+        return view('sale-spend.daily_sales.create', $data);
     }
 
     /**
@@ -141,7 +141,7 @@ class DailySaleController extends Controller
     {
         Gate::authorize('general.daily_sale.show');
         $dailySale->load('salePlatform');
-        return view('daily_sales.daily_sales.show', compact('dailySale'));
+        return view('sale-spend.daily_sales.show', compact('dailySale'));
     }
 
     /**
@@ -173,7 +173,7 @@ class DailySaleController extends Controller
         $data['salePlatforms']   = $this->salePlatformService->getParentOptions();
         $data['existingEntries'] = $existingEntries;
 
-        return view('daily_sales.daily_sales.edit', $data);
+        return view('sale-spend.daily_sales.edit', $data);
     }
 
     /**

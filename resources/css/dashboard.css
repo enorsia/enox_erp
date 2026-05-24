@@ -49,3 +49,28 @@
     max-width: 100%;
 }
 
+.an-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    transition: border-color 200ms, box-shadow 200ms;
+}
+.dark .an-card { background: #1e293b; border-color: #334155; }
+.an-card:hover  { box-shadow: 0 4px 24px rgba(0,0,0,0.07); }
+
+.kpi-card {
+    border-radius: 14px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 180ms, box-shadow 180ms;
+}
+.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.12); }
+.kpi-value { font-size: 26px; font-weight: 800; line-height: 1.1; }
+.kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; opacity: 0.75; margin-top: 4px; }
+.kpi-sub   { font-size: 11px; margin-top: 6px; opacity: 0.65; }
+
+.chart-title { font-size: 13px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 6px; }
+.dark .chart-title { color: #f1f5f9; }
+.chart-subtitle { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.sec-heading { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: #94a3b8; }

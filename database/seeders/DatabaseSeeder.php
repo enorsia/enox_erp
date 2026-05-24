@@ -30,6 +30,7 @@ class DatabaseSeeder extends Seeder
             MonthlyBudgetSeeder::class,
             DailySaleSeeder::class,
             DailyReturnSeeder::class,
+            DailyAdPerformanceSeeder::class,
         ]);
     }
 }

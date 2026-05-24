@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Sale Platforms')
+@section('title', 'Platforms')
 
 @section('content')
 <div id="sale-platform-page-content"></div>
@@ -52,10 +52,9 @@
                     <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Type</p>
                     <select name="type" class="tom-select w-full text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" data-placeholder="All Types">
                         <option value="">All Types</option>
-                        <option value="channel"     {{ request('type') == 'channel'     ? 'selected' : '' }}>Channel</option>
-                        <option value="sub_channel" {{ request('type') == 'sub_channel' ? 'selected' : '' }}>Sub Channel</option>
-                        <option value="marketplace" {{ request('type') == 'marketplace' ? 'selected' : '' }}>Marketplace</option>
-                        <option value="region"      {{ request('type') == 'region'      ? 'selected' : '' }}>Region</option>
+                        @foreach($channel_lists as $item)
+                            <option value="{{ $item }}" {{ request('type') == $item ? 'selected' : '' }}>{{ ucfirst(str_replace('_', ' ', $item)) }}</option>
+                        @endforeach
                     </select>
                 </div>
                 <hr class="border-slate-100 dark:border-slate-700"/>
@@ -104,7 +103,7 @@
                     <div class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
                         <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                     </div>
-                    <h3 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">Export Sale Platforms</h3>
+                    <h3 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">Export Platforms</h3>
                 </div>
                 <button @click="exportOpen = false" class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -115,8 +114,6 @@
                     <p class="text-[12px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Select Columns</p>
                     <div class="flex gap-2">
                         <button type="button" @click="toggleAll(true)" class="text-[11px] text-accent-500 hover:text-accent-700 font-medium">All</button>
-                        <span class="text-slate-300 dark:text-slate-600">|</span>
-                        <button type="button" @click="toggleAll(false)" class="text-[11px] text-slate-400 hover:text-slate-600 font-medium">None</button>
                     </div>
                 </div>
                 @php $exportLabels = \App\Exports\SalePlatformExport::columnLabels(); $exportCols = \App\Exports\SalePlatformExport::allColumns(); @endphp
@@ -148,8 +145,8 @@
         {{-- Page Header --}}
         <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
             <div>
-                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Sale Platforms</h1>
-                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Manage all sale platforms and their hierarchy</p>
+                <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Platforms</h1>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Manage all platforms and their hierarchy</p>
             </div>
             <div class="flex items-center gap-2 flex-wrap">
                 <button type="button" @click="exportOpen = true"
@@ -373,7 +370,7 @@
             @empty
                 <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-10 text-center">
                     <svg class="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/></svg>
-                    <p class="text-sm text-slate-400 dark:text-slate-500">No sale platforms found.</p>
+                    <p class="text-sm text-slate-400 dark:text-slate-500">No platforms found.</p>
                     @can('general.sale_platform.create')
                         <a href="{{ route('admin.sale-platforms.create') }}" class="inline-flex items-center gap-1.5 mt-3 px-4 py-2 text-sm rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">Create your first platform</a>
                     @endcan
