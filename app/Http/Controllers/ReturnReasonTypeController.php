@@ -66,11 +66,11 @@ class ReturnReasonTypeController extends Controller
         }
     }
 
-    public function show(ReturnReasonType $returnReasonType) : View
+    public function show(ReturnReasonType $returnReason) : View
     {
         Gate::authorize('general.return_reason_type.show');
 
-        return view('sale-spend.return_reason_types.show', compact('returnReasonType'));
+        return view('sale-spend.return_reason_types.show', compact('returnReason'));
     }
 
     public function edit(ReturnReasonType $return_reason) : View
