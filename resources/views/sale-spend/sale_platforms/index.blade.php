@@ -68,7 +68,7 @@
                 </div>
                 <hr class="border-slate-100 dark:border-slate-700"/>
                 <div>
-                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Show in Analytics</p>
+                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Show in daily sale & spend report</p>
                     <select name="show_in_analytics" class="tom-select w-full text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" data-placeholder="All">
                         <option value="">All</option>
                         <option value="1" {{ request('show_in_analytics') == '1' ? 'selected' : '' }}>Yes</option>
@@ -77,7 +77,7 @@
                 </div>
                 <hr class="border-slate-100 dark:border-slate-700"/>
                 <div>
-                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Show in Sale Tracking</p>
+                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Show in Ads performance</p>
                     <select name="show_in_sale_tracking" class="tom-select w-full text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" data-placeholder="All">
                         <option value="">All</option>
                         <option value="1" {{ request('show_in_sale_tracking') == '1' ? 'selected' : '' }}>Yes</option>
@@ -192,11 +192,11 @@
                 <p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{{ $stats['types']->count() }}</p>
             </div>
             <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5">
-                <p class="text-[11px] uppercase tracking-wider text-blue-400 dark:text-blue-500 font-medium mb-1">In Analytics</p>
+                <p class="text-[11px] uppercase tracking-wider text-blue-400 dark:text-blue-500 font-medium mb-1">Daily Sale & Spend</p>
                 <p class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ $stats['show_in_analytics'] }}</p>
             </div>
             <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5">
-                <p class="text-[11px] uppercase tracking-wider text-violet-400 dark:text-violet-500 font-medium mb-1">In Sale Tracking</p>
+                <p class="text-[11px] uppercase tracking-wider text-violet-400 dark:text-violet-500 font-medium mb-1">Ads Performance</p>
                 <p class="text-2xl font-bold text-violet-600 dark:text-violet-400">{{ $stats['show_in_sale_tracking'] }}</p>
             </div>
         </div>
@@ -224,13 +224,13 @@
                 @endif
                 @if(request('show_in_analytics') !== null && request('show_in_analytics') !== '')
                     <div class="flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700">
-                        <span class="font-semibold">Analytics:</span> {{ request('show_in_analytics') == '1' ? 'Yes' : 'No' }}
+                        <span class="font-semibold">Daily Sale & Spend:</span> {{ request('show_in_analytics') == '1' ? 'Yes' : 'No' }}
                         <a href="{{ request()->fullUrlWithQuery(['show_in_analytics' => null]) }}" class="ml-0.5 opacity-60 hover:opacity-100 text-[13px] leading-none">&times;</a>
                     </div>
                 @endif
                 @if(request('show_in_sale_tracking') !== null && request('show_in_sale_tracking') !== '')
                     <div class="flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700">
-                        <span class="font-semibold">Sale Tracking:</span> {{ request('show_in_sale_tracking') == '1' ? 'Yes' : 'No' }}
+                        <span class="font-semibold">Ads Performance:</span> {{ request('show_in_sale_tracking') == '1' ? 'Yes' : 'No' }}
                         <a href="{{ request()->fullUrlWithQuery(['show_in_sale_tracking' => null]) }}" class="ml-0.5 opacity-60 hover:opacity-100 text-[13px] leading-none">&times;</a>
                     </div>
                 @endif
@@ -329,13 +329,13 @@
                                     @if ($platform->show_in_analytics)
                                         <span class="inline-flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-100 dark:border-blue-800/40">
                                             <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                                            Analytics
+                                            Daily Sale & Spend
                                         </span>
                                     @endif
                                     @if ($platform->show_in_sale_tracking)
                                         <span class="inline-flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 px-1.5 py-0.5 rounded border border-violet-100 dark:border-violet-800/40">
                                             <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
-                                            Sale Tracking
+                                            Ads Performance
                                         </span>
                                     @endif
                                     @if (!empty($platform->ancestor_names))

@@ -185,7 +185,7 @@
                                 <p class="f-hint mt-1 ml-11">If enabled, sales/spent can be added directly to this platform. If disabled, entries can only be added to sub-platforms.</p>
                             </div>
 
-                            <!-- Show in Analytics -->
+                            <!-- Show in daily sale & spend report -->
                             <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
                                 <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Module Visibility</p>
                                 <div class="flex items-center gap-3 cursor-pointer">
@@ -194,14 +194,14 @@
                                         <div class="toggle-thumb"></div>
                                     </div>
                                     <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
-                                          onclick="toggleSwitch('showInAnalyticsToggle', event)">Show in Analytics</span>
+                                          onclick="toggleSwitch('showInAnalyticsToggle', event)">Show in daily sale & spend report</span>
                                     <input type="checkbox" name="show_in_analytics" id="showInAnalyticsCheckbox" class="hidden"
                                             {{ old('show_in_analytics', true) ? 'checked' : '' }}>
                                 </div>
-                                <p class="f-hint mt-1 ml-11">When enabled, this platform appears in the Analytics Dashboard, Daily Sales, and Daily Returns modules.</p>
+                                <p class="f-hint mt-1 ml-11">When enabled, this platform appears in the Daily Sale & Spend report, Daily Sales, and Daily Returns modules.</p>
                             </div>
 
-                            <!-- Show in Sale Tracking -->
+                            <!-- Show in Ads performance -->
                             <div id="saleTrackingSection">
                                 <div class="flex items-center gap-3 cursor-pointer">
                                     <div class="toggle-track {{ old('show_in_sale_tracking', true) ? 'on' : '' }}" id="showInSaleTrackingToggle"
@@ -209,21 +209,21 @@
                                         <div class="toggle-thumb"></div>
                                     </div>
                                     <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
-                                          onclick="toggleSwitch('showInSaleTrackingToggle', event); toggleTrackingColumns()">Show in Sale Tracking</span>
+                                          onclick="toggleSwitch('showInSaleTrackingToggle', event); toggleTrackingColumns()">Show in Ads performance</span>
                                     <input type="checkbox" name="show_in_sale_tracking" id="showInSaleTrackingCheckbox" class="hidden"
                                             {{ old('show_in_sale_tracking', true) ? 'checked' : '' }}>
                                 </div>
-                                <p class="f-hint mt-1 ml-11">When enabled, this platform appears in the Sale Tracking module.</p>
+                                <p class="f-hint mt-1 ml-11">When enabled, this platform appears in the Ads Performance module.</p>
                             </div>
 
-                            <!-- Tracking Columns (shown only when Show in Sale Tracking is ON) -->
+                            <!-- Tracking Columns (shown only when Show in Ads performance is ON) -->
                             <div id="trackingColumnsSection"
                                  class="{{ old('show_in_sale_tracking', true) ? '' : 'hidden' }} ml-1 mt-1 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30">
                                 <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2.5">
-                                    Engagement Columns in Sale Tracking
+                                    Engagement Columns in Ads Performance
                                 </p>
                                 <p class="text-[11px] text-slate-400 dark:text-slate-500 mb-3 leading-relaxed">
-                                    Choose which metrics are visible for this platform in the Sale Tracking module and its export.
+                                    Choose which metrics are visible for this platform in the Ads Performance module and its export.
                                 </p>
                                 <div class="grid grid-cols-2 gap-y-2 gap-x-3">
                                     @foreach([

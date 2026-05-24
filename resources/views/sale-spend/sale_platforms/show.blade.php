@@ -242,7 +242,7 @@
                     </div>
 
                     <div class="space-y-3">
-                        {{-- Show in Analytics --}}
+                        {{-- Show in daily sale & spend report --}}
                         <div class="flex items-start gap-3 p-3 rounded-lg border {{ $salePlatform->show_in_analytics ? 'border-blue-100 dark:border-blue-800/30 bg-blue-50 dark:bg-blue-900/10' : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/20' }}">
                             <div class="mt-0.5 shrink-0">
                                 @if ($salePlatform->show_in_analytics)
@@ -253,15 +253,15 @@
                             </div>
                             <div>
                                 <p class="text-[13px] font-medium {{ $salePlatform->show_in_analytics ? 'text-blue-700 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400' }}">
-                                    Show in Analytics
+                                    Show in daily sale & spend report
                                 </p>
                                 <p class="text-[11px] {{ $salePlatform->show_in_analytics ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400' }}">
-                                    {{ $salePlatform->show_in_analytics ? 'Visible in Analytics Dashboard, Daily Sales & Daily Returns' : 'Hidden from Analytics modules' }}
+                                    {{ $salePlatform->show_in_analytics ? 'Visible in Daily Sale & Spend report, Daily Sales & Daily Returns' : 'Hidden from Daily Sale & Spend report modules' }}
                                 </p>
                             </div>
                         </div>
 
-                        {{-- Show in Sale Tracking --}}
+                        {{-- Show in Ads performance --}}
                         <div class="flex items-start gap-3 p-3 rounded-lg border {{ $salePlatform->show_in_sale_tracking ? 'border-violet-100 dark:border-violet-800/30 bg-violet-50 dark:bg-violet-900/10' : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/20' }}">
                             <div class="mt-0.5 shrink-0">
                                 @if ($salePlatform->show_in_sale_tracking)
@@ -272,10 +272,10 @@
                             </div>
                             <div>
                                 <p class="text-[13px] font-medium {{ $salePlatform->show_in_sale_tracking ? 'text-violet-700 dark:text-violet-300' : 'text-slate-500 dark:text-slate-400' }}">
-                                    Show in Sale Tracking
+                                    Show in Ads performance
                                 </p>
                                 <p class="text-[11px] {{ $salePlatform->show_in_sale_tracking ? 'text-violet-500 dark:text-violet-400' : 'text-slate-400' }}">
-                                    {{ $salePlatform->show_in_sale_tracking ? 'Visible in Sale Tracking module' : 'Hidden from Sale Tracking module' }}
+                                    {{ $salePlatform->show_in_sale_tracking ? 'Visible in Ads Performance module' : 'Hidden from Ads Performance module' }}
                                 </p>
                             </div>
                         </div>
