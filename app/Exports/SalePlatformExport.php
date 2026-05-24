@@ -211,13 +211,12 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
         $sheet->getStyle('A1')->getFont()->setSize(18)->setBold(true);
         $sheet->getRowDimension(1)->setRowHeight(30);
         $sheet->getRowDimension(2)->setRowHeight(22);
-        $sheet->getRowDimension(3)->setRowHeight(18);
     }
 
     private function applyHeadingStyle($sheet, string $endCol): void
     {
         $sheet->getStyle("A6:{$endCol}6")->applyFromArray([
-            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF009966']],
             'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
             'alignment' => [
                 'horizontal' => Alignment::HORIZONTAL_CENTER,

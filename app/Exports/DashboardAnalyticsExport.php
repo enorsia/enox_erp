@@ -236,7 +236,7 @@ class DashboardAnalyticsExport
             $rsRootQtyCols[$root['id']]   = $rsQtyRootBase   + $i;
         }
 
-        $firstHdrRow  = 2;
+        $firstHdrRow  = 7;
         $colLabelRow  = $numAllPlatCols > 0 ? $firstHdrRow + 1 : $firstHdrRow;
         $dataStartRow = $colLabelRow + 1;
 
@@ -244,10 +244,10 @@ class DashboardAnalyticsExport
         $titleStr      = 'Tracking Digital Marketing COST VS Allocation – ' . ($label['label'] ?? '');
         $titleStartCol = Coordinate::stringFromColumnIndex(self::COL_SALES);
         $titleEndCol   = Coordinate::stringFromColumnIndex($mainLastCol);
-        $sheet->setCellValue($titleStartCol . '1', $titleStr);
-        $sheet->mergeCells("{$titleStartCol}1:{$titleEndCol}1");
-        $this->styleTitle($sheet, "{$titleStartCol}1:{$titleEndCol}1");
-        foreach (['A1', 'B1'] as $cell) {
+        $sheet->setCellValue($titleStartCol . '6', $titleStr);
+        $sheet->mergeCells("{$titleStartCol}6:{$titleEndCol}6");
+        $this->styleTitle($sheet, "{$titleStartCol}6:{$titleEndCol}6");
+        foreach (['A6', 'B6'] as $cell) {
             $sheet->getStyle($cell)->getFill()->setFillType(Fill::FILL_SOLID)
                 ->getStartColor()->setARGB(self::CLR_ACCENT);
         }
@@ -570,7 +570,7 @@ class DashboardAnalyticsExport
         $lastMainRow = $r - 1;
         $r   += 4;
         } else {
-            $r = 2;
+            $r = 7;
         }
 
         $anc = 2;
@@ -857,6 +857,36 @@ class DashboardAnalyticsExport
         if ($includeWeeklyBreakdown && $wbSecStart > 0) {
             $sheet->getRowDimension($wbSecStart)->setRowHeight(22);
         }
+
+        // Write the 3-row app header at the top (rows 1-3)
+        $headerMaxCol = max($mainLastCol, $wbLastCol, $retLastCol);
+        if ($headerMaxCol < 1) $headerMaxCol = 10;
+        $headerEndCol = Coordinate::stringFromColumnIndex($headerMaxCol);
+        $this->applyHeaderRows(
+            $sheet,
+            $headerEndCol,
+            'Tracking Digital Marketing COST VS Allocation – ' . ($label['label'] ?? '')
+        );
+    }
+
+    private function applyHeaderRows($sheet, string $endCol, string $title): void
+    {
+        $appName = config('app.name', 'ENOX ERP');
+        foreach ([$appName, $title, 'Generated: ' . now()->format('d M Y H:i')] as $i => $text) {
+            $row = $i + 1;
+            $sheet->setCellValue("A{$row}", $text);
+            $sheet->mergeCells("A{$row}:{$endCol}{$row}");
+        }
+        $sheet->getStyle("A1:{$endCol}3")->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 14],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
+        ]);
+        $sheet->getStyle('A1')->getFont()->setSize(18)->setBold(true);
+        $sheet->getRowDimension(1)->setRowHeight(30);
+        $sheet->getRowDimension(2)->setRowHeight(22);
     }
 
     private function styleTitle($sheet, string $range): void
@@ -865,7 +895,7 @@ class DashboardAnalyticsExport
         $style->getFont()->setBold(true)->setSize(13)->getColor()->setARGB(self::CLR_TITLE_FG);
         $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_TITLE_BG);
         $style->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
-        $sheet->getRowDimension(1)->setRowHeight(26);
+        $sheet->getRowDimension(6)->setRowHeight(26);
     }
 
     private function applyHeaderStyle($sheet, string $range): void

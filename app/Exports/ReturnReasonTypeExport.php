@@ -10,6 +10,9 @@ use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithCustomStartCell;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell, WithMapping
 {
@@ -83,7 +86,7 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
                 $sheet      = $event->sheet->getDelegate();
                 $activeCols = $this->columns ?: $this->allColumns();
                 $cols       = count($activeCols);
-                $endCol     = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cols);
+                $endCol     = Coordinate::stringFromColumnIndex($cols);
 
                 $this->applyHeaderRows($sheet, $endCol, 'RETURN REASON TYPES');
                 $this->applyHeadingStyle($sheet, $endCol);
@@ -102,7 +105,10 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
         }
         $sheet->getStyle("A1:{$endCol}3")->applyFromArray([
             'font'      => ['bold' => true, 'size' => 14],
-            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
         ]);
         $sheet->getStyle('A1')->getFont()->setSize(18)->setBold(true);
         $sheet->getRowDimension(1)->setRowHeight(30);
@@ -112,9 +118,12 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
     private function applyHeadingStyle($sheet, string $endCol): void
     {
         $sheet->getStyle("A6:{$endCol}6")->applyFromArray([
-            'fill'      => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF009966']],
             'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
-            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
         ]);
         $sheet->getRowDimension(6)->setRowHeight(20);
     }
@@ -129,17 +138,17 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
 
         $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
             'alignment' => [
-                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
-                'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
             ],
         ]);
 
         $leftCols = ['name', 'slug', 'description'];
         foreach ($activeCols as $idx => $colKey) {
             if (in_array($colKey, $leftCols)) {
-                $excelCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($idx + 1);
+                $excelCol = Coordinate::stringFromColumnIndex($idx + 1);
                 $sheet->getStyle("{$excelCol}7:{$excelCol}{$highestRow}")->getAlignment()
-                    ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT)
+                    ->setHorizontal(Alignment::HORIZONTAL_LEFT)
                     ->setWrapText(true);
             }
         }
@@ -147,4 +156,3 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
         $sheet->freezePane('A7');
     }
 }
-

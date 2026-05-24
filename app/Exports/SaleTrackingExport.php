@@ -129,6 +129,26 @@ class SaleTrackingExport
         ]);
     }
 
+    private function applyHeaderRows($sheet, string $title): void
+    {
+        $appName = config('app.name', 'ENOX ERP');
+        foreach ([$appName, $title, 'Generated: ' . now()->format('d M Y H:i')] as $i => $text) {
+            $row = $i + 1;
+            $sheet->setCellValue("A{$row}", $text);
+            $sheet->mergeCells("A{$row}:" . self::LAST_COL . "{$row}");
+        }
+        $sheet->getStyle('A1:' . self::LAST_COL . '3')->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 14],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
+        ]);
+        $sheet->getStyle('A1')->getFont()->setSize(18)->setBold(true);
+        $sheet->getRowDimension(1)->setRowHeight(30);
+        $sheet->getRowDimension(2)->setRowHeight(22);
+    }
+
     private function postProcessChartLabels(string $filePath): void
     {
         $zip = new \ZipArchive();
@@ -323,30 +343,22 @@ class SaleTrackingExport
             ];
         }
 
-        $titleRange = 'A1:' . self::LAST_COL . '1';
-        $sheet->setCellValue('A1', 'Enorsia Digital Ad Performance Tracking');
-        $sheet->mergeCells($titleRange);
-        $sheet->getStyle($titleRange)->getFont()->setBold(true)->setSize(13)->getColor()->setARGB(self::CLR_TITLE_FG);
-        $sheet->getStyle($titleRange)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_TITLE_BG);
-        $sheet->getStyle($titleRange)->getAlignment()
-            ->setHorizontal(Alignment::HORIZONTAL_CENTER)
-            ->setVertical(Alignment::VERTICAL_CENTER);
-        $sheet->getRowDimension(1)->setRowHeight(28);
+        $this->applyHeaderRows($sheet, 'Enorsia Digital Ad Performance Tracking');
 
         foreach (self::COLUMNS as $col => $def) {
-            $sheet->setCellValue($col . '2', $def['label']);
+            $sheet->setCellValue($col . '6', $def['label']);
             $sheet->getColumnDimension($col)->setWidth($def['width']);
         }
-        $hdrRange = 'A2:' . self::LAST_COL . '2';
+        $hdrRange = 'A6:' . self::LAST_COL . '6';
         $sheet->getStyle($hdrRange)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_HDR_BG);
         $sheet->getStyle($hdrRange)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_HDR_FG);
         $sheet->getStyle($hdrRange)->getAlignment()
             ->setHorizontal(Alignment::HORIZONTAL_CENTER)
             ->setVertical(Alignment::VERTICAL_CENTER)
             ->setWrapText(true);
-        $sheet->getRowDimension(2)->setRowHeight(32);
+        $sheet->getRowDimension(6)->setRowHeight(32);
 
-        $r          = 3;
+        $r          = 7;
         $sl         = 1;
         $monthIndex = 0;
         $prevQRow   = null;
@@ -445,15 +457,15 @@ class SaleTrackingExport
         $sheet->setCellValue('C' . $r, 'TOTAL');
 
         foreach (['D','E','F','G','H','I'] as $col) {
-            $sheet->setCellValue($col . $r, "=SUM({$col}3:{$col}{$dataEndRow})");
+            $sheet->setCellValue($col . $r, "=SUM({$col}7:{$col}{$dataEndRow})");
         }
-        $sheet->setCellValue('J' . $r, "=SUM(J3:J{$dataEndRow})");
-        $sheet->setCellValue('K' . $r, "=SUM(K3:K{$dataEndRow})");
-        $sheet->setCellValue('L' . $r, "=SUM(K3:K{$dataEndRow})");
-        $sheet->setCellValue('M' . $r, "=SUM(M3:M{$dataEndRow})");
-        $sheet->setCellValue('N' . $r, "=SUM(N3:N{$dataEndRow})");
-        $sheet->setCellValue('P' . $r, "=SUM(P3:P{$dataEndRow})");
-        $sheet->setCellValue('Q' . $r, "=SUM(P3:P{$dataEndRow})");
+        $sheet->setCellValue('J' . $r, "=SUM(J7:J{$dataEndRow})");
+        $sheet->setCellValue('K' . $r, "=SUM(K7:K{$dataEndRow})");
+        $sheet->setCellValue('L' . $r, "=SUM(K7:K{$dataEndRow})");
+        $sheet->setCellValue('M' . $r, "=SUM(M7:M{$dataEndRow})");
+        $sheet->setCellValue('N' . $r, "=SUM(N7:N{$dataEndRow})");
+        $sheet->setCellValue('P' . $r, "=SUM(P7:P{$dataEndRow})");
+        $sheet->setCellValue('Q' . $r, "=SUM(P7:P{$dataEndRow})");
         $sheet->setCellValue('R' . $r, $grandTotalReturn ?: null);
         $sheet->setCellValue('S' . $r, "=IFERROR(Q{$r}-R{$r},\"\")");
         $sheet->setCellValue('U' . $r, "=IFERROR((Q{$r}/L{$r})*100,\"\")");
@@ -464,21 +476,21 @@ class SaleTrackingExport
         $sheet->getStyle('A' . $r . ':' . self::LAST_COL . $r)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_TOTAL_FG);
         $sheet->getStyle('D' . $r . ':' . self::LAST_COL . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
 
-        if ($dataEndRow >= 3) {
+        if ($dataEndRow >= 7) {
             foreach (['J','K','L','P','Q','R','S'] as $col) {
-                $sheet->getStyle($col . '3:' . $col . $totalsRow)->getNumberFormat()->setFormatCode($moneyFmt);
+                $sheet->getStyle($col . '7:' . $col . $totalsRow)->getNumberFormat()->setFormatCode($moneyFmt);
             }
             foreach (['D','E','F','G','H','I','M','N'] as $col) {
-                $sheet->getStyle($col . '3:' . $col . $totalsRow)->getNumberFormat()->setFormatCode($numFmt);
+                $sheet->getStyle($col . '7:' . $col . $totalsRow)->getNumberFormat()->setFormatCode($numFmt);
             }
-            $sheet->getStyle('O3:O' . $totalsRow)->getNumberFormat()->setFormatCode($pctFmt);
-            $sheet->getStyle('T3:T' . $totalsRow)->getNumberFormat()->setFormatCode('0"%"');
-            $sheet->getStyle('U3:U' . $totalsRow)->getNumberFormat()->setFormatCode('0.00"%"');
+            $sheet->getStyle('O7:O' . $totalsRow)->getNumberFormat()->setFormatCode($pctFmt);
+            $sheet->getStyle('T7:T' . $totalsRow)->getNumberFormat()->setFormatCode('0"%"');
+            $sheet->getStyle('U7:U' . $totalsRow)->getNumberFormat()->setFormatCode('0.00"%"');
         }
 
         $sheet->getStyle('A1:' . self::LAST_COL . $totalsRow)
             ->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-        $sheet->freezePane('D3');
+        $sheet->freezePane('D7');
 
         $summaryStart = $totalsRow + 3;
         $summaryEnd   = $this->writeMonthlySummary($sheet, $monthAgg, $summaryStart);
