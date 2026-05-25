@@ -322,6 +322,7 @@ class SaleTrackingService
         return [
             'month'                              => 'required|date_format:Y-m',
             'entries'                            => 'present|array',
+            'entries.*.id'                       => 'nullable|integer|min:1',   // MUST be here so Laravel doesn't strip it
             'entries.*.sale_platform_id'         => 'nullable|exists:sale_platforms,id',
             'entries.*.reach'                    => 'nullable|integer|min:0',
             'entries.*.impressions'              => 'nullable|integer|min:0',
