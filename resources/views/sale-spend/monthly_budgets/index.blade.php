@@ -3,6 +3,7 @@
 @section('title', 'Monthly Budgets')
 
 @section('content')
+@php $return_url = urlencode(request()->fullUrl()); @endphp
 <div id="monthly-budget-page-content"></div>
 
 <div x-data="{
@@ -150,7 +151,7 @@
                     @endif
                 </button>
                 @can('general.monthly_budget.create')
-                    <a href="{{ route('admin.monthly-budgets.create') }}"
+                    <a href="{{ route('admin.monthly-budgets.create') }}?return_url={{ $return_url }}"
                        class="flex items-center gap-2 px-4 py-2 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
                         Create Monthly Budget
@@ -200,6 +201,7 @@
                 <p class="text-sm text-slate-400 dark:text-slate-500">No monthly budgets found for the selected filters.</p>
             </div>
         @else
+            <div data-restore-scroll>
             @foreach ($viewGroups as $yearGroup)
                 {{-- ── Year Section ── --}}
                 <div class="mb-6">
@@ -241,6 +243,7 @@
                     @endforeach
                 </div>
             @endforeach
+            </div>
         @endif
 
         @include('layouts.pagination', ['paginator' => $monthlyBudgets])

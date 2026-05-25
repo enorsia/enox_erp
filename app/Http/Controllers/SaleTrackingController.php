@@ -50,6 +50,7 @@ class SaleTrackingController extends Controller
         $validated = $request->validate($this->service->bulkStoreRules());
         $month     = $validated['month'];
         $entries   = $validated['entries'];
+        $return_url = $request->input('return_url', route(self::ROUTES['index']));
 
         try {
             $created = $this->service->bulkCreate($month, $entries);
@@ -59,7 +60,7 @@ class SaleTrackingController extends Controller
                 ->log('Created ' . count($created) . ' sale tracking record(s) for ' . \Carbon\Carbon::parse($month)->format('M Y'));
 
             notify()->success(count($created) . ' sale tracking record(s) created.', 'Success');
-            return redirect()->route(self::ROUTES['index']);
+            return redirect($return_url);
         } catch (\Exception $e) {
             Log::error('SALE TRACKING - bulk create failed: ' . $e->getMessage());
             notify()->error('Failed to create sale tracking records.', 'Error');
@@ -106,6 +107,7 @@ class SaleTrackingController extends Controller
         $validated = $request->validate($this->service->bulkUpdateRules());
         $month     = $validated['month'];
         $entries   = $validated['entries'] ?? [];
+        $return_url = $request->input('return_url', route(self::ROUTES['index']));
         $deleteIds = array_values(array_filter(
             (array) $request->input('entries_delete', []),
             fn($v) => is_numeric($v)
@@ -120,7 +122,7 @@ class SaleTrackingController extends Controller
                 ->log('Updated sale tracking for ' . \Carbon\Carbon::parse($month)->format('M Y'));
 
             notify()->success('Sale tracking records updated.', 'Success');
-            return redirect()->route(self::ROUTES['index']);
+            return redirect($return_url);
         } catch (\Exception $e) {
             Log::error('SALE TRACKING - update failed: ' . $e->getMessage());
             notify()->error('Failed to update sale tracking records.', 'Error');
@@ -131,6 +133,8 @@ class SaleTrackingController extends Controller
     public function destroy(DailyAdPerformance $saleTracking): RedirectResponse
     {
         Gate::authorize('general.sale_tracking.delete');
+
+        $return_url = request()->input('return_url', route(self::ROUTES['index']));
 
         try {
             $label = ($saleTracking->salePlatform?->name ?? '—') . ' – ' . optional($saleTracking->month)->format('M Y');
@@ -146,7 +150,7 @@ class SaleTrackingController extends Controller
             notify()->error('Failed to delete record.', 'Error');
         }
 
-        return redirect()->back();
+        return redirect($return_url);
     }
 
     public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse

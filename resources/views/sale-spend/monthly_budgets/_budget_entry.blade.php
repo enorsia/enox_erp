@@ -140,6 +140,7 @@
             <div class="flex gap-1 shrink-0">
                 @can('general.monthly_budget.show')
                     <a href="{{ route('admin.monthly-budgets.show', $budget->id) }}"
+                       data-preserve-scroll
                        class="{{ $isRoot ? 'w-7 h-7 rounded-lg' : 'w-6 h-6 rounded' }} border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
                        title="View">
                         <svg class="{{ $isRoot ? 'w-3.5 h-3.5' : 'w-3 h-3' }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -149,7 +150,8 @@
                     </a>
                 @endcan
                 @can('general.monthly_budget.edit')
-                    <a href="{{ route('admin.monthly-budgets.edit', $budget->id) }}"
+                    <a href="{{ route('admin.monthly-budgets.edit', $budget->id) }}?return_url={{ $return_url ?? '' }}"
+                       data-preserve-scroll
                        class="{{ $isRoot ? 'w-7 h-7 rounded-lg' : 'w-6 h-6 rounded' }} border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
                        title="Edit">
                         <svg class="{{ $isRoot ? 'w-3.5 h-3.5' : 'w-3 h-3' }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">

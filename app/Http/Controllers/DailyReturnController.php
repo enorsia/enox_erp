@@ -91,7 +91,8 @@ class DailyReturnController extends Controller
             }
 
             notify()->success(count($created) . ' daily return record(s) created successfully.', 'Success');
-            return redirect()->route(self::ROUTES['index']);
+            $returnUrl = $request->input('return_url');
+            return $returnUrl ? redirect()->to(urldecode($returnUrl)) : redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
             Log::error('DAILY RETURNS - bulk creation failed: ' . $e->getMessage());
             notify()->error('Failed to create daily returns', 'Error');
@@ -178,7 +179,8 @@ class DailyReturnController extends Controller
                 ->log("Updated daily returns for {$date}");
 
             notify()->success('Daily returns updated successfully.', 'Success');
-            return redirect()->route(self::ROUTES['index']);
+            $returnUrl = $request->input('return_url');
+            return $returnUrl ? redirect()->to(urldecode($returnUrl)) : redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
             Log::error('DAILY RETURNS - update failed: ' . $e->getMessage());
             notify()->error('Failed to update daily returns', 'Error');

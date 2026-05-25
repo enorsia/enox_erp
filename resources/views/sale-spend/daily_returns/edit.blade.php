@@ -31,6 +31,7 @@
     <form method="POST" action="{{ route('admin.daily-returns.update', $dailyReturn->id) }}" id="editForm">
         @csrf
         @method('PUT')
+        <input type="hidden" name="return_url" value="{{ request('return_url') }}" />
 
         <!-- Hidden date -->
         <input type="hidden" name="date" value="{{ $date }}" />

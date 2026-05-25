@@ -17,6 +17,7 @@
         <form method="POST" action="{{ route('admin.return-reason.update', $return_reason->id) }}" id="EditValidateForm">
             @csrf
             @method('PUT')
+            <input type="hidden" name="return_url" value="{{ request('return_url') }}" />
 
             <div class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
 

@@ -58,7 +58,8 @@ class ReturnReasonTypeController extends Controller
                 ->log('Created new return reason type: ' . $reasonType->name);
 
             notify()->success("Return reason type created successfully.", "Success");
-            return redirect()->route(self::ROUTES['index']);
+            $returnUrl = $request->input('return_url');
+            return $returnUrl ? redirect()->to(urldecode($returnUrl)) : redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
             Log::error('RETURN REASON TYPES - creation failed: ' . $e->getMessage());
             notify()->error('Failed to create return reason type', 'Error');
@@ -107,7 +108,8 @@ class ReturnReasonTypeController extends Controller
             }
 
             notify()->success("Return reason type updated successfully.", "Success");
-            return redirect()->route(self::ROUTES['index']);
+            $returnUrl = $request->input('return_url');
+            return $returnUrl ? redirect()->to(urldecode($returnUrl)) : redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
             Log::error('RETURN REASON TYPES - update failed: ' . $e->getMessage());
             notify()->error('Failed to update return reason type', 'Error');

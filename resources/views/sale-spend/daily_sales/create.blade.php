@@ -27,6 +27,7 @@
 
     <form method="POST" action="{{ route('admin.daily-sales.store') }}" id="validateForm">
         @csrf
+        <input type="hidden" name="return_url" value="{{ request('return_url') }}" />
 
         <!-- ── DATE ROW ── -->
         <div class="section-card !mb-4">

@@ -81,6 +81,7 @@ window.deleteData = function (id) {
         cancelButtonText: 'Cancel',
     }).then((result) => {
         if (result.isConfirmed) {
+            if (typeof window.saveScrollPosition === 'function') window.saveScrollPosition();
             const form = document.getElementById('delete-form-' + id);
             if (form) form.submit();
         }
@@ -137,6 +138,76 @@ document.addEventListener('DOMContentLoaded', function() {
     initTomSelect();
 });
 
+
+/* ══════════════════════════════════════
+   SCROLL PRESERVATION
+   Uses the <main> scroll container (overflow-y-auto),
+   not window — because window does not scroll in this layout.
+══════════════════════════════════════ */
+(function initScrollPreservation() {
+    const SCROLL_KEY = 'admin_scroll_' + window.location.pathname;
+
+    /** The real scrollable container in this layout */
+    function getMain() {
+        return document.querySelector('main');
+    }
+
+    function getScrollY() {
+        const el = getMain();
+        const y  = el ? el.scrollTop : window.scrollY;
+        console.debug('[ScrollPreserve] getScrollY =', y, '(main el:', !!el, ')');
+        return y;
+    }
+
+    function doScrollTo(y) {
+        const el = getMain();
+        console.debug('[ScrollPreserve] restoring scroll to', y, '(main el:', !!el, ')');
+        if (el) {
+            el.scrollTop = parseInt(y);
+        } else {
+            window.scrollTo({ top: parseInt(y), behavior: 'auto' });
+        }
+    }
+
+    /** Expose globally so inline page scripts can call window.saveScrollPosition() */
+    window.saveScrollPosition = function () {
+        const y = getScrollY();
+        sessionStorage.setItem(SCROLL_KEY, y);
+        console.debug('[ScrollPreserve] SAVED', y, 'key:', SCROLL_KEY);
+    };
+
+    /** Save scroll on any [data-preserve-scroll] click; clear on pagination clicks */
+    document.addEventListener('click', function (e) {
+        const link = e.target.closest('a, button');
+        if (!link) return;
+
+        if (link.hasAttribute('data-preserve-scroll')) {
+            window.saveScrollPosition();
+            console.debug('[ScrollPreserve] data-preserve-scroll clicked – saved');
+            return;
+        }
+
+        if (link.hasAttribute('data-pagination') || link.closest('[data-pagination-nav]')) {
+            sessionStorage.removeItem(SCROLL_KEY);
+            console.debug('[ScrollPreserve] pagination click – cleared key');
+        }
+    });
+
+    /** Restore scroll when returning to a page that has [data-restore-scroll] */
+    document.addEventListener('DOMContentLoaded', function () {
+        const savedY = sessionStorage.getItem(SCROLL_KEY);
+        const target = document.querySelector('[data-restore-scroll]');
+        console.debug('[ScrollPreserve] DOMContentLoaded | savedY:', savedY, '| target:', !!target, '| key:', SCROLL_KEY);
+
+        if (savedY && target) {
+            // rAF ensures layout/CSS is fully applied before scrolling
+            requestAnimationFrame(function () {
+                doScrollTo(savedY);
+                sessionStorage.removeItem(SCROLL_KEY);
+            });
+        }
+    });
+})();
 
 /* ══════════════════════════════════════
    SESSION FLASH (iziToast notifications)

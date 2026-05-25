@@ -86,7 +86,8 @@ class MonthlyBudgetController extends Controller
                 ->log('Created new monthly budget for ' . $monthlyBudget->salePlatform->name . ' - ' . $monthlyBudget->year . '/' . $monthlyBudget->month);
 
             notify()->success("Monthly budget created successfully.", "Success");
-            return redirect()->route(self::ROUTES['index']);
+            $returnUrl = $request->input('return_url');
+            return $returnUrl ? redirect()->to(urldecode($returnUrl)) : redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
             Log::error('MONTHLY BUDGET - creation failed: ' . $e->getMessage());
             notify()->error('Failed to create monthly budget', 'Error');
@@ -153,7 +154,8 @@ class MonthlyBudgetController extends Controller
             }
 
             notify()->success("Monthly budget updated successfully.", "Success");
-            return redirect()->route(self::ROUTES['index']);
+            $returnUrl = $request->input('return_url');
+            return $returnUrl ? redirect()->to(urldecode($returnUrl)) : redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
             Log::error('MONTHLY BUDGET - update failed: ' . $e->getMessage());
             notify()->error('Failed to update monthly budget', 'Error');
@@ -194,7 +196,7 @@ class MonthlyBudgetController extends Controller
             $monthlyBudget->delete();
 
             notify()->success("Monthly budget deleted successfully.", "Deleted");
-            return redirect()->route(self::ROUTES['index']);
+            return redirect()->back();
         } catch (\Exception $e) {
             Log::error('MONTHLY BUDGET - deletion failed: ' . $e->getMessage());
             notify()->error('Failed to delete monthly budget', 'Error');

@@ -3,6 +3,7 @@
 @section('title', 'Return Reason')
 
 @section('content')
+@php $return_url = urlencode(request()->fullUrl()); @endphp
 <div id="return-reason-type-page-content"></div>
 
 <div x-data="{
@@ -129,7 +130,7 @@
                     @endif
                 </button>
                 @can('general.return_reason_type.create')
-                    <a href="{{ route('admin.return-reason.create') }}"
+                    <a href="{{ route('admin.return-reason.create') }}?return_url={{ $return_url }}"
                        class="flex items-center gap-2 px-4 py-2 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
                         Create Return Reason Type
@@ -160,7 +161,7 @@
         @endif
 
         {{-- Cards List --}}
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-3" data-restore-scroll>
             @if (!$reasonTypes->isEmpty())
                 @foreach ($reasonTypes as $key => $reasonType)
                     <div class="order-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 grid grid-cols-[1fr_auto] gap-3 items-center">
@@ -183,12 +184,12 @@
                         </div>
                         <div class="flex gap-1 flex-shrink-0">
                             @can('general.return_reason_type.show')
-                                <a href="{{ route('admin.return-reason.show', $reasonType->id) }}" class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="View">
+                                <a href="{{ route('admin.return-reason.show', $reasonType->id) }}" data-preserve-scroll class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="View">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                 </a>
                             @endcan
                             @can('general.return_reason_type.edit')
-                                <a href="{{ route('admin.return-reason.edit', $reasonType->id) }}" class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="Edit">
+                                <a href="{{ route('admin.return-reason.edit', $reasonType->id) }}?return_url={{ $return_url }}" data-preserve-scroll class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors" title="Edit">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                                 </a>
                             @endcan
@@ -219,6 +220,7 @@
 <script>
     function deleteData(id) {
         if (confirm('Are you sure you want to delete this return reason type?')) {
+            if (typeof window.saveScrollPosition === 'function') window.saveScrollPosition();
             document.getElementById('delete-form-' + id).submit();
         }
     }

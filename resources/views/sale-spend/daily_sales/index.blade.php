@@ -3,6 +3,7 @@
 @section('title', 'Daily Sales')
 
 @section('content')
+@php $return_url = urlencode(request()->fullUrl()); @endphp
 <div id="daily-sales-page-content"></div>
 
 <div x-data="{
@@ -134,7 +135,7 @@
                     @if($af > 0)<span class="bg-accent-400 text-white text-[9px] font-bold min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">{{ $af }}</span>@endif
                 </button>
                 @can('general.daily_sale.create')
-                    <a href="{{ route('admin.daily-sales.create') }}"
+                    <a href="{{ route('admin.daily-sales.create') }}?return_url={{ $return_url }}"
                        class="flex items-center gap-2 px-4 py-2 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
                         Add Daily Sale
@@ -179,14 +180,15 @@
                 </div>
                 <p class="text-sm font-medium text-slate-400 dark:text-slate-500">No daily sales records found.</p>
                 @can('general.daily_sale.create')
-                    <a href="{{ route('admin.daily-sales.create') }}" class="inline-flex items-center gap-2 mt-4 px-4 py-2 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
+                    <a href="{{ route('admin.daily-sales.create') }}?return_url={{ $return_url }}"
+                       class="inline-flex items-center gap-2 mt-4 px-4 py-2 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
                         Add First Entry
                     </a>
                 @endcan
             </div>
         @else
-            <div class="space-y-6">
+            <div class="space-y-6" data-restore-scroll>
             @foreach ($dateGroups as $dg)
 
             {{-- ══ DATE GROUP CARD ══ --}}
@@ -218,7 +220,8 @@
                             {{ number_format($dg['totalOrders']) }} orders
                         </span>
                         @can('general.daily_sale.edit')
-                            <a href="{{ route('admin.daily-sales.edit', $dg['entries']->first()->id) }}"
+                            <a href="{{ route('admin.daily-sales.edit', $dg['entries']->first()->id) }}?return_url={{ $return_url }}"
+                               data-preserve-scroll
                                class="ds-edit-date-btn">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125"/></svg>
                                 Edit Date

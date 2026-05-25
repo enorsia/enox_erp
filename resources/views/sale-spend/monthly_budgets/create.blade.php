@@ -15,6 +15,7 @@
 
         <form method="POST" action="{{ route('admin.monthly-budgets.store') }}" id="validateForm">
             @csrf
+            <input type="hidden" name="return_url" value="{{ request('return_url') }}" />
 
             <div class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
 

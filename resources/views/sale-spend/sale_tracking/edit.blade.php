@@ -28,6 +28,7 @@
 
     <form method="POST" action="{{ route('admin.ads-performance.update', $saleTracking->id) }}" id="stForm">
         @csrf @method('PUT')
+        <input type="hidden" name="return_url" value="{{ request('return_url') }}" />
 
         <!-- ── MONTH ROW (read-only display) ── -->
         <div class="section-card !mb-4">
@@ -72,7 +73,7 @@
                     Revenue, Cost, Orders &amp; Returns are calculated automatically from Daily Sales &amp; Returns data
                 </div>
                 <div class="flex gap-2.5">
-                    <a href="{{ route('admin.ads-performance.index') }}"
+                    <a href="{{ request('return_url') ? urldecode(request('return_url')) : route('admin.ads-performance.index') }}"
                        class="px-4 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
                         Cancel
                     </a>

@@ -31,6 +31,7 @@
     <form method="POST" action="{{ route('admin.daily-sales.update', $dailySale->id) }}" id="editForm">
         @csrf
         @method('PUT')
+        <input type="hidden" name="return_url" value="{{ request('return_url') }}" />
 
         <!-- Hidden date — keeps validation happy; date is locked to the original record's date -->
         <input type="hidden" name="date" value="{{ $date }}" />

@@ -116,7 +116,8 @@ class SalePlatformController extends Controller
                 ->log('Created new sale platform: ' . $platform->name);
 
             notify()->success("Sale platform created successfully.", "Success");
-            return redirect()->route(self::ROUTES['index']);
+            $returnUrl = $request->input('return_url');
+            return $returnUrl ? redirect()->to(urldecode($returnUrl)) : redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
             Log::error('Sale platform creation failed: ' . $e->getMessage());
             notify()->error('Failed to create sale platform', 'Error');
@@ -219,7 +220,8 @@ class SalePlatformController extends Controller
             }
 
             notify()->success("Sale platform updated successfully.", "Success");
-            return redirect()->route(self::ROUTES['index']);
+            $returnUrl = $request->input('return_url');
+            return $returnUrl ? redirect()->to(urldecode($returnUrl)) : redirect()->route(self::ROUTES['index']);
         } catch (\Exception $e) {
             Log::error('Sale platform update failed: ' . $e->getMessage());
             notify()->error('Failed to update sale platform', 'Error');
