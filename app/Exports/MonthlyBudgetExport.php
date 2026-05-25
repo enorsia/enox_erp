@@ -12,7 +12,9 @@ use Maatwebsite\Excel\Concerns\WithCustomStartCell;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Illuminate\Support\Facades\Log;
 
 class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell
 {
@@ -35,6 +37,11 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
 
     public function collection(): Collection
     {
+        Log::info('MonthlyBudgetExport: collection() started', [
+            'columns' => $this->columns ?: self::allColumns(),
+        ]);
+
+        try {
         $this->dataRowIdx  = 0;
         $this->mergeRanges = [];
 
@@ -86,9 +93,9 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
                 'level1'     => $l1,
                 'level2'     => $l2,
                 'level3'     => $l3,
-                'year'       => $record->year,
+                'year'       => (int) ($record->year ?? 0),
                 'month'      => $this->months[$record->month] ?? $record->month,
-                'budget'     => number_format($record->budget, 2),
+                'budget'     => (float) ($record->budget ?? 0),
                 'currency'   => $record->currency,
                 'notes'      => $record->notes ?? '-',
                 'created_at' => $record->created_at?->format('d M Y'),
@@ -104,10 +111,29 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
         unset($row);
 
         $activeCols = $this->columns ?: self::allColumns();
-        return collect(array_map(
+        $result = collect(array_map(
             fn($row) => array_values(array_intersect_key($row, array_flip($activeCols))),
             $rows
         ));
+
+        Log::info('MonthlyBudgetExport: collection() completed successfully', [
+            'record_count' => count($rows),
+            'columns'      => $activeCols,
+        ]);
+
+        return $result;
+
+        } catch (\Throwable $e) {
+            Log::error('MonthlyBudgetExport: collection() failed', [
+                'error'   => $e->getMessage(),
+                'class'   => get_class($e),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+                'columns' => $this->columns ?: self::allColumns(),
+            ]);
+            throw $e;
+        }
     }
 
     public function headings(): array
@@ -143,6 +169,8 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
+                Log::info('MonthlyBudgetExport: AfterSheet styling started');
+                try {
                 $sheet      = $event->sheet->getDelegate();
                 $activeCols = $this->columns ?: self::allColumns();
                 $colCount   = count($activeCols);
@@ -152,6 +180,18 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
                 $this->applyHeadingStyle($sheet, $endCol, $activeCols);
                 $this->applyDataStyle($sheet, $endCol, $activeCols);
                 $this->applyHierarchicalMerges($sheet, $activeCols);
+
+                Log::info('MonthlyBudgetExport: AfterSheet styling completed successfully');
+                } catch (\Throwable $e) {
+                    Log::error('MonthlyBudgetExport: AfterSheet styling failed', [
+                        'error' => $e->getMessage(),
+                        'class' => get_class($e),
+                        'file'  => $e->getFile(),
+                        'line'  => $e->getLine(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    throw $e;
+                }
             },
         ];
     }
@@ -281,6 +321,22 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
                 'vertical'   => Alignment::VERTICAL_CENTER,
             ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color'       => ['argb' => 'FFB0B0B0'],
+                ],
+            ],
+        ]);
+
+        // Outer border on heading + data block
+        $sheet->getStyle("A6:{$endCol}{$highestRow}")->applyFromArray([
+            'borders' => [
+                'outline' => [
+                    'borderStyle' => Border::BORDER_MEDIUM,
+                    'color'       => ['argb' => 'FF009966'],
+                ],
+            ],
         ]);
 
         $leftCols = ['level1', 'level2', 'level3', 'notes'];
@@ -291,6 +347,14 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
                     ->setHorizontal(Alignment::HORIZONTAL_LEFT)
                     ->setWrapText(true);
             }
+        }
+
+        // Apply money number format for budget column
+        $colMap = array_flip($activeCols);
+        if (isset($colMap['budget'])) {
+            $budgetCol = Coordinate::stringFromColumnIndex($colMap['budget'] + 1);
+            $sheet->getStyle("{$budgetCol}7:{$budgetCol}{$highestRow}")
+                ->getNumberFormat()->setFormatCode('#,##0.00');
         }
 
         $sheet->freezePane('A7');

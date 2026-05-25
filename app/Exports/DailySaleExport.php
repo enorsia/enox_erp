@@ -12,7 +12,9 @@ use Maatwebsite\Excel\Concerns\WithCustomStartCell;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Illuminate\Support\Facades\Log;
 
 class DailySaleExport implements FromCollection, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell
 {
@@ -28,6 +30,11 @@ class DailySaleExport implements FromCollection, WithHeadings, WithEvents, Shoul
 
     public function collection(): Collection
     {
+        Log::info('DailySaleExport: collection() started', [
+            'columns' => $this->columns ?: self::allColumns(),
+        ]);
+
+        try {
         $this->dataRowIdx  = 0;
         $this->mergeRanges = [];
 
@@ -80,16 +87,16 @@ class DailySaleExport implements FromCollection, WithHeadings, WithEvents, Shoul
                 'level2'                       => $l2,
                 'level3'                       => $l3,
                 'date'                         => $record->date?->format('d M Y'),
-                'spent'                        => number_format($record->spent, 2),
-                'sales'                        => number_format($record->sales, 2),
-                'number_of_orders'             => $record->number_of_orders,
-                'number_of_quantities'         => $record->number_of_quantities,
-                'number_of_male_orders'        => $record->number_of_male_orders,
-                'number_of_female_orders'      => $record->number_of_female_orders,
-                'number_of_kids_orders'        => $record->number_of_kids_orders,
-                'number_of_male_quantities'    => $record->number_of_male_quantities,
-                'number_of_female_quantities'  => $record->number_of_female_quantities,
-                'number_of_kids_quantities'    => $record->number_of_kids_quantities,
+                'spent'                        => (float) ($record->spent ?? 0),
+                'sales'                        => (float) ($record->sales ?? 0),
+                'number_of_orders'             => (int)   ($record->number_of_orders ?? 0),
+                'number_of_quantities'         => (int)   ($record->number_of_quantities ?? 0),
+                'number_of_male_orders'        => (int)   ($record->number_of_male_orders ?? 0),
+                'number_of_female_orders'      => (int)   ($record->number_of_female_orders ?? 0),
+                'number_of_kids_orders'        => (int)   ($record->number_of_kids_orders ?? 0),
+                'number_of_male_quantities'    => (int)   ($record->number_of_male_quantities ?? 0),
+                'number_of_female_quantities'  => (int)   ($record->number_of_female_quantities ?? 0),
+                'number_of_kids_quantities'    => (int)   ($record->number_of_kids_quantities ?? 0),
                 'created_at'                   => $record->created_at?->format('d M Y'),
                 'updated_at'                   => $record->updated_at?->format('d M Y'),
             ];
@@ -103,10 +110,29 @@ class DailySaleExport implements FromCollection, WithHeadings, WithEvents, Shoul
         unset($row);
 
         $activeCols = $this->columns ?: self::allColumns();
-        return collect(array_map(
+        $result = collect(array_map(
             fn($row) => array_values(array_intersect_key($row, array_flip($activeCols))),
             $rows
         ));
+
+        Log::info('DailySaleExport: collection() completed successfully', [
+            'record_count' => count($rows),
+            'columns'      => $activeCols,
+        ]);
+
+        return $result;
+
+        } catch (\Throwable $e) {
+            Log::error('DailySaleExport: collection() failed', [
+                'error'   => $e->getMessage(),
+                'class'   => get_class($e),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+                'columns' => $this->columns ?: self::allColumns(),
+            ]);
+            throw $e;
+        }
     }
 
     public function headings(): array
@@ -154,6 +180,8 @@ class DailySaleExport implements FromCollection, WithHeadings, WithEvents, Shoul
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
+                Log::info('DailySaleExport: AfterSheet styling started');
+                try {
                 $sheet      = $event->sheet->getDelegate();
                 $activeCols = $this->columns ?: self::allColumns();
                 $colCount   = count($activeCols);
@@ -163,6 +191,18 @@ class DailySaleExport implements FromCollection, WithHeadings, WithEvents, Shoul
                 $this->applyHeadingStyle($sheet, $endCol, $activeCols);
                 $this->applyDataStyle($sheet, $endCol, $activeCols);
                 $this->applyHierarchicalMerges($sheet, $activeCols);
+
+                Log::info('DailySaleExport: AfterSheet styling completed successfully');
+                } catch (\Throwable $e) {
+                    Log::error('DailySaleExport: AfterSheet styling failed', [
+                        'error' => $e->getMessage(),
+                        'class' => get_class($e),
+                        'file'  => $e->getFile(),
+                        'line'  => $e->getLine(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    throw $e;
+                }
             },
         ];
     }
@@ -293,6 +333,22 @@ class DailySaleExport implements FromCollection, WithHeadings, WithEvents, Shoul
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
                 'vertical'   => Alignment::VERTICAL_CENTER,
             ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color'       => ['argb' => 'FFB0B0B0'],
+                ],
+            ],
+        ]);
+
+        // Outer border on heading + data block
+        $sheet->getStyle("A6:{$endCol}{$highestRow}")->applyFromArray([
+            'borders' => [
+                'outline' => [
+                    'borderStyle' => Border::BORDER_MEDIUM,
+                    'color'       => ['argb' => 'FF009966'],
+                ],
+            ],
         ]);
 
         $leftCols = ['level1', 'level2', 'level3'];
@@ -305,7 +361,16 @@ class DailySaleExport implements FromCollection, WithHeadings, WithEvents, Shoul
             }
         }
 
+        // Apply money number format for currency columns
+        $moneyCols = ['spent', 'sales'];
+        foreach ($activeCols as $idx => $colKey) {
+            if (in_array($colKey, $moneyCols)) {
+                $excelCol = Coordinate::stringFromColumnIndex($idx + 1);
+                $sheet->getStyle("{$excelCol}7:{$excelCol}{$highestRow}")
+                    ->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+        }
+
         $sheet->freezePane('A7');
     }
 }
-

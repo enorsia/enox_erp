@@ -12,6 +12,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Facades\Log;
 
 class DashboardAnalyticsExport
 {
@@ -69,6 +70,15 @@ class DashboardAnalyticsExport
 
     public function download(DashboardAnalyticsService $service): StreamedResponse
     {
+        Log::info('DashboardAnalyticsExport: download() started', [
+            'date_from' => $this->dateFrom,
+            'date_to'   => $this->dateTo,
+            'months'    => $this->months,
+            'label'     => $this->label,
+            'tables'    => $this->tables,
+        ]);
+
+        try {
         $spreadsheet = new Spreadsheet();
         $spreadsheet->removeSheetByIndex(0);
 
@@ -96,9 +106,14 @@ class DashboardAnalyticsExport
 
         $spreadsheet->setActiveSheetIndex(0);
 
-        $filename = 'analytics-'
-            . str_replace(' ', '_', strtolower($this->label['label'] ?? 'report'))
-            . '-' . now()->format('Y-m-d') . '.xlsx';
+        $filename = 'Analytics Report - '
+            . ($this->label['label'] ?? 'Report')
+            . ' - ' . now()->format('d M Y') . '.xlsx';
+
+        Log::info('DashboardAnalyticsExport: download() spreadsheet built successfully', [
+            'filename' => $filename,
+            'sheets'   => count($spreadsheet->getAllSheets()),
+        ]);
 
         return new StreamedResponse(function () use ($spreadsheet) {
             $writer = new Xlsx($spreadsheet);
@@ -108,6 +123,20 @@ class DashboardAnalyticsExport
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
             'Cache-Control'       => 'max-age=0',
         ]);
+
+        } catch (\Throwable $e) {
+            Log::error('DashboardAnalyticsExport: download() failed', [
+                'error'     => $e->getMessage(),
+                'class'     => get_class($e),
+                'file'      => $e->getFile(),
+                'line'      => $e->getLine(),
+                'trace'     => $e->getTraceAsString(),
+                'date_from' => $this->dateFrom,
+                'date_to'   => $this->dateTo,
+                'label'     => $this->label,
+            ]);
+            throw $e;
+        }
     }
 
     private function writeSheetData(
@@ -118,6 +147,14 @@ class DashboardAnalyticsExport
         array  $months,
         array  $label,
     ): void {
+        Log::info('DashboardAnalyticsExport: writeSheetData() started', [
+            'date_from' => $dateFrom,
+            'date_to'   => $dateTo,
+            'label'     => $label,
+            'tables'    => $this->tables,
+        ]);
+
+        try {
         $includeDailyReport     = in_array('daily_report',      $this->tables);
         $includeReturnBreakdown = in_array('return_breakdown',   $this->tables);
         $includeWeeklyBreakdown = in_array('weekly_breakdown',   $this->tables);
@@ -440,17 +477,26 @@ class DashboardAnalyticsExport
         ];
 
         foreach ($summaryRows as $key => $sRow) {
-            $color = $summaryColorMap[$key] ?? self::CLR_WHITE;
+            $color          = $summaryColorMap[$key] ?? self::CLR_WHITE;
+            $useSumFormulas = in_array($key, ['total_sale', 'total_spend']) && $dataEndRow >= $dataStartRow;
+
             $sheet->setCellValue('B' . $r, $sRow['label']);
             $sheet->getStyle('B' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
             if ($sRow['col_c'] !== null) {
-                $sheet->setCellValue('C' . $r, round((float) $sRow['col_c'], 2));
+                $val = $useSumFormulas && $key === 'total_sale'
+                    ? "=SUM(C{$dataStartRow}:C{$dataEndRow})"
+                    : round((float) $sRow['col_c'], 2);
+                $sheet->setCellValue('C' . $r, $val);
                 $sheet->getStyle('C' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             }
             if ($sRow['col_e'] !== null) {
                 $colEIsPercent = !empty($sRow['col_e_format']) && str_contains($sRow['col_e_format'], '%');
-                $sheet->setCellValue('E' . $r, $colEIsPercent ? (float) $sRow['col_e'] : round((float) $sRow['col_e'], 2));
+                if ($useSumFormulas && $key === 'total_spend' && !$colEIsPercent) {
+                    $sheet->setCellValue('E' . $r, "=SUM(E{$dataStartRow}:E{$dataEndRow})");
+                } else {
+                    $sheet->setCellValue('E' . $r, $colEIsPercent ? (float) $sRow['col_e'] : round((float) $sRow['col_e'], 2));
+                }
                 $sheet->getStyle('E' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                 if (!empty($sRow['col_e_format'])) {
                     $sheet->getStyle('E' . $r)->getNumberFormat()->setFormatCode($sRow['col_e_format']);
@@ -460,68 +506,105 @@ class DashboardAnalyticsExport
             foreach ($sRow['platform'] as $colKey => $value) {
                 if (!isset($platColMap[$colKey])) continue;
                 $ci = $platColMap[$colKey];
-                $platIsPercent = !empty($sRow['platform_formats'][$colKey]) && str_contains($sRow['platform_formats'][$colKey], '%');
-                $sheet->setCellValueByColumnAndRow($ci, $r, $platIsPercent ? (float) $value : round((float) $value, 2));
-                $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-                if (!empty($sRow['platform_formats'][$colKey])) {
-                    $sheet->getStyleByColumnAndRow($ci, $r)->getNumberFormat()->setFormatCode($sRow['platform_formats'][$colKey]);
+                if ($useSumFormulas) {
+                    $excelCol = Coordinate::stringFromColumnIndex($ci);
+                    $sheet->setCellValueByColumnAndRow($ci, $r, "=SUM({$excelCol}{$dataStartRow}:{$excelCol}{$dataEndRow})");
+                } else {
+                    $platIsPercent = !empty($sRow['platform_formats'][$colKey]) && str_contains($sRow['platform_formats'][$colKey], '%');
+                    $sheet->setCellValueByColumnAndRow($ci, $r, $platIsPercent ? (float) $value : round((float) $value, 2));
+                    if (!empty($sRow['platform_formats'][$colKey])) {
+                        $sheet->getStyleByColumnAndRow($ci, $r)->getNumberFormat()->setFormatCode($sRow['platform_formats'][$colKey]);
+                    }
                 }
+                $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             }
 
             foreach ($allPlatCols as $i => $platCol) {
                 if ($platCol['kind'] !== 'summary') continue;
                 $ci  = $platBaseCol + $i;
-                $val = 0;
-                foreach ($platCol['leaf_ids'] as $leafId) {
-                    $lk = "{$leafId}_{$platCol['col_type']}";
-                    if (isset($sRow['platform'][$lk])) $val += $sRow['platform'][$lk];
-                }
-                if ($val != 0) {
-                    $summaryIsPercent = false;
-                    if (!empty($sRow['platform_formats'])) {
-                        foreach ($platCol['leaf_ids'] as $leafId) {
-                            $lk = "{$leafId}_{$platCol['col_type']}";
-                            if (!empty($sRow['platform_formats'][$lk]) && str_contains($sRow['platform_formats'][$lk], '%')) {
-                                $summaryIsPercent = true;
-                                break;
+                if ($useSumFormulas) {
+                    $excelCol = Coordinate::stringFromColumnIndex($ci);
+                    $sheet->setCellValueByColumnAndRow($ci, $r, "=SUM({$excelCol}{$dataStartRow}:{$excelCol}{$dataEndRow})");
+                    $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                } else {
+                    $val = 0;
+                    foreach ($platCol['leaf_ids'] as $leafId) {
+                        $lk = "{$leafId}_{$platCol['col_type']}";
+                        if (isset($sRow['platform'][$lk])) $val += $sRow['platform'][$lk];
+                    }
+                    if ($val != 0) {
+                        $summaryIsPercent = false;
+                        if (!empty($sRow['platform_formats'])) {
+                            foreach ($platCol['leaf_ids'] as $leafId) {
+                                $lk = "{$leafId}_{$platCol['col_type']}";
+                                if (!empty($sRow['platform_formats'][$lk]) && str_contains($sRow['platform_formats'][$lk], '%')) {
+                                    $summaryIsPercent = true;
+                                    break;
+                                }
                             }
                         }
-                    }
-                    $sheet->setCellValueByColumnAndRow($ci, $r, $summaryIsPercent ? (float) $val : round((float) $val, 2));
-                    $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-                    if (!empty($sRow['platform_formats'])) {
-                        foreach ($platCol['leaf_ids'] as $leafId) {
-                            $lk = "{$leafId}_{$platCol['col_type']}";
-                            if (!empty($sRow['platform_formats'][$lk])) {
-                                $sheet->getStyleByColumnAndRow($ci, $r)->getNumberFormat()->setFormatCode($sRow['platform_formats'][$lk]);
-                                break;
+                        $sheet->setCellValueByColumnAndRow($ci, $r, $summaryIsPercent ? (float) $val : round((float) $val, 2));
+                        $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                        if (!empty($sRow['platform_formats'])) {
+                            foreach ($platCol['leaf_ids'] as $leafId) {
+                                $lk = "{$leafId}_{$platCol['col_type']}";
+                                if (!empty($sRow['platform_formats'][$lk])) {
+                                    $sheet->getStyleByColumnAndRow($ci, $r)->getNumberFormat()->setFormatCode($sRow['platform_formats'][$lk]);
+                                    break;
+                                }
                             }
                         }
                     }
                 }
             }
 
-            if (!empty($sRow['total_orders'])) $sheet->setCellValueByColumnAndRow($rsOrdersCol, $r, round((float) $sRow['total_orders'], 2));
-            if (!empty($sRow['root_orders'])) {
+            if ($useSumFormulas) {
+                // SUM formulas for order / qty / gender columns
+                foreach ([
+                    $rsOrdersCol  => "=SUM(" . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($rsOrdersCol) . "{$dataStartRow}:" . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($rsOrdersCol) . "{$dataEndRow})",
+                    $rsQtyCol     => "=SUM(" . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($rsQtyCol)     . "{$dataStartRow}:" . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($rsQtyCol)     . "{$dataEndRow})",
+                    $rsKidsCol    => "=SUM(" . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($rsKidsCol)    . "{$dataStartRow}:" . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($rsKidsCol)    . "{$dataEndRow})",
+                    $rsFemaleCol  => "=SUM(" . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($rsFemaleCol) . "{$dataStartRow}:" . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($rsFemaleCol) . "{$dataEndRow})",
+                    $rsMaleCol    => "=SUM(" . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($rsMaleCol)   . "{$dataStartRow}:" . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($rsMaleCol)   . "{$dataEndRow})",
+                ] as $ci => $formula) {
+                    $sheet->setCellValueByColumnAndRow($ci, $r, $formula);
+                    $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                }
                 foreach ($rootPlatforms as $root) {
                     $rid = $root['id'];
-                    if (isset($sRow['root_orders'][$rid], $rsRootOrderCols[$rid])) {
-                        $sheet->setCellValueByColumnAndRow($rsRootOrderCols[$rid], $r, round((float) $sRow['root_orders'][$rid], 2));
+                    foreach ([
+                        $rsRootOrderCols[$rid] ?? null,
+                        $rsRootQtyCols[$rid]   ?? null,
+                    ] as $ci) {
+                        if ($ci === null) continue;
+                        $excelCol = Coordinate::stringFromColumnIndex($ci);
+                        $sheet->setCellValueByColumnAndRow($ci, $r, "=SUM({$excelCol}{$dataStartRow}:{$excelCol}{$dataEndRow})");
+                        $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                     }
                 }
-            }
-            if (!empty($sRow['total_qty'])) $sheet->setCellValueByColumnAndRow($rsQtyCol, $r, round((float) $sRow['total_qty'], 2));
-            if (!empty($sRow['root_qty'])) {
-                foreach ($rootPlatforms as $root) {
-                    $rid = $root['id'];
-                    if (isset($sRow['root_qty'][$rid], $rsRootQtyCols[$rid])) {
-                        $sheet->setCellValueByColumnAndRow($rsRootQtyCols[$rid], $r, round((float) $sRow['root_qty'][$rid], 2));
+            } else {
+                if (!empty($sRow['total_orders'])) $sheet->setCellValueByColumnAndRow($rsOrdersCol, $r, round((float) $sRow['total_orders'], 2));
+                if (!empty($sRow['root_orders'])) {
+                    foreach ($rootPlatforms as $root) {
+                        $rid = $root['id'];
+                        if (isset($sRow['root_orders'][$rid], $rsRootOrderCols[$rid])) {
+                            $sheet->setCellValueByColumnAndRow($rsRootOrderCols[$rid], $r, round((float) $sRow['root_orders'][$rid], 2));
+                        }
                     }
                 }
+                if (!empty($sRow['total_qty'])) $sheet->setCellValueByColumnAndRow($rsQtyCol, $r, round((float) $sRow['total_qty'], 2));
+                if (!empty($sRow['root_qty'])) {
+                    foreach ($rootPlatforms as $root) {
+                        $rid = $root['id'];
+                        if (isset($sRow['root_qty'][$rid], $rsRootQtyCols[$rid])) {
+                            $sheet->setCellValueByColumnAndRow($rsRootQtyCols[$rid], $r, round((float) $sRow['root_qty'][$rid], 2));
+                        }
+                    }
+                }
+                if ($sRow['kids']   !== null) $sheet->setCellValueByColumnAndRow($rsKidsCol,   $r, round((float) $sRow['kids'],   2));
+                if ($sRow['female'] !== null) $sheet->setCellValueByColumnAndRow($rsFemaleCol,  $r, round((float) $sRow['female'], 2));
+                if ($sRow['male']   !== null) $sheet->setCellValueByColumnAndRow($rsMaleCol,    $r, round((float) $sRow['male'],   2));
             }
-            if ($sRow['kids']   !== null) $sheet->setCellValueByColumnAndRow($rsKidsCol,   $r, round((float) $sRow['kids'],   2));
-            if ($sRow['female'] !== null) $sheet->setCellValueByColumnAndRow($rsFemaleCol,  $r, round((float) $sRow['female'], 2));
-            if ($sRow['male']   !== null) $sheet->setCellValueByColumnAndRow($rsMaleCol,    $r, round((float) $sRow['male'],   2));
 
             $this->fillRow($sheet, $r, $mainLastCol, $color);
             $sheet->getStyle('B' . $r)->getFont()->setBold(true);
@@ -867,6 +950,26 @@ class DashboardAnalyticsExport
             $headerEndCol,
             'Tracking Digital Marketing COST VS Allocation – ' . ($label['label'] ?? '')
         );
+
+        Log::info('DashboardAnalyticsExport: writeSheetData() completed successfully', [
+            'date_from' => $dateFrom,
+            'date_to'   => $dateTo,
+            'label'     => $label,
+        ]);
+
+        } catch (\Throwable $e) {
+            Log::error('DashboardAnalyticsExport: writeSheetData() failed', [
+                'error'     => $e->getMessage(),
+                'class'     => get_class($e),
+                'file'      => $e->getFile(),
+                'line'      => $e->getLine(),
+                'trace'     => $e->getTraceAsString(),
+                'date_from' => $dateFrom,
+                'date_to'   => $dateTo,
+                'label'     => $label,
+            ]);
+            throw $e;
+        }
     }
 
     private function applyHeaderRows($sheet, string $endCol, string $title): void

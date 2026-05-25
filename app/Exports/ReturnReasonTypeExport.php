@@ -12,7 +12,9 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Illuminate\Support\Facades\Log;
 
 class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell, WithMapping
 {
@@ -27,16 +29,32 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
 
     public function query()
     {
+        Log::info('ReturnReasonTypeExport: query() called', [
+            'columns' => $this->columns ?: $this->allColumns(),
+        ]);
         return $this->query;
     }
 
     public function map($row): array
     {
+        try {
         $this->rowIndex++;
         $cols = $this->columns ?: $this->allColumns();
         $map  = $this->rowMap($row);
         $map['id'] = $this->rowIndex;
         return array_values(array_intersect_key($map, array_flip($cols)));
+        } catch (\Throwable $e) {
+            Log::error('ReturnReasonTypeExport: map() failed', [
+                'error'      => $e->getMessage(),
+                'class'      => get_class($e),
+                'file'       => $e->getFile(),
+                'line'       => $e->getLine(),
+                'trace'      => $e->getTraceAsString(),
+                'row_index'  => $this->rowIndex,
+                'row_id'     => $row->id ?? null,
+            ]);
+            throw $e;
+        }
     }
 
     public function headings(): array
@@ -54,7 +72,7 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
             'slug'        => $row->slug,
             'description' => $row->description ?? '-',
             'is_active'   => $row->is_active ? 'Active' : 'Inactive',
-            'sort_order'  => $row->sort_order,
+            'sort_order'  => (int) ($row->sort_order ?? 0),
             'created_at'  => $row->created_at?->format('d M Y'),
             'updated_at'  => $row->updated_at?->format('d M Y'),
         ];
@@ -83,6 +101,8 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
+                Log::info('ReturnReasonTypeExport: AfterSheet styling started');
+                try {
                 $sheet      = $event->sheet->getDelegate();
                 $activeCols = $this->columns ?: $this->allColumns();
                 $cols       = count($activeCols);
@@ -91,6 +111,20 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
                 $this->applyHeaderRows($sheet, $endCol, 'RETURN REASON TYPES');
                 $this->applyHeadingStyle($sheet, $endCol);
                 $this->applyDataStyle($sheet, $endCol, $activeCols);
+
+                Log::info('ReturnReasonTypeExport: AfterSheet styling completed successfully', [
+                    'total_rows' => $this->rowIndex,
+                ]);
+                } catch (\Throwable $e) {
+                    Log::error('ReturnReasonTypeExport: AfterSheet styling failed', [
+                        'error' => $e->getMessage(),
+                        'class' => get_class($e),
+                        'file'  => $e->getFile(),
+                        'line'  => $e->getLine(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    throw $e;
+                }
             },
         ];
     }
@@ -141,6 +175,21 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
                 'vertical'   => Alignment::VERTICAL_CENTER,
             ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color'       => ['argb' => 'FFB0B0B0'],
+                ],
+            ],
+        ]);
+
+        $sheet->getStyle("A6:{$endCol}{$highestRow}")->applyFromArray([
+            'borders' => [
+                'outline' => [
+                    'borderStyle' => Border::BORDER_MEDIUM,
+                    'color'       => ['argb' => 'FF009966'],
+                ],
+            ],
         ]);
 
         $leftCols = ['name', 'slug', 'description'];
@@ -155,4 +204,6 @@ class ReturnReasonTypeExport implements FromQuery, WithHeadings, WithEvents, Sho
 
         $sheet->freezePane('A7');
     }
+
+
 }

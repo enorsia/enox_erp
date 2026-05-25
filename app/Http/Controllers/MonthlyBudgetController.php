@@ -178,7 +178,7 @@ class MonthlyBudgetController extends Controller
 
         return Excel::download(
             new MonthlyBudgetExport($query, $columns),
-            'monthly-budgets-' . now()->format('Y-m-d') . '.xlsx'
+            'Monthly Budget Report - ' . now()->format('d M Y') . '.xlsx'
         );
     }
 

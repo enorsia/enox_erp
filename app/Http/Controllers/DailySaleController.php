@@ -240,7 +240,7 @@ class DailySaleController extends Controller
 
         return Excel::download(
             new DailySaleExport($this->service->getExportQuery($request->except(['columns'])), $columns),
-            'daily-sales-' . now()->format('Y-m-d') . '.xlsx'
+            'Daily Sales Report - ' . now()->format('d M Y') . '.xlsx'
         );
     }
 

@@ -203,7 +203,7 @@ class DailyReturnController extends Controller
 
         return Excel::download(
             new DailyReturnExport($query, $columns),
-            'daily-returns-' . now()->format('Y-m-d') . '.xlsx'
+            'Daily Returns Report - ' . now()->format('d M Y') . '.xlsx'
         );
     }
 

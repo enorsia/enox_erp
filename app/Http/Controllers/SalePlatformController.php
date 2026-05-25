@@ -244,7 +244,7 @@ class SalePlatformController extends Controller
 
         return Excel::download(
             new SalePlatformExport($query, $columns),
-            'sale-platforms-' . now()->format('Y-m-d') . '.xlsx'
+            'Sale Platforms - ' . now()->format('d M Y') . '.xlsx'
         );
     }
 

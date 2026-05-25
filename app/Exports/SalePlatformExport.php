@@ -12,7 +12,9 @@ use Maatwebsite\Excel\Concerns\WithCustomStartCell;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Illuminate\Support\Facades\Log;
 
 class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell
 {
@@ -30,6 +32,11 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
 
     public function collection(): Collection
     {
+        Log::info('SalePlatformExport: collection() started', [
+            'columns' => $this->columns ?: self::allColumns(),
+        ]);
+
+        try {
         $this->dataRowIdx  = 0;
         $this->mergeRanges = [];
 
@@ -50,10 +57,29 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
 
         $activeCols = $this->columns ?: self::allColumns();
 
-        return collect(array_map(
+        $result = collect(array_map(
             fn($row) => array_values(array_intersect_key($row, array_flip($activeCols))),
             $rows
         ));
+
+        Log::info('SalePlatformExport: collection() completed successfully', [
+            'record_count' => count($rows),
+            'columns'      => $activeCols,
+        ]);
+
+        return $result;
+
+        } catch (\Throwable $e) {
+            Log::error('SalePlatformExport: collection() failed', [
+                'error'   => $e->getMessage(),
+                'class'   => get_class($e),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+                'columns' => $this->columns ?: self::allColumns(),
+            ]);
+            throw $e;
+        }
     }
 
     private function appendPlatformRows($root, Collection $childrenMap, array &$rows): void
@@ -106,7 +132,7 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
             'is_active'             => ($platform->is_active ?? false) ? 'Active' : 'Inactive',
             'show_in_analytics'     => ($platform->show_in_analytics ?? true) ? 'Yes' : 'No',
             'show_in_sale_tracking' => ($platform->show_in_sale_tracking ?? true) ? 'Yes' : 'No',
-            'sort_order'            => $platform->sort_order ?? 0,
+            'sort_order'            => (int) ($platform->sort_order ?? 0),
             'created_at'            => $platform->created_at?->format('d M Y'),
             'updated_at'            => $platform->updated_at?->format('d M Y'),
         ];
@@ -147,6 +173,8 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
+                Log::info('SalePlatformExport: AfterSheet styling started');
+                try {
                 $sheet      = $event->sheet->getDelegate();
                 $activeCols = $this->columns ?: self::allColumns();
                 $colCount   = count($activeCols);
@@ -156,6 +184,18 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
                 $this->applyHeadingStyle($sheet, $endCol);
                 $this->applyDataStyle($sheet, $endCol, $activeCols);
                 $this->applyHierarchicalMerges($sheet, $activeCols);
+
+                Log::info('SalePlatformExport: AfterSheet styling completed successfully');
+                } catch (\Throwable $e) {
+                    Log::error('SalePlatformExport: AfterSheet styling failed', [
+                        'error' => $e->getMessage(),
+                        'class' => get_class($e),
+                        'file'  => $e->getFile(),
+                        'line'  => $e->getLine(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    throw $e;
+                }
             },
         ];
     }
@@ -239,6 +279,21 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
                 'vertical'   => Alignment::VERTICAL_CENTER,
             ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color'       => ['argb' => 'FFB0B0B0'],
+                ],
+            ],
+        ]);
+
+        $sheet->getStyle("A6:{$endCol}{$highestRow}")->applyFromArray([
+            'borders' => [
+                'outline' => [
+                    'borderStyle' => Border::BORDER_MEDIUM,
+                    'color'       => ['argb' => 'FF009966'],
+                ],
+            ],
         ]);
 
         $leftCols = ['level1', 'level2', 'level3'];
@@ -254,4 +309,5 @@ class SalePlatformExport implements FromCollection, WithHeadings, WithEvents, Sh
         $sheet->freezePane('A7');
     }
 }
+
 

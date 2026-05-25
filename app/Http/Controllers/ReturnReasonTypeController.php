@@ -132,7 +132,7 @@ class ReturnReasonTypeController extends Controller
 
         return Excel::download(
             new ReturnReasonTypeExport($query, $columns),
-            'return-reason-types-' . now()->format('Y-m-d') . '.xlsx'
+            'Return Reason Types - ' . now()->format('d M Y') . '.xlsx'
         );
     }
 

@@ -14,12 +14,12 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Illuminate\Support\Facades\Log;
 
 class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, ShouldAutoSize, WithCustomStartCell
 {
     private int   $dataRowIdx  = 0;
     private array $mergeRanges = [];
-    private array $rowBands    = [];   // excel_row => band_index (0-based, per Level-1 group)
 
     public function __construct(
         private Builder $query,
@@ -30,9 +30,13 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
 
     public function collection(): Collection
     {
+        Log::info('DailyReturnExport: collection() started', [
+            'columns' => $this->columns ?: self::allColumns(),
+        ]);
+
+        try {
         $this->dataRowIdx  = 0;
         $this->mergeRanges = [];
-        $this->rowBands    = [];
 
         $records = $this->query
             ->with(['salePlatform.parent.parent', 'returnReasonType'])
@@ -84,15 +88,15 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
                 'level3'                             => $l3,
                 'reason'                             => $record->returnReasonType?->name ?? '-',
                 'date'                               => $record->date?->format('d M Y'),
-                'return_amount'                      => $record->return_amount,
-                'number_of_returns'                  => $record->number_of_returns,
-                'number_of_return_quantities'        => $record->number_of_return_quantities,
-                'number_of_male_returns'             => $record->number_of_male_returns,
-                'number_of_female_returns'           => $record->number_of_female_returns,
-                'number_of_kids_returns'             => $record->number_of_kids_returns,
-                'number_of_male_return_quantities'   => $record->number_of_male_return_quantities,
-                'number_of_female_return_quantities' => $record->number_of_female_return_quantities,
-                'number_of_kids_return_quantities'   => $record->number_of_kids_return_quantities,
+                'return_amount'                      => (float) ($record->return_amount ?? 0),
+                'number_of_returns'                  => (int) ($record->number_of_returns ?? 0),
+                'number_of_return_quantities'        => (int) ($record->number_of_return_quantities ?? 0),
+                'number_of_male_returns'             => (int) ($record->number_of_male_returns ?? 0),
+                'number_of_female_returns'           => (int) ($record->number_of_female_returns ?? 0),
+                'number_of_kids_returns'             => (int) ($record->number_of_kids_returns ?? 0),
+                'number_of_male_return_quantities'   => (int) ($record->number_of_male_return_quantities ?? 0),
+                'number_of_female_return_quantities' => (int) ($record->number_of_female_return_quantities ?? 0),
+                'number_of_kids_return_quantities'   => (int) ($record->number_of_kids_return_quantities ?? 0),
                 'created_at'                         => $record->created_at?->format('d M Y'),
                 'updated_at'                         => $record->updated_at?->format('d M Y'),
             ];
@@ -105,23 +109,31 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
         foreach ($rows as $i => &$row) { $row['id'] = $i + 1; }
         unset($row);
 
-        // Track which Excel row belongs to which Level-1 platform group
-        // (used later in AfterSheet for alternating band colours)
-        $prevL1  = null;
-        $bandIdx = -1;
-        foreach ($rows as $i => $row) {
-            if ($row['level1'] !== $prevL1) {
-                $bandIdx++;
-                $prevL1 = $row['level1'];
-            }
-            $this->rowBands[$i + 7] = $bandIdx;   // Excel row = 0-based index + 7
-        }
 
         $activeCols = $this->columns ?: self::allColumns();
-        return collect(array_map(
+        $result = collect(array_map(
             fn($row) => array_values(array_intersect_key($row, array_flip($activeCols))),
             $rows
         ));
+
+        Log::info('DailyReturnExport: collection() completed successfully', [
+            'record_count' => count($rows),
+            'columns'      => $activeCols,
+        ]);
+
+        return $result;
+
+        } catch (\Throwable $e) {
+            Log::error('DailyReturnExport: collection() failed', [
+                'error'   => $e->getMessage(),
+                'class'   => get_class($e),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+                'columns' => $this->columns ?: self::allColumns(),
+            ]);
+            throw $e;
+        }
     }
 
     public function headings(): array
@@ -170,6 +182,8 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
+                Log::info('DailyReturnExport: AfterSheet styling started');
+                try {
                 $sheet      = $event->sheet->getDelegate();
                 $activeCols = $this->columns ?: self::allColumns();
                 $colCount   = count($activeCols);
@@ -179,6 +193,18 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
                 $this->applyHeadingStyle($sheet, $endCol, $activeCols);
                 $this->applyDataStyle($sheet, $endCol, $activeCols);
                 $this->applyHierarchicalMerges($sheet, $activeCols);
+
+                Log::info('DailyReturnExport: AfterSheet styling completed successfully');
+                } catch (\Throwable $e) {
+                    Log::error('DailyReturnExport: AfterSheet styling failed', [
+                        'error' => $e->getMessage(),
+                        'class' => get_class($e),
+                        'file'  => $e->getFile(),
+                        'line'  => $e->getLine(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    throw $e;
+                }
             },
         ];
     }
@@ -253,70 +279,47 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
 
     private function applyHeaderRows($sheet, string $endCol, string $title): void
     {
-        $rows = [
-            [config('app.name', 'ENOX ERP'),                     'FF005C3E', 'FFFFFFFF', 18, 34],
-            [$title,                                              'FF009966', 'FFFFFFFF', 13, 26],
-            ['Generated: ' . now()->format('d M Y H:i'),         'FFB2DFDB', 'FF003D2B', 11, 20],
-        ];
+        $appName = config('app.name', 'ENOX ERP');
+        $info    = [$appName, $title, 'Generated: ' . now()->format('d M Y H:i')];
 
-        foreach ($rows as $i => [$text, $bg, $fg, $size, $height]) {
+        foreach ($info as $i => $text) {
             $row = $i + 1;
             $sheet->setCellValue("A{$row}", $text);
             $sheet->mergeCells("A{$row}:{$endCol}{$row}");
-            $sheet->getStyle("A{$row}:{$endCol}{$row}")->applyFromArray([
-                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => $bg]],
-                'font'      => ['bold' => true, 'size' => $size, 'color' => ['argb' => $fg]],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-            ]);
-            $sheet->getRowDimension($row)->setRowHeight($height);
         }
+
+        $sheet->getStyle("A1:{$endCol}3")->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 14],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
+        ]);
+        $sheet->getStyle('A1')->getFont()->setSize(18)->setBold(true);
+        $sheet->getRowDimension(1)->setRowHeight(30);
+        $sheet->getRowDimension(2)->setRowHeight(22);
     }
 
     private function applyHeadingStyle($sheet, string $endCol, array $activeCols): void
     {
-        // Each column group gets a distinct background colour so the user can
-        // instantly spot which columns relate to which metric category.
-        $headingColors = [
-            'id'                                  => 'FF546E7A',   // blue-gray  (SL)
-            'level1'                              => 'FF263238',   // dark slate (Platform)
-            'level2'                              => 'FF37474F',   // slate      (Sub Platform)
-            'level3'                              => 'FF455A64',   // mid-slate  (Sub Sub Platform)
-            'reason'                              => 'FF6A1B9A',   // deep purple
-            'date'                                => 'FF00695C',   // dark teal
-            'return_amount'                       => 'FFBF360C',   // deep orange
-            'number_of_returns'                   => 'FF283593',   // deep indigo
-            'number_of_return_quantities'         => 'FF283593',   // deep indigo
-            'number_of_male_returns'              => 'FF0D47A1',   // deep blue
-            'number_of_male_return_quantities'    => 'FF0D47A1',   // deep blue
-            'number_of_female_returns'            => 'FF880E4F',   // deep pink
-            'number_of_female_return_quantities'  => 'FF880E4F',   // deep pink
-            'number_of_kids_returns'              => 'FF1B5E20',   // deep green
-            'number_of_kids_return_quantities'    => 'FF1B5E20',   // deep green
-            'created_at'                          => 'FF607D8B',   // gray-blue  (audit)
-            'updated_at'                          => 'FF607D8B',   // gray-blue  (audit)
-        ];
+        $sheet->getStyle("A6:{$endCol}6")->applyFromArray([
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF009966']],
+            'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
+        ]);
+        $sheet->getRowDimension(6)->setRowHeight(20);
 
         $leftCols = ['level1', 'level2', 'level3', 'reason'];
-
         foreach ($activeCols as $idx => $colKey) {
-            $excelCol = Coordinate::stringFromColumnIndex($idx + 1);
-            $bg       = $headingColors[$colKey] ?? 'FF009966';
-            $halign   = in_array($colKey, $leftCols)
-                ? Alignment::HORIZONTAL_LEFT
-                : Alignment::HORIZONTAL_CENTER;
-
-            $sheet->getStyle("{$excelCol}6")->applyFromArray([
-                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => $bg]],
-                'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
-                'alignment' => [
-                    'horizontal' => $halign,
-                    'vertical'   => Alignment::VERTICAL_CENTER,
-                    'wrapText'   => true,
-                ],
-            ]);
+            if (in_array($colKey, $leftCols)) {
+                $excelCol = Coordinate::stringFromColumnIndex($idx + 1);
+                $sheet->getStyle("{$excelCol}6")->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            }
         }
-
-        $sheet->getRowDimension(6)->setRowHeight(22);
     }
 
     private function applyDataStyle($sheet, string $endCol, array $activeCols): void
@@ -327,74 +330,28 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
             return;
         }
 
-        // ── Colour palettes ──────────────────────────────────────────────────
+        $sheet->getStyle("A7:{$endCol}{$highestRow}")->applyFromArray([
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color'       => ['argb' => 'FFB0B0B0'],
+                ],
+            ],
+        ]);
 
-        // Alternating soft background colours – one shade per Level-1 platform group.
-        // Keeps groups visually separated without being distracting.
-        $bandColors = [
-            'FFFFFFFF',   // white          (group 1)
-            'FFF0F7FF',   // light periwinkle (group 2)
-            'FFF0FFF5',   // light mint     (group 3)
-            'FFFDF6EC',   // light cream    (group 4)
-            'FFF8F0FF',   // light lavender (group 5)
-            'FFEFF9FD',   // light cyan     (group 6 … cycles)
-        ];
-
-        // Fixed column tints for metric groups – always visible regardless of band.
-        $colTints = [
-            'return_amount'                      => 'FFFFF3E0',   // amber   – stands out
-            'number_of_returns'                  => 'FFEDE7F6',   // indigo  – totals
-            'number_of_return_quantities'        => 'FFEDE7F6',
-            'number_of_male_returns'             => 'FFE3F2FD',   // blue    – male
-            'number_of_male_return_quantities'   => 'FFE3F2FD',
-            'number_of_female_returns'           => 'FFFCE4EC',   // pink    – female
-            'number_of_female_return_quantities' => 'FFFCE4EC',
-            'number_of_kids_returns'             => 'FFF1F8E9',   // green   – kids
-            'number_of_kids_return_quantities'   => 'FFF1F8E9',
-        ];
-
-        // ── Build consecutive row-ranges per band (efficient: no cell-by-cell loop) ─
-        $bandRanges  = [];
-        $prevBandIdx = null;
-        $rangeStart  = null;
-
-        for ($row = 7; $row <= $highestRow; $row++) {
-            $bi = ($this->rowBands[$row] ?? 0) % count($bandColors);
-            if ($bi !== $prevBandIdx) {
-                if ($prevBandIdx !== null) {
-                    $bandRanges[] = ['band' => $prevBandIdx, 'start' => $rangeStart, 'end' => $row - 1];
-                }
-                $rangeStart  = $row;
-                $prevBandIdx = $bi;
-            }
-        }
-        if ($prevBandIdx !== null) {
-            $bandRanges[] = ['band' => $prevBandIdx, 'start' => $rangeStart, 'end' => $highestRow];
-        }
-
-        // ── Apply colours column by column ───────────────────────────────────
-        foreach ($activeCols as $idx => $colKey) {
-            $excelCol = Coordinate::stringFromColumnIndex($idx + 1);
-
-            if (isset($colTints[$colKey])) {
-                // Metric columns: fixed tint colour for the whole column
-                $sheet->getStyle("{$excelCol}7:{$excelCol}{$highestRow}")
-                    ->getFill()->setFillType(Fill::FILL_SOLID)
-                    ->getStartColor()->setARGB($colTints[$colKey]);
-            } else {
-                // Platform / text columns: apply the platform-group band colour
-                foreach ($bandRanges as $r) {
-                    $sheet->getStyle("{$excelCol}{$r['start']}:{$excelCol}{$r['end']}")
-                        ->getFill()->setFillType(Fill::FILL_SOLID)
-                        ->getStartColor()->setARGB($bandColors[$r['band']]);
-                }
-            }
-        }
-
-        // ── Alignment ────────────────────────────────────────────────────────
-        $sheet->getStyle("A7:{$endCol}{$highestRow}")->getAlignment()
-            ->setHorizontal(Alignment::HORIZONTAL_CENTER)
-            ->setVertical(Alignment::VERTICAL_CENTER);
+        // Outer border on heading + data block
+        $sheet->getStyle("A6:{$endCol}{$highestRow}")->applyFromArray([
+            'borders' => [
+                'outline' => [
+                    'borderStyle' => Border::BORDER_MEDIUM,
+                    'color'       => ['argb' => 'FF009966'],
+                ],
+            ],
+        ]);
 
         $leftCols = ['level1', 'level2', 'level3', 'reason'];
         foreach ($activeCols as $idx => $colKey) {
@@ -406,15 +363,6 @@ class DailyReturnExport implements FromCollection, WithHeadings, WithEvents, Sho
             }
         }
 
-        // ── Thin border on entire table (heading row + data rows) ─────────────
-        $sheet->getStyle("A6:{$endCol}{$highestRow}")->applyFromArray([
-            'borders' => [
-                'allBorders' => [
-                    'borderStyle' => Border::BORDER_THIN,
-                    'color'       => ['argb' => 'FFBDBDBD'],
-                ],
-            ],
-        ]);
 
         $sheet->freezePane('A7');
     }

@@ -19,6 +19,7 @@ use PhpOffice\PhpSpreadsheet\Chart\Layout;
 use PhpOffice\PhpSpreadsheet\Chart\Axis;
 use PhpOffice\PhpSpreadsheet\Chart\AxisText;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Facades\Log;
 
 class SaleTrackingExport
 {
@@ -75,6 +76,11 @@ class SaleTrackingExport
 
     public function download(SaleTrackingService $service): StreamedResponse
     {
+        Log::info('SaleTrackingExport: download() started', [
+            'filters' => $this->filters,
+        ]);
+
+        try {
         $records = $service->getExportQuery($this->filters)->get();
 
         $platformIds = $records->pluck('sale_platform_id')->filter()->unique()->values()->toArray();
@@ -105,7 +111,13 @@ class SaleTrackingExport
         }
 
         $spreadsheet->setActiveSheetIndex(0);
-        $filename = 'ad-tracking-' . now()->format('Y-m-d') . '.xlsx';
+        $filename = 'Ad Performance Tracking - ' . now()->format('d M Y') . '.xlsx';
+
+        Log::info('SaleTrackingExport: download() spreadsheet built successfully', [
+            'filename'      => $filename,
+            'record_count'  => $records->count(),
+            'filters'       => $this->filters,
+        ]);
 
         return new StreamedResponse(function () use ($spreadsheet) {
             $tempFile = tempnam(sys_get_temp_dir(), 'xlsx_');
@@ -127,6 +139,18 @@ class SaleTrackingExport
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
             'Cache-Control'       => 'max-age=0',
         ]);
+
+        } catch (\Throwable $e) {
+            Log::error('SaleTrackingExport: download() failed', [
+                'error'   => $e->getMessage(),
+                'class'   => get_class($e),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+                'filters' => $this->filters,
+            ]);
+            throw $e;
+        }
     }
 
     private function applyHeaderRows($sheet, string $title): void
@@ -256,6 +280,11 @@ class SaleTrackingExport
 
     private function writeSheet($sheet, $records, array $saleLookup, array $returnLookup, ?float $prevMonthTotalRevenue = null): void
     {
+        Log::info('SaleTrackingExport: writeSheet() started', [
+            'record_count' => $records->count(),
+        ]);
+
+        try {
         $sheetName = 'Ad Performance';
         $moneyFmt  = '#,##0.00';
         $pctFmt    = '0.00%';
@@ -504,6 +533,22 @@ class SaleTrackingExport
 
         $platformStart = $overviewEnd + 3;
         $this->writePlatformSections($sheet, $sheetName, $platformData, $platformStart);
+
+        Log::info('SaleTrackingExport: writeSheet() completed successfully', [
+            'record_count' => $records->count(),
+        ]);
+
+        } catch (\Throwable $e) {
+            Log::error('SaleTrackingExport: writeSheet() failed', [
+                'error'        => $e->getMessage(),
+                'class'        => get_class($e),
+                'file'         => $e->getFile(),
+                'line'         => $e->getLine(),
+                'trace'        => $e->getTraceAsString(),
+                'record_count' => $records->count(),
+            ]);
+            throw $e;
+        }
     }
 
     private function writeMonthlySummary($sheet, array $monthAgg, int $startRow): int
