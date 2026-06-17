@@ -57,10 +57,69 @@ class SalesChartController extends Controller
     {
         Gate::authorize('general.forecasting.index');
 
-        $data = $this->getChartPaginateData($request);
+        $platform_ncs = Platform::selectedPlatforms();
+        $platforms = Platform::all()->keyBy('code');
+        $platform_code = $request->platform_code;
 
-        $data["platform_ncs"] = Platform::selectedPlatforms();
-        $data["platforms"] = Platform::all()->keyBy('code');
+        if ($platform_code) {
+            $data = $this->sellingChartApiService->getCommonData();
+
+            $data["platform_ncs"] = $platform_ncs;
+            $data["platforms"] = $platforms;
+
+            $chartInfos = SellingChartBasicInfo::filter($request)
+                ->with(['sellingChartPrices'])
+                ->withCount(['sellingChartPrices'])
+                ->orderByDesc('id')
+                ->get();
+
+            $chartInfos = $chartInfos->map(function ($chartInfo) use ($platform_ncs, $platforms, $platform_code) {
+                $hasCanSell = false;
+
+                $chartInfo->sellingChartPrices->map(function ($price) use ($platform_ncs, $platforms, $platform_code, &$hasCanSell) {
+                    foreach ($platform_ncs as $p_code => $p_name) {
+                        $platform = $platforms->get($p_code);
+                        $cal_val = calculatePlatformProfit($price, $platform);
+                        $price->{$p_code . '_can_sell'} = ($cal_val['can_sell'] ?? 'No') === 'Yes';
+                        $price->{$p_code . '_cal_val'}   = $cal_val;
+                        if ($price->{$platform_code . '_can_sell'}) {
+                            $hasCanSell = true;
+                        }
+                    }
+                    return $price;
+                });
+
+                $chartInfo->hasCanSell = $hasCanSell;
+                // dd($chartInfo->toArray());
+
+                return $chartInfo;
+            })
+                ->filter(fn($c) => $c->hasCanSell)
+                ->values();
+
+            $page = request()->get('page', 1);
+            $perPage = 30;
+
+            $data['chartInfos'] = new \Illuminate\Pagination\LengthAwarePaginator(
+                $chartInfos->forPage($page, $perPage)->values(),
+                $chartInfos->count(),
+                $perPage,
+                $page,
+                ['path' => request()->url(), 'query' => request()->query()]
+            );
+
+            $designNos = $data['chartInfos']->pluck('design_no')->unique()->toArray();
+            $ecommerceProducts = $this->sellingChartApiService->getEcomProducts([
+                'designNos' => $designNos
+            ]);
+            $data['ecommerceMap'] = $ecommerceProducts->keyBy(fn($item) => $item['style']['name'] ?? null);
+
+            $data['start'] = ($data['chartInfos']->currentPage() - 1) * $data['chartInfos']->perPage() + 1;
+        } else {
+            $data = $this->getChartPaginateData($request);
+            $data["platform_ncs"] = $platform_ncs;
+            $data["platforms"] = $platforms;
+        }
 
         return view('selling_chart.forecasting.index', $data);
     }
@@ -173,7 +232,8 @@ class SalesChartController extends Controller
             ->with(['sellingChartPrices.discounts'])
             ->withCount(['sellingChartPrices'])
             ->orderByDesc('id')
-            ->paginate(30);
+            ->paginate(30)
+            ->withQueryString();
 
         $designNos = $data['chartInfos']->pluck('design_no')->unique()->toArray();
 
