@@ -13,7 +13,7 @@ class AuthController extends Controller
         return view('auth.login');
 
     }
-
+    // test comment
     public function login(Request $request)
     {
         $request->validate([
