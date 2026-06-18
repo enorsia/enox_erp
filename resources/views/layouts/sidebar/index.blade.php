@@ -158,12 +158,10 @@
                 <div x-data="{ open: {{ Request::is('admin/sales-spends/*') ? 'true' : 'false' }} }">
                     <button @click="open = !open"
                             class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/sales-spends/*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
-                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor"
-                             stroke-width="1.5" viewBox="0 0 24 24">
-                            <path stroke-linecap="round"
-                                  d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4"/>
+                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
-                        <span class="flex-1 text-left">Sale & Spend</span>
+                        <span class="flex-1 text-left">Sales & Spends</span>
                         <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
                              :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
                              viewBox="0 0 24 24">
