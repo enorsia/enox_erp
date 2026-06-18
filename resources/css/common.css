@@ -1,3 +1,6 @@
+html {
+    overflow: hidden;
+}
 /* ── Custom scrollbar ── */
 .sidebar-scroll::-webkit-scrollbar {
     width: 3px;
@@ -256,7 +259,7 @@ button {
     background: #fff;
     border-top: 1px solid #e2e8f0;
     padding: 1rem 1.5rem;
-    z-index: 50;
+    z-index: 1;
 }
 
 .dark .sticky-footer {
@@ -704,4 +707,502 @@ button {
 /* ── SweetAlert2: always above the custom view overlay (z-[9999]) ── */
 .swal2-container { z-index: 100000 !important; }
 .swal2-backdrop  { z-index:  99999 !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   DAILY SALES — year badge, month pill, platform header, sale card, metric tile
+   ═══════════════════════════════════════════════════════════════ */
+.ds-year-badge {
+    background: linear-gradient(135deg, var(--color-accent-400, #1D9E75), var(--color-accent-600, #0F6E56));
+    color: #fff;
+    border-radius: 9999px;
+    padding: 4px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 8px rgba(29,158,117,0.25);
+}
+.ds-month-pill {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-accent-600, #0F6E56);
+    background: rgba(29,158,117,0.08);
+    border: 1px solid rgba(29,158,117,0.18);
+    border-radius: 8px;
+    padding: 3px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.dark .ds-month-pill {
+    color: #5DCAA5;
+    background: rgba(93,202,165,0.1);
+    border-color: rgba(93,202,165,0.2);
+}
+.ds-platform-group-header {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #94a3b8;
+    padding: 4px 0 4px 8px;
+    border-left: 2px solid #e2e8f0;
+    margin: 6px 0 4px 0;
+}
+.dark .ds-platform-group-header {
+    color: #64748b;
+    border-left-color: #334155;
+}
+.ds-sale-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 16px;
+    transition: border-color 180ms, box-shadow 180ms, transform 180ms;
+}
+.ds-sale-card:hover {
+    border-color: #9FE1CB;
+    box-shadow: 0 4px 20px rgba(29,158,117,0.10);
+    transform: translateY(-1px);
+}
+.dark .ds-sale-card {
+    background: #1e293b;
+    border-color: #334155;
+}
+.dark .ds-sale-card:hover {
+    border-color: #0F6E56;
+    box-shadow: 0 4px 16px rgba(15,110,86,0.15);
+}
+.ds-metric-tile {
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: center;
+}
+.dark .ds-metric-tile {
+    background: rgba(255,255,255,0.04);
+    border-color: #334155;
+}
+.ds-metric-tile .ds-metric-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #94a3b8;
+    margin-bottom: 2px;
+    display: block;
+}
+.ds-metric-tile .ds-metric-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1.2;
+    display: block;
+}
+.dark .ds-metric-tile .ds-metric-value {
+    color: #f1f5f9;
+}
+.ds-metric-tile.accent .ds-metric-value  { color: var(--color-accent-400, #1D9E75); }
+.dark .ds-metric-tile.accent .ds-metric-value { color: #5DCAA5; }
+.ds-metric-tile.success .ds-metric-value { color: #10b981; }
+
+/* ═══════════════════════════════════════════════════════════════
+   DAILY RETURNS — year badge, month pill, platform header, return card, metric tile
+   ═══════════════════════════════════════════════════════════════ */
+.dr-year-badge {
+    background: linear-gradient(135deg, #f43f5e, #e11d48);
+    color: #fff;
+    border-radius: 9999px;
+    padding: 4px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 8px rgba(244,63,94,0.25);
+}
+.dr-month-pill {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e11d48;
+    background: rgba(244,63,94,0.07);
+    border: 1px solid rgba(244,63,94,0.18);
+    border-radius: 8px;
+    padding: 3px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.dark .dr-month-pill {
+    color: #fb7185;
+    background: rgba(251,113,133,0.1);
+    border-color: rgba(251,113,133,0.2);
+}
+.dr-platform-group-header {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #94a3b8;
+    padding: 4px 0 4px 8px;
+    border-left: 2px solid #fecdd3;
+    margin: 6px 0 4px 0;
+}
+.dark .dr-platform-group-header {
+    color: #64748b;
+    border-left-color: #4c1d2a;
+}
+.dr-return-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 16px;
+    transition: border-color 180ms, box-shadow 180ms, transform 180ms;
+}
+.dr-return-card:hover {
+    border-color: #fda4af;
+    box-shadow: 0 4px 20px rgba(244,63,94,0.10);
+    transform: translateY(-1px);
+}
+.dark .dr-return-card {
+    background: #1e293b;
+    border-color: #334155;
+}
+.dark .dr-return-card:hover {
+    border-color: #9f1239;
+    box-shadow: 0 4px 16px rgba(244,63,94,0.12);
+}
+.dr-metric-tile {
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: center;
+}
+.dark .dr-metric-tile {
+    background: rgba(255,255,255,0.04);
+    border-color: #334155;
+}
+.dr-metric-tile .dr-metric-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #94a3b8;
+    margin-bottom: 2px;
+    display: block;
+}
+.dr-metric-tile .dr-metric-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1.2;
+    display: block;
+}
+.dark .dr-metric-tile .dr-metric-value {
+    color: #f1f5f9;
+}
+.dr-metric-tile.danger .dr-metric-value      { color: #e11d48; }
+.dark .dr-metric-tile.danger .dr-metric-value { color: #fb7185; }
+
+/* ── Daily Sales entry row – disabled state (allows_direct_entry = false) ── */
+.ds-row-disabled {
+    opacity: 0.45;
+    pointer-events: none;
+    user-select: none;
+}
+.ds-row-disabled button[title="Remove row"] {
+    pointer-events: all;
+    opacity: 1;
+}
+
+/* ══════════════════════════════════════════════
+   Daily Sales Index — Premium Card Components
+   ══════════════════════════════════════════════ */
+
+/* Date group wrapper */
+.ds-date-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / .05), 0 1px 2px -1px rgb(0 0 0 / .05);
+}
+.dark .ds-date-card {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+/* Date header strip */
+.ds-date-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.875rem 1.25rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-bottom: 1px solid #e2e8f0;
+}
+.dark .ds-date-header {
+    background: linear-gradient(135deg, #1e293b 0%, #172033 100%);
+    border-bottom-color: #334155;
+}
+
+/* Date icon */
+.ds-date-icon-wrap {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.625rem;
+    background: linear-gradient(135deg, #1D9E75, #0F6E56);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgb(29 158 117 / .35);
+}
+
+/* Totals summary pills */
+.ds-total-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid;
+}
+.ds-total-pill.green {
+    background: #d1fae5;
+    border-color: #6ee7b7;
+    color: #065f46;
+}
+.dark .ds-total-pill.green {
+    background: rgb(6 78 59 / .25);
+    border-color: rgb(52 211 153 / .25);
+    color: #6ee7b7;
+}
+.ds-total-pill.amber {
+    background: #fef3c7;
+    border-color: #fcd34d;
+    color: #92400e;
+}
+.dark .ds-total-pill.amber {
+    background: rgb(120 53 15 / .25);
+    border-color: rgb(252 211 77 / .25);
+    color: #fcd34d;
+}
+.ds-total-pill.blue {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1e40af;
+}
+.dark .ds-total-pill.blue {
+    background: rgb(30 58 138 / .25);
+    border-color: rgb(147 197 253 / .25);
+    color: #93c5fd;
+}
+
+/* Edit date button */
+.ds-edit-date-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0.4rem 0.875rem;
+    border-radius: 0.5rem;
+    border: 1px solid #9FE1CB;
+    background: #E1F5EE;
+    color: #0F6E56;
+    transition: background 150ms, border-color 150ms;
+    text-decoration: none;
+}
+.ds-edit-date-btn:hover {
+    background: #b8eedd;
+    border-color: #5DCAA5;
+}
+.dark .ds-edit-date-btn {
+    background: rgb(29 158 117 / .15);
+    border-color: rgb(93 202 165 / .3);
+    color: #5DCAA5;
+}
+.dark .ds-edit-date-btn:hover {
+    background: rgb(29 158 117 / .25);
+}
+
+/* Platform group header */
+.ds-group-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.ds-group-dot.root  { background: #1D9E75; }
+.ds-group-dot.child { background: #60a5fa; }
+
+.ds-group-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    white-space: nowrap;
+}
+.ds-group-label.root  { color: #1D9E75; }
+.ds-group-label.child { color: #3b82f6; }
+.dark .ds-group-label.root  { color: #5DCAA5; }
+.dark .ds-group-label.child { color: #93c5fd; }
+
+/* ── Platform sale card ── */
+.ds-sale-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.875rem;
+    padding: 0.875rem;
+    transition: box-shadow 200ms, border-color 200ms, transform 200ms;
+    position: relative;
+}
+.ds-sale-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 0.875rem 0.875rem 0 0;
+    background: linear-gradient(90deg, #1D9E75, #5DCAA5);
+    opacity: 0;
+    transition: opacity 200ms;
+}
+.ds-sale-card:hover {
+    box-shadow: 0 4px 16px rgb(0 0 0 / .08);
+    border-color: #c7e9df;
+    transform: translateY(-1px);
+}
+.ds-sale-card:hover::before { opacity: 1; }
+.dark .ds-sale-card {
+    background: #0f172a;
+    border-color: #1e293b;
+}
+.dark .ds-sale-card:hover {
+    box-shadow: 0 4px 20px rgb(0 0 0 / .3);
+    border-color: #334155;
+}
+
+/* Platform avatar */
+.ds-platform-avatar {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    background: linear-gradient(135deg, #1D9E75, #0F6E56);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    flex-shrink: 0;
+    letter-spacing: -.5px;
+}
+
+/* Action buttons (shown on card hover) */
+.ds-action-btn {
+    width: 1.625rem;
+    height: 1.625rem;
+    border-radius: 0.375rem;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    transition: background 150ms, color 150ms, border-color 150ms;
+    text-decoration: none;
+}
+.ds-action-btn:hover         { background: #e2e8f0; color: #475569; }
+.ds-action-btn.danger:hover  { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+.dark .ds-action-btn         { background: #1e293b; border-color: #334155; color: #64748b; }
+.dark .ds-action-btn:hover        { background: #334155; color: #94a3b8; }
+.dark .ds-action-btn.danger:hover { background: rgb(220 38 38 / .15); color: #f87171; border-color: rgb(220 38 38 / .3); }
+
+/* Metric cells */
+.ds-metric-cell {
+    border-radius: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.ds-metric-lbl {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    opacity: .6;
+}
+.ds-metric-val {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.ds-metric-cell.sales-cell  { background: #d1fae5; }
+.ds-metric-cell.spent-cell  { background: #fef3c7; }
+.ds-metric-cell.orders-cell { background: #dbeafe; }
+.ds-metric-cell.qty-cell    { background: #f3f4f6; }
+.ds-metric-cell.sales-cell  .ds-metric-lbl  { color: #065f46; }
+.ds-metric-cell.sales-cell  .ds-metric-val  { color: #047857; }
+.ds-metric-cell.spent-cell  .ds-metric-lbl  { color: #92400e; }
+.ds-metric-cell.spent-cell  .ds-metric-val  { color: #b45309; }
+.ds-metric-cell.orders-cell .ds-metric-lbl  { color: #1e40af; }
+.ds-metric-cell.orders-cell .ds-metric-val  { color: #1d4ed8; }
+.ds-metric-cell.qty-cell    .ds-metric-lbl  { color: #374151; }
+.ds-metric-cell.qty-cell    .ds-metric-val  { color: #111827; }
+/* dark */
+.dark .ds-metric-cell.sales-cell  { background: rgb(6 78 59 / .25); }
+.dark .ds-metric-cell.spent-cell  { background: rgb(120 53 15 / .2); }
+.dark .ds-metric-cell.orders-cell { background: rgb(30 58 138 / .2); }
+.dark .ds-metric-cell.qty-cell    { background: rgb(255 255 255 / .04); }
+.dark .ds-metric-cell.sales-cell  .ds-metric-lbl  { color: #6ee7b7; }
+.dark .ds-metric-cell.sales-cell  .ds-metric-val  { color: #34d399; }
+.dark .ds-metric-cell.spent-cell  .ds-metric-lbl  { color: #fcd34d; }
+.dark .ds-metric-cell.spent-cell  .ds-metric-val  { color: #fbbf24; }
+.dark .ds-metric-cell.orders-cell .ds-metric-lbl  { color: #93c5fd; }
+.dark .ds-metric-cell.orders-cell .ds-metric-val  { color: #60a5fa; }
+.dark .ds-metric-cell.qty-cell    .ds-metric-lbl  { color: #94a3b8; }
+.dark .ds-metric-cell.qty-cell    .ds-metric-val  { color: #cbd5e1; }
+
+/* Gender breakdown strip */
+.ds-gender-strip {
+    display: flex;
+    gap: 0.375rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #f1f5f9;
+    margin-top: 0.375rem;
+}
+.dark .ds-gender-strip { border-top-color: #1e293b; }
+.ds-gender-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    border-radius: 0.375rem;
+    padding: 0.25rem 0;
+    font-size: 10px;
+    font-weight: 700;
+}
+.ds-gender-item span:first-child  { opacity: .55; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.ds-gender-item span:last-child   { font-size: 12px; }
+.ds-gender-item.male   { background: #eff6ff; color: #1d4ed8; }
+.ds-gender-item.female { background: #fdf2f8; color: #9d174d; }
+.ds-gender-item.kids   { background: #fff7ed; color: #92400e; }
+.dark .ds-gender-item.male   { background: rgb(30 58 138 / .2); color: #93c5fd; }
+.dark .ds-gender-item.female { background: rgb(157 23 77 / .15); color: #f9a8d4; }
+.dark .ds-gender-item.kids   { background: rgb(120 53 15 / .2); color: #fcd34d; }
+
 

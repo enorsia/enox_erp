@@ -26,3 +26,5 @@ Thumbs.db
 /deployments/*
 composer.lock
 package-lock.json
+public/aprin_2025.xlsx
+public/Daliy report DM V3.xlsx

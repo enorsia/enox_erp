@@ -34,3 +34,7 @@
 
 /* ── Common shared styles ── */
 @import './common.css';
+
+/* ── Analytics Dashboard ── */
+@import './dashboard.css';
+

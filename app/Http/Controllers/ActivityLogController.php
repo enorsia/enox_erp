@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request): View
     {
         Gate::authorize('authentication.activity_logs.index');
 
@@ -61,7 +62,7 @@ class ActivityLogController extends Controller
         return view('activity_logs.index', $data);
     }
 
-    public function show($id)
+    public function show(int $id): View
     {
         Gate::authorize('authentication.activity_logs.show');
 
@@ -70,4 +71,3 @@ class ActivityLogController extends Controller
         return view('activity_logs.show', compact('activity'));
     }
 }
-

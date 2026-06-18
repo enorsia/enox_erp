@@ -111,7 +111,7 @@
                                     <div class="toggle-thumb"></div>
                                 </div>
                                 <span
-                                    class="text-sm text-slate-600 dark:text-slate-300 font-medium">Active status</span>
+                                    class="text-sm text-slate-600 dark:text-slate-300 font-medium" onclick="toggleSwitch('statusToggle')">Active status</span>
                                 <input type="checkbox" name="status" class="hidden" id="statusCheckbox"
                                     {{ $expense->status == 1 ? 'checked' : '' }}>
                             </label>
@@ -149,12 +149,3 @@
         </form>
     </div>
 @endsection
-
-@push('js')
-    <script>
-        document.getElementById('statusToggle').addEventListener('click', function () {
-            var cb = document.getElementById('statusCheckbox');
-            cb.checked = this.classList.contains('on');
-        });
-    </script>
-@endpush

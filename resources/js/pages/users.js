@@ -7,15 +7,6 @@ $(document).ready(function () {
         $('#role, [data-select2]').select2({ width: '100%' });
     }
 
-    /* ── Status toggle sync on load ── */
-    const statusToggle = document.getElementById('statusToggle');
-    if (statusToggle) {
-        statusToggle.addEventListener('click', function () {
-            const cb = document.getElementById('statusCheckbox');
-            if (cb) cb.checked = this.classList.contains('on');
-        });
-    }
-
     /* ══════════════════════════════════
        CREATE FORM VALIDATION
     ══════════════════════════════════ */
