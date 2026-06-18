@@ -32,6 +32,76 @@ class DailyReturnService
     }
 
     /**
+     * Get all filter data needed for the index page.
+     */
+    public function getFilterData(): array
+    {
+        $salePlatformService = app(SalePlatformService::class);
+
+        return [
+            'salePlatforms' => $salePlatformService->getParentOptions(),
+            'reasonTypes'   => \App\Models\ReturnReasonType::all(),
+        ];
+    }
+
+    /**
+     * Get active filter count.
+     */
+    public function getActiveFilterCount(array $filters): int
+    {
+        return collect([
+            $filters['sale_platform_id'] ?? null,
+            $filters['return_reason_type_id'] ?? null,
+            $filters['date_from'] ?? null,
+            $filters['date_to'] ?? null,
+        ])->filter()->count();
+    }
+
+    /**
+     * Get active filter tags for display.
+     */
+    public function getActiveFilterTags(array $filters, array $salePlatforms, $reasonTypes): array
+    {
+        $tags = [];
+
+        if (!empty($filters['sale_platform_id'])) {
+            $platform = collect($salePlatforms)->firstWhere('id', $filters['sale_platform_id']);
+            $tags[] = [
+                'label' => 'Platform',
+                'value' => strip_tags($platform['label'] ?? $filters['sale_platform_id']),
+                'param' => 'sale_platform_id',
+            ];
+        }
+
+        if (!empty($filters['return_reason_type_id'])) {
+            $reason = $reasonTypes->firstWhere('id', $filters['return_reason_type_id']);
+            $tags[] = [
+                'label' => 'Reason',
+                'value' => $reason->name ?? $filters['return_reason_type_id'],
+                'param' => 'return_reason_type_id',
+            ];
+        }
+
+        if (!empty($filters['date_from'])) {
+            $tags[] = [
+                'label' => 'From',
+                'value' => $filters['date_from'],
+                'param' => 'date_from',
+            ];
+        }
+
+        if (!empty($filters['date_to'])) {
+            $tags[] = [
+                'label' => 'To',
+                'value' => $filters['date_to'],
+                'param' => 'date_to',
+            ];
+        }
+
+        return $tags;
+    }
+
+    /**
      * Build date-wise view groups for the index page.
      *
      * Structure returned:
@@ -48,86 +118,142 @@ class DailyReturnService
      *   • Record at depth 1 (mid)   → rootGroup only,  subName = null
      *   • Record at depth 2+ (leaf) → rootGroup + subGroup, subName = level-2 name
      */
-    public function buildDateViewGroups(\Illuminate\Contracts\Pagination\LengthAwarePaginator $paginator): array
+    /**
+     * Build hierarchical tree structure for the index page.
+     */
+    public function buildTreeView($paginator): array
     {
         $dateGroups = [];
 
-        foreach (
-            $paginator->getCollection()
-                ->groupBy(fn($r) => optional($r->date)->format('Y-m-d') ?? '')
-                ->sortKeysDesc()
-            as $date => $dateReturns
-        ) {
-            $rootGroupsMap = [];
-            $rootOrderList = [];
-
-            foreach ($dateReturns as $ret) {
-                $plat = $ret->salePlatform;
-
-                // Build ancestor chain: [root, level-2?, leaf]  (index 0 = topmost)
-                $ancestors = [];
-                $cur = $plat;
-                while ($cur) {
-                    array_unshift($ancestors, $cur);
-                    $cur = $cur->parent ?? null;
-                }
-
-                $root = $ancestors[0] ?? null;
-                $mid  = count($ancestors) >= 3 ? $ancestors[1] : null;
-
-                $rootKey = $root ? ('r' . $root->id) : 'r_unknown';
-                $subKey  = $mid  ? ('s' . $mid->id)  : 'direct';
-
-                if (!isset($rootGroupsMap[$rootKey])) {
-                    $rootGroupsMap[$rootKey] = [
-                        'rootName' => $root?->name ?? '—',
-                        'subMap'   => [],
-                        'subOrder' => [],
-                    ];
-                    $rootOrderList[] = $rootKey;
-                }
-
-                if (!isset($rootGroupsMap[$rootKey]['subMap'][$subKey])) {
-                    $rootGroupsMap[$rootKey]['subMap'][$subKey] = [
-                        'subName' => $mid?->name,
-                        'entries' => [],
-                    ];
-                    $rootGroupsMap[$rootKey]['subOrder'][] = $subKey;
-                }
-
-                $rootGroupsMap[$rootKey]['subMap'][$subKey]['entries'][] = $ret;
-            }
-
-            $rootGroups = [];
-            foreach ($rootOrderList as $rk) {
-                $rg = $rootGroupsMap[$rk];
-                $subGroups = [];
-                foreach ($rg['subOrder'] as $sk) {
-                    $sg = $rg['subMap'][$sk];
-                    $subGroups[] = [
-                        'subName' => $sg['subName'],
-                        'entries' => collect($sg['entries']),
-                    ];
-                }
-                $rootGroups[] = [
-                    'rootName'  => $rg['rootName'],
-                    'subGroups' => $subGroups,
-                ];
-            }
-
-            $dateGroups[] = [
-                'date'           => $date,
-                'dateFormatted'  => \Carbon\Carbon::parse($date)->format('d M Y'),
-                'totalReturns'   => $dateReturns->sum('number_of_returns'),
-                'totalReturnQty' => $dateReturns->sum('number_of_return_quantities'),
-                'rootGroups'     => $rootGroups,
-                'entries'        => $dateReturns->values(),
-            ];
+        foreach ($paginator->getCollection()->groupBy(fn($r) => optional($r->date)->format('Y-m-d') ?? '')->sortKeysDesc() as $date => $dateReturns) {
+            $dateGroups[] = $this->buildDateGroup($date, $dateReturns);
         }
 
         return $dateGroups;
     }
 
+    /**
+     * Build a single date group with its hierarchical structure.
+     */
+    private function buildDateGroup(string $date, $dateReturns): array
+    {
+        $nodeInfo = [];
+        $childIds = [];
+        $entriesByPid = [];
+        $rootIds = [];
+        $rootTotals = [];
+
+        foreach ($dateReturns as $entry) {
+            $plat = $entry->salePlatform;
+            if (!$plat) continue;
+
+            $chain = [];
+            $cur = $plat;
+            while ($cur) {
+                array_unshift($chain, $cur);
+                $cur = $cur->parent ?? null;
+            }
+
+            foreach ($chain as $i => $node) {
+                if (!isset($nodeInfo[$node->id])) {
+                    $nodeInfo[$node->id] = ['name' => $node->name, 'depth' => $i];
+                    if ($i > 0) {
+                        $pid = $chain[$i - 1]->id;
+                        $childIds[$pid][] = $node->id;
+                    }
+                }
+            }
+
+            $rootId = $chain[0]->id;
+            if (!in_array($rootId, $rootIds, true)) $rootIds[] = $rootId;
+            $rootTotals[$rootId]['returns'] = ($rootTotals[$rootId]['returns'] ?? 0) + $entry->number_of_returns;
+            $rootTotals[$rootId]['qty'] = ($rootTotals[$rootId]['qty'] ?? 0) + $entry->number_of_return_quantities;
+
+            $entriesByPid[$plat->id][] = $entry;
+        }
+
+        $rootRenderLists = [];
+        foreach ($rootIds as $rid) {
+            $list = [];
+            $this->buildTreeRows($rid, 0, 'drp_' . $date . '_' . $rid, $date, $nodeInfo, $childIds, $entriesByPid, $list);
+            $rootRenderLists[$rid] = $list;
+        }
+
+        $rootGroups = [];
+        foreach ($rootIds as $rootId) {
+            $rootGroups[] = [
+                'id' => $rootId,
+                'name' => $nodeInfo[$rootId]['name'],
+                'totals' => $rootTotals[$rootId],
+                'rows' => $rootRenderLists[$rootId],
+            ];
+        }
+
+        return [
+            'date' => $date,
+            'dateFormatted' => \Carbon\Carbon::parse($date)->format('d M Y'),
+            'totalReturns' => $dateReturns->sum('number_of_returns'),
+            'totalReturnQty' => $dateReturns->sum('number_of_return_quantities'),
+            'entries' => $dateReturns->values(),
+            'rootGroups' => $rootGroups,
+            'hasEntries' => $dateReturns->isNotEmpty(),
+        ];
+    }
+
+    /**
+     * Recursively build tree rows.
+     */
+    private function buildTreeRows(
+        int $platformId,
+        int $depth,
+        string $parentKey,
+        string $dateKey,
+        array &$nodeInfo,
+        array &$childIds,
+        array &$entriesByPid,
+        array &$out
+    ): void {
+        $node = $nodeInfo[$platformId];
+        $myKey = 'drp_' . $dateKey . '_' . $platformId;
+        $kids = $childIds[$platformId] ?? [];
+        $entries = $entriesByPid[$platformId] ?? [];
+        $hasContent = (count($kids) + count($entries)) > 0;
+
+        if ($depth > 0) {
+            $out[] = [
+                'type' => 'platform',
+                'depth' => $depth,
+                'key' => $myKey,
+                'parent' => $parentKey,
+                'name' => $node['name'],
+                'hasContent' => $hasContent,
+                'isSub' => $depth > 1,
+                'showBorder' => $depth === 1,
+            ];
+        }
+
+        foreach ($entries as $entry) {
+            $out[] = [
+                'type' => 'entry',
+                'depth' => $depth + 1,
+                'parent' => $myKey,
+                'entry' => $entry,
+                'alwaysVisible' => $depth === 0,
+            ];
+        }
+
+        foreach ($kids as $kidId) {
+            $this->buildTreeRows($kidId, $depth + 1, $myKey, $dateKey, $nodeInfo, $childIds, $entriesByPid, $out);
+        }
+    }
+
+    /**
+     * Build date-wise view groups for the index page (legacy method - kept for compatibility).
+     */
+    public function buildDateViewGroups($paginator): array
+    {
+        return $this->buildTreeView($paginator);
+    }
     /**
      * Load all daily return records for a specific date.
      */

@@ -15,6 +15,73 @@
  *   No cross-row platform blocking is needed.
  */
 
+/* ──────────────────────────────────────────────────
+   Platform Tree Toggle (index/listing page)
+
+   Collapses/expands the root → sub → sub-sub platform
+   rows rendered by sale-spend.daily_returns.index.
+   Mirrors the sale-platforms tree toggle, but scopes
+   "siblings" by the real data-dr-parent relationship
+   rather than depth — so opening one branch never
+   collapses an unrelated branch elsewhere in the tree.
+
+   Runs unconditionally (independent of window.DR, which
+   is only set on the create/edit entry-form pages).
+   ────────────────────────────────────────────────── */
+(function () {
+    function collapseDrDescendants(key) {
+        document.querySelectorAll(`[data-dr-parent="${key}"]`).forEach(child => {
+            child.classList.add('hidden');
+
+            const childKey = child.getAttribute('data-dr-key');
+            if (childKey) {
+                const icon = child.querySelector('.dr-toggle-icon');
+                if (icon) icon.style.transform = 'rotate(-90deg)';
+                collapseDrDescendants(childKey);
+            }
+        });
+    }
+
+    function closeDrSiblings(parentKey, exceptKey) {
+        document.querySelectorAll(`[data-dr-parent="${parentKey}"][data-dr-key]`).forEach(sibling => {
+            const siblingKey = sibling.getAttribute('data-dr-key');
+            if (siblingKey === exceptKey) return;
+
+            const icon = sibling.querySelector('.dr-toggle-icon');
+            if (icon && icon.style.transform !== 'rotate(-90deg)') {
+                collapseDrDescendants(siblingKey);
+                icon.style.transform = 'rotate(-90deg)';
+            }
+        });
+    }
+
+    window.toggleDrRow = function (event, key) {
+        const row = document.querySelector(`[data-dr-key="${key}"]`);
+        if (!row) return;
+
+        const icon     = row.querySelector('.dr-toggle-icon');
+        const isClosed = icon && icon.style.transform === 'rotate(-90deg)';
+
+        if (isClosed) {
+            // Expand: reveal direct children only (their own state stays closed)
+            document.querySelectorAll(`[data-dr-parent="${key}"]`).forEach(child => {
+                child.classList.remove('hidden');
+            });
+            if (icon) icon.style.transform = 'rotate(0deg)';
+
+            // Accordion: close other open siblings under the same true parent
+            closeDrSiblings(row.getAttribute('data-dr-parent'), key);
+        } else {
+            // Collapse: hide the whole subtree and reset its icons
+            collapseDrDescendants(key);
+            if (icon) icon.style.transform = 'rotate(-90deg)';
+        }
+    };
+})();
+
+/* ──────────────────────────────────────────────────
+   Entry Form Builder (create/edit pages)
+   ────────────────────────────────────────────────── */
 (function () {
     const DR = window.DR || {};
     if (!DR.platforms) return;
@@ -258,4 +325,3 @@
         init();
     }
 })();
-

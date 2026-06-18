@@ -31,12 +31,33 @@ class DailyReturnController extends Controller
     {
         Gate::authorize('general.daily_return.index');
 
-        $data['dailyReturns']  = $this->service->getList($request->all());
-        $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
-        $data['reasonTypes']   = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
-        $data['dateGroups']    = $this->service->buildDateViewGroups($data['dailyReturns']);
+        $filters = $request->all();
+        $dailyReturns = $this->service->getList($filters);
 
-        return view('sale-spend.daily_returns.index', $data);
+        // Get all data needed for the view
+        $filterData = $this->service->getFilterData();
+        $dateGroups = $this->service->buildTreeView($dailyReturns);
+        $activeFilterCount = $this->service->getActiveFilterCount($filters);
+        $activeFilterTags = $this->service->getActiveFilterTags(
+            $filters,
+            $filterData['salePlatforms'],
+            $filterData['reasonTypes']
+        );
+
+        $returnUrl = urlencode($request->fullUrl());
+        $exportLabels = \App\Exports\DailyReturnExport::columnLabels();
+        $exportCols = \App\Exports\DailyReturnExport::allColumns();
+
+        return view('sale-spend.daily_returns.index', compact(
+            'dailyReturns',
+            'dateGroups',
+            'filterData',
+            'activeFilterCount',
+            'activeFilterTags',
+            'returnUrl',
+            'exportLabels',
+            'exportCols'
+        ));
     }
 
     public function create(): View
