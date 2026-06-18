@@ -85,7 +85,7 @@
                                     <option value="">None (top-level)</option>
                                     @foreach ($parentOptions as $option)
                                         <option value="{{ $option['id'] }}"
-                                                data-depth="{{ $option['depth'] }}"
+                                                data-depth="{{ $option['depth'] }}" {{ $option['depth'] >= 2 ? 'disabled' : '' }}
                                                 {{ old('parent_id') == $option['id'] ? 'selected' : '' }}>
                                             {{ $option['label'] }}
                                         </option>

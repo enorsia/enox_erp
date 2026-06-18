@@ -60,7 +60,14 @@ class SalePlatformController extends Controller
     {
         Gate::authorize('general.sale_platform.create');
 
-        $data['parentOptions'] = $this->service->getParentOptions();
+        //$data['parentOptions'] = $this->service->getParentOptions();
+        $data['parentOptions'] = collect($this->service->getParentOptions())
+            ->filter(function($item) {
+                return $item['depth'] < 2;
+            })
+            ->values()
+            ->toArray();
+
         $data['types']         = SalePlatform::CHANNEL_LIST;
 
         return view('sale-spend.sale_platforms.create', $data);
@@ -157,7 +164,11 @@ class SalePlatformController extends Controller
         Gate::authorize('general.sale_platform.edit');
 
         $data['salePlatform']  = $salePlatform;
-        $data['parentOptions'] = $this->service->getParentOptions($salePlatform->id);
+        //$data['parentOptions'] = $this->service->getParentOptions($salePlatform->id);
+        $data['parentOptions'] = collect($this->service->getParentOptions($salePlatform->id))
+            ->where('depth', '<', 2)
+            ->values()
+            ->toArray();
         $data['types']         = SalePlatform::CHANNEL_LIST;
 
         return view('sale-spend.sale_platforms.edit', $data);
