@@ -59,7 +59,7 @@
 
         {{-- General --}}
         @canany(Cache::get('permissions.available', [])['prefix']['general_'] ?? [])
-            <div class="pt-4 pb-1">
+            <div class="pt-4">
                 <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Main</p>
 
                 @can('general.dashboard.index')
@@ -154,9 +154,7 @@
 
         {{-- Reports --}}
         @canany(Cache::get('permissions.available', [])['prefix']['general_'] ?? [])
-            <div class="pt-4 pb-1">
-                <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Reports</p>
-
+            <div class="pb-1">
                 <div x-data="{ open: {{ Request::is('admin/sales-spends/*') ? 'true' : 'false' }} }">
                     <button @click="open = !open"
                             class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/sales-spends/*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
@@ -165,7 +163,7 @@
                             <path stroke-linecap="round"
                                   d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4"/>
                         </svg>
-                        <span class="flex-1 text-left">Sale Spend</span>
+                        <span class="flex-1 text-left">Sale & Spend</span>
                         <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
                              :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
                              viewBox="0 0 24 24">
