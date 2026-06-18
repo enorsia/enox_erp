@@ -28,7 +28,7 @@ class MonthlyBudgetService
             ->selectRaw('year, month')
             ->distinct()
             ->orderByDesc('year')
-            ->orderBy('month')
+            ->orderByDesc('month')
             ->get();  // lightweight – only two integer columns
 
         $total = $allPairs->count();
@@ -79,7 +79,7 @@ class MonthlyBudgetService
         foreach ($allBudgets->groupBy('year')->sortKeysDesc() as $year => $yearBudgets) {
             $monthGroups = [];
 
-            foreach ($yearBudgets->sortBy('month')->groupBy('month') as $monthNum => $monthBudgets) {
+            foreach ($yearBudgets->sortByDesc('month')->groupBy('month') as $monthNum => $monthBudgets) {
                 $budgetByPlatformId   = $monthBudgets->keyBy('sale_platform_id');
                 $platformIdsWithBudget = $budgetByPlatformId->keys()->all();
 

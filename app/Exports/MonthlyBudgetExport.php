@@ -176,7 +176,7 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
                 $colCount   = count($activeCols);
                 $endCol     = Coordinate::stringFromColumnIndex($colCount);
 
-                $this->applyHeaderRows($sheet, $endCol, 'MONTHLY BUDGETS');
+                $this->applyHeaderRows($sheet, $endCol, '');
                 $this->applyHeadingStyle($sheet, $endCol, $activeCols);
                 $this->applyDataStyle($sheet, $endCol, $activeCols);
                 $this->applyHierarchicalMerges($sheet, $activeCols);
