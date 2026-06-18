@@ -240,6 +240,17 @@
                             <div class="ds-group-dot root"></div>
                             <span class="ds-group-label root">{{ $rg['rootName'] }}</span>
                             <div class="flex-1 h-px bg-slate-100 dark:bg-slate-700/60 ml-1"></div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <span class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full">
+                                    Sale : £{{ number_format($rg['rootTotals']['sales'], 2) }}
+                                </span>
+                                                        <span class="text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
+                                    Spent : £{{ number_format($rg['rootTotals']['spent'], 2) }}
+                                </span>
+                                                        <span class="text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">
+                                    Orders : {{ number_format($rg['rootTotals']['orders']) }}
+                                </span>
+                            </div>
                         </div>
 
                         @foreach ($rg['subGroups'] as $sg)

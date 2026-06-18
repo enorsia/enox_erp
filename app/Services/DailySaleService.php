@@ -83,6 +83,11 @@ class DailySaleService
                 if (!isset($rootGroupsMap[$rootKey])) {
                     $rootGroupsMap[$rootKey] = [
                         'rootName' => $root?->name ?? '—',
+                        'rootTotals' => [
+                            'sales'  => 0,
+                            'spent'  => 0,
+                            'orders' => 0,
+                        ],
                         'subMap'   => [],
                         'subOrder' => [],
                     ];
@@ -98,6 +103,10 @@ class DailySaleService
                 }
 
                 $rootGroupsMap[$rootKey]['subMap'][$subKey]['entries'][] = $sale;
+
+                $rootGroupsMap[$rootKey]['rootTotals']['sales'] += $sale->sales;
+                $rootGroupsMap[$rootKey]['rootTotals']['spent'] += $sale->spent;
+                $rootGroupsMap[$rootKey]['rootTotals']['orders'] += $sale->number_of_orders;
             }
 
             // Flatten to plain indexed arrays so the blade needs zero PHP logic
@@ -114,6 +123,7 @@ class DailySaleService
                 }
                 $rootGroups[] = [
                     'rootName'  => $rg['rootName'],
+                    'rootTotals' => $rg['rootTotals'],
                     'subGroups' => $subGroups,
                 ];
             }
