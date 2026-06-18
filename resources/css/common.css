@@ -530,7 +530,7 @@ button {
     /* Use exactly 5 equal columns on wide viewports so each item
        spans an equal fraction of the row (full width divided by 5). */
     .selling-chart-grid {
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(6, 1fr);
     }
 }
 @media (max-width: 560px) {

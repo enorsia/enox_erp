@@ -111,7 +111,62 @@ class SellingChartApiService
         return $categoriesData;
     }
 
-    public function getCommonData(): array
+    public function getCommonData()
+    {
+        $cacheKey = 'common_data_v1';
+
+        $cachedData = Cache::get($cacheKey);
+
+        if (!empty($cachedData)) {
+            return $cachedData;
+        }
+
+        try {
+            $data = [];
+
+            $lookupData = $this->getLookupResponse([1, 5, 8, 10, 11]);
+            // Split by type_id
+            $data['departments'] = collect($lookupData)->where('type_id', 1)->map(fn($item) => (object) $item);
+            $data['fabrics'] = collect($lookupData)->where('type_id', 5)->map(fn($item) => (object) $item);
+            $data['initialRepeats'] = collect($lookupData)->where('type_id', 8)->map(fn($item) => (object) $item);
+            $data['seasons'] = collect($lookupData)->where('type_id', 10)->map(fn($item) => (object) $item);
+            $data['seasons_phases'] = collect($lookupData)->where('type_id', 11)->map(fn($item) => (object) $item);
+
+            // 2️⃣ Product Categories
+            $getCategoryData = $this->getCategoryResponse();
+            $data['selling_chart_cats'] = $getCategoryData->map(fn($item) => (object) $item);
+
+            $data['selling_chart_types'] = SellingChartType::get();
+
+            // 5️⃣ Store ONLY successful response in cache
+            Cache::put($cacheKey, $data, now()->addHours(2));
+
+            return $data;
+        } catch (Exception $e) {
+
+            Log::error('getCommonData API call failed', [
+                'message' => $e->getMessage()
+            ]);
+
+            // 6️⃣ Fallback to old cache if exists
+            if (Cache::has($cacheKey)) {
+                Cache::forget($cacheKey);
+            }
+
+            // 7️⃣ Final safe fallback (never break UI)
+            return [
+                'departments' => [],
+                'fabrics' => [],
+                'initialRepeats' => [],
+                'seasons' => [],
+                'seasons_phases' => [],
+                'selling_chart_cats' => [],
+                'selling_chart_types' => [],
+            ];
+        }
+    }
+
+    public function getCommonDataOld(): array
     {
         // Cache::forget('common_data_v1');
         return Cache::remember('common_data_v1', now()->addHours(2), function () {

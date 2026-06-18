@@ -137,6 +137,23 @@
                         </select>
                     </div>
 
+                    <hr class="border-slate-100 dark:border-slate-700"/>
+
+                    {{-- Platform --}}
+                    <div>
+                        <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Platform</p>
+                        <select id="platform_code" name="platform_code"
+                                class="tom-select w-full text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors"
+                                data-placeholder="Select Platform">
+                            <option value="">All Platforms</option>
+                            @foreach ($platform_ncs as $p_code => $p_name)
+                                <option value="{{ $p_code }}" {{ request('platform_code') == $p_code ? 'selected' : '' }}>
+                                    {{ $p_name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
                 </div>
 
                 {{-- Drawer Footer --}}
@@ -178,6 +195,9 @@
                     @if(request('mini_category'))
                         <input type="hidden" name="mini_category" value="{{ request('mini_category') }}">
                     @endif
+                    @if(request('platform_code'))
+                        <input type="hidden" name="platform_code" value="{{ request('platform_code') }}">
+                    @endif
                     <div class="relative">
                         <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                             <circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
@@ -194,6 +214,7 @@
                         request('department_id'),
                         request('product_category_id'),
                         request('mini_category'),
+                        request('platform_code'),
                     ])->filter()->count();
                 @endphp
                 <button type="button" @click="drawerOpen = true"
@@ -209,7 +230,7 @@
             </div>
 
             {{-- ── ACTIVE FILTER TAGS ── --}}
-            @if(request('name') || request('department_id') || request('product_category_id') || request('mini_category'))
+            @if(request('name') || request('department_id') || request('product_category_id') || request('mini_category') || request('platform_code'))
                 <div class="flex flex-wrap gap-2 mb-4">
                     @if(request('name'))
                         <div class="flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700">
@@ -238,9 +259,27 @@
                             <a href="{{ request()->fullUrlWithQuery(['mini_category' => null]) }}" class="ml-0.5 opacity-60 hover:opacity-100 text-[13px] leading-none">&times;</a>
                         </div>
                     @endif
+                    @if(request('platform_code'))
+                        @php $miniName = $selling_chart_types->firstWhere('id', request('platform_code'))?->name ?? request('platform_code'); @endphp
+                        <div class="flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700">
+                            <span class="font-semibold">Platform:</span> {{ $miniName }}
+                            <a href="{{ request()->fullUrlWithQuery(['platform_code' => null]) }}" class="ml-0.5 opacity-60 hover:opacity-100 text-[13px] leading-none">&times;</a>
+                        </div>
+                    @endif
                 </div>
             @endif
 
+        <div class="flex flex-row items-center justify-end py-1 px-0.5 min-h-[40px]">
+            <p class="self-center text-[12px] text-slate-400 dark:text-slate-500 m-0">
+                @if (!$chartInfos->isEmpty())
+                    Showing <span
+                        class="font-semibold text-slate-600 dark:text-slate-300">{{ $chartInfos->firstItem() }}–{{ $chartInfos->lastItem() }}</span>
+                    of <span class="font-semibold text-slate-600 dark:text-slate-300">{{ $chartInfos->total() }}</span> items
+                @else
+                    No item found
+                @endif
+            </p>
+        </div>
             {{-- ── FORECASTING CARDS ── --}}
             <div class="flex flex-col gap-3">
                 @if (!$chartInfos->isEmpty())
@@ -342,9 +381,14 @@
                                                 @foreach ($platform_ncs as $p_code => $p_name)
                                                     @can('general.forecasting.' . $p_code)
                                                         @php
-                                                            $platform = $platforms->get($p_code);
-                                                            $cal_val  = calculatePlatformProfit($ch_price, $platform);
-                                                            $canSell  = ($cal_val['can_sell'] ?? 'No') === 'Yes';
+                                                           if(request('platform_code')){
+                                                             $cal_val  = $ch_price->{$p_code . '_cal_val'};
+                                                             $canSell  = $ch_price->{$p_code . '_can_sell'};
+                                                           }else{
+                                                             $platform = $platforms->get($p_code);
+                                                             $cal_val  = calculatePlatformProfit($ch_price, $platform);
+                                                             $canSell  = ($cal_val['can_sell'] ?? 'No') === 'Yes';
+                                                           }
                                                         @endphp
                                                         <div class="sc-platform-card rounded-lg border p-2.5
                                                             {{ $canSell
