@@ -61,7 +61,7 @@ class MonthlyBudgetController extends Controller
             'sale_platform_id' => 'required|exists:sale_platforms,id',
             'year' => 'required|integer|min:1900|max:2100',
             'month' => 'required|integer|min:1|max:12',
-            'budget' => 'required|numeric|min:1',
+            'budget' => 'required|numeric|min:0',
             'currency' => 'required|string|size:3',
             'notes' => 'nullable|string',
         ]);
@@ -121,7 +121,7 @@ class MonthlyBudgetController extends Controller
             'sale_platform_id' => 'required|exists:sale_platforms,id',
             'year' => 'required|integer|min:1900|max:2100',
             'month' => 'required|integer|min:1|max:12',
-            'budget' => 'required|numeric|min:1',
+            'budget' => 'required|numeric|min:0',
             'currency' => 'required|string|size:3',
             'notes' => 'nullable|string',
         ]);
