@@ -89,7 +89,7 @@
                             <!-- Budget -->
                             <div>
                                 <label class="f-label">Budget <span class="f-required">*</span></label>
-                                <input type="number" name="budget" step="0.01" min="1"
+                                <input type="number" name="budget" step="0.01" min="0"
                                        class="f-input @error('budget') border-red-400 @enderror"
                                        value="{{ old('budget', $monthlyBudget->budget) }}" required />
                                 @error('budget')
