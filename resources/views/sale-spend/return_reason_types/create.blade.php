@@ -99,15 +99,14 @@
                         <div class="space-y-4">
                             <!-- Active Status -->
                             <div>
-                                <label class="flex items-center gap-3 cursor-pointer">
-                                    <div class="toggle-track {{ old('is_active') ? 'on' : '' }}" id="statusToggle"
-                                         onclick="toggleSwitch('statusToggle')">
+                                <label class="flex items-center gap-3 cursor-pointer" onclick="toggleSwitch('statusToggle', event)">
+                                    <div class="toggle-track {{ old('is_active') ? 'on' : '' }}" id="statusToggle">
                                         <div class="toggle-thumb"></div>
                                     </div>
                                     <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">Active status</span>
-                                    <input type="checkbox" name="is_active" class="hidden" id="statusCheckbox"
-                                           {{ old('is_active') ? 'checked' : '' }}>
                                 </label>
+                                <input type="checkbox" name="is_active" id="statusCheckbox" class="hidden"
+                                       {{ old('is_active') ? 'checked' : '' }}>
                                 <p class="f-hint mt-1">Enable to make this return reason type active.</p>
                             </div>
                         </div>
