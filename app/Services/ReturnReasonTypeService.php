@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ReturnReasonType;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
 class ReturnReasonTypeService
@@ -19,6 +20,17 @@ class ReturnReasonTypeService
             ->latest('id')
             ->paginate(20)
             ->withQueryString();
+    }
+
+    /**
+     * Return all return reason types (unpaginated) for select dropdowns.
+     */
+    public function getOptions(array $filters = []): Collection
+    {
+        return ReturnReasonType::filter($filters)
+            ->orderBy('sort_order')
+            ->latest('id')
+            ->get(['id', 'name']);
     }
 
     /**

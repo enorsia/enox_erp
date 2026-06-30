@@ -65,7 +65,7 @@ class DailyReturnController extends Controller
         Gate::authorize('general.daily_return.create');
 
         $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
-        $data['reasonTypes']   = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
+        $data['reasonTypes']   = $this->returnReasonTypeService->getOptions(['is_active' => 1]);
 
         return view('sale-spend.daily_returns.create', $data);
     }
@@ -157,7 +157,7 @@ class DailyReturnController extends Controller
         $data['dailyReturn']     = $dailyReturn;
         $data['date']            = $date;
         $data['salePlatforms']   = $this->salePlatformService->getParentOptions();
-        $data['reasonTypes']     = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
+        $data['reasonTypes']     = $this->returnReasonTypeService->getOptions(['is_active' => 1]);
         $data['existingEntries'] = $existingEntries;
 
         return view('sale-spend.daily_returns.edit', $data);

@@ -93,7 +93,7 @@
 window.DR = {
     mode     : 'create',
     platforms: @json($salePlatforms),
-    reasons  : @json(array_values(array_map(fn($r) => ['id' => $r->id, 'name' => $r->name], $reasonTypes))),
+    reasons  : @json($reasonTypes->values()),
     entries  : @json(array_values(old('entries', []))),
     deleteIds: [],
 };

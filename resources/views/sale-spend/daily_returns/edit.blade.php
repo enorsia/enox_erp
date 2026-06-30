@@ -105,7 +105,7 @@
 window.DR = {
     mode     : 'edit',
     platforms: @json($salePlatforms),
-    reasons  : @json(array_values(array_map(fn($r) => ['id' => $r->id, 'name' => $r->name], $reasonTypes))),
+    reasons  : @json($reasonTypes->values()),
     entries  : @json(array_values(old('entries', $existingEntries))),
     deleteIds: @json(array_values(old('entries_delete', []))),
 };
