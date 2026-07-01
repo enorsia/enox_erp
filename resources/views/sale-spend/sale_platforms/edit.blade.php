@@ -144,52 +144,78 @@
                                 <p class="f-hint mt-1 ml-11">Enable to make this platform active.</p>
                             </div>
 
-                            <!-- Is Spent -->
-                            <div>
-                                <div class="flex items-center gap-3 cursor-pointer">
-                                    <div class="toggle-track {{ old('is_spent', $salePlatform->is_spent) ? 'on' : '' }}" id="isSpentToggle"
-                                         onclick="toggleSwitch('isSpentToggle', event)">
-                                        <div class="toggle-thumb"></div>
+                            <!-- Daily Sale Module -->
+                            <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
+                                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Daily Sale Module</p>
+
+                                <div class="space-y-3">
+                                    <!-- Is Spent -->
+                                    <div>
+                                        <div class="flex items-center gap-3 cursor-pointer">
+                                            <div class="toggle-track {{ old('is_spent', $salePlatform->is_spent) ? 'on' : '' }}" id="isSpentToggle"
+                                                 onclick="toggleSwitch('isSpentToggle', event)">
+                                                <div class="toggle-thumb"></div>
+                                            </div>
+                                            <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                                  onclick="toggleSwitch('isSpentToggle', event)">Can track spent</span>
+                                            <input type="checkbox" name="is_spent" id="isSpentCheckbox" class="hidden"
+                                                    {{ old('is_spent', $salePlatform->is_spent) ? 'checked' : '' }}>
+                                        </div>
+                                        <p class="f-hint mt-1 ml-11">Allow recording spending/cost data on this platform.</p>
                                     </div>
-                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
-                                          onclick="toggleSwitch('isSpentToggle', event)">Can track spent</span>
-                                    <input type="checkbox" name="is_spent" id="isSpentCheckbox" class="hidden"
-                                            {{ old('is_spent', $salePlatform->is_spent) ? 'checked' : '' }}>
+
+                                    <!-- Is Sales -->
+                                    <div>
+                                        <div class="flex items-center gap-3 cursor-pointer">
+                                            <div class="toggle-track {{ old('is_sales', $salePlatform->is_sales) ? 'on' : '' }}" id="isSalesToggle"
+                                                 onclick="toggleSwitch('isSalesToggle', event)">
+                                                <div class="toggle-thumb"></div>
+                                            </div>
+                                            <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                                  onclick="toggleSwitch('isSalesToggle', event)">Can track sales</span>
+                                            <input type="checkbox" name="is_sales" id="isSalesCheckbox" class="hidden"
+                                                    {{ old('is_sales', $salePlatform->is_sales) ? 'checked' : '' }}>
+                                        </div>
+                                        <p class="f-hint mt-1 ml-11">Allow recording sales data on this platform.</p>
+                                    </div>
+
+                                    <!-- Allows Direct Entry (Daily Sale) -->
+                                    <div>
+                                        <div class="flex items-center gap-3 cursor-pointer">
+                                            <div class="toggle-track {{ old('allows_direct_entry', $salePlatform->allows_direct_entry) ? 'on' : '' }}" id="allowsDirectEntryToggle"
+                                                 onclick="toggleSwitch('allowsDirectEntryToggle', event)">
+                                                <div class="toggle-thumb"></div>
+                                            </div>
+                                            <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                                  onclick="toggleSwitch('allowsDirectEntryToggle', event)">Allow direct entry</span>
+                                            <input type="checkbox" name="allows_direct_entry" id="allowsDirectEntryCheckbox" class="hidden"
+                                                    {{ old('allows_direct_entry', $salePlatform->allows_direct_entry) ? 'checked' : '' }}>
+                                        </div>
+                                        <p class="f-hint mt-1 ml-11">If enabled, daily sales can be added directly to this platform. If disabled, entries can only be added to sub-platforms.</p>
+                                    </div>
                                 </div>
-                                <p class="f-hint mt-1 ml-11">Allow recording spending/cost data on this platform.</p>
                             </div>
 
-                            <!-- Is Sales -->
-                            <div>
-                                <div class="flex items-center gap-3 cursor-pointer">
-                                    <div class="toggle-track {{ old('is_sales', $salePlatform->is_sales) ? 'on' : '' }}" id="isSalesToggle"
-                                         onclick="toggleSwitch('isSalesToggle', event)">
-                                        <div class="toggle-thumb"></div>
+                            <!-- Daily Return Module -->
+                            <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
+                                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Daily Return Module</p>
+
+                                <div>
+                                    <div class="flex items-center gap-3 cursor-pointer">
+                                        <div class="toggle-track {{ old('allows_return_direct_entry', $salePlatform->allows_return_direct_entry ?? true) ? 'on' : '' }}" id="allowsReturnDirectEntryToggle"
+                                             onclick="toggleSwitch('allowsReturnDirectEntryToggle', event)">
+                                            <div class="toggle-thumb"></div>
+                                        </div>
+                                        <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                              onclick="toggleSwitch('allowsReturnDirectEntryToggle', event)">Allow direct entry</span>
+                                        <input type="checkbox" name="allows_return_direct_entry" id="allowsReturnDirectEntryCheckbox" class="hidden"
+                                                {{ old('allows_return_direct_entry', $salePlatform->allows_return_direct_entry ?? true) ? 'checked' : '' }}>
                                     </div>
-                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
-                                          onclick="toggleSwitch('isSalesToggle', event)">Can track sales</span>
-                                    <input type="checkbox" name="is_sales" id="isSalesCheckbox" class="hidden"
-                                            {{ old('is_sales', $salePlatform->is_sales) ? 'checked' : '' }}>
+                                    <p class="f-hint mt-1 ml-11">If enabled, daily returns can be added directly to this platform. If disabled, entries can only be added to sub-platforms.</p>
                                 </div>
-                                <p class="f-hint mt-1 ml-11">Allow recording sales data on this platform.</p>
                             </div>
 
-                            <!-- Allows Direct Entry -->
-                            <div>
-                                <div class="flex items-center gap-3 cursor-pointer">
-                                    <div class="toggle-track {{ old('allows_direct_entry', $salePlatform->allows_direct_entry) ? 'on' : '' }}" id="allowsDirectEntryToggle"
-                                         onclick="toggleSwitch('allowsDirectEntryToggle', event)">
-                                        <div class="toggle-thumb"></div>
-                                    </div>
-                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
-                                          onclick="toggleSwitch('allowsDirectEntryToggle', event)">Allow direct entry</span>
-                                    <input type="checkbox" name="allows_direct_entry" id="allowsDirectEntryCheckbox" class="hidden"
-                                            {{ old('allows_direct_entry', $salePlatform->allows_direct_entry) ? 'checked' : '' }}>
-                                </div>
-                                <p class="f-hint mt-1 ml-11">If enabled, sales/spent can be added directly to this platform. If disabled, entries can only be added to sub-platforms.</p>
-                            </div>
-
-                            <!-- Show in daily sale & spend report -->
+                            <!-- Module Visibility -->
                             <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
                                 <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Module Visibility</p>
                                 <div class="flex items-center gap-3 cursor-pointer">
@@ -202,7 +228,7 @@
                                     <input type="checkbox" name="show_in_analytics" id="showInAnalyticsCheckbox" class="hidden"
                                             {{ old('show_in_analytics', $salePlatform->show_in_analytics) ? 'checked' : '' }}>
                                 </div>
-                                <p class="f-hint mt-1 ml-11">When enabled, this platform appears in the Daily Sale & Spend report, Daily Sales, and Daily Returns modules.</p>
+                                <p class="f-hint mt-1 ml-11">When enabled, this platform appears in the Daily Sale & Spend report and related analytics.</p>
                             </div>
 
                             <!-- Show in Ads performance -->
