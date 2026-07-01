@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\DailyReturnExport;
 use App\Models\DailyReturn;
+use App\Models\SalePlatform;
 use App\Services\DailyReturnService;
 use App\Services\ReturnReasonTypeService;
 use App\Services\SalePlatformService;
@@ -65,7 +66,7 @@ class DailyReturnController extends Controller
         Gate::authorize('general.daily_return.create');
 
         $data['salePlatforms'] = $this->salePlatformService->getParentOptions();
-        $data['reasonTypes']   = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
+        $data['reasonTypes']   = $this->returnReasonTypeService->getOptions(['is_active' => 1]);
 
         return view('sale-spend.daily_returns.create', $data);
     }
@@ -85,6 +86,14 @@ class DailyReturnController extends Controller
         if (count($combos) !== count(array_unique($combos))) {
             return redirect()->back()->withInput()
                 ->withErrors(['entries' => 'Duplicate platform + reason entries within the same submission.']);
+        }
+
+        $platformIds = array_column($entries, 'sale_platform_id');
+        $notAllowed = SalePlatform::whereIn('id', $platformIds)
+            ->where('allows_return_direct_entry', false)->pluck('name');
+        if ($notAllowed->isNotEmpty()) {
+            return redirect()->back()->withInput()
+                ->withErrors(['entries' => 'Direct entry not allowed for: ' . $notAllowed->join(', ')]);
         }
 
         // Check duplicates against DB for this date
@@ -157,7 +166,7 @@ class DailyReturnController extends Controller
         $data['dailyReturn']     = $dailyReturn;
         $data['date']            = $date;
         $data['salePlatforms']   = $this->salePlatformService->getParentOptions();
-        $data['reasonTypes']     = $this->returnReasonTypeService->getList(['is_active' => 1])->items();
+        $data['reasonTypes']     = $this->returnReasonTypeService->getOptions(['is_active' => 1]);
         $data['existingEntries'] = $existingEntries;
 
         return view('sale-spend.daily_returns.edit', $data);
@@ -189,6 +198,14 @@ class DailyReturnController extends Controller
             if (count($combos) !== count(array_unique($combos))) {
                 return redirect()->back()->withInput()
                     ->withErrors(['entries' => 'Duplicate platform + reason entries within the same submission.']);
+            }
+
+            $platformIds = array_column($entries, 'sale_platform_id');
+            $notAllowed = SalePlatform::whereIn('id', $platformIds)
+                ->where('allows_return_direct_entry', false)->pluck('name');
+            if ($notAllowed->isNotEmpty()) {
+                return redirect()->back()->withInput()
+                    ->withErrors(['entries' => 'Direct entry not allowed for: ' . $notAllowed->join(', ')]);
             }
         }
 

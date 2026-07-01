@@ -215,15 +215,3 @@
     </div>
 </div>
 @endsection
-
-@push('scripts')
-<script>
-    function deleteData(id) {
-        if (confirm('Are you sure you want to delete this return reason type?')) {
-            if (typeof window.saveScrollPosition === 'function') window.saveScrollPosition();
-            document.getElementById('delete-form-' + id).submit();
-        }
-    }
-</script>
-@endpush
-

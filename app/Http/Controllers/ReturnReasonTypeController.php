@@ -44,7 +44,7 @@ class ReturnReasonTypeController extends Controller
             'name'        => 'required|string|max:150|unique:return_reason_types,name',
             'slug'        => 'nullable|string|max:150|unique:return_reason_types,slug',
             'description' => 'nullable|string',
-            'is_active'   => 'nullable|boolean',
+            'is_active'   => 'nullable|in:on,off',
             'sort_order'  => 'nullable|integer|min:0|max:255',
         ]);
 
@@ -136,18 +136,18 @@ class ReturnReasonTypeController extends Controller
         );
     }
 
-    public function destroy(ReturnReasonType $returnReasonType) : RedirectResponse
+    public function destroy(ReturnReasonType $return_reason) : RedirectResponse
     {
         Gate::authorize('general.return_reason_type.delete');
 
         try {
             activity()
                 ->causedBy(Auth::user())
-                ->performedOn($returnReasonType)
-                ->withProperties(['deleted_reason_type' => $returnReasonType->name])
-                ->log('Deleted return reason type: ' . $returnReasonType->name);
+                ->performedOn($return_reason)
+                ->withProperties(['deleted_reason_type' => $return_reason->name])
+                ->log('Deleted return reason type: ' . $return_reason->name);
 
-            $this->service->delete($returnReasonType);
+            $this->service->delete($return_reason);
 
             notify()->success("Return reason type deleted successfully.", "Deleted");
             return redirect()->back();

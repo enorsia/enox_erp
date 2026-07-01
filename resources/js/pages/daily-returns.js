@@ -107,7 +107,7 @@
             const opt       = document.createElement('option');
             opt.value       = p.id;
             opt.textContent = p.label;
-            if (!p.allows_direct_entry) opt.disabled = true;
+            if (!p.allows_return_direct_entry) opt.disabled = true;
             if (String(p.id) === String(selectedId)) opt.selected = true;
             sel.appendChild(opt);
         });
