@@ -38,53 +38,11 @@
             <hr class="border-slate-100 dark:border-slate-700"/>
 
             <div>
-                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Data View</p>
-                <select name="view" class="f-input custom-select">
-                    @foreach($filter_options['views'] as $opt)
-                        <option value="{{ $opt['value'] }}" {{ $view === $opt['value'] ? 'selected' : '' }}>{{ $opt['label'] }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <hr class="border-slate-100 dark:border-slate-700"/>
-
-            <div>
-                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Week</p>
-                <select name="week" class="f-input custom-select">
-                    <option value="">All Weeks</option>
-                    @foreach($filter_options['weeks'] as $wk)
-                        <option value="{{ $wk['value'] }}" {{ (string) $report_filters['week'] === (string) $wk['value'] ? 'selected' : '' }}>{{ $wk['label'] }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <hr class="border-slate-100 dark:border-slate-700"/>
-
-            <div>
                 <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Platform</p>
                 <select name="platform_id" class="f-input custom-select">
                     <option value="">All Platforms</option>
                     @foreach($filter_options['platforms'] as $p)
                         <option value="{{ $p['id'] }}" {{ (string) $report_filters['platform_id'] === (string) $p['id'] ? 'selected' : '' }}>{{ $p['name'] }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <hr class="border-slate-100 dark:border-slate-700"/>
-
-            <div>
-                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Return Reason</p>
-                <select name="return_reason_id" class="f-input custom-select">
-                    <option value="">All Reasons</option>
-                    @foreach($filter_options['return_reasons'] as $r)
-                        <option value="{{ $r['id'] }}" {{ (string) $report_filters['return_reason_id'] === (string) $r['id'] ? 'selected' : '' }}>{{ $r['name'] }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <hr class="border-slate-100 dark:border-slate-700"/>
-
-            <div>
-                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Gender</p>
-                <select name="gender" class="f-input custom-select">
-                    @foreach($filter_options['genders'] as $g)
-                        <option value="{{ $g['value'] }}" {{ $report_filters['gender'] === $g['value'] ? 'selected' : '' }}>{{ $g['label'] }}</option>
                     @endforeach
                 </select>
             </div>

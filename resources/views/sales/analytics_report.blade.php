@@ -4,24 +4,13 @@
 
 @section('content')
 <div x-data="{
-        drawerOpen: false,
         exportOpen: false,
         period: '{{ $filters['period'] ?? 'this_month' }}',
         fromYM: '{{ ($filters['period'] ?? 'this_month') === 'custom' ? ($filters['from_year_month'] ?? $period_display['from_year_month']) : $period_display['from_year_month'] }}',
         toYM:   '{{ ($filters['period'] ?? 'this_month') === 'custom' ? ($filters['to_year_month'] ?? $period_display['to_year_month']) : $period_display['to_year_month'] }}',
-        initialPeriod: '{{ $filters['period'] ?? 'this_month' }}',
-        initialFromYM: '{{ $period_display['from_year_month'] }}',
-        initialToYM: '{{ $period_display['to_year_month'] }}',
         tables: { daily_report: true, return_breakdown: true, weekly_breakdown: true },
         markCustomPeriod() {
             this.period = 'custom';
-        },
-        onDrawerSubmit(e) {
-            if (this.period !== this.initialPeriod
-                || this.fromYM !== this.initialFromYM
-                || this.toYM !== this.initialToYM) {
-                e.target.querySelector('[name=month]')?.remove();
-            }
         },
         submitPeriod() {
             const url = new URL(window.location.href);
@@ -52,9 +41,7 @@
         },
         atLeastOneSelected() { return Object.values(this.tables).some(v => v); }
      }"
-     @keydown.escape.window="drawerOpen = false; exportOpen = false">
-
-    @include('sales.partials.report_filter_drawer')
+     @keydown.escape.window="exportOpen = false">
 
     {{-- Export modal --}}
     <div x-show="exportOpen" x-cloak class="fixed inset-0 z-[300] flex items-center justify-center p-4" style="display:none;">
@@ -117,18 +104,10 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                     Export Excel
                 </button>
-                <button type="button" @click="drawerOpen = true"
-                        class="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] border rounded-lg transition-colors {{ $active_filter_count > 0 ? 'border-accent-200 bg-accent-400/10 text-accent-600 dark:text-accent-400' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' }}">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 4h18M7 8h10M11 12h2"/></svg>
-                    Filters
-                    @if($active_filter_count > 0)
-                        <span class="bg-accent-400 text-white text-[9px] font-bold min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">{{ $active_filter_count }}</span>
-                    @endif
-                </button>
             </div>
         </div>
 
-        {{-- Period filter (synced with sidebar drawer) --}}
+        {{-- Period filter --}}
         <div class="an-card p-5">
             <p class="sec-heading mb-4">Filter by Period</p>
             <div class="flex flex-wrap items-end gap-3">
@@ -171,8 +150,7 @@
             <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <div class="text-[12px] text-blue-700 dark:text-blue-400">
                 <span class="font-semibold">How to use:</span>
-                Select a period above or in <strong>Filters</strong>, then narrow by week, platform, return reason, or gender.
-                Period and month range stay in sync in both places. Switch view tabs for Totals, Weekly, All Data, and Return Breakdown.
+                Select a period above, then switch view tabs for Totals, Weekly, All Data, and Return Breakdown.
             </div>
         </div>
 
@@ -186,7 +164,7 @@
                         <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
                             Showing {{ $visible_count }} rows
                             @if($active_filter_count > 0)
-                                <span class="text-accent-600 dark:text-accent-400">· {{ $active_filter_count }} filter{{ $active_filter_count > 1 ? 's' : '' }} active</span>
+                                <span class="text-accent-600">· {{ $active_filter_count }} filter{{ $active_filter_count > 1 ? 's' : '' }} active</span>
                             @endif
                         </p>
                     </div>
