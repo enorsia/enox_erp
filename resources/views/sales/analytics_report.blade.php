@@ -7,9 +7,22 @@
         drawerOpen: false,
         exportOpen: false,
         period: '{{ $filters['period'] ?? 'this_month' }}',
-        fromYM: '{{ $filters['from_year_month'] ?? now()->format('Y-m') }}',
-        toYM:   '{{ $filters['to_year_month']   ?? now()->format('Y-m') }}',
+        fromYM: '{{ ($filters['period'] ?? 'this_month') === 'custom' ? ($filters['from_year_month'] ?? $period_display['from_year_month']) : $period_display['from_year_month'] }}',
+        toYM:   '{{ ($filters['period'] ?? 'this_month') === 'custom' ? ($filters['to_year_month'] ?? $period_display['to_year_month']) : $period_display['to_year_month'] }}',
+        initialPeriod: '{{ $filters['period'] ?? 'this_month' }}',
+        initialFromYM: '{{ $period_display['from_year_month'] }}',
+        initialToYM: '{{ $period_display['to_year_month'] }}',
         tables: { daily_report: true, return_breakdown: true, weekly_breakdown: true },
+        markCustomPeriod() {
+            this.period = 'custom';
+        },
+        onDrawerSubmit(e) {
+            if (this.period !== this.initialPeriod
+                || this.fromYM !== this.initialFromYM
+                || this.toYM !== this.initialToYM) {
+                e.target.querySelector('[name=month]')?.remove();
+            }
+        },
         submitPeriod() {
             const url = new URL(window.location.href);
             url.searchParams.set('period', this.period);
@@ -20,6 +33,7 @@
                 url.searchParams.delete('from_year_month');
                 url.searchParams.delete('to_year_month');
             }
+            url.searchParams.delete('month');
             window.location.href = url.toString();
         },
         exportUrl() {
@@ -112,32 +126,19 @@
             </div>
         </div>
 
-        {{-- Period filter --}}
+        {{-- Period filter (synced with sidebar drawer) --}}
         <div class="an-card p-5">
             <p class="sec-heading mb-4">Filter by Period</p>
             <div class="flex flex-wrap items-end gap-3">
-                <div class="w-52">
-                    <label class="f-label">Period</label>
-                    <select class="f-input custom-select" x-model="period" @change="period !== 'custom' && submitPeriod()">
-                        <option value="this_month">This Month</option>
-                        <option value="last_month">Last Month</option>
-                        <option value="last_3_months">Last 3 Months</option>
-                        <option value="last_6_months">Last 6 Months</option>
-                        <option value="last_1_year">Last 1 Year</option>
-                        <option value="custom">Custom Range</option>
-                    </select>
-                </div>
-                <div x-show="period === 'custom'" x-collapse class="flex flex-wrap items-end gap-3">
-                    <div>
-                        <label class="f-label">From (Year-Month)</label>
-                        <input type="month" x-model="fromYM" class="f-input w-42" />
-                    </div>
-                    <div>
-                        <label class="f-label">To (Year-Month)</label>
-                        <input type="month" x-model="toYM" class="f-input w-42" />
-                    </div>
-                    <button type="button" @click="submitPeriod()" class="px-5 py-2 bg-accent-400 hover:bg-accent-600 text-white text-sm font-semibold rounded-lg">Apply</button>
-                </div>
+                @include('sales.partials.report_period_fields', ['inForm' => false])
+                <button type="button" @click="submitPeriod()"
+                        class="px-5 py-2 bg-accent-400 hover:bg-accent-600 text-white text-sm font-semibold rounded-lg transition-colors">
+                    Apply Period
+                </button>
+                <a href="{{ $reset_period_url }}"
+                   class="px-5 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
+                    Reset
+                </a>
             </div>
         </div>
 
@@ -169,8 +170,8 @@
             <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <div class="text-[12px] text-blue-700 dark:text-blue-400">
                 <span class="font-semibold">How to use:</span>
-                Select a period above, open <strong>Filters</strong> to narrow by week, platform, return reason, gender, or date range.
-                Switch between <strong>Totals</strong>, <strong>Weekly</strong>, <strong>All Data</strong>, and <strong>Return Breakdown</strong> — the same sections exported to Excel.
+                Select a period above or in <strong>Filters</strong>, then narrow by week, platform, return reason, or gender.
+                Period and month range stay in sync in both places. Switch view tabs for Totals, Weekly, All Data, and Return Breakdown.
             </div>
         </div>
 
@@ -199,6 +200,21 @@
                     </div>
                 </div>
             </div>
+
+            @if($show_daily_month_tabs)
+                <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20">
+                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2.5">Month</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        @foreach($daily_month_tabs as $tab)
+                            <a href="{{ $tab['url'] }}"
+                               class="sr-month-pill {{ $tab['active'] ? 'active' : '' }}">
+                                {{ $tab['label'] }}
+                                <span class="sr-view-count">{{ $tab['count'] }}</span>
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
 
             <div class="sr-table-wrap">
                 @if($view === 'weekly')

@@ -22,20 +22,17 @@
         </button>
     </div>
 
-    <form method="get" action="{{ route('admin.sales.analytics.report') }}" class="flex-1 flex flex-col overflow-hidden">
-        <input type="hidden" name="period" value="{{ $filters['period'] }}">
-        @if($filters['period'] === 'custom')
-            <input type="hidden" name="from_year_month" value="{{ $filters['from_year_month'] }}">
-            <input type="hidden" name="to_year_month" value="{{ $filters['to_year_month'] }}">
+    <form method="get" action="{{ route('admin.sales.analytics.report') }}" @submit="onDrawerSubmit" class="flex-1 flex flex-col overflow-hidden">
+        @if($report_filters['month'] !== '')
+            <input type="hidden" name="month" value="{{ $report_filters['month'] }}">
         @endif
 
         <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+            {{-- Period (synced with body card) --}}
             <div>
-                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Search</p>
-                <div class="relative">
-                    <svg class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
-                    <input type="text" name="search" value="{{ $report_filters['search'] }}" placeholder="Labels, dates, amounts…"
-                           class="w-full pl-8 pr-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400"/>
+                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-3">Filter by Period</p>
+                <div class="space-y-3">
+                    @include('sales.partials.report_period_fields', ['inForm' => true])
                 </div>
             </div>
             <hr class="border-slate-100 dark:border-slate-700"/>
@@ -90,22 +87,6 @@
                         <option value="{{ $g['value'] }}" {{ $report_filters['gender'] === $g['value'] ? 'selected' : '' }}>{{ $g['label'] }}</option>
                     @endforeach
                 </select>
-            </div>
-            <hr class="border-slate-100 dark:border-slate-700"/>
-
-            <div>
-                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Date From</p>
-                <input type="date" name="date_from" value="{{ $report_filters['date_from'] }}"
-                       min="{{ $filter_options['period_from'] }}" max="{{ $filter_options['period_to'] }}"
-                       class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400"/>
-            </div>
-            <hr class="border-slate-100 dark:border-slate-700"/>
-
-            <div>
-                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Date To</p>
-                <input type="date" name="date_to" value="{{ $report_filters['date_to'] }}"
-                       min="{{ $filter_options['period_from'] }}" max="{{ $filter_options['period_to'] }}"
-                       class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400"/>
             </div>
         </div>
 

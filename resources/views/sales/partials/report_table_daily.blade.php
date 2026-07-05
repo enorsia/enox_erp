@@ -2,8 +2,8 @@
     <table class="sticky-table w-full min-w-[1200px]">
         <thead>
             <tr>
-                <th class="tbl-th sticky left-0 z-20 bg-slate-50 dark:bg-slate-800">Week</th>
-                <th class="tbl-th sticky left-[52px] z-20 bg-slate-50 dark:bg-slate-800 min-w-[100px]">Date</th>
+                <th class="tbl-th sticky left-0 z-20 sr-sticky-head-week">Week</th>
+                <th class="tbl-th sticky left-[52px] z-20 sr-sticky-head-date min-w-[100px]">Date</th>
                 <th class="tbl-th text-right">Daily Sales</th>
                 <th class="tbl-th text-right">Daily ROAS</th>
                 <th class="tbl-th text-right">Daily Spend</th>
@@ -26,8 +26,8 @@
         <tbody>
             @forelse($daily_rows as $idx => $row)
                 <tr class="{{ $idx % 2 === 1 ? 'sr-row-alt' : '' }}">
-                    <td class="sr-td sr-week-cell sticky left-0 z-10 text-center font-medium">W{{ $row['week'] }}</td>
-                    <td class="sr-td sticky left-[52px] z-10">{{ $row['date_label'] }}</td>
+                    <td class="sr-td sr-sticky-week text-center font-medium">W{{ $row['week'] }}</td>
+                    <td class="sr-td sr-sticky-date">{{ $row['date_label'] }}</td>
                     <td class="sr-td text-right">{{ $row['sales_display'] }}</td>
                     <td class="sr-td text-right">{{ $row['roas_display'] }}</td>
                     <td class="sr-td text-right">{{ $row['spend_display'] }}</td>

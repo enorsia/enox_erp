@@ -17,6 +17,8 @@ class SalesReportService
         'returns' => 'Return Breakdown',
     ];
 
+    private const PLATFORM_COLOR_COUNT = 5;
+
     public function __construct(
         private DashboardAnalyticsService $analytics,
     ) {}
@@ -31,24 +33,30 @@ class SalesReportService
         $dateTo   = $range['to']->toDateString();
         $export   = $this->analytics->getDailyExportData($dateFrom, $dateTo, $range['months']);
 
-        $rootPlatforms     = $export['root_platforms'];
+        $rootPlatforms     = $this->enrichRootPlatformsWithColors($export['root_platforms']);
         $platformColumns   = $this->buildPlatformColumnMeta($export['column_data']['columns'] ?? []);
         $summaryRows       = $this->buildSummaryRows($export['summary_rows'], $platformColumns);
-        $dailyRows         = $this->buildDailyRows($export['rows'], $platformColumns, $rootPlatforms);
+        $dailyRowsAll      = $this->buildDailyRows($export['rows'], $platformColumns, $rootPlatforms);
         $weeklyPayload     = $this->buildWeeklyRows($export['rows'], $export['weekly_rows'], $rootPlatforms, $dateFrom, $dateTo);
         $returnPayload     = $this->buildReturnRows($export['return_reason_data'], $rootPlatforms);
 
         $summaryRows = $this->filterSummaryRows($summaryRows, $reportFilters);
-        $dailyRows   = $this->filterDailyRows($dailyRows, $reportFilters, $dateFrom, $dateTo);
+        $dailySansMonth = $this->filterDailyRows($dailyRowsAll, array_merge($reportFilters, ['month' => '']), $dateFrom, $dateTo);
+        $dailyRows   = $this->applyDailyMonthFilter($dailySansMonth, $reportFilters['month']);
         $weeklyRows  = $this->filterWeeklyRows($weeklyPayload['rows'], $reportFilters);
         $returnRows  = $this->filterReturnRows($returnPayload['rows'], $reportFilters);
 
         $view = $reportFilters['view'];
+        $dailyMonthTabs = $this->buildDailyMonthTabs($request, $periodFilters, $reportFilters, $range, $dailySansMonth);
 
         return [
             'filters'             => $periodFilters,
+            'period_display'      => [
+                'from_year_month' => $range['from']->format('Y-m'),
+                'to_year_month'   => $range['to']->format('Y-m'),
+            ],
             'report_filters'      => $reportFilters,
-            'active_filter_count' => $this->countActiveReportFilters($reportFilters),
+            'active_filter_count' => $this->countActiveReportFilters($reportFilters, $periodFilters),
             'filter_options'      => $this->buildFilterOptions($export, $range, $returnPayload['reason_types']),
             'range'               => $range,
             'view'                => $view,
@@ -75,7 +83,10 @@ class SalesReportService
                 default   => count($summaryRows),
             },
             'reset_report_url'    => $this->buildResetUrl($request, $periodFilters, $view),
+            'reset_period_url'    => $this->buildResetPeriodUrl($request, $reportFilters, $view),
             'active_filter_tags'  => $this->buildActiveFilterTags($request, $periodFilters, $reportFilters, $rootPlatforms, $returnPayload['reason_types']),
+            'daily_month_tabs'    => $dailyMonthTabs,
+            'show_daily_month_tabs' => $view === 'daily' && count($dailyMonthTabs) > 0,
         ];
     }
 
@@ -108,19 +119,21 @@ class SalesReportService
             'week'               => $input['week'] ?? '',
             'platform_id'        => $input['platform_id'] ?? '',
             'return_reason_id'   => $input['return_reason_id'] ?? '',
-            'date_from'          => $input['date_from'] ?? '',
-            'date_to'            => $input['date_to'] ?? '',
+            'month'              => $input['month'] ?? '',
             'gender'             => $input['gender'] ?? '',
         ];
     }
 
-    private function countActiveReportFilters(array $filters): int
+    private function countActiveReportFilters(array $filters, array $periodFilters): int
     {
         $count = 0;
-        foreach (['search', 'week', 'platform_id', 'return_reason_id', 'date_from', 'date_to', 'gender'] as $key) {
+        foreach (['search', 'week', 'platform_id', 'return_reason_id', 'gender'] as $key) {
             if (($filters[$key] ?? '') !== '') {
                 $count++;
             }
+        }
+        if (($periodFilters['period'] ?? 'this_month') !== 'this_month') {
+            $count++;
         }
 
         return $count;
@@ -205,6 +218,7 @@ class SalesReportService
             $built[] = [
                 'week'               => $row['week'],
                 'date'               => $row['date'],
+                'year_month'         => Carbon::parse($row['date'])->format('Y-m'),
                 'date_label'         => Carbon::parse($row['date'])->format('d-M-Y'),
                 'sales'              => round((float) $row['total_sales'], 2),
                 'spend'              => round((float) $row['total_spent'], 2),
@@ -334,7 +348,7 @@ class SalesReportService
             $pctRetGbp  = $sales     > 0 ? $retGbp / $sales     : 0;
 
             $platformMetrics = [];
-            foreach ($rootPlatforms as $root) {
+            foreach ($rootPlatforms as $i => $root) {
                 $rid = $root['id'];
                 $pSales  = round((float) ($weeklySalesByRoot[$wk][$rid] ?? 0), 2);
                 $pOrders = (float) ($wRow['root_orders'][$rid] ?? 0);
@@ -342,10 +356,12 @@ class SalesReportService
                 $pRetAmt = round((float) ($weeklyReturnsByRoot[$wk][$rid]['amount']    ?? 0), 2);
                 $pRetOrd = (float) ($weeklyReturnsByRoot[$wk][$rid]['order_qty'] ?? 0);
                 $pRetQty = (float) ($weeklyReturnsByRoot[$wk][$rid]['item_qty']  ?? 0);
+                $colorClass = $root['color_class'] ?? $this->platformColorClass($i);
 
                 $platformMetrics[] = [
                     'id'                    => $rid,
                     'name'                  => $root['name'],
+                    'color_class'           => $colorClass,
                     'sales'                 => $pSales,
                     'orders'                => $pOrders,
                     'qty'                   => $pQty,
@@ -400,10 +416,11 @@ class SalesReportService
         }
 
         $weeklyPlatformTotal = [];
-        foreach ($rootPlatforms as $root) {
+        foreach ($rootPlatforms as $i => $root) {
             $rid = $root['id'];
             $pt  = $platTotals[$rid];
             $weeklyPlatformTotal[] = [
+                'color_class'           => $root['color_class'] ?? $this->platformColorClass($i),
                 'id'                    => $rid,
                 'sales_display'         => $this->formatMoney($pt['sales']),
                 'orders_display'        => $this->formatNumber($pt['orders']),
@@ -523,16 +540,8 @@ class SalesReportService
             if ($filters['week'] !== '' && (string) $row['week'] !== (string) $filters['week']) {
                 return false;
             }
-            if ($filters['date_from'] !== '' && $row['date'] < $filters['date_from']) {
+            if ($row['date'] < $periodFrom || $row['date'] > $periodTo) {
                 return false;
-            }
-            if ($filters['date_to'] !== '' && $row['date'] > $filters['date_to']) {
-                return false;
-            }
-            if ($filters['date_from'] === '' && $filters['date_to'] === '') {
-                if ($row['date'] < $periodFrom || $row['date'] > $periodTo) {
-                    return false;
-                }
             }
             if ($filters['platform_id'] !== '') {
                 $pid  = (int) $filters['platform_id'];
@@ -627,8 +636,6 @@ class SalesReportService
                 ['value' => 'male', 'label' => 'Male'],
             ],
             'views'          => collect(self::VIEWS)->map(fn ($label, $key) => ['value' => $key, 'label' => $label])->values()->toArray(),
-            'period_from'    => $range['from']->toDateString(),
-            'period_to'      => $range['to']->toDateString(),
         ];
     }
 
@@ -660,6 +667,17 @@ class SalesReportService
         if ($reportFilters['search'] !== '') {
             $tags[] = ['label' => 'Search', 'value' => $reportFilters['search'], 'url' => $this->buildUrl($request, array_merge($base, ['search' => '']))];
         }
+        if (($periodFilters['period'] ?? 'this_month') !== 'this_month') {
+            $tags[] = [
+                'label' => 'Period',
+                'value' => $this->periodFilterLabel($periodFilters),
+                'url'   => $this->buildUrl($request, array_merge($base, [
+                    'period' => 'this_month',
+                    'from_year_month' => '',
+                    'to_year_month' => '',
+                ])),
+            ];
+        }
         if ($reportFilters['week'] !== '') {
             $tags[] = ['label' => 'Week', 'value' => 'Week ' . $reportFilters['week'], 'url' => $this->buildUrl($request, array_merge($base, ['week' => '']))];
         }
@@ -671,11 +689,9 @@ class SalesReportService
             $name = collect($reasonTypes)->firstWhere('id', (int) $reportFilters['return_reason_id'])['name'] ?? $reportFilters['return_reason_id'];
             $tags[] = ['label' => 'Reason', 'value' => $name, 'url' => $this->buildUrl($request, array_merge($base, ['return_reason_id' => '']))];
         }
-        if ($reportFilters['date_from'] !== '') {
-            $tags[] = ['label' => 'From', 'value' => $reportFilters['date_from'], 'url' => $this->buildUrl($request, array_merge($base, ['date_from' => '']))];
-        }
-        if ($reportFilters['date_to'] !== '') {
-            $tags[] = ['label' => 'To', 'value' => $reportFilters['date_to'], 'url' => $this->buildUrl($request, array_merge($base, ['date_to' => '']))];
+        if ($reportFilters['month'] !== '') {
+            $label = Carbon::createFromFormat('Y-m', $reportFilters['month'])->format('F Y');
+            $tags[] = ['label' => 'Month', 'value' => $label, 'url' => $this->buildUrl($request, array_merge($base, ['month' => '']))];
         }
         if ($reportFilters['gender'] !== '') {
             $tags[] = ['label' => 'Gender', 'value' => ucfirst($reportFilters['gender']), 'url' => $this->buildUrl($request, array_merge($base, ['gender' => '']))];
@@ -689,8 +705,32 @@ class SalesReportService
         return $this->buildUrl($request, array_merge($periodFilters, [
             'view' => $view,
             'search' => '', 'week' => '', 'platform_id' => '',
-            'return_reason_id' => '', 'date_from' => '', 'date_to' => '', 'gender' => '',
+            'return_reason_id' => '', 'month' => '', 'gender' => '',
         ]));
+    }
+
+    private function buildResetPeriodUrl(Request $request, array $reportFilters, string $view): string
+    {
+        return $this->buildUrl($request, array_merge($reportFilters, [
+            'view'             => $view,
+            'period'           => 'this_month',
+            'from_year_month'  => '',
+            'to_year_month'    => '',
+            'month'            => '',
+        ]));
+    }
+
+    private function periodFilterLabel(array $periodFilters): string
+    {
+        return match ($periodFilters['period'] ?? 'this_month') {
+            'last_month'     => 'Last Month',
+            'last_3_months'  => 'Last 3 Months',
+            'last_6_months'  => 'Last 6 Months',
+            'last_1_year'    => 'Last 1 Year',
+            'custom'         => Carbon::createFromFormat('Y-m', $periodFilters['from_year_month'])->format('M Y')
+                . ' – ' . Carbon::createFromFormat('Y-m', $periodFilters['to_year_month'])->format('M Y'),
+            default          => 'This Month',
+        };
     }
 
     private function buildUrl(Request $request, array $params): string
@@ -699,6 +739,67 @@ class SalesReportService
         $path  = $request->url();
 
         return $path . (empty($query) ? '' : '?' . http_build_query($query));
+    }
+
+    private function enrichRootPlatformsWithColors(array $rootPlatforms): array
+    {
+        return array_map(function (array $platform, int $index) {
+            $platform['color_class'] = $this->platformColorClass($index);
+
+            return $platform;
+        }, $rootPlatforms, array_keys($rootPlatforms));
+    }
+
+    private function platformColorClass(int $index): string
+    {
+        return 'sr-plat-' . ($index % self::PLATFORM_COLOR_COUNT);
+    }
+
+    private function applyDailyMonthFilter(array $rows, string $month): array
+    {
+        if ($month === '') {
+            return $rows;
+        }
+
+        return array_values(array_filter($rows, fn (array $row) => ($row['year_month'] ?? '') === $month));
+    }
+
+    private function buildDailyMonthTabs(
+        Request $request,
+        array $periodFilters,
+        array $reportFilters,
+        array $range,
+        array $dailyRows,
+    ): array {
+        if (count($range['months']) <= 1) {
+            return [];
+        }
+
+        $tabs = [];
+
+        $tabs[] = [
+            'key'    => '',
+            'label'  => 'All Months',
+            'active' => $reportFilters['month'] === '',
+            'count'  => count($dailyRows),
+            'url'    => $this->buildUrl($request, array_merge($periodFilters, $reportFilters, ['month' => ''])),
+        ];
+
+        foreach ($range['months'] as $m) {
+            $ym    = sprintf('%04d-%02d', $m['year'], $m['month']);
+            $label = Carbon::createFromDate($m['year'], $m['month'], 1)->format('F Y');
+            $count = count(array_filter($dailyRows, fn (array $row) => ($row['year_month'] ?? '') === $ym));
+
+            $tabs[] = [
+                'key'    => $ym,
+                'label'  => $label,
+                'active' => $reportFilters['month'] === $ym,
+                'count'  => $count,
+                'url'    => $this->buildUrl($request, array_merge($periodFilters, $reportFilters, ['month' => $ym])),
+            ];
+        }
+
+        return $tabs;
     }
 
     private function buildPeriodStats(array $totals): array
