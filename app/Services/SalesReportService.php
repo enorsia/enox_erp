@@ -34,9 +34,20 @@ class SalesReportService
         $export   = $this->analytics->getDailyExportData($dateFrom, $dateTo, $range['months']);
 
         $rootPlatforms     = $this->enrichRootPlatformsWithColors($export['root_platforms']);
-        $platformColumns   = $this->buildPlatformColumnMeta($export['column_data']['columns'] ?? []);
-        $summaryRows       = $this->buildSummaryRows($export['summary_rows'], $platformColumns);
-        $dailyRowsAll      = $this->buildDailyRows($export['rows'], $platformColumns, $rootPlatforms);
+        $groupedColumns    = $this->enrichGroupedColumnEdges(
+            $this->enrichGroupedColumnsWithColors(
+                $this->buildGroupedPlatformColumns($export['column_data']['tree'] ?? []),
+                $this->buildPlatformColorMap($export['column_data']['tree'] ?? []),
+            ),
+        );
+        $tableHeaders = [
+            'summary' => $this->buildSummaryTableHeaders($groupedColumns, $rootPlatforms),
+            'daily'   => $this->buildDailyTableHeaders($groupedColumns, $rootPlatforms),
+            'weekly'  => $this->buildWeeklyTableHeaders($rootPlatforms),
+            'returns' => $this->buildReturnTableHeaders($rootPlatforms),
+        ];
+        $summaryRows       = $this->buildSummaryRows($export['summary_rows'], $groupedColumns);
+        $dailyRowsAll      = $this->buildDailyRows($export['rows'], $groupedColumns, $rootPlatforms);
         $weeklyPayload     = $this->buildWeeklyRows($export['rows'], $export['weekly_rows'], $rootPlatforms, $dateFrom, $dateTo);
         $returnPayload     = $this->buildReturnRows($export['return_reason_data'], $rootPlatforms);
 
@@ -63,7 +74,8 @@ class SalesReportService
             'view_tabs'           => $this->buildViewTabs($request, $periodFilters, $reportFilters),
             'stats'               => $this->buildPeriodStats($export['totals']),
             'root_platforms'      => $rootPlatforms,
-            'platform_columns'    => $platformColumns,
+            'grouped_columns'     => $groupedColumns,
+            'table_headers'       => $tableHeaders,
             'summary_rows'        => $summaryRows,
             'weekly_rows'         => $weeklyRows,
             'weekly_total'        => $weeklyPayload['total'],
@@ -141,35 +153,19 @@ class SalesReportService
 
     // ── Section builders (mirror Excel export) ───────────────────
 
-    private function buildPlatformColumnMeta(array $columns): array
-    {
-        return array_map(fn ($col) => [
-            'key'         => "{$col['platform_id']}_{$col['type']}",
-            'platform_id' => $col['platform_id'],
-            'name'        => $col['name'],
-            'type'        => $col['type'],
-            'type_label'  => $col['type'] === 'cost' ? 'Spend' : 'Sales',
-        ], $columns);
-    }
-
-    private function buildSummaryRows(array $summaryRows, array $platformColumns): array
+    private function buildSummaryRows(array $summaryRows, array $groupedColumns): array
     {
         $rows = [];
         foreach ($summaryRows as $key => $row) {
-            $platformCells = [];
-            foreach ($platformColumns as $col) {
-                $val  = $row['platform'][$col['key']] ?? null;
-                $fmt  = $row['platform_formats'][$col['key']] ?? null;
-                $platformCells[] = [
-                    'key'     => $col['key'],
-                    'display' => $this->formatValue($val, $fmt),
-                    'raw'     => $val,
-                ];
-            }
+            $platformCells = $this->buildSummaryPlatformCells(
+                $groupedColumns,
+                $row['platform'] ?? [],
+                $row['platform_formats'] ?? [],
+            );
 
             $spendFmt = $row['col_e_format'] ?? null;
 
-            $rows[] = [
+            $rows[] = array_merge([
                 'key'            => $key,
                 'label'          => $row['label'],
                 'row_class'      => $this->summaryRowClass($key),
@@ -182,13 +178,21 @@ class SalesReportService
                 'male_display'   => $this->formatNumber($row['male'] ?? null),
                 'platform_cells' => $platformCells,
                 'search_blob'    => $this->searchBlob($row['label'], $row['col_c'] ?? null, $row['col_e'] ?? null, ...array_column($platformCells, 'raw')),
-            ];
+            ], $this->negativeFieldClasses([
+                'sales'  => $row['col_c'] ?? null,
+                'spend'  => $row['col_e'] ?? null,
+                'orders' => $row['total_orders'] ?? null,
+                'qty'    => $row['total_qty'] ?? null,
+                'kids'   => $row['kids'] ?? null,
+                'female' => $row['female'] ?? null,
+                'male'   => $row['male'] ?? null,
+            ]));
         }
 
         return $rows;
     }
 
-    private function buildDailyRows(array $rows, array $platformColumns, array $rootPlatforms): array
+    private function buildDailyRows(array $rows, array $groupedColumns, array $rootPlatforms): array
     {
         $built = [];
         foreach ($rows as $row) {
@@ -199,23 +203,37 @@ class SalesReportService
                 $rootQty[$rid]    = (int) ($grp['qty']    ?? 0);
             }
 
-            $platformCells = [];
-            foreach ($platformColumns as $col) {
-                $pid = $col['platform_id'];
-                $plat = $row['platform'][$pid] ?? $row['platform'][(string) $pid] ?? null;
-                $val  = $col['type'] === 'cost' ? ($plat['cost'] ?? null) : ($plat['sales'] ?? null);
-                $platformCells[] = ['display' => $this->formatMoney($val)];
-            }
+            $platformCells = $this->buildDailyPlatformCells($groupedColumns, $row['platform'] ?? []);
 
+            $orderCount = count($rootPlatforms) + 1;
             $rootOrderCells = [];
-            $rootQtyCells   = [];
-            foreach ($rootPlatforms as $root) {
+            foreach ($rootPlatforms as $i => $root) {
                 $rid = $root['id'];
-                $rootOrderCells[] = ['display' => $this->formatNumber($rootOrders[$rid] ?? 0)];
-                $rootQtyCells[]   = ['display' => $this->formatNumber($rootQty[$rid] ?? 0)];
+                $rootOrderCells[] = [
+                    'display'     => $this->formatNumber($rootOrders[$rid] ?? 0),
+                    'edge_class'  => $this->columnEdgeClass($i, $orderCount),
+                    'value_class' => $this->negativeValueClass($rootOrders[$rid] ?? 0),
+                ];
             }
 
-            $built[] = [
+            $qtyCount = count($rootPlatforms) + 1;
+            $rootQtyCells = [];
+            foreach ($rootPlatforms as $i => $root) {
+                $rid = $root['id'];
+                $rootQtyCells[] = [
+                    'display'     => $this->formatNumber($rootQty[$rid] ?? 0),
+                    'edge_class'  => $this->columnEdgeClass($i, $qtyCount),
+                    'value_class' => $this->negativeValueClass($rootQty[$rid] ?? 0),
+                ];
+            }
+
+            $genderCells = [
+                ['display' => $this->formatNumber($row['kids']),   'edge_class' => 'sr-col-start', 'value_class' => $this->negativeValueClass($row['kids'])],
+                ['display' => $this->formatNumber($row['female']), 'edge_class' => '',             'value_class' => $this->negativeValueClass($row['female'])],
+                ['display' => $this->formatNumber($row['male']),   'edge_class' => 'sr-col-end',   'value_class' => $this->negativeValueClass($row['male'])],
+            ];
+
+            $built[] = array_merge([
                 'week'               => $row['week'],
                 'date'               => $row['date'],
                 'year_month'         => Carbon::parse($row['date'])->format('Y-m'),
@@ -234,9 +252,11 @@ class SalesReportService
                 'platform_cells'     => $platformCells,
                 'root_order_cells'   => $rootOrderCells,
                 'root_qty_cells'     => $rootQtyCells,
+                'gender_cells'       => $genderCells,
+                'orders_total_edge'  => $this->columnEdgeClass($orderCount - 1, $orderCount),
+                'qty_total_edge'     => $this->columnEdgeClass($qtyCount - 1, $qtyCount),
                 'sales_display'      => $this->formatMoney($row['total_sales']),
                 'spend_display'      => $this->formatMoney($row['total_spent']),
-                'roas_display'       => $this->formatPercent($row['roas']),
                 'orders_display'     => $this->formatNumber($row['total_orders']),
                 'qty_display'        => $this->formatNumber($row['total_qty']),
                 'kids_display'       => $this->formatNumber($row['kids']),
@@ -250,7 +270,15 @@ class SalesReportService
                     $row['total_spent'],
                     $row['total_orders'],
                 ),
-            ];
+            ], $this->negativeFieldClasses([
+                'sales'  => $row['total_sales'],
+                'spend'  => $row['total_spent'],
+                'orders' => $row['total_orders'],
+                'qty'    => $row['total_qty'],
+                'kids'   => $row['kids'],
+                'female' => $row['female'],
+                'male'   => $row['male'],
+            ]));
         }
 
         return $built;
@@ -358,7 +386,7 @@ class SalesReportService
                 $pRetQty = (float) ($weeklyReturnsByRoot[$wk][$rid]['item_qty']  ?? 0);
                 $colorClass = $root['color_class'] ?? $this->platformColorClass($i);
 
-                $platformMetrics[] = [
+                $platformMetrics[] = array_merge([
                     'id'                    => $rid,
                     'name'                  => $root['name'],
                     'color_class'           => $colorClass,
@@ -374,7 +402,14 @@ class SalesReportService
                     'return_amount_display' => $this->formatMoney($pRetAmt),
                     'return_orders_display' => $this->formatNumber($pRetOrd),
                     'return_qty_display'    => $this->formatNumber($pRetQty),
-                ];
+                ], $this->negativeFieldClasses([
+                    'sales'          => $pSales,
+                    'orders'         => $pOrders,
+                    'qty'            => $pQty,
+                    'return_amount'  => $pRetAmt,
+                    'return_orders'  => $pRetOrd,
+                    'return_qty'     => $pRetQty,
+                ]));
 
                 $platTotals[$rid]['sales']          += $pSales;
                 $platTotals[$rid]['orders']         += $pOrders;
@@ -391,7 +426,7 @@ class SalesReportService
             $totalRetPcs += $retPcs;
             $totalRetGbp += $retGbp;
 
-            $built[] = [
+            $built[] = array_merge([
                 'week'                  => $wk,
                 'label'                 => $wRow['label'] ?? ('week ' . $wk),
                 'sales'                 => round($sales, 2),
@@ -412,14 +447,23 @@ class SalesReportService
                 'return_pct_qty_display'=> $this->formatPercent($pctRetPcs),
                 'return_pct_amt_display'=> $this->formatPercent($pctRetGbp),
                 'search_blob'           => $this->searchBlob($wRow['label'] ?? ('week ' . $wk), $sales, $spend, $weekOrders, $retGbp),
-            ];
+            ], $this->negativeFieldClasses([
+                'sales'         => $sales,
+                'spend'         => $spend,
+                'orders'        => $weekOrders,
+                'qty'           => $weekItems,
+                'returns_pcs'   => $retPcs,
+                'returns_gbp'   => $retGbp,
+                'return_pct_qty'=> $pctRetPcs,
+                'return_pct_amt'=> $pctRetGbp,
+            ]));
         }
 
         $weeklyPlatformTotal = [];
         foreach ($rootPlatforms as $i => $root) {
             $rid = $root['id'];
             $pt  = $platTotals[$rid];
-            $weeklyPlatformTotal[] = [
+            $weeklyPlatformTotal[] = array_merge([
                 'color_class'           => $root['color_class'] ?? $this->platformColorClass($i),
                 'id'                    => $rid,
                 'sales_display'         => $this->formatMoney($pt['sales']),
@@ -428,12 +472,22 @@ class SalesReportService
                 'return_amount_display' => $this->formatMoney($pt['return_amount']),
                 'return_orders_display' => $this->formatNumber($pt['return_orders']),
                 'return_qty_display'    => $this->formatNumber($pt['return_qty']),
-            ];
+            ], $this->negativeFieldClasses([
+                'sales'         => $pt['sales'],
+                'orders'        => $pt['orders'],
+                'qty'           => $pt['qty'],
+                'return_amount' => $pt['return_amount'],
+                'return_orders' => $pt['return_orders'],
+                'return_qty'    => $pt['return_qty'],
+            ]));
         }
+
+        $totalPctQty = $totalItems > 0 ? $totalRetPcs / $totalItems : 0;
+        $totalPctAmt = $totalSales > 0 ? $totalRetGbp / $totalSales : 0;
 
         return [
             'rows'  => $built,
-            'total' => [
+            'total' => array_merge([
                 'label'                 => 'Total',
                 'sales_display'         => $this->formatMoney($totalSales),
                 'spend_display'         => $this->formatMoney($totalSpend),
@@ -441,10 +495,19 @@ class SalesReportService
                 'qty_display'           => $this->formatNumber($totalItems),
                 'returns_pcs_display'   => $this->formatNumber($totalRetPcs),
                 'returns_gbp_display'   => $this->formatMoney($totalRetGbp),
-                'return_pct_qty_display'=> $this->formatPercent($totalItems > 0 ? $totalRetPcs / $totalItems : 0),
-                'return_pct_amt_display'=> $this->formatPercent($totalSales > 0 ? $totalRetGbp / $totalSales : 0),
+                'return_pct_qty_display'=> $this->formatPercent($totalPctQty),
+                'return_pct_amt_display'=> $this->formatPercent($totalPctAmt),
                 'platforms'             => $weeklyPlatformTotal,
-            ],
+            ], $this->negativeFieldClasses([
+                'sales'          => $totalSales,
+                'spend'          => $totalSpend,
+                'orders'         => $totalOrders,
+                'qty'            => $totalItems,
+                'returns_pcs'    => $totalRetPcs,
+                'returns_gbp'    => $totalRetGbp,
+                'return_pct_qty' => $totalPctQty,
+                'return_pct_amt' => $totalPctAmt,
+            ])),
         ];
     }
 
@@ -467,10 +530,13 @@ class SalesReportService
                     'count'         => $count,
                     'count_display' => $this->formatNumber($count),
                     'pct_display'   => $this->formatPercent($rootPct, 1),
+                    'color_class'   => trim(($root['color_class'] ?? '') . ' ' . $this->negativeValueClass($count)),
+                    'count_edge'    => 'sr-col-start',
+                    'pct_edge'      => 'sr-col-end',
                 ];
             }
 
-            $rows[] = [
+            $rows[] = array_merge([
                 'id'             => $reason['id'],
                 'name'           => $reason['name'],
                 'root_cells'     => $rootCells,
@@ -484,7 +550,12 @@ class SalesReportService
                 'total_display'  => $this->formatNumber($reasonTotal),
                 'pct_display'    => $this->formatPercent($pctTotal, 1),
                 'search_blob'    => $this->searchBlob($reason['name'], $reasonTotal, $reason['kids'] ?? 0),
-            ];
+            ], $this->negativeFieldClasses([
+                'kids'   => $reason['kids'] ?? 0,
+                'female' => $reason['female'] ?? 0,
+                'male'   => $reason['male'] ?? 0,
+                'total'  => $reasonTotal,
+            ]));
         }
 
         $totalRootCells = [];
@@ -494,13 +565,16 @@ class SalesReportService
             $totalRootCells[] = [
                 'count_display' => $this->formatNumber($rootTotal),
                 'pct_display'   => $this->formatPercent($rootPct, 1),
+                'color_class'   => trim(($root['color_class'] ?? '') . ' ' . $this->negativeValueClass($rootTotal)),
+                'count_edge'    => 'sr-col-start',
+                'pct_edge'      => 'sr-col-end',
             ];
         }
 
         return [
             'rows'         => $rows,
             'reason_types' => $reasonTypes->values()->map(fn ($r) => ['id' => $r->id, 'name' => $r->name])->toArray(),
-            'total'        => [
+            'total'        => array_merge([
                 'label'          => 'Total',
                 'root_cells'     => $totalRootCells,
                 'kids_display'   => $this->formatNumber($returnReasonData['totals_kids']   ?? 0),
@@ -508,7 +582,12 @@ class SalesReportService
                 'male_display'   => $this->formatNumber($returnReasonData['totals_male']   ?? 0),
                 'total_display'  => $this->formatNumber($grandTotal),
                 'pct_display'    => $this->formatPercent($grandTotal > 0 ? 1 : 0, 1),
-            ],
+            ], $this->negativeFieldClasses([
+                'kids'   => $returnReasonData['totals_kids']   ?? 0,
+                'female' => $returnReasonData['totals_female'] ?? 0,
+                'male'   => $returnReasonData['totals_male']   ?? 0,
+                'total'  => $grandTotal,
+            ])),
         ];
     }
 
@@ -804,15 +883,512 @@ class SalesReportService
 
     private function buildPeriodStats(array $totals): array
     {
+        $items = [
+            ['label' => 'Total Sales', 'raw' => $totals['sales'] ?? 0,  'tone' => 'emerald', 'money' => true],
+            ['label' => 'Total Spend', 'raw' => $totals['spent'] ?? 0,  'tone' => 'amber',  'money' => true],
+            ['label' => 'Orders',      'raw' => $totals['orders'] ?? 0, 'tone' => 'blue',   'money' => false],
+            ['label' => 'Order Qty',   'raw' => $totals['qty'] ?? 0,    'tone' => 'violet', 'money' => false],
+        ];
+
+        return array_map(fn (array $item) => [
+            'label'       => $item['label'],
+            'value'       => $item['money']
+                ? $this->formatMoney($item['raw'])
+                : $this->formatNumber($item['raw']),
+            'value_class' => $this->negativeValueClass($item['raw']),
+            'tone'        => $item['tone'],
+        ], $items);
+    }
+
+    // ── Table layout (mirrors Excel grouped platform headers) ───────
+
+    private function buildGroupedPlatformColumns(array $tree, int $depth = 0): array
+    {
+        $cols = [];
+
+        foreach ($tree as $node) {
+            if (!empty($node['children'])) {
+                $leafIds = [];
+                $this->collectLeafIdsFromTree($node['children'], $leafIds);
+
+                if ($node['is_spent']) {
+                    $cols[] = $this->groupedColumnMeta($node, 'summary', 'cost', $depth, $leafIds);
+                }
+                if ($node['is_sales']) {
+                    $cols[] = $this->groupedColumnMeta($node, 'summary', 'sales', $depth, $leafIds);
+                }
+
+                $cols = array_merge($cols, $this->buildGroupedPlatformColumns($node['children'], $depth + 1));
+            } else {
+                if ($node['is_spent']) {
+                    $cols[] = $this->groupedColumnMeta($node, 'leaf', 'cost', $depth, [$node['id']]);
+                }
+                if ($node['is_sales']) {
+                    $cols[] = $this->groupedColumnMeta($node, 'leaf', 'sales', $depth, [$node['id']]);
+                }
+            }
+        }
+
+        return $cols;
+    }
+
+    private function groupedColumnMeta(array $node, string $kind, string $colType, int $level, array $leafIds): array
+    {
         return [
-            ['label' => 'Total Sales', 'value' => $this->formatMoney($totals['sales'] ?? 0), 'tone' => 'emerald'],
-            ['label' => 'Total Spend', 'value' => $this->formatMoney($totals['spent'] ?? 0), 'tone' => 'amber'],
-            ['label' => 'Orders', 'value' => $this->formatNumber($totals['orders'] ?? 0), 'tone' => 'blue'],
-            ['label' => 'Order Qty', 'value' => $this->formatNumber($totals['qty'] ?? 0), 'tone' => 'violet'],
+            'kind'         => $kind,
+            'platform_id'  => $node['id'],
+            'col_type'     => $colType,
+            'level'        => $level,
+            'name'         => $node['name'],
+            'leaf_ids'     => $leafIds,
+            'key'          => "{$node['id']}_{$colType}",
+            'type_label'   => $colType === 'cost' ? 'Spend' : 'Sales',
+            'color_class'  => '',
         ];
     }
 
+    private function collectLeafIdsFromTree(array $nodes, array &$ids): void
+    {
+        foreach ($nodes as $node) {
+            if (empty($node['children'])) {
+                $ids[] = $node['id'];
+            } else {
+                $this->collectLeafIdsFromTree($node['children'], $ids);
+            }
+        }
+    }
+
+    private function buildPlatformColorMap(array $tree): array
+    {
+        $map = [];
+        foreach ($tree as $index => $rootNode) {
+            $this->assignPlatformColor($rootNode, $this->platformColorClass($index), $map);
+        }
+
+        return $map;
+    }
+
+    private function assignPlatformColor(array $node, string $colorClass, array &$map): void
+    {
+        $map[$node['id']] = $colorClass;
+        foreach ($node['children'] ?? [] as $child) {
+            $this->assignPlatformColor($child, $colorClass, $map);
+        }
+    }
+
+    private function enrichGroupedColumnsWithColors(array $columns, array $colorMap): array
+    {
+        return array_map(function (array $col) use ($colorMap) {
+            $col['color_class'] = $colorMap[$col['platform_id']] ?? '';
+
+            return $col;
+        }, $columns);
+    }
+
+    private function enrichGroupedColumnEdges(array $columns): array
+    {
+        $count = count($columns);
+        $index = 0;
+
+        while ($index < $count) {
+            $platId = $columns[$index]['platform_id'];
+            $cursor = $index;
+            while ($cursor < $count && $columns[$cursor]['platform_id'] === $platId) {
+                $cursor++;
+            }
+
+            for ($i = $index; $i < $cursor; $i++) {
+                $columns[$i]['edge_class'] = $this->columnEdgeClass($i - $index, $cursor - $index);
+            }
+
+            $index = $cursor;
+        }
+
+        return $columns;
+    }
+
+    private function columnEdgeClass(int $index, int $total): string
+    {
+        $parts = [];
+        if ($index === 0) {
+            $parts[] = 'sr-col-start';
+        }
+        if ($index === $total - 1) {
+            $parts[] = 'sr-col-end';
+        }
+
+        return implode(' ', $parts);
+    }
+
+    private function buildSummaryTableHeaders(array $groupedColumns, array $rootPlatforms): array
+    {
+        $row1 = [
+            $this->fixedHeaderCell('Summary', 'left', 'sr-sticky-head-label sr-th-zone-label', false, true),
+            $this->fixedHeaderCell('Daily Sales', 'right', 'sr-th-zone-core'),
+            $this->fixedHeaderCell('Daily Spend', 'right', 'sr-th-zone-core', true),
+        ];
+        $row2 = [];
+
+        $this->appendPlatformHeaderCells($row1, $row2, $groupedColumns);
+        $metricLabels = ['Orders', 'Qty', 'Kids', 'Female', 'Male'];
+        foreach ($metricLabels as $i => $label) {
+            $row1[] = $this->headerCell(
+                $label,
+                'right',
+                'sr-th-zone-metrics',
+                2,
+                1,
+                $i === count($metricLabels) - 1,
+            );
+        }
+
+        return [
+            'rows'      => [$row1, $row2],
+            'col_count' => $this->countHeaderColumns($row1),
+        ];
+    }
+
+    private function buildDailyTableHeaders(array $groupedColumns, array $rootPlatforms): array
+    {
+        $row1 = [
+            $this->fixedHeaderCell('Week', 'center', 'sr-sticky-head-week sr-th-zone-label', false, true),
+            $this->fixedHeaderCell('Date', 'left', 'sr-sticky-head-date sr-th-zone-label'),
+            $this->fixedHeaderCell('Daily Sales', 'right', 'sr-th-zone-core'),
+            $this->fixedHeaderCell('Daily Spend', 'right', 'sr-th-zone-core', true),
+        ];
+        $row2 = [];
+
+        $this->appendPlatformHeaderCells($row1, $row2, $groupedColumns);
+        $this->appendRootMetricHeaders($row1, $row2, 'Order QTY', $rootPlatforms, true);
+        $this->appendRootMetricHeaders($row1, $row2, 'Order Item QTY', $rootPlatforms, true);
+        $this->appendGenderHeaders($row1, $row2);
+
+        return [
+            'rows'      => [$row1, $row2],
+            'col_count' => $this->countHeaderColumns($row1),
+        ];
+    }
+
+    private function buildWeeklyTableHeaders(array $rootPlatforms): array
+    {
+        $row1 = [];
+        $row2 = [];
+
+        $fixedLabels = ['Week', 'Sales (£)', 'Spend (£)', 'Order', 'Order Qty', 'Return Qty', 'Return Qty %', 'Return Amt (£)', 'Return Amt %'];
+        foreach ($fixedLabels as $i => $label) {
+            $row1[] = $this->headerCell(
+                $label,
+                'right',
+                'sr-th-zone-core',
+                2,
+                1,
+                $i === count($fixedLabels) - 1,
+            );
+        }
+
+        $childLabels = ['Sales', 'Orders', 'Qty', 'Return (£)', 'Ret Orders', 'Ret Qty'];
+        foreach ($rootPlatforms as $root) {
+            $row1[] = $this->headerCell(
+                $this->shortPlatformName($root['name']),
+                'center',
+                'sr-plat-hdr ' . ($root['color_class'] ?? ''),
+                1,
+                count($childLabels),
+                true,
+                true,
+            );
+            foreach ($childLabels as $j => $label) {
+                $row2[] = $this->headerCell(
+                    $label,
+                    'right',
+                    'sr-plat-subhdr ' . ($root['color_class'] ?? ''),
+                    1,
+                    1,
+                    $j === count($childLabels) - 1,
+                    $j === 0,
+                );
+            }
+        }
+
+        return [
+            'rows'      => [$row1, $row2],
+            'col_count' => count($fixedLabels) + (count($rootPlatforms) * count($childLabels)),
+        ];
+    }
+
+    private function buildReturnTableHeaders(array $rootPlatforms): array
+    {
+        $row1 = [
+            $this->headerCell('Reason', 'left', 'sr-sticky-head-label sr-th-zone-label', 2, 1, true, false),
+        ];
+        $row2 = [];
+
+        foreach ($rootPlatforms as $root) {
+            $row1[] = $this->headerCell(
+                $this->shortPlatformName($root['name']),
+                'center',
+                'sr-plat-hdr ' . ($root['color_class'] ?? ''),
+                1,
+                2,
+                true,
+                true,
+            );
+            $row2[] = $this->headerCell('Qty', 'right', 'sr-plat-subhdr ' . ($root['color_class'] ?? ''), 1, 1, false, true);
+            $row2[] = $this->headerCell('%', 'right', 'sr-plat-subhdr ' . ($root['color_class'] ?? ''), 1, 1, true, false);
+        }
+
+        $row1[] = $this->headerCell('Gender', 'center', 'sr-th-group', 1, 3, true, true);
+        $row2[] = $this->headerCell('Kids', 'right', 'sr-th-sub', 1, 1, false, true);
+        $row2[] = $this->headerCell('Female', 'right', 'sr-th-sub');
+        $row2[] = $this->headerCell('Male', 'right', 'sr-th-sub', 1, 1, true, false);
+
+        $row1[] = $this->headerCell('Total', 'center', 'sr-th-group', 1, 2, true, true);
+        $row2[] = $this->headerCell('Qty', 'right', 'sr-th-sub', 1, 1, false, true);
+        $row2[] = $this->headerCell('%', 'right', 'sr-th-sub', 1, 1, true, false);
+
+        return [
+            'rows'      => [$row1, $row2],
+            'col_count' => 1 + (count($rootPlatforms) * 2) + 5,
+        ];
+    }
+
+    private function appendPlatformHeaderCells(array &$row1, array &$row2, array $groupedColumns): void
+    {
+        if (count($groupedColumns) === 0) {
+            return;
+        }
+
+        $count = count($groupedColumns);
+        $index = 0;
+
+        while ($index < $count) {
+            $col    = $groupedColumns[$index];
+            $platId = $col['platform_id'];
+            $span   = 0;
+            $cursor = $index;
+
+            while ($cursor < $count && $groupedColumns[$cursor]['platform_id'] === $platId) {
+                $span++;
+                $cursor++;
+            }
+
+            $summaryClass = $col['kind'] === 'summary' ? ' sr-th-plat-summary' : '';
+            $row1[] = $this->headerCell(
+                $col['name'],
+                'center',
+                'sr-plat-hdr ' . ($col['color_class'] ?? '') . $summaryClass,
+                1,
+                $span,
+                true,
+                true,
+            );
+
+            for ($i = $index; $i < $cursor; $i++) {
+                $sub = $groupedColumns[$i];
+                $row2[] = $this->headerCell(
+                    $sub['type_label'],
+                    'center',
+                    'sr-plat-subhdr ' . ($sub['color_class'] ?? ''),
+                    1,
+                    1,
+                    $i === $cursor - 1,
+                    $i === $index,
+                );
+            }
+
+            $index = $cursor;
+        }
+    }
+
+    private function appendRootMetricHeaders(array &$row1, array &$row2, string $groupLabel, array $rootPlatforms, bool $withTotal): void
+    {
+        $span = count($rootPlatforms) + ($withTotal ? 1 : 0);
+        $row1[] = $this->headerCell($groupLabel, 'center', 'sr-th-group', 1, $span, true, true);
+
+        foreach ($rootPlatforms as $i => $root) {
+            $row2[] = $this->headerCell(
+                $this->shortPlatformName($root['name']),
+                'right',
+                'sr-th-sub',
+                1,
+                1,
+                false,
+                $i === 0,
+            );
+        }
+
+        if ($withTotal) {
+            $row2[] = $this->headerCell('Total', 'right', 'sr-th-sub sr-th-total', 1, 1, true, false);
+        } elseif (count($rootPlatforms) > 0) {
+            $last = array_key_last($row2);
+            $row2[$last]['class'] = trim(($row2[$last]['class'] ?? '') . ' sr-th-sec-after');
+        }
+    }
+
+    private function appendGenderHeaders(array &$row1, array &$row2): void
+    {
+        $row1[] = $this->headerCell('Gender Order QTY', 'center', 'sr-th-group', 1, 3, true, true);
+        $row2[] = $this->headerCell('Kids', 'right', 'sr-th-sub', 1, 1, false, true);
+        $row2[] = $this->headerCell('Female', 'right', 'sr-th-sub');
+        $row2[] = $this->headerCell('Male', 'right', 'sr-th-sub', 1, 1, true, false);
+    }
+
+    private function fixedHeaderCell(
+        string $label,
+        string $align,
+        string $class,
+        bool $sectionAfter = false,
+        bool $colStart = false,
+    ): array {
+        return $this->headerCell($label, $align, $class, 2, 1, $sectionAfter, $colStart);
+    }
+
+    private function headerCell(
+        string $label,
+        string $align = 'left',
+        string $class = '',
+        int $rowspan = 1,
+        int $colspan = 1,
+        bool $sectionAfter = false,
+        bool $colStart = false,
+    ): array {
+        if ($colStart) {
+            $class = trim($class . ' sr-th-col-start');
+        }
+        if ($sectionAfter) {
+            $class = trim($class . ' sr-th-sec-after');
+        }
+
+        return compact('label', 'align', 'class', 'rowspan', 'colspan');
+    }
+
+    private function countHeaderColumns(array $row1): int
+    {
+        return array_sum(array_map(fn (array $cell) => $cell['colspan'] ?? 1, $row1));
+    }
+
+    private function shortPlatformName(string $name): string
+    {
+        $name = trim(preg_replace('/\s*(platform|marketplace|store)\s*/i', '', $name) ?? $name);
+
+        return mb_strlen($name) > 10 ? mb_substr($name, 0, 9) . '.' : $name;
+    }
+
+    private function buildSummaryPlatformCells(array $groupedColumns, array $platformRow, array $formats): array
+    {
+        $cells = [];
+        foreach ($groupedColumns as $col) {
+            $val = $this->resolveSummaryGroupedValue($col, $platformRow);
+            $fmt = $this->resolveSummaryGroupedFormat($col, $formats);
+            $cells[] = [
+                'display'     => $this->formatValue($val, $fmt),
+                'raw'         => $val,
+                'color_class' => trim(($col['color_class'] ?? '') . ' sr-plat-cell ' . $this->negativeValueClass($val)),
+                'edge_class'  => $col['edge_class'] ?? '',
+                'kind'        => $col['kind'],
+            ];
+        }
+
+        return $cells;
+    }
+
+    private function buildDailyPlatformCells(array $groupedColumns, array $platformData): array
+    {
+        $cells = [];
+        foreach ($groupedColumns as $col) {
+            $val = $this->resolveDailyGroupedValue($col, $platformData);
+            $cells[] = [
+                'display'     => $this->formatMoney($val),
+                'color_class' => trim(($col['color_class'] ?? '') . ' sr-plat-cell ' . $this->negativeValueClass($val)),
+                'edge_class'  => $col['edge_class'] ?? '',
+                'kind'        => $col['kind'],
+            ];
+        }
+
+        return $cells;
+    }
+
+    private function resolveSummaryGroupedValue(array $col, array $platformRow): mixed
+    {
+        if ($col['kind'] === 'leaf') {
+            return $platformRow[$col['key']] ?? null;
+        }
+
+        $sum = 0.0;
+        $has = false;
+        foreach ($col['leaf_ids'] as $leafId) {
+            $key = "{$leafId}_{$col['col_type']}";
+            if (array_key_exists($key, $platformRow)) {
+                $has = true;
+                $sum += (float) $platformRow[$key];
+            }
+        }
+
+        return $has ? $sum : null;
+    }
+
+    private function resolveSummaryGroupedFormat(array $col, array $formats): ?string
+    {
+        if ($col['kind'] === 'leaf') {
+            return $formats[$col['key']] ?? null;
+        }
+
+        foreach ($col['leaf_ids'] as $leafId) {
+            $key = "{$leafId}_{$col['col_type']}";
+            if (!empty($formats[$key])) {
+                return $formats[$key];
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveDailyGroupedValue(array $col, array $platformData): ?float
+    {
+        if ($col['kind'] === 'leaf') {
+            $plat = $platformData[$col['platform_id']] ?? $platformData[(string) $col['platform_id']] ?? null;
+
+            return $col['col_type'] === 'cost'
+                ? ($plat['cost'] ?? null)
+                : ($plat['sales'] ?? null);
+        }
+
+        $sum = 0.0;
+        $has = false;
+        foreach ($col['leaf_ids'] as $leafId) {
+            $plat = $platformData[$leafId] ?? $platformData[(string) $leafId] ?? null;
+            if ($plat !== null) {
+                $has = true;
+                $sum += $col['col_type'] === 'cost'
+                    ? (float) ($plat['cost'] ?? 0)
+                    : (float) ($plat['sales'] ?? 0);
+            }
+        }
+
+        return $has ? $sum : null;
+    }
+
     // ── Formatting & utilities ─────────────────────────────────────
+
+    private function negativeValueClass(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        return (float) $value < 0 ? 'sr-negative' : '';
+    }
+
+    /** @param array<string, mixed> $values */
+    private function negativeFieldClasses(array $values): array
+    {
+        $classes = [];
+        foreach ($values as $field => $value) {
+            $classes["{$field}_class"] = $this->negativeValueClass($value);
+        }
+
+        return $classes;
+    }
 
     private function formatMoney(mixed $value): string
     {

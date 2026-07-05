@@ -68,7 +68,7 @@
                     </div>
                     <div>
                         <h3 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">Export Sales</h3>
-                        <p class="text-[11px] text-slate-400">Choose which sections to include</p>
+                        <p class="text-[11px] text-slate-400 dark:text-slate-500">Choose which sections to include</p>
                     </div>
                 </div>
                 <button type="button" @click="exportOpen = false" class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors">
@@ -85,13 +85,13 @@
                         <input type="checkbox" x-model="tables.{{ $section['key'] }}" class="mt-0.5 w-4 h-4 rounded border-slate-300 cursor-pointer">
                         <div>
                             <div class="text-[13px] font-semibold text-slate-700 dark:text-slate-200">{{ $section['label'] }}</div>
-                            <p class="text-[11px] text-slate-400 mt-0.5">{{ $section['desc'] }}</p>
+                            <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{{ $section['desc'] }}</p>
                         </div>
                     </label>
                 @endforeach
             </div>
             <div class="flex gap-2.5 px-6 py-4 border-t border-slate-200 dark:border-slate-700">
-                <button type="button" @click="exportOpen = false" class="flex-1 py-2.5 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 text-slate-500 font-medium">Cancel</button>
+                <button type="button" @click="exportOpen = false" class="flex-1 py-2.5 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium">Cancel</button>
                 <a :href="exportUrl()" :class="atLeastOneSelected() ? '' : 'pointer-events-none opacity-40'"
                    class="flex-[2] py-2.5 text-[13px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-center">Export Excel</a>
             </div>
@@ -109,7 +109,7 @@
                     </span>
                     Sales Report
                 </h1>
-                <p class="text-sm text-slate-400 mt-0.5 ml-10">{{ $range['label'] }}</p>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5 ml-10">{{ $range['label'] }}</p>
             </div>
             <div class="flex items-center gap-2 flex-wrap sm:justify-end">
                 <button type="button" @click="exportOpen = true"
@@ -118,7 +118,7 @@
                     Export Excel
                 </button>
                 <button type="button" @click="drawerOpen = true"
-                        class="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] border rounded-lg transition-colors {{ $active_filter_count > 0 ? 'border-accent-200 bg-accent-400/10 text-accent-600' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 hover:bg-slate-50' }}">
+                        class="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] border rounded-lg transition-colors {{ $active_filter_count > 0 ? 'border-accent-200 bg-accent-400/10 text-accent-600 dark:text-accent-400' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' }}">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 4h18M7 8h10M11 12h2"/></svg>
                     Filters
                     @if($active_filter_count > 0)
@@ -149,7 +149,7 @@
             @foreach($stats as $stat)
                 <div class="sr-stat-card sr-stat-{{ $stat['tone'] }}">
                     <p class="sr-stat-label">{{ $stat['label'] }}</p>
-                    <p class="sr-stat-value">{{ $stat['value'] }}</p>
+                    <p class="sr-stat-value {{ $stat['value_class'] ?? '' }}">{{ $stat['value'] }}</p>
                 </div>
             @endforeach
         </div>
@@ -183,10 +183,10 @@
                     <div>
                         <p class="sec-heading mb-1">Report Data</p>
                         <h2 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">{{ $range['label'] }}</h2>
-                        <p class="text-[11px] text-slate-400 mt-0.5">
+                        <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
                             Showing {{ $visible_count }} rows
                             @if($active_filter_count > 0)
-                                <span class="text-accent-600">· {{ $active_filter_count }} filter{{ $active_filter_count > 1 ? 's' : '' }} active</span>
+                                <span class="text-accent-600 dark:text-accent-400">· {{ $active_filter_count }} filter{{ $active_filter_count > 1 ? 's' : '' }} active</span>
                             @endif
                         </p>
                     </div>

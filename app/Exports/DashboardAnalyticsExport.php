@@ -91,14 +91,14 @@ class DashboardAnalyticsExport
                 if ($monthStart < $this->dateFrom) $monthStart = $this->dateFrom;
                 if ($monthEnd   > $this->dateTo)   $monthEnd   = $this->dateTo;
 
-                $monthTitle = $monthCarbon->format('M-Y');
+                $monthTitle = $this->sanitizeSheetTitle($monthCarbon->format('M-Y'));
                 $sheet      = $spreadsheet->createSheet();
                 $sheet->setTitle($monthTitle);
 
                 $this->writeSheetData($sheet, $service, $monthStart, $monthEnd, [$month], ['label' => $monthTitle]);
             }
         } else {
-            $sheetTitle = mb_substr($this->label['label'] ?? 'Report', 0, 31);
+            $sheetTitle = $this->sanitizeSheetTitle($this->label['label'] ?? 'Report');
             $sheet      = $spreadsheet->createSheet();
             $sheet->setTitle($sheetTitle);
             $this->writeSheetData($sheet, $service, $this->dateFrom, $this->dateTo, $this->months, $this->label);
@@ -1072,6 +1072,16 @@ class DashboardAnalyticsExport
     {
         $name = trim(preg_replace('/\s*(platform|marketplace|store)\s*/i', '', $name));
         return mb_strlen($name) > 10 ? mb_substr($name, 0, 9) . '.' : $name;
+    }
+
+    /** Excel sheet titles cannot contain * : / \ ? [ ] and are limited to 31 characters. */
+    private function sanitizeSheetTitle(string $title): string
+    {
+        $title = str_replace(['*', ':', '/', '\\', '?', '[', ']'], ' ', $title);
+        $title = trim(preg_replace('/\s+/', ' ', $title) ?? '');
+        $title = mb_substr($title, 0, 31);
+
+        return $title !== '' ? $title : 'Report';
     }
 
     // Build grouped platform columns
