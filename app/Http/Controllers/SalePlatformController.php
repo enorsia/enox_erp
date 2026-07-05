@@ -85,6 +85,7 @@ class SalePlatformController extends Controller
             'is_sales'               => ['nullable', 'in:on,off'],
             'allows_direct_entry'         => ['nullable', 'in:on,off'],
             'allows_return_direct_entry'  => ['nullable', 'in:on,off'],
+            'allows_budget_direct_entry'  => ['nullable', 'in:on,off'],
             'show_in_analytics'           => ['nullable', 'in:on,off'],
             'show_in_sale_tracking'  => ['nullable', 'in:on,off'],
             'track_reach'            => ['nullable', 'in:on,off'],
@@ -107,6 +108,7 @@ class SalePlatformController extends Controller
                 'is_sales'               => $request->has('is_sales'),
                 'allows_direct_entry'        => $request->has('allows_direct_entry'),
                 'allows_return_direct_entry' => $request->has('allows_return_direct_entry'),
+                'allows_budget_direct_entry' => $request->has('allows_budget_direct_entry'),
                 'show_in_analytics'          => $request->has('show_in_analytics'),
                 'show_in_sale_tracking'  => $request->has('show_in_sale_tracking'),
                 'track_reach'            => $request->has('track_reach'),
@@ -188,6 +190,7 @@ class SalePlatformController extends Controller
             'is_sales'               => ['nullable', 'in:on,off'],
             'allows_direct_entry'         => ['nullable', 'in:on,off'],
             'allows_return_direct_entry'  => ['nullable', 'in:on,off'],
+            'allows_budget_direct_entry'  => ['nullable', 'in:on,off'],
             'show_in_analytics'           => ['nullable', 'in:on,off'],
             'show_in_sale_tracking'  => ['nullable', 'in:on,off'],
             'track_reach'            => ['nullable', 'in:on,off'],
@@ -200,7 +203,7 @@ class SalePlatformController extends Controller
         ]);
 
         try {
-            $oldValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'is_spent', 'is_sales', 'allows_direct_entry', 'allows_return_direct_entry', 'show_in_analytics', 'show_in_sale_tracking', 'track_reach', 'track_impressions', 'track_clicks', 'track_sessions', 'track_engaged_sessions', 'track_users', 'sort_order']);
+            $oldValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'is_spent', 'is_sales', 'allows_direct_entry', 'allows_return_direct_entry', 'allows_budget_direct_entry', 'show_in_analytics', 'show_in_sale_tracking', 'track_reach', 'track_impressions', 'track_clicks', 'track_sessions', 'track_engaged_sessions', 'track_users', 'sort_order']);
 
             $salePlatform->update([
                 'name'                   => $validated['name'],
@@ -212,6 +215,7 @@ class SalePlatformController extends Controller
                 'is_sales'               => $request->has('is_sales'),
                 'allows_direct_entry'        => $request->has('allows_direct_entry'),
                 'allows_return_direct_entry' => $request->has('allows_return_direct_entry'),
+                'allows_budget_direct_entry' => $request->has('allows_budget_direct_entry'),
                 'show_in_analytics'          => $request->has('show_in_analytics'),
                 'show_in_sale_tracking'  => $request->has('show_in_sale_tracking'),
                 'track_reach'            => $request->has('track_reach'),
@@ -223,7 +227,7 @@ class SalePlatformController extends Controller
                 'sort_order'             => $validated['sort_order'] ?? 0,
             ]);
 
-            $newValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'is_spent', 'is_sales', 'allows_direct_entry', 'allows_return_direct_entry', 'show_in_analytics', 'show_in_sale_tracking', 'track_reach', 'track_impressions', 'track_clicks', 'track_sessions', 'track_engaged_sessions', 'track_users', 'sort_order']);
+            $newValues = $salePlatform->only(['name', 'slug', 'parent_id', 'type', 'is_active', 'is_spent', 'is_sales', 'allows_direct_entry', 'allows_return_direct_entry', 'allows_budget_direct_entry', 'show_in_analytics', 'show_in_sale_tracking', 'track_reach', 'track_impressions', 'track_clicks', 'track_sessions', 'track_engaged_sessions', 'track_users', 'sort_order']);
             $changes   = array_filter($newValues, fn(mixed $v, string|int $k): bool => $v != $oldValues[$k], ARRAY_FILTER_USE_BOTH);
 
             if (!empty($changes)) {

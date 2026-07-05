@@ -40,7 +40,9 @@
                                 <select name="sale_platform_id" class="tom-select f-input @error('sale_platform_id') border-red-400 @enderror" required>
                                     <option value="">Select a platform</option>
                                     @foreach($salePlatforms as $platform)
-                                        <option value="{{ $platform['id'] }}" {{ old('sale_platform_id') == $platform['id'] ? 'selected' : '' }}>
+                                        <option value="{{ $platform['id'] }}"
+                                                @if(!$platform['allows_budget_direct_entry']) disabled @endif
+                                                {{ old('sale_platform_id') == $platform['id'] ? 'selected' : '' }}>
                                             {!! $platform['label'] !!}
                                         </option>
                                     @endforeach
