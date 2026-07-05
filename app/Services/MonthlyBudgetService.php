@@ -124,7 +124,7 @@ class MonthlyBudgetService
                         $directChildIds = $childrenByParent[$nodeId] ?? [];
                         $childEntries  = !empty($directChildIds) ? $buildEntries($directChildIds) : [];
                         $childrenTotal = (float) array_sum(array_map(fn($e) => $e['total'], $childEntries));
-                        $ownBudget     = $isStructural ? 0.0 : (float) $budget->budget;
+                        $ownBudget     = $isStructural ? 0.0 : (float) $budget->budget_approved;
 
                         $entries[] = [
                             'platformId'   => $nodeId,
@@ -146,14 +146,14 @@ class MonthlyBudgetService
                 $monthGroups[] = [
                     'monthNum'    => $monthNum,
                     'monthName'   => $months[$monthNum] ?? 'Month '.$monthNum,
-                    'monthTotal'  => $monthBudgets->sum('budget'),
+                    'monthTotal'  => $monthBudgets->sum('budget_approved'),
                     'rootEntries' => $rootEntries,
                 ];
             }
 
             $yearGroups[] = [
                 'year'        => $year,
-                'yearTotal'   => $yearBudgets->sum('budget'),
+                'yearTotal'   => $yearBudgets->sum('budget_approved'),
                 'monthGroups' => $monthGroups,
             ];
         }

@@ -13,7 +13,7 @@ class SalesReportService
     private const VIEWS = [
         'total'   => 'Totals',
         'weekly'  => 'Weekly',
-        'daily'   => 'All Data',
+        'daily'   => 'Daily Data',
         'returns' => 'Return Breakdown',
     ];
 
@@ -525,7 +525,7 @@ class SalesReportService
                 $has = collect($row['platform_cells'])->contains(
                     fn ($c) => str_starts_with($c['key'], $pid . '_') && ($c['raw'] ?? 0) != 0
                 );
-                if (!$has && !in_array($row['key'], ['total_sale', 'total_spend', 'average_daily', 'roi', 'forecasting', 'total_budget', 'balance_budget'], true)) {
+                if (!$has && !in_array($row['key'], ['total_sale', 'total_spend', 'average_daily', 'roi', 'forecasting', /* 'total_budget_requested', */ 'total_budget', 'balance_budget'], true)) {
                     return false;
                 }
             }
@@ -855,6 +855,7 @@ class SalesReportService
         return match ($key) {
             'average_daily'  => 'sr-row-average',
             'total_sale', 'total_spend' => 'sr-row-total',
+            // 'total_budget_requested',
             'total_budget', 'balance_budget' => 'sr-row-budget',
             'roi'            => 'sr-row-roi',
             'forecasting'    => 'sr-row-forecast',

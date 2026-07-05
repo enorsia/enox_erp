@@ -39,10 +39,12 @@
         exportUrl() {
             const base = '{{ route('admin.sales.analytics.export') }}';
             const url  = new URL(base, window.location.origin);
-            url.searchParams.set('period', this.period);
-            if (this.period === 'custom') {
-                url.searchParams.set('from_year_month', this.fromYM);
-                url.searchParams.set('to_year_month', this.toYM);
+            const page = new URL(window.location.href);
+            const period = page.searchParams.get('period') || this.period;
+            url.searchParams.set('period', period);
+            if (period === 'custom') {
+                url.searchParams.set('from_year_month', page.searchParams.get('from_year_month') || this.fromYM);
+                url.searchParams.set('to_year_month', page.searchParams.get('to_year_month') || this.toYM);
             }
             const selected = Object.keys(this.tables).filter(k => this.tables[k]);
             if (selected.length > 0) url.searchParams.set('tables', selected.join(','));
@@ -161,7 +163,6 @@
                         <a href="{{ $tag['url'] }}" class="ml-0.5 opacity-60 hover:opacity-100 text-[13px]">&times;</a>
                     </div>
                 @endforeach
-                <a href="{{ $reset_report_url }}" class="flex items-center gap-1 text-[11px] text-slate-400 hover:text-red-500 px-2 py-1 rounded-full hover:bg-red-50 transition-colors">Clear all</a>
             </div>
         @endif
 

@@ -13,7 +13,8 @@ class MonthlyBudget extends Model
         'sale_platform_id',
         'year',
         'month',
-        'budget',
+        'budget_requested',
+        'budget_approved',
         'currency',
         'notes',
     ];
@@ -29,7 +30,8 @@ class MonthlyBudget extends Model
             $query->where(function ($query) use ($search) {
                 $query->where('year', 'like', '%' . $search . '%')
                     ->orWhere('month', 'like', '%' . $search . '%')
-                    ->orWhere('budget', 'like', '%' . $search . '%')
+                    ->orWhere('budget_requested', 'like', '%' . $search . '%')
+                    ->orWhere('budget_approved', 'like', '%' . $search . '%')
                     ->orWhere('currency', 'like', '%' . $search . '%')
                     ->orWhereHas('salePlatform', function ($query) use ($search) {
                         $query->where('name', 'like', '%' . $search . '%');

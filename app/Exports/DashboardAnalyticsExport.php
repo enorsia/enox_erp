@@ -470,6 +470,7 @@ class DashboardAnalyticsExport
             'average_daily'  => self::CLR_AVERAGE_DAILY,
             'total_sale'     => self::CLR_TOTAL,
             'total_spend'    => self::CLR_TOTAL,
+            // 'total_budget_requested' => self::CLR_BUDGET, // future: budget requested row
             'total_budget'   => self::CLR_BUDGET,
             'balance_budget' => self::CLR_BUDGET,
             'roi'            => self::CLR_ROAS,
@@ -527,11 +528,7 @@ class DashboardAnalyticsExport
                     $sheet->setCellValueByColumnAndRow($ci, $r, "=SUM({$excelCol}{$dataStartRow}:{$excelCol}{$dataEndRow})");
                     $sheet->getStyleByColumnAndRow($ci, $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                 } else {
-                    $val = 0;
-                    foreach ($platCol['leaf_ids'] as $leafId) {
-                        $lk = "{$leafId}_{$platCol['col_type']}";
-                        if (isset($sRow['platform'][$lk])) $val += $sRow['platform'][$lk];
-                    }
+                    $val = $this->summaryPlatformValue($sRow, $platCol, $key);
                     if ($val != 0) {
                         $summaryIsPercent = false;
                         if (!empty($sRow['platform_formats'])) {
@@ -620,11 +617,7 @@ class DashboardAnalyticsExport
             foreach ($allPlatCols as $i => $platCol) {
                 if ($platCol['kind'] !== 'summary') continue;
                 $ci = $platBaseCol + $i;
-                $val = 0;
-                foreach ($platCol['leaf_ids'] as $leafId) {
-                    $lk = "{$leafId}_{$platCol['col_type']}";
-                    if (isset($sRow['platform'][$lk])) $val += $sRow['platform'][$lk];
-                }
+                $val = $this->summaryPlatformValue($sRow, $platCol, $key);
                 if ((float) $val < 0) $sheet->getStyleByColumnAndRow($ci, $r)->getFont()->getColor()->setARGB(self::CLR_NEGATIVE);
             }
             if (!empty($sRow['root_orders'])) {
@@ -1006,6 +999,25 @@ class DashboardAnalyticsExport
         $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::CLR_HDR_BG);
         $sheet->getStyle($range)->getFont()->setBold(true)->getColor()->setARGB(self::CLR_HDR_FG);
         $sheet->getStyle($range)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER)->setWrapText(true);
+    }
+
+    private function summaryPlatformValue(array $sRow, array $platCol, string $rowKey): float
+    {
+        $val = 0.0;
+        foreach ($platCol['leaf_ids'] as $leafId) {
+            $lk = "{$leafId}_{$platCol['col_type']}";
+            if (isset($sRow['platform'][$lk])) {
+                $val += (float) $sRow['platform'][$lk];
+            }
+        }
+
+        if ($platCol['col_type'] === 'cost'
+            && $rowKey === 'total_budget'
+            && !empty($sRow['parent_budget'][$platCol['platform_id']])) {
+            $val += (float) $sRow['parent_budget'][$platCol['platform_id']];
+        }
+
+        return $val;
     }
 
     private function fillRow($sheet, int $row, int $lastColIdx, string $argb): void

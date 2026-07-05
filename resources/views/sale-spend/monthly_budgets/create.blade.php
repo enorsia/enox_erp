@@ -84,13 +84,24 @@
                                 </div>
                             </div>
 
-                            <!-- Budget -->
+                            <!-- Budget Requested -->
                             <div>
-                                <label class="f-label">Budget <span class="f-required">*</span></label>
-                                <input type="number" name="budget" step="0.01" min="0"
-                                       class="f-input @error('budget') border-red-400 @enderror"
-                                       placeholder="e.g. 15000.00" value="{{ old('budget', 0.00) }}" required />
-                                @error('budget')
+                                <label class="f-label">Budget Requested <span class="f-required">*</span></label>
+                                <input type="number" name="budget_requested" step="0.01" min="0"
+                                       class="f-input @error('budget_requested') border-red-400 @enderror"
+                                       placeholder="e.g. 18000.00" value="{{ old('budget_requested', 0.00) }}" required />
+                                @error('budget_requested')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <!-- Budget Approved -->
+                            <div>
+                                <label class="f-label">Budget Approved <span class="f-required">*</span></label>
+                                <input type="number" name="budget_approved" step="0.01" min="0"
+                                       class="f-input @error('budget_approved') border-red-400 @enderror"
+                                       placeholder="e.g. 15000.00" value="{{ old('budget_approved', 0.00) }}" required />
+                                @error('budget_approved')
                                     <p class="f-error">{{ $message }}</p>
                                 @enderror
                             </div>

@@ -22,7 +22,8 @@
                     <div class="flex items-center gap-2 mt-0.5">
                         <span class="badge-custom badge-blue text-[10px]">Monthly Budget</span>
                         <span class="text-[11px] text-slate-400 dark:text-slate-500">
-                            Budget: {{ number_format($monthlyBudget->budget, 2) }} {{ $monthlyBudget->currency }}
+                            Requested: {{ number_format($monthlyBudget->budget_requested, 2) }} {{ $monthlyBudget->currency }}
+                            · Approved: {{ number_format($monthlyBudget->budget_approved, 2) }} {{ $monthlyBudget->currency }}
                         </span>
                     </div>
                 </div>
@@ -65,10 +66,16 @@
                             <span class="text-[13px] text-slate-700 dark:text-slate-200 font-medium">{{ $months[$monthlyBudget->month] ?? 'N/A' }}</span>
                         </div>
 
-                        {{-- Budget --}}
+                        {{-- Budget Requested --}}
                         <div class="flex items-center justify-between py-3">
-                            <span class="text-[12px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28 shrink-0">Budget</span>
-                            <span class="text-[13px] text-slate-700 dark:text-slate-200 font-medium">{{ number_format($monthlyBudget->budget, 2) }}</span>
+                            <span class="text-[12px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28 shrink-0">Requested</span>
+                            <span class="text-[13px] text-slate-700 dark:text-slate-200 font-medium">{{ number_format($monthlyBudget->budget_requested, 2) }}</span>
+                        </div>
+
+                        {{-- Budget Approved --}}
+                        <div class="flex items-center justify-between py-3">
+                            <span class="text-[12px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28 shrink-0">Approved</span>
+                            <span class="text-[13px] text-slate-700 dark:text-slate-200 font-medium">{{ number_format($monthlyBudget->budget_approved, 2) }}</span>
                         </div>
 
                         {{-- Currency --}}
