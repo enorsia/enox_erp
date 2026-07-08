@@ -54,15 +54,6 @@
         </div>
     @endif
 
-    {{-- How to use --}}
-    <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/40 rounded-xl p-4 flex items-start gap-3">
-        <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <div class="text-[12px] text-blue-700 dark:text-blue-400">
-            <span class="font-semibold">How to use:</span>
-            Same data as the Excel export — switch tabs for Ad Performance detail, Monthly Summary, platform engagement, and interactive charts.
-        </div>
-    </div>
-
     {{-- Report data viewer --}}
     <div class="an-card overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
