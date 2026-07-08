@@ -25,7 +25,7 @@
     </div>
 
     {{-- ═══ Filter + Export ═══ --}}
-    <div class="an-card p-4" x-data="{
+    <div class="an-card dashboard-filter p-4" x-data="{
         period: '{{ $filters['period'] ?? 'this_month' }}',
         fromYM: '{{ $filters['from_year_month'] ?? now()->format('Y-m') }}',
         toYM:   '{{ $filters['to_year_month']   ?? now()->format('Y-m') }}',
@@ -57,7 +57,7 @@
             {{-- Period select dropdown --}}
             <div class="w-52">
                 <label class="f-label">Filter by Period</label>
-                <select class="f-input custom-select" x-model="period" @change="period !== 'custom' && submit()">
+                <select class="tom-select f-input" data-placeholder="Select Period" x-model="period" @change="period !== 'custom' && submit()">
                     <option value="this_month">This Month</option>
                     <option value="last_month">Last Month</option>
                     <option value="last_3_months">Last 3 Months</option>

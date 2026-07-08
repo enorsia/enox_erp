@@ -2,11 +2,6 @@ import $ from '$';
 
 $(document).ready(function () {
 
-    /* ── Select2 for role dropdown ── */
-    if ($.fn.select2) {
-        $('#role, [data-select2]').select2({ width: '100%' });
-    }
-
     /* ══════════════════════════════════
        CREATE FORM VALIDATION
     ══════════════════════════════════ */
@@ -18,7 +13,12 @@ $(document).ready(function () {
             errorElement: 'p',
             errorPlacement: function (error, element) {
                 error.addClass('f-error');
-                error.insertAfter(element);
+                const tsWrapper = element.closest('.ts-wrapper');
+                if (tsWrapper.length) {
+                    error.insertAfter(tsWrapper);
+                } else {
+                    error.insertAfter(element);
+                }
             },
             rules: {
                 name:                  { required: true },
@@ -54,7 +54,12 @@ $(document).ready(function () {
             errorElement: 'p',
             errorPlacement: function (error, element) {
                 error.addClass('f-error');
-                error.insertAfter(element);
+                const tsWrapper = element.closest('.ts-wrapper');
+                if (tsWrapper.length) {
+                    error.insertAfter(tsWrapper);
+                } else {
+                    error.insertAfter(element);
+                }
             },
             rules: {
                 name:  { required: true },

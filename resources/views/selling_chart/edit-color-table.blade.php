@@ -37,7 +37,7 @@
                 </td>
                 @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
                     <td class="px-2 py-1.5 size-field">
-                        <select name="range_id[]" class="tbl-input ctmr">
+                        <select name="range_id[]" class="tom-select tbl-input ctmr" data-placeholder="Select range">
                             <option value="">Select range</option>
                             @foreach ($ranges as $range)
                                 <option value="{{ $range->id }}"
