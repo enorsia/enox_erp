@@ -509,3 +509,452 @@
 .dark .sr-stat-violet .sr-stat-value { color: #a78bfa; }
 .sr-stat-value.sr-negative { color: #dc2626 !important; }
 .dark .sr-stat-value.sr-negative { color: #f87171 !important; }
+
+/* Ads Performance Report */
+.ap-report-table thead th.ap-th {
+    position: sticky;
+    top: 0;
+    z-index: 11;
+    padding: 10px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.35;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+    vertical-align: middle;
+    background: #009966 !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.22) !important;
+    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+}
+.dark .ap-report-table thead th.ap-th {
+    background: #0b6b4a !important;
+    color: #ecfdf5 !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    border-bottom-color: rgba(255, 255, 255, 0.16) !important;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* Monthly summary — softer header (matches Excel summary section) */
+.ap-report-table.ap-summary-table thead th.ap-th {
+    background: #52b08c !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.16) !important;
+}
+.dark .ap-report-table.ap-summary-table thead th.ap-th {
+    background: #2f6f58 !important;
+    color: #f0fdf9 !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Platform engagement — section title row inside table area */
+.ap-platform-title {
+    background: #003d2b;
+    color: #ffffff;
+}
+.dark .ap-platform-title {
+    background: #14532d;
+    color: #ecfdf5;
+}
+
+.ap-th-left { text-align: left; }
+.ap-th-center { text-align: center; }
+.ap-th-right { text-align: right; }
+
+/* Sticky columns + totals inside scroll containers */
+.ap-sticky-table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+.ap-scroll-y .ap-sticky-col {
+    position: sticky;
+    z-index: 5;
+}
+.ap-scroll-y thead th.ap-sticky-col {
+    z-index: 24;
+    top: 0;
+}
+.ap-sticky-col-1 {
+    left: 0;
+    min-width: 3rem;
+}
+.ap-sticky-col-2 {
+    left: var(--ap-sticky-left-2, 3.5rem);
+    min-width: 5rem;
+}
+.ap-sticky-col-3 {
+    left: var(--ap-sticky-left-3, 9rem);
+    min-width: 6.5rem;
+}
+.ap-scroll-y .ap-sticky-col {
+    box-sizing: border-box;
+    overflow: visible;
+    white-space: nowrap;
+}
+.ap-report-table.ap-performance-table {
+    width: max-content;
+    min-width: 100%;
+    table-layout: auto;
+}
+.ap-report-table.ap-performance-table thead th,
+.ap-report-table.ap-performance-table .sr-td {
+    white-space: nowrap;
+}
+.ap-report-table.ap-performance-table thead th.ap-th-right,
+.ap-report-table.ap-performance-table .sr-td-num {
+    min-width: 5.25rem;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+.ap-report-table.ap-performance-table .ap-sticky-col-3 {
+    min-width: 7rem;
+}
+.ap-report-table.ap-performance-table tbody .ap-sticky-col-3 {
+    max-width: 16rem;
+    white-space: normal;
+    word-break: break-word;
+}
+.ap-report-table.ap-performance-table tr.ap-row-total-sticky .ap-sticky-col-3 {
+    max-width: none;
+    white-space: nowrap;
+}
+.ap-report-table.ap-performance-table tr.ap-row-total-sticky .sr-td-num {
+    min-width: 5.5rem;
+}
+.ap-report-table .ap-td-empty {
+    color: transparent;
+    user-select: none;
+}
+.ap-scroll-y .ap-month-bg-0 .sr-td.ap-sticky-col { background: #ffffff !important; }
+.ap-scroll-y .ap-month-bg-1 .sr-td.ap-sticky-col { background: #e0f5eb !important; }
+.ap-scroll-y .ap-row-alt .sr-td.ap-sticky-col { background: #f0faf5 !important; }
+.ap-scroll-y .ap-summary-table .ap-row-alt .sr-td.ap-sticky-col { background: #e6f3f0 !important; }
+.ap-scroll-y .ap-row-total .sr-td.ap-sticky-col,
+.ap-scroll-y tr.ap-row-total-sticky .sr-td.ap-sticky-col { background: #b3e6cc !important; }
+.dark .ap-scroll-y .ap-month-bg-0 .sr-td.ap-sticky-col { background: #1e293b !important; }
+.dark .ap-scroll-y .ap-month-bg-1 .sr-td.ap-sticky-col { background: rgba(0, 153, 102, 0.16) !important; }
+.dark .ap-scroll-y .ap-row-alt .sr-td.ap-sticky-col { background: rgba(30, 41, 59, 0.55) !important; }
+.dark .ap-scroll-y .ap-summary-table .ap-row-alt .sr-td.ap-sticky-col { background: rgba(30, 41, 59, 0.45) !important; }
+.dark .ap-scroll-y .ap-row-total .sr-td.ap-sticky-col,
+.dark .ap-scroll-y tr.ap-row-total-sticky .sr-td.ap-sticky-col { background: rgba(0, 153, 102, 0.35) !important; }
+.ap-scroll-y .ap-sticky-col::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -6px;
+    bottom: 0;
+    width: 6px;
+    background: linear-gradient(to right, rgba(15, 23, 42, 0.08), transparent);
+    pointer-events: none;
+}
+.dark .ap-scroll-y .ap-sticky-col::after {
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.28), transparent);
+}
+.ap-scroll-y tr.ap-row-total-sticky td {
+    position: sticky;
+    bottom: 0;
+    z-index: 7;
+    box-shadow: 0 -2px 6px rgba(15, 23, 42, 0.08);
+}
+.dark .ap-scroll-y tr.ap-row-total-sticky td {
+    box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.35);
+}
+.ap-scroll-y tr.ap-row-total-sticky td.ap-sticky-col {
+    z-index: 18;
+}
+
+/* Ad Performance — alternating month bands (matches Excel) */
+.ap-month-bg-0 .sr-td { background: #ffffff; }
+.ap-month-bg-1 .sr-td { background: #e0f5eb; }
+.dark .ap-month-bg-0 .sr-td { background: #1e293b; }
+.dark .ap-month-bg-1 .sr-td { background: rgba(0, 153, 102, 0.16); }
+
+.ap-row-alt .sr-td { background: #f0faf5; }
+.dark .ap-row-alt .sr-td { background: rgba(30, 41, 59, 0.55); }
+
+.ap-summary-table .ap-row-alt .sr-td { background: #e6f3f0; }
+.dark .ap-summary-table .ap-row-alt .sr-td { background: rgba(30, 41, 59, 0.45); }
+
+.ap-row-total .sr-td {
+    background: #b3e6cc !important;
+    color: #003d2b;
+    font-weight: 700;
+}
+.dark .ap-row-total .sr-td {
+    background: rgba(0, 153, 102, 0.28) !important;
+    color: #bbf7d0;
+}
+
+.ap-summary-table .ap-row-total .sr-td {
+    background: #cceedd !important;
+    color: #003d2b;
+}
+.dark .ap-summary-table .ap-row-total .sr-td {
+    background: rgba(82, 176, 140, 0.22) !important;
+    color: #d1fae5;
+}
+
+.ap-month-cell {
+    vertical-align: middle;
+    font-weight: 600;
+}
+/* Month merged cells inherit band color from parent row */
+.ap-month-bg-0 .ap-month-cell { background: #ffffff !important; }
+.ap-month-bg-1 .ap-month-cell { background: #e0f5eb !important; }
+.dark .ap-month-bg-0 .ap-month-cell { background: #1e293b !important; }
+.dark .ap-month-bg-1 .ap-month-cell { background: rgba(0, 153, 102, 0.16) !important; }
+
+.ap-report-table .sr-td {
+    font-size: 12px;
+    padding: 8px 12px;
+}
+
+/* Ads Performance Report — scroll areas for long date ranges (tables) */
+.ap-scroll-y {
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Chart.js scroll pattern: outer overflow container + inner sized to fit all labels.
+ * https://www.chartjs.org/docs/latest/configuration/responsive.html
+ */
+.ap-chart-hscroll {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+.ap-chart-hscroll .ap-chart-wrap {
+    height: 300px;
+    min-width: 100%;
+}
+.ap-chart-vscroll {
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: visible;
+}
+.ap-chart-vscroll.is-scrollable {
+    max-height: min(70vh, 480px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.ap-chart-vscroll .ap-chart-wrap-tall {
+    min-height: 320px;
+    width: 100%;
+}
+
+/* Ads Performance Report — chart containers */
+.ap-chart-wrap {
+    position: relative;
+    height: 300px;
+}
+.ap-chart-wrap-tall {
+    position: relative;
+    min-height: 320px;
+}
+#apEngagementPlatformSelect + .ts-wrapper,
+#apEngagementPlatformSelect.ts-wrapper,
+#apPlatformEngagementSelect + .ts-wrapper,
+#apPlatformEngagementSelect.ts-wrapper {
+    margin-top: 0;
+}
+.ap-chart-wrap canvas {
+    display: block;
+}
+
+/* Ads Performance Report — full-screen panel toggle */
+body.ap-fs-active {
+    overflow: hidden;
+}
+body.ap-fs-active #sidebar,
+body.ap-fs-active #sidebarBackdrop {
+    display: none !important;
+}
+body.ap-fs-active > div.flex > .flex-1 > header {
+    display: none;
+}
+.ap-fs-panel.ap-fs-open {
+    position: fixed;
+    inset: 0;
+    z-index: 400;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    overflow: hidden;
+    padding: 0.375rem 0.5rem 0.5rem !important;
+    padding-top: 1.75rem !important;
+    box-shadow: none;
+}
+.dark .ap-fs-panel.ap-fs-open {
+    background: #0f172a;
+}
+.ap-fs-panel.ap-fs-open .ap-fs-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-top: 0 !important;
+}
+.ap-fs-panel.ap-fs-open .ap-fs-body.mt-4 {
+    margin-top: 0.125rem !important;
+}
+/* Compact / hide headers in full screen */
+.ap-fs-panel.ap-fs-open .chart-subtitle,
+.ap-fs-panel.ap-fs-open > .flex.flex-col.sm\:flex-row p.text-\[11px\] {
+    display: none;
+}
+.ap-fs-panel.ap-fs-open .chart-title {
+    font-size: 11px;
+    font-weight: 600;
+    gap: 4px;
+    line-height: 1.2;
+}
+.ap-fs-panel.ap-fs-open .chart-title svg {
+    width: 13px;
+    height: 13px;
+}
+.ap-fs-panel.ap-fs-open.an-card > .flex.items-start,
+.ap-fs-panel.ap-fs-open.an-card > .flex.flex-col.sm\:flex-row {
+    margin-bottom: 0 !important;
+    gap: 0 !important;
+    padding: 0 !important;
+    min-height: 0;
+    flex-shrink: 0;
+}
+.ap-fs-panel.ap-fs-open.an-card > .flex.items-start.justify-between > .min-w-0,
+.ap-fs-panel.ap-fs-open > .flex.items-center.justify-between.mb-3 > p,
+.ap-fs-panel.ap-fs-open > .flex.flex-col.sm\:flex-row > .min-w-0 {
+    display: none;
+}
+.ap-fs-panel.ap-fs-open > .flex.items-center.justify-between.mb-3 {
+    margin-bottom: 0 !important;
+    min-height: 0;
+    padding: 0;
+}
+.ap-fs-panel.ap-fs-open > .flex.flex-col.sm\:flex-row.mb-1,
+.ap-fs-panel.ap-fs-open > .flex.flex-col.sm\:flex-row.mb-4 {
+    margin-bottom: 0.125rem !important;
+    gap: 0.375rem !important;
+    padding-right: 2.25rem;
+    align-items: center !important;
+    flex-direction: row !important;
+    justify-content: flex-end;
+}
+.ap-fs-panel.ap-fs-open > .flex.flex-col.sm\:flex-row .ap-fs-btn {
+    display: none;
+}
+.ap-fs-panel.ap-fs-open .ap-fs-body > .ap-scroll-y,
+.ap-fs-panel.ap-fs-open .ap-fs-body > .ap-chart-hscroll,
+.ap-fs-panel.ap-fs-open .ap-fs-body > .ap-chart-vscroll {
+    flex: 1;
+    min-height: 0;
+}
+.ap-fs-panel.ap-fs-open .ap-scroll-y {
+    max-height: none;
+}
+.ap-fs-panel.ap-fs-open .ap-chart-wrap {
+    height: 100%;
+    min-height: 200px;
+}
+.ap-fs-panel.ap-fs-open .ap-chart-hscroll {
+    height: 100%;
+}
+.ap-fs-panel.ap-fs-open .ap-chart-hscroll .ap-chart-wrap {
+    height: 100%;
+    min-height: 200px;
+}
+.ap-fs-panel.ap-fs-open .ap-chart-vscroll {
+    max-height: none;
+    height: 100%;
+}
+.ap-fs-panel.ap-fs-open .ap-chart-vscroll.is-scrollable {
+    max-height: none;
+}
+
+/* Full-screen toggle button */
+.ap-fs-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #64748b;
+    flex-shrink: 0;
+    transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.dark .ap-fs-btn {
+    border-color: #475569;
+    background: #1e293b;
+    color: #94a3b8;
+}
+.ap-fs-btn:hover {
+    background: #f8fafc;
+    color: #334155;
+    border-color: #cbd5e1;
+}
+.dark .ap-fs-btn:hover {
+    background: #334155;
+    color: #e2e8f0;
+    border-color: #64748b;
+}
+.ap-fs-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+}
+.ap-fs-btn-text {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+.ap-fs-panel.ap-fs-open .ap-fs-btn {
+    position: fixed;
+    top: 0.375rem;
+    right: 0.375rem;
+    z-index: 410;
+    display: inline-flex !important;
+    width: 2rem;
+    height: 2rem;
+    min-height: 0;
+    padding: 0;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+    border-color: #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+}
+.ap-fs-panel.ap-fs-open > .ap-fs-btn {
+    display: inline-flex !important;
+}
+.dark .ap-fs-panel.ap-fs-open .ap-fs-btn {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    border-color: #475569;
+    background: #1e293b;
+    color: #e2e8f0;
+}
+.ap-fs-panel.ap-fs-open .ap-fs-btn-text {
+    display: none !important;
+}
+.ap-fs-panel.ap-fs-open .ap-fs-icon {
+    width: 1rem;
+    height: 1rem;
+}
+.ap-fs-panel.ap-fs-open .ap-fs-btn:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+.dark .ap-fs-panel.ap-fs-open .ap-fs-btn:hover {
+    background: #334155;
+    border-color: #64748b;
+}

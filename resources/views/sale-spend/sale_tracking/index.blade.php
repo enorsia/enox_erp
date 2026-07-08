@@ -159,6 +159,13 @@
             </div>
             <div class="flex items-center gap-2 flex-wrap">
 
+                {{-- Report view --}}
+                <a href="{{ route('admin.ads-performance.report', request()->except('page')) }}"
+                   class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-accent-200 dark:border-accent-700 rounded-lg bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-300 hover:bg-accent-100 transition-colors font-medium">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    Ads Performance Report
+                </a>
+
                 {{-- Export --}}
                 <a href="{{ route('admin.ads-performance.export') }}?{{ http_build_query(request()->except('page')) }}"
                    class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-emerald-200 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-colors font-medium">

@@ -64,6 +64,9 @@ class DailyAdPerformance extends BaseModel
             $now = Carbon::now();
             $currentMonthEnd = $now->copy()->endOfMonth()->toDateString();
             match ($range) {
+                'this_month' => $query
+                    ->where('daily_ad_performances.month', '>=', $now->copy()->startOfMonth()->toDateString())
+                    ->where('daily_ad_performances.month', '<=', $currentMonthEnd),
                 // Previous calendar month only
                 'last_month' => $query
                     ->where('daily_ad_performances.month', '>=', $now->copy()->subMonth()->startOfMonth()->toDateString())

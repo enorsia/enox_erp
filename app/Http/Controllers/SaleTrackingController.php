@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\SaleTrackingExport;
 use App\Models\DailyAdPerformance;
+use App\Services\AdsPerformanceReportService;
 use App\Services\SalePlatformService;
 use App\Services\SaleTrackingService;
 use Illuminate\Http\RedirectResponse;
@@ -20,6 +21,7 @@ class SaleTrackingController extends Controller
     public function __construct(
         private SaleTrackingService $service,
         private SalePlatformService $salePlatformService,
+        private AdsPerformanceReportService $reportService,
     ) {}
 
     public function index(Request $request): View
@@ -151,6 +153,16 @@ class SaleTrackingController extends Controller
         }
 
         return redirect($return_url);
+    }
+
+    public function report(Request $request): View
+    {
+        Gate::authorize('general.sale_tracking.index');
+
+        return view('sale-spend.sale_tracking.report', array_merge(
+            $this->reportService->buildPageData($request),
+            ['salePlatforms' => $this->salePlatformService->getSaleTrackingPlatformOptions()],
+        ));
     }
 
     public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
