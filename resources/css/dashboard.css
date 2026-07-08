@@ -459,15 +459,15 @@
 .sr-row-alt .sr-sticky-head-label { background: #f8fafc; }
 .dark .sr-row-alt .sr-sticky-head-label { background: #1e293b; }
 .sr-row-total .sr-sticky-head-label { background: #b3e6cc; }
-.dark .sr-row-total .sr-sticky-head-label { background: rgba(29, 158, 117, 0.22); }
+.dark .sr-row-total .sr-sticky-head-label { background: rgb(0 109 74); }
 .sr-row-average .sr-sticky-head-label { background: #e8d5f2; }
-.dark .sr-row-average .sr-sticky-head-label { background: rgba(139, 92, 246, 0.18); }
+.dark .sr-row-average .sr-sticky-head-label { background: rgb(84 47 167); }
 .sr-row-budget .sr-sticky-head-label { background: #fff9cc; }
-.dark .sr-row-budget .sr-sticky-head-label { background: rgba(245, 158, 11, 0.15); }
+.dark .sr-row-budget .sr-sticky-head-label { background: rgb(127 89 24); }
 .sr-row-roi .sr-sticky-head-label { background: #ffddc0; }
-.dark .sr-row-roi .sr-sticky-head-label { background: rgba(249, 115, 22, 0.15); }
+.dark .sr-row-roi .sr-sticky-head-label { background: rgb(134 73 31); }
 .sr-row-forecast .sr-sticky-head-label { background: #fff0aa; }
-.dark .sr-row-forecast .sr-sticky-head-label { background: rgba(234, 179, 8, 0.14); }
+.dark .sr-row-forecast .sr-sticky-head-label { background: rgb(125 104 37); }
 
 .sr-stat-card {
     border-radius: 14px;
