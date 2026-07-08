@@ -25,7 +25,7 @@
     </div>
 
     {{-- ═══ Filter + Export ═══ --}}
-    <div class="an-card p-4" x-data="{
+    <div class="an-card dashboard-filter p-4" x-data="{
         period: '{{ $filters['period'] ?? 'this_month' }}',
         fromYM: '{{ $filters['from_year_month'] ?? now()->format('Y-m') }}',
         toYM:   '{{ $filters['to_year_month']   ?? now()->format('Y-m') }}',
