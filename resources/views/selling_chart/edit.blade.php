@@ -50,7 +50,7 @@
                             <label class="f-label">Department</label>
                             <input type="hidden" name="department_id" value="{{ $chartInfo->department_id }}">
                             <select id="department_select" disabled
-                                class="f-input custom-select opacity-60 cursor-not-allowed">
+                                class="f-input opacity-60 cursor-not-allowed">
                                 <option value="">Select Department</option>
                                 @foreach ($departments as $department)
                                     <option value="{{ $department->id }}"
@@ -66,7 +66,7 @@
                             <label class="f-label">Product Category</label>
                             <input type="hidden" name="category_id" value="{{ $chartInfo->category_id }}">
                             <select id="product_category" disabled
-                                class="f-input custom-select opacity-60 cursor-not-allowed">
+                                class="f-input opacity-60 cursor-not-allowed">
                                 <option value="">Select Category</option>
                                 @foreach ($selling_chart_cats as $selling_chart_cat)
                                     <option value="{{ $selling_chart_cat->id }}"
@@ -81,7 +81,8 @@
                         <div>
                             <label class="f-label">Mini Category <span class="f-required">*</span></label>
                             <select id="product_mini_category" name="mini_category" required
-                                class="f-input custom-select @error('mini_category') border-red-400 @enderror">
+                                class="tom-select f-input @error('mini_category') border-red-400 @enderror"
+                                data-placeholder="Select Mini Category">
                                 <option value="">Select Mini Category</option>
                                 @foreach ($selling_chart_types as $selling_chart_type)
                                     <option value="{{ $selling_chart_type->id }}"
@@ -114,7 +115,8 @@
                                     data-shipping-cost="{{ $expense->shipping_cost ?? 0 }}">
                             @endforeach
                             <select id="season_select" name="season_id" required
-                                class="f-input custom-select @error('season_id') border-red-400 @enderror">
+                                class="tom-select f-input @error('season_id') border-red-400 @enderror"
+                                data-placeholder="Select Season">
                                 <option value="">Select Season</option>
                                 @foreach ($seasons as $season)
                                     <option value="{{ $season->id }}"
@@ -130,7 +132,8 @@
                         <div>
                             <label class="f-label">Season Phase <span class="f-required">*</span></label>
                             <select id="Season_Phase" name="season_phase_id" required
-                                class="f-input custom-select @error('season_phase_id') border-red-400 @enderror">
+                                class="tom-select f-input @error('season_phase_id') border-red-400 @enderror"
+                                data-placeholder="Select Season Phase">
                                 <option value="">Select Season Phase</option>
                                 @foreach ($seasons_phases as $seasons_phase)
                                     <option value="{{ $seasons_phase->id }}"
@@ -146,7 +149,8 @@
                         <div>
                             <label class="f-label">Initial / Repeat Order <span class="f-required">*</span></label>
                             <select id="Repeat_Order" name="order_type_id" required
-                                class="f-input custom-select @error('order_type_id') border-red-400 @enderror">
+                                class="tom-select f-input @error('order_type_id') border-red-400 @enderror"
+                                data-placeholder="Select Initial / Repeat Order">
                                 <option value="">Select Initial / Repeat Order</option>
                                 @foreach ($initialRepeats as $initialRepeat)
                                     <option value="{{ $initialRepeat->id }}"
@@ -207,7 +211,8 @@
                         <div>
                             <label class="f-label">Fabrication <span class="f-required">*</span></label>
                             <select id="fabrication" name="fabrication" required
-                                class="f-input custom-select @error('fabrication') border-red-400 @enderror">
+                                class="tom-select f-input @error('fabrication') border-red-400 @enderror"
+                                data-placeholder="Select a fabrication">
                                 <option value="">Select a fabrication</option>
                                 @foreach ($fabrics as $fabric)
                                     <option value="{{ $fabric->id }}"

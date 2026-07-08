@@ -99,7 +99,7 @@
                             <!-- Role -->
                             <div>
                                 <label class="f-label">Role <span class="f-required">*</span></label>
-                                <select name="role" class="f-input custom-select @error('role') border-red-400 @enderror" required>
+                                <select name="role" class="tom-select f-input @error('role') border-red-400 @enderror" data-placeholder="Select Role" required>
                                     <option value="">Select Role</option>
                                     @foreach ($roles as $role)
                                         <option value="{{ $role->name }}" {{ $user?->roles?->first()?->name == $role->name ? 'selected' : '' }}>

@@ -66,7 +66,8 @@
                         <div>
                             <label class="f-label">Department <span class="f-required">*</span></label>
                             <select id="department_select" name="department_id" required
-                                class="f-input custom-select @error('department_id') border-red-400 @enderror">
+                                class="tom-select f-input @error('department_id') border-red-400 @enderror"
+                                data-placeholder="Select Department">
                                 <option value="">Select Department</option>
                                 @foreach ($departments as $department)
                                     <option value="{{ $department->id }}"
@@ -82,7 +83,8 @@
                         <div>
                             <label class="f-label">Product Category <span class="f-required">*</span></label>
                             <select id="product_category" name="category_id" required
-                                class="f-input custom-select @error('category_id') border-red-400 @enderror">
+                                class="tom-select f-input @error('category_id') border-red-400 @enderror"
+                                data-placeholder="Select Category">
                                 <option value="">Select Category</option>
                             </select>
                             @error('category_id') <p class="f-error">{{ $message }}</p> @enderror
@@ -92,7 +94,8 @@
                         <div>
                             <label class="f-label">Mini Category <span class="f-required">*</span></label>
                             <select id="product_mini_category" name="mini_category" required
-                                class="f-input custom-select @error('mini_category') border-red-400 @enderror">
+                                class="tom-select f-input @error('mini_category') border-red-400 @enderror"
+                                data-placeholder="Select Mini Category">
                                 <option value="">Select Mini Category</option>
                                 @foreach ($selling_chart_types as $selling_chart_type)
                                     <option value="{{ $selling_chart_type->id }}"
@@ -108,7 +111,8 @@
                         <div>
                             <label class="f-label">Season <span class="f-required">*</span></label>
                             <select id="season_select" name="season_id" required
-                                class="f-input custom-select @error('season_id') border-red-400 @enderror">
+                                class="tom-select f-input @error('season_id') border-red-400 @enderror"
+                                data-placeholder="Select Season">
                                 <option value="">Select Season</option>
                                 @foreach ($seasons as $season)
                                     <option value="{{ $season->id }}"
@@ -124,7 +128,8 @@
                         <div>
                             <label class="f-label">Season Phase <span class="f-required">*</span></label>
                             <select id="Season_Phase" name="season_phase_id" required
-                                class="f-input custom-select @error('season_phase_id') border-red-400 @enderror">
+                                class="tom-select f-input @error('season_phase_id') border-red-400 @enderror"
+                                data-placeholder="Select Season Phase">
                                 <option value="">Select Season Phase</option>
                                 @foreach ($seasons_phases as $seasons_phase)
                                     <option value="{{ $seasons_phase->id }}"
@@ -140,7 +145,8 @@
                         <div>
                             <label class="f-label">Initial / Repeat Order <span class="f-required">*</span></label>
                             <select id="Repeat_Order" name="order_type_id" required
-                                class="f-input custom-select @error('order_type_id') border-red-400 @enderror">
+                                class="tom-select f-input @error('order_type_id') border-red-400 @enderror"
+                                data-placeholder="Select Initial / Repeat Order">
                                 <option value="">Select Initial / Repeat Order</option>
                                 @foreach ($initialRepeats as $initialRepeat)
                                     <option value="{{ $initialRepeat->id }}"
@@ -201,7 +207,8 @@
                         <div>
                             <label class="f-label">Fabrication <span class="f-required">*</span></label>
                             <select id="fabrication" name="fabrication" required
-                                class="f-input custom-select @error('fabrication') border-red-400 @enderror">
+                                class="tom-select f-input @error('fabrication') border-red-400 @enderror"
+                                data-placeholder="Select a fabrication">
                                 <option value="">Select a fabrication</option>
                                 @foreach ($fabrics as $fabric)
                                     <option value="{{ $fabric->id }}"

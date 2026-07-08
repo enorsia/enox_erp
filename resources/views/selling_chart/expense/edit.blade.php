@@ -36,7 +36,8 @@
                         <div>
                             <label class="f-label">Year <span class="f-required">*</span></label>
                             <select name="year"
-                                class="f-input custom-select @error('year') border-red-400 @enderror" required>
+                                class="tom-select f-input @error('year') border-red-400 @enderror"
+                                data-placeholder="Select Year" required>
                                 <option value="">Select Year</option>
                                 @for ($i = 2020; $i <= 2030; $i++)
                                     <option value="{{ $i }}" {{ $expense->year == $i ? 'selected' : '' }}>{{ $i }}
