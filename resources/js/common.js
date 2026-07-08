@@ -114,22 +114,33 @@ $(document).on('change', '.image-input', function () {
 });
 
 /* ══════════════════════════════════════
-   SELECT2 GLOBAL INIT
-  Initialise any element with .select2-input
+   TOM SELECT GLOBAL INIT
+   Initialise any element with .tom-select
 ══════════════════════════════════════ */
+window.initTomSelectElements = function (root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    const elements = root && root.matches && root.matches('.tom-select')
+        ? [root, ...scope.querySelectorAll('.tom-select')]
+        : scope.querySelectorAll('.tom-select');
 
-document.addEventListener('DOMContentLoaded', function() {
+    if (typeof TomSelect === 'undefined') return;
+
+    elements.forEach(element => {
+        if (element.tomselect) return;
+        new TomSelect(element, {
+            create: false,
+            searchField: 'text',
+            sortField: [{ field: '$order' }, { field: '$score' }],
+            placeholder: element.dataset.placeholder || 'Select an option',
+            maxOptions: 50,
+        });
+    });
+};
+
+document.addEventListener('DOMContentLoaded', function () {
     function initTomSelect() {
         if (typeof TomSelect !== 'undefined') {
-            document.querySelectorAll('.tom-select').forEach(element => {
-                new TomSelect(element, {
-                    create: false,
-                    searchField: 'text',
-                    sortField: [{field: '$order'}, {field: '$score'}],
-                    placeholder: element.dataset.placeholder || 'Select an option',
-                    maxOptions: 50,
-                });
-            });
+            window.initTomSelectElements(document);
         } else {
             setTimeout(initTomSelect, 100);
         }

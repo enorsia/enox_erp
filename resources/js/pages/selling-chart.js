@@ -72,6 +72,10 @@ $(document).ready(function () {
                 url: SIZE_URL + '/' + id,
                 success: function (data) {
                     $('.color-table').html(data);
+                    if (typeof window.initTomSelectElements === 'function') {
+                        const colorTable = document.querySelector('.color-table');
+                        if (colorTable) window.initTomSelectElements(colorTable);
+                    }
                     const $btnInvisible = $('.btn-invisible');
                     if ($btnInvisible.hasClass('invisible')) {
                         $btnInvisible.removeClass('invisible');
@@ -92,9 +96,18 @@ $(document).ready(function () {
     $('.add_more_btn').on('click', function (e) {
         e.preventDefault();
         const newRow = $('table tbody tr:first').clone();
+        newRow.find('.ts-wrapper').each(function () {
+            const $select = $(this).find('select').first().clone();
+            $select.val('');
+            $(this).replaceWith($select);
+        });
         newRow.find('input').val('');
+        newRow.find('select').val('');
         newRow.find('.x_price_fob').removeAttr('readonly');
         $('table tbody').append(newRow);
+        if (typeof window.initTomSelectElements === 'function') {
+            window.initTomSelectElements(newRow[0]);
+        }
     });
 
     $(document).on('click', 'table .delete-row', function () {
@@ -163,7 +176,10 @@ $(document).ready(function () {
             validClass: 'is-valid',
             errorElement: 'div',
             errorPlacement: function (error, element) {
-                if (element.hasClass('choices__input')) {
+                const tsWrapper = element.closest('.ts-wrapper');
+                if (tsWrapper.length) {
+                    error.insertAfter(tsWrapper);
+                } else if (element.hasClass('choices__input')) {
                     error.insertAfter(element.closest('.choices'));
                 } else {
                     error.insertAfter(element);
@@ -478,6 +494,10 @@ window.viewChart = function (id, page = 1) {
             if (response.status === true) {
                 $('#viewSellingChartItemModal').remove();
                 $('.setViewSellingChartItemModal').html(response.data);
+                if (typeof window.initTomSelectElements === 'function') {
+                    const modalRoot = document.querySelector('.setViewSellingChartItemModal');
+                    if (modalRoot) window.initTomSelectElements(modalRoot);
+                }
                 if (window.Alpine) {
                     window.Alpine.initTree(document.querySelector('.setViewSellingChartItemModal'));
                 }

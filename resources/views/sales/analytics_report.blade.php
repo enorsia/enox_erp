@@ -171,7 +171,7 @@
             {{-- Period select --}}
             <div class="w-52">
                 <label class="f-label">Period</label>
-                <select class="f-input custom-select" x-model="period" @change="period !== 'custom' && submit()">
+                <select class="tom-select f-input" data-placeholder="Select Period" x-model="period" @change="period !== 'custom' && submit()">
                     <option value="this_month">This Month</option>
                     <option value="last_month">Last Month</option>
                     <option value="last_3_months">Last 3 Months</option>
