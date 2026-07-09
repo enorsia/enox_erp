@@ -1,6 +1,8 @@
 // ── Alpine.js ──
 import Alpine from 'alpinejs';
 import collapse from '@alpinejs/collapse';
+import './pages/sales-analytics-report';
+
 Alpine.plugin(collapse);
 window.Alpine = Alpine;
 Alpine.start();

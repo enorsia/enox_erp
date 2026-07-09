@@ -21,6 +21,7 @@ class SalesReportService
 
     public function __construct(
         private DashboardAnalyticsService $analytics,
+        private SalesReportExportColumns $exportColumns,
     ) {}
 
     public function buildPageData(Request $request): array
@@ -59,6 +60,7 @@ class SalesReportService
 
         $view = $reportFilters['view'];
         $dailyMonthTabs = $this->buildDailyMonthTabs($request, $periodFilters, $reportFilters, $range, $dailySansMonth);
+        $exportSections = $this->exportColumns->buildSections($groupedColumns, $rootPlatforms);
 
         return [
             'filters'             => $periodFilters,
@@ -99,6 +101,8 @@ class SalesReportService
             'active_filter_tags'  => $this->buildActiveFilterTags($request, $periodFilters, $reportFilters, $rootPlatforms, $returnPayload['reason_types']),
             'daily_month_tabs'    => $dailyMonthTabs,
             'show_daily_month_tabs' => $view === 'daily' && count($dailyMonthTabs) > 0,
+            'export_sections'         => $exportSections,
+            'export_column_defaults'  => $this->exportColumns->defaultSelection($exportSections),
         ];
     }
 

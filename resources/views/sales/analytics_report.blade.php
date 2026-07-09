@@ -3,84 +3,174 @@
 @section('title', 'Sales Report Export')
 
 @section('content')
-<div x-data="{
-        exportOpen: false,
-        period: '{{ $filters['period'] ?? 'this_month' }}',
-        fromYM: '{{ ($filters['period'] ?? 'this_month') === 'custom' ? ($filters['from_year_month'] ?? $period_display['from_year_month']) : $period_display['from_year_month'] }}',
-        toYM:   '{{ ($filters['period'] ?? 'this_month') === 'custom' ? ($filters['to_year_month'] ?? $period_display['to_year_month']) : $period_display['to_year_month'] }}',
-        tables: { daily_report: true, return_breakdown: true, weekly_breakdown: true },
-        markCustomPeriod() {
-            this.period = 'custom';
-        },
-        submitPeriod() {
-            const url = new URL(window.location.href);
-            url.searchParams.set('period', this.period);
-            if (this.period === 'custom') {
-                url.searchParams.set('from_year_month', this.fromYM);
-                url.searchParams.set('to_year_month', this.toYM);
-            } else {
-                url.searchParams.delete('from_year_month');
-                url.searchParams.delete('to_year_month');
-            }
-            url.searchParams.delete('month');
-            window.location.href = url.toString();
-        },
-        exportUrl() {
-            const base = '{{ route('admin.sales.analytics.export') }}';
-            const url  = new URL(base, window.location.origin);
-            const page = new URL(window.location.href);
-            const period = page.searchParams.get('period') || this.period;
-            url.searchParams.set('period', period);
-            if (period === 'custom') {
-                url.searchParams.set('from_year_month', page.searchParams.get('from_year_month') || this.fromYM);
-                url.searchParams.set('to_year_month', page.searchParams.get('to_year_month') || this.toYM);
-            }
-            const selected = Object.keys(this.tables).filter(k => this.tables[k]);
-            if (selected.length > 0) url.searchParams.set('tables', selected.join(','));
-            return url.toString();
-        },
-        atLeastOneSelected() { return Object.values(this.tables).some(v => v); }
-     }"
+<div id="sales-report-page-content"
+     x-data="salesReportPage()"
      @keydown.escape.window="exportOpen = false">
 
     {{-- Export modal --}}
     <div x-show="exportOpen" x-cloak class="fixed inset-0 z-[300] flex items-center justify-center p-4" style="display:none;">
-        <div class="absolute inset-0 bg-black/40" @click="exportOpen = false"></div>
-        <div class="relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-700"
-             x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
-            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
-                        <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    </div>
-                    <div>
-                        <h3 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">Export Sales</h3>
-                        <p class="text-[11px] text-slate-400 dark:text-slate-500">Choose which sections to include</p>
-                    </div>
-                </div>
-                <button type="button" @click="exportOpen = false" class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-            </div>
-            <div class="px-6 py-5 space-y-3">
-                @foreach([
-                    ['key' => 'daily_report', 'label' => 'Daily Report', 'desc' => 'Day-by-day sales, spend, ROAS & platform breakdown', 'tone' => 'emerald'],
-                    ['key' => 'return_breakdown', 'label' => 'Return Breakdown', 'desc' => 'Returns by reason per platform & gender', 'tone' => 'rose'],
-                    ['key' => 'weekly_breakdown', 'label' => 'Weekly Breakdown', 'desc' => 'Weekly sales, spend, orders & returns', 'tone' => 'amber'],
-                ] as $section)
-                    <label class="flex items-start gap-3.5 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors">
-                        <input type="checkbox" x-model="tables.{{ $section['key'] }}" class="mt-0.5 w-4 h-4 rounded border-slate-300 cursor-pointer">
-                        <div>
-                            <div class="text-[13px] font-semibold text-slate-700 dark:text-slate-200">{{ $section['label'] }}</div>
-                            <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{{ $section['desc'] }}</p>
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" @click="exportOpen = false"></div>
+        <div class="relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200/80 dark:border-slate-700 max-h-[90vh] flex flex-col overflow-hidden"
+             x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+             @click.stop>
+
+            {{-- Header --}}
+            <div class="shrink-0 px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-start gap-3 min-w-0">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-sm shadow-emerald-500/20 shrink-0">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                         </div>
-                    </label>
-                @endforeach
+                        <div class="min-w-0">
+                            <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100">Export to Excel</h3>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Choose which report tables and columns to include</p>
+                            <p class="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 mt-1.5" x-text="exportSummary()"></p>
+                        </div>
+                    </div>
+                    <button type="button" @click="exportOpen = false"
+                            class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-200 flex items-center justify-center transition-colors shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
             </div>
-            <div class="flex gap-2.5 px-6 py-4 border-t border-slate-200 dark:border-slate-700">
-                <button type="button" @click="exportOpen = false" class="flex-1 py-2.5 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium">Cancel</button>
-                <a :href="exportUrl()" :class="atLeastOneSelected() ? '' : 'pointer-events-none opacity-40'"
-                   class="flex-[2] py-2.5 text-[13px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-center">Export Excel</a>
+
+            {{-- Body --}}
+            <div class="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-slate-50/50 dark:bg-slate-900/20">
+                <template x-for="section in sections" :key="section.key">
+                    <div class="rounded-xl border bg-white dark:bg-slate-800 shadow-sm transition-all duration-200"
+                         :class="tables[section.key]
+                             ? 'border-slate-200 dark:border-slate-700'
+                             : 'border-slate-200/60 dark:border-slate-700/60 opacity-60'">
+
+                        {{-- Section header --}}
+                        <div class="flex items-center gap-3 px-3.5 py-3">
+                            <label class="flex items-center shrink-0 cursor-pointer" @click.stop>
+                                <input type="checkbox"
+                                       class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/30 cursor-pointer"
+                                       :checked="tables[section.key]"
+                                       @change="setTableIncluded(section.key, $event.target.checked)">
+                            </label>
+
+                            <button type="button" @click="toggleExpanded(section.key)"
+                                    class="flex-1 flex items-center gap-2 min-w-0 text-left group">
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="text-sm font-semibold text-slate-800 dark:text-slate-100" x-text="section.label"></span>
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                                              :class="sectionSelectedCount(section.key) > 0
+                                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                                  : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'"
+                                              x-text="sectionSelectedCount(section.key) + ' / ' + sectionTotalCount(section.key)"></span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 line-clamp-1" x-text="section.desc"></p>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-all duration-200 shrink-0"
+                                     :class="expanded[section.key] ? 'rotate-180' : ''"
+                                     fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+                            </button>
+
+                            <div class="flex items-center gap-1 shrink-0" @click.stop>
+                                <button type="button" @click="selectAllColumns(section.key)"
+                                        class="px-2 py-1 text-[10px] font-medium rounded-md text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors">
+                                    All
+                                </button>
+                                <button type="button" @click="clearColumns(section.key)"
+                                        class="px-2 py-1 text-[10px] font-medium rounded-md text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors">
+                                    None
+                                </button>
+                            </div>
+                        </div>
+
+                        {{-- Column groups --}}
+                        <div x-show="expanded[section.key]" x-collapse class="border-t border-slate-100 dark:border-slate-700/80">
+                            <div class="p-3 space-y-2.5">
+                                {{-- Single-checkbox groups: 2 per row --}}
+                                <div x-show="singleColumnGroups(section).length > 0" class="grid grid-cols-2 gap-1.5">
+                                    <template x-for="group in singleColumnGroups(section)" :key="group.header + '-single'">
+                                        <template x-for="col in group.columns" :key="col.key">
+                                            <label class="flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all duration-150 select-none"
+                                                   :class="isColumnSelected(section.key, col.key)
+                                                       ? 'border-emerald-300 bg-emerald-50/90 shadow-sm ring-1 ring-emerald-500/10 dark:border-emerald-700/60 dark:bg-emerald-950/30'
+                                                       : 'border-slate-200/80 bg-white hover:border-slate-300 hover:shadow-sm dark:border-slate-600/80 dark:bg-slate-800/80 dark:hover:border-slate-500'"
+                                                   :title="columnLabel(col)">
+                                                <input type="checkbox"
+                                                       class="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/30 cursor-pointer shrink-0"
+                                                       :checked="isColumnSelected(section.key, col.key)"
+                                                       @change="toggleColumn(section.key, col.key)">
+                                                <span class="min-w-0 flex-1 leading-tight">
+                                                    <span class="block text-[11px] font-medium truncate"
+                                                          :class="isColumnSelected(section.key, col.key)
+                                                              ? 'text-emerald-800 dark:text-emerald-200'
+                                                              : 'text-slate-700 dark:text-slate-300'"
+                                                          x-text="columnChipLabel(col)"></span>
+                                                </span>
+                                            </label>
+                                        </template>
+                                    </template>
+                                </div>
+
+                                {{-- Multi-checkbox groups --}}
+                                <template x-for="group in multiColumnGroups(section)" :key="group.header">
+                                    <div class="rounded-lg border border-slate-100 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-900/30 p-2.5">
+                                        <div class="flex items-center justify-between gap-2 mb-2">
+                                            <div class="flex items-center gap-2 min-w-0">
+                                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate" x-text="group.header"></span>
+                                                <span class="text-[10px] text-slate-400 dark:text-slate-500 shrink-0"
+                                                      x-text="'(' + groupSelectedCount(section.key, group) + '/' + group.columns.length + ')'"></span>
+                                            </div>
+                                            <div class="flex items-center gap-1 shrink-0">
+                                                <button type="button" @click="toggleGroupColumns(section.key, group, true)"
+                                                        class="text-[10px] font-medium text-emerald-600 hover:underline">All</button>
+                                                <span class="text-slate-300 text-[10px]">·</span>
+                                                <button type="button" @click="toggleGroupColumns(section.key, group, false)"
+                                                        class="text-[10px] font-medium text-slate-400 hover:underline">None</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                            <template x-for="col in group.columns" :key="col.key">
+                                                <label class="flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all duration-150 select-none"
+                                                       :class="isColumnSelected(section.key, col.key)
+                                                           ? 'border-emerald-300 bg-emerald-50/90 shadow-sm ring-1 ring-emerald-500/10 dark:border-emerald-700/60 dark:bg-emerald-950/30'
+                                                           : 'border-slate-200/80 bg-white hover:border-slate-300 hover:shadow-sm dark:border-slate-600/80 dark:bg-slate-800/80 dark:hover:border-slate-500'"
+                                                       :title="columnLabel(col)">
+                                                    <input type="checkbox"
+                                                           class="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/30 cursor-pointer shrink-0"
+                                                           :checked="isColumnSelected(section.key, col.key)"
+                                                           @change="toggleColumn(section.key, col.key)">
+                                                    <span class="min-w-0 flex-1 leading-tight">
+                                                        <span x-show="columnChipMeta(col)"
+                                                              class="block text-[9px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500 truncate"
+                                                              x-text="columnChipMeta(col)"></span>
+                                                        <span class="block text-[11px] font-medium truncate"
+                                                              :class="isColumnSelected(section.key, col.key)
+                                                                  ? 'text-emerald-800 dark:text-emerald-200'
+                                                                  : 'text-slate-700 dark:text-slate-300'"
+                                                              x-text="columnChipLabel(col)"></span>
+                                                    </span>
+                                                </label>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            {{-- Footer --}}
+            <div class="shrink-0 px-4 py-3.5 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center gap-2">
+                <button type="button" @click="exportOpen = false"
+                        class="flex-1 py-2.5 text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                    Cancel
+                </button>
+                <a :href="exportUrl()"
+                   :class="canExport() ? 'hover:bg-emerald-600 shadow-emerald-500/20' : 'opacity-40 pointer-events-none'"
+                   class="flex-[1.4] inline-flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-xl bg-emerald-500 text-white shadow-sm transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Download Excel
+                </a>
             </div>
         </div>
     </div>
@@ -215,4 +305,21 @@
 
     </div>
 </div>
+
+@push('js')
+<script>
+window.salesReportExportConfig = {
+    period: @json($filters['period'] ?? 'this_month'),
+    fromYM: @json(($filters['period'] ?? 'this_month') === 'custom'
+        ? ($filters['from_year_month'] ?? $period_display['from_year_month'])
+        : $period_display['from_year_month']),
+    toYM: @json(($filters['period'] ?? 'this_month') === 'custom'
+        ? ($filters['to_year_month'] ?? $period_display['to_year_month'])
+        : $period_display['to_year_month']),
+    sections: @json($export_sections),
+    columns: @json($export_column_defaults),
+    exportBaseUrl: @json(route('admin.sales.analytics.export')),
+};
+</script>
+@endpush
 @endsection
