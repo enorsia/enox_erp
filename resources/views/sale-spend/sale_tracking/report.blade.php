@@ -17,7 +17,7 @@
             <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5 ml-10">{{ $period_label }}</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap sm:justify-end">
-            <a href="{{ $back_url }}"
+            <a href="{{ route('admin.ads-performance.index') }}"
                class="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
                 Back to Ads Performance

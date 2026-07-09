@@ -167,11 +167,11 @@
                 </a>
 
                 {{-- Export --}}
-                <a href="{{ route('admin.ads-performance.export') }}?{{ http_build_query(request()->except('page')) }}"
-                   class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-emerald-200 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-colors font-medium">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                    Export Excel
-                </a>
+{{--                <a href="{{ route('admin.ads-performance.export') }}?{{ http_build_query(request()->except('page')) }}"--}}
+{{--                   class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-emerald-200 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-colors font-medium">--}}
+{{--                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>--}}
+{{--                    Export Excel--}}
+{{--                </a>--}}
 
                 {{-- Filters --}}
                 @php
