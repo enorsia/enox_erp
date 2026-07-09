@@ -200,13 +200,6 @@
                                 </a>
                             @endcan
 
-                            @can('general.dashboard.index')
-                                <a href="{{ route('admin.sales.analytics.report') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/sales-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
-                                    Sales Report
-                                </a>
-                            @endcan
-
                             @can('general.sale_tracking.index')
                                 <a href="{{ route('admin.ads-performance.index') }}"
                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/ads-performance*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
