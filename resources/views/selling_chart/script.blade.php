@@ -433,12 +433,7 @@
                 success: function(data) {
                     // console.log(data);
                     $('.color-table').html(data);
-
-                    if ($('.btn-invisible.invisible')) {
-                        $('.btn-invisible').removeClass('invisible');
-                    } else {
-                        $('.btn-invisible').addClass('invisible');
-                    }
+                    $('.submit-btn, .add_more_btn').removeClass('invisible');
                 },
                 error: function(data) {
                     console.log('Create fail');

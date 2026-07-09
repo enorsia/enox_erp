@@ -267,7 +267,7 @@
                 </div>
 
                 {{-- ── Color / Price Table (loaded via AJAX on department select) ── --}}
-                <div class="section-card overflow-x-auto">
+                <div class="section-card selling-chart-color-section">
                     <div class="section-title mb-3">
                         <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" d="M3 10h18M3 6h18M3 14h18M3 18h18"/>
@@ -275,7 +275,9 @@
                         Color &amp; Pricing
                         <span class="text-[10px] font-normal text-slate-400 ml-1">(select a department to load)</span>
                     </div>
-                    <div class="color-table mb-0"></div>
+                    <div class="color-table-scroll">
+                        <div class="color-table mb-0"></div>
+                    </div>
 
                     <div class="mt-3">
                         <button type="button"

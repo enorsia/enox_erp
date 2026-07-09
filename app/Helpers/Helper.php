@@ -67,6 +67,25 @@ if (!function_exists('cloudflareImage')) {
     }
 }
 
+if (!function_exists('sellingChartImage')) {
+    function sellingChartImage(?string $filename, ?int $width = null, string $type = 'design'): ?string
+    {
+        if (!$filename) {
+            return null;
+        }
+
+        if (app()->environment('production')) {
+            return cloudflareImage($filename, $width);
+        }
+
+        $folder = $type === 'inspiration'
+            ? 'upload/selling_images'
+            : 'upload/selling_design_images';
+
+        return asset($folder . '/' . basename($filename));
+    }
+}
+
 if (!function_exists('zeroToString')) {
     function zeroToString($value)
     {
