@@ -57,7 +57,7 @@ class SellingChartApiService
             }
 
             if ($response->successful()) {
-                $lookupData = $response->json('data.lookupNames', collect());
+                $lookupData = collect($response->json('data.lookupNames', []));
             }
         } catch (Exception $e) {
             Log::error('Selling_chart lookup_names API Error', [
@@ -117,7 +117,7 @@ class SellingChartApiService
 
         $cachedData = Cache::get($cacheKey);
 
-        if (!empty($cachedData)) {
+        if ($this->hasValidCommonData($cachedData)) {
             return $cachedData;
         }
 
@@ -126,11 +126,11 @@ class SellingChartApiService
 
             $lookupData = $this->getLookupResponse([1, 5, 8, 10, 11]);
             // Split by type_id
-            $data['departments'] = collect($lookupData)->where('type_id', 1)->map(fn($item) => (object) $item);
-            $data['fabrics'] = collect($lookupData)->where('type_id', 5)->map(fn($item) => (object) $item);
-            $data['initialRepeats'] = collect($lookupData)->where('type_id', 8)->map(fn($item) => (object) $item);
-            $data['seasons'] = collect($lookupData)->where('type_id', 10)->map(fn($item) => (object) $item);
-            $data['seasons_phases'] = collect($lookupData)->where('type_id', 11)->map(fn($item) => (object) $item);
+            $data['departments'] = $lookupData->where('type_id', 1)->map(fn($item) => (object) $item)->values();
+            $data['fabrics'] = $lookupData->where('type_id', 5)->map(fn($item) => (object) $item)->values();
+            $data['initialRepeats'] = $lookupData->where('type_id', 8)->map(fn($item) => (object) $item)->values();
+            $data['seasons'] = $lookupData->where('type_id', 10)->map(fn($item) => (object) $item)->values();
+            $data['seasons_phases'] = $lookupData->where('type_id', 11)->map(fn($item) => (object) $item)->values();
 
             // 2️⃣ Product Categories
             $getCategoryData = $this->getCategoryResponse();
@@ -138,8 +138,10 @@ class SellingChartApiService
 
             $data['selling_chart_types'] = SellingChartType::get();
 
-            // 5️⃣ Store ONLY successful response in cache
-            Cache::put($cacheKey, $data, now()->addHours(2));
+            // Store only when lookup data loaded successfully (avoid caching empty fallbacks)
+            if ($this->hasValidCommonData($data)) {
+                Cache::put($cacheKey, $data, now()->addHours(2));
+            }
 
             return $data;
         } catch (Exception $e) {
@@ -201,5 +203,16 @@ class SellingChartApiService
 
             return $data;
         });
+    }
+
+    protected function hasValidCommonData(?array $data): bool
+    {
+        if (empty($data)) {
+            return false;
+        }
+
+        $departments = collect($data['departments'] ?? []);
+
+        return $departments->isNotEmpty();
     }
 }

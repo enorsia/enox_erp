@@ -256,7 +256,7 @@
                                 class="f-input image-input @error('image') border-red-400 @enderror">
                             <img class="image-preview mt-3 w-[120px] rounded-lg"
                                 @if($chartInfo->inspiration_image) style="display:block;" @else style="display:none;" @endif
-                                src="{{ $chartInfo->inspiration_image ? cloudflareImage($chartInfo->inspiration_image, 150) : '' }}"
+                                src="{{ sellingChartImage($chartInfo->inspiration_image, 150, 'inspiration') }}"
                                 alt="Inspiration Image Preview">
                             @error('image') <p class="f-error">{{ $message }}</p> @enderror
                         </div>
@@ -268,7 +268,7 @@
                                 class="f-input image-input @error('design_image') border-red-400 @enderror">
                             <img class="image-preview mt-3 w-[120px] rounded-lg"
                                 @if($chartInfo->design_image) style="display:block;" @else style="display:none;" @endif
-                                src="{{ $chartInfo->design_image ? cloudflareImage($chartInfo->design_image, 150) : '' }}"
+                                src="{{ sellingChartImage($chartInfo->design_image, 150, 'design') }}"
                                 alt="Design Image Preview">
                             @error('design_image') <p class="f-error">{{ $message }}</p> @enderror
                         </div>
@@ -277,7 +277,7 @@
                 </div>
 
                 {{-- ── Color / Price Table ── --}}
-                <div class="section-card overflow-x-auto">
+                <div class="section-card selling-chart-color-section">
                     <div class="section-title mb-3">
                         <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" d="M3 10h18M3 6h18M3 14h18M3 18h18"/>
@@ -286,8 +286,10 @@
                     </div>
 
                     <input type="hidden" id="ch_in_id" value="{{ $chartInfo->id }}">
-                    <div class="color-table mb-0">
-                        @include('selling_chart.edit-color-table')
+                    <div class="color-table-scroll">
+                        <div class="color-table mb-0">
+                            @include('selling_chart.edit-color-table')
+                        </div>
                     </div>
 
                     <div class="mt-3">

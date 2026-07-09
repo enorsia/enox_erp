@@ -449,11 +449,11 @@
                                         @if ($chartInfo->design_image)
                                             <div class="relative group/img overflow-hidden rounded-lg">
                                                 <img class="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover border-2 border-slate-200 dark:border-slate-600 cursor-zoom-in transition-all duration-300 group-hover/img:scale-110 group-hover/img:border-accent-400"
-                                                    src="{{ cloudflareImage($chartInfo->design_image, 80) }}"
-                                                    x-on:click.prevent="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'"
-                                                    data-large="{{ cloudflareImage($chartInfo->design_image, 1200) }}"
+                                                    src="{{ sellingChartImage($chartInfo->design_image, 80) }}"
+                                                    x-on:click.prevent="imagePopup = '{{ sellingChartImage($chartInfo->design_image, 1200) }}'"
+                                                    data-large="{{ sellingChartImage($chartInfo->design_image, 1200) }}"
                                                     alt="Design Image" title="Design Image" loading="lazy">
-                                                <button type="button" aria-label="Open image" data-large="{{ cloudflareImage($chartInfo->design_image, 1200) }}" x-on:click.prevent="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'"
+                                                <button type="button" aria-label="Open image" data-large="{{ sellingChartImage($chartInfo->design_image, 1200) }}" x-on:click.prevent="imagePopup = '{{ sellingChartImage($chartInfo->design_image, 1200) }}'"
                                                     class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-300 rounded-lg flex items-center justify-center text-white">
                                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"/>
@@ -473,11 +473,11 @@
                                         <div class="hidden sm:flex flex-col items-center gap-1">
                                             <div class="relative group/img overflow-hidden rounded-lg">
                                                 <img class="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover border-2 border-slate-200 dark:border-slate-600 cursor-zoom-in transition-all duration-300 group-hover/img:scale-110 group-hover/img:border-purple-400"
-                                                    src="{{ cloudflareImage($chartInfo->inspiration_image, 80) }}"
-                                                    x-on:click.prevent="imagePopup = '{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}'"
-                                                    data-large="{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}"
+                                                    src="{{ sellingChartImage($chartInfo->inspiration_image, 80, 'inspiration') }}"
+                                                    x-on:click.prevent="imagePopup = '{{ sellingChartImage($chartInfo->inspiration_image, 1200, 'inspiration') }}'"
+                                                    data-large="{{ sellingChartImage($chartInfo->inspiration_image, 1200, 'inspiration') }}"
                                                     alt="Inspiration Image" title="Inspiration Image" loading="lazy">
-                                                <button type="button" aria-label="Open image" data-large="{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}" x-on:click.prevent="imagePopup = '{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}'"
+                                                <button type="button" aria-label="Open image" data-large="{{ sellingChartImage($chartInfo->inspiration_image, 1200, 'inspiration') }}" x-on:click.prevent="imagePopup = '{{ sellingChartImage($chartInfo->inspiration_image, 1200, 'inspiration') }}'"
                                                     class="absolute inset-0 bg-gradient-to-t from-purple-900/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-300 rounded-lg flex items-center justify-center text-white">
                                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"/>

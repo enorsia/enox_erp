@@ -5,7 +5,7 @@
             <th class="tbl-th">Color</th>
 
             @if ($department_id == 1928 || $department_id == 1929)
-                <th class="tbl-th size-th" style="width:110px">Range</th>
+                <th class="tbl-th size-th">Range</th>
             @endif
 
             <th class="tbl-th" style="width:90px">PO Qty</th>
@@ -23,14 +23,14 @@
                     </svg>
                 </button>
             </td>
-            <td class="px-2 py-1.5">
-                <div class="relative">
+            <td class="px-2 py-1.5 color-cell">
+                <div class="color-cell-wrap">
                     <input type="text" name="color[]" class="tbl-input color" placeholder="Search color…">
                     <input type="hidden" name="color_id[]" class="x_color_id">
                     <input type="hidden" name="color_name[]" class="x_color_name">
                     <input type="text" name="color_code[]" class="x_color_code ctmr"
                         style="position:absolute;left:0;visibility:hidden;">
-                    <div class="color-box absolute left-0 top-full mt-1 w-56 z-50"></div>
+                    <div class="color-box"></div>
                 </div>
             </td>
 
