@@ -76,13 +76,24 @@ class AdsPerformanceReportService
 
     public function buildExportSections(array $input): array
     {
-        $filterInput  = $this->extractFilterInput($input);
-        $queryFilters = $this->normalizeQueryFilters($filterInput);
+        $queryFilters = $this->normalizeExportFilters($input);
         $dataset      = $this->buildDataset($queryFilters);
 
         return $this->exportColumns->buildSections(
             $this->buildExportPlatformList($dataset['platform_data'] ?? []),
         );
+    }
+
+    public function normalizeExportFilters(array $input): array
+    {
+        return $this->normalizeQueryFilters($this->extractFilterInput($input));
+    }
+
+    public function hasExportData(array $input): bool
+    {
+        return $this->trackingService
+            ->getExportQuery($this->normalizeExportFilters($input))
+            ->exists();
     }
 
     public function buildExportPlatformList(array $platformData): array

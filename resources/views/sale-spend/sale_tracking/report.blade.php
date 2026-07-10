@@ -160,7 +160,7 @@
                 </button>
                 <button type="button"
                         :disabled="!canExport()"
-                        @click="canExport() && window.location.assign(exportUrl())"
+                        @click="downloadExport()"
                         :class="canExport() ? 'hover:bg-emerald-600 shadow-emerald-500/20' : 'opacity-40 cursor-not-allowed'"
                         class="flex-[1.4] inline-flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-xl bg-emerald-500 text-white shadow-sm transition-all">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
@@ -280,6 +280,8 @@ window.adsPerformanceExportConfig = {
     sections: @json($export_sections),
     columns: @json($export_column_defaults),
     exportBaseUrl: @json(route('admin.ads-performance.export')),
+    filterParams: @json($filters),
+    hasData: @json(!$is_empty),
 };
 </script>
 @endpush

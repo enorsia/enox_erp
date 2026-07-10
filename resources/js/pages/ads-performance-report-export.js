@@ -24,6 +24,9 @@ document.addEventListener('alpine:init', () => {
             'date_to',
         ];
 
+        const filterParams = cfg.filterParams ?? {};
+        const hasData = cfg.hasData !== false;
+
         return {
             exportOpen: false,
             sections: cfg.sections ?? [],
@@ -31,6 +34,7 @@ document.addEventListener('alpine:init', () => {
             expanded: defaultExpanded,
             columns: cfg.columns ?? {},
             exportBaseUrl: cfg.exportBaseUrl ?? '',
+            hasData,
 
             sectionColumnKeys(sectionKey) {
                 const section = this.sections.find(s => s.key === sectionKey);
@@ -123,7 +127,13 @@ document.addEventListener('alpine:init', () => {
                 const url = new URL(this.exportBaseUrl, window.location.origin);
                 const page = new URL(window.location.href);
 
+                Object.entries(filterParams).forEach(([key, val]) => {
+                    if (key === 'view' || val === '' || val == null) return;
+                    url.searchParams.set(key, val);
+                });
+
                 FILTER_PARAM_KEYS.forEach(key => {
+                    if (url.searchParams.has(key)) return;
                     const val = page.searchParams.get(key);
                     if (val) url.searchParams.set(key, val);
                 });
@@ -139,6 +149,56 @@ document.addEventListener('alpine:init', () => {
                 url.searchParams.set('export_columns', JSON.stringify(columnPayload));
 
                 return url.toString();
+            },
+
+            async downloadExport() {
+                if (!this.canExport()) return;
+
+                if (!this.hasData) {
+                    window.Swal?.fire({
+                        icon: 'info',
+                        title: 'No Data Found',
+                        text: 'No data found for the selected filters.',
+                    });
+                    return;
+                }
+
+                const url = this.exportUrl();
+
+                try {
+                    const response = await fetch(url, {
+                        credentials: 'same-origin',
+                        headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json' },
+                    });
+
+                    if (!response.ok) {
+                        const payload = await response.json().catch(() => ({}));
+                        window.Swal?.fire({
+                            icon: 'info',
+                            title: 'No Data Found',
+                            text: payload.message || 'No data found for the selected filters.',
+                        });
+                        return;
+                    }
+
+                    const blob = await response.blob();
+                    const disposition = response.headers.get('Content-Disposition') || '';
+                    const match = disposition.match(/filename="([^"]+)"/);
+                    const filename = match?.[1] || 'Ad Performance Tracking.xlsx';
+
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = filename;
+                    link.click();
+                    URL.revokeObjectURL(link.href);
+                    this.exportOpen = false;
+                } catch {
+                    window.Swal?.fire({
+                        icon: 'error',
+                        title: 'Export Failed',
+                        text: 'Could not download the report. Please try again.',
+                    });
+                }
             },
 
             canExport() {

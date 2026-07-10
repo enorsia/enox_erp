@@ -8,6 +8,7 @@ use App\Services\AdsPerformanceExportColumns;
 use App\Services\AdsPerformanceReportService;
 use App\Services\SalePlatformService;
 use App\Services\SaleTrackingService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -60,7 +61,7 @@ class SaleTrackingController extends Controller
 
             activity()->causedBy(Auth::user())
                 ->withProperties(['month' => $month, 'count' => count($created)])
-                ->log('Created ' . count($created) . ' sale tracking record(s) for ' . \Carbon\Carbon::parse($month)->format('M Y'));
+                ->log('Created ' . count($created) . ' sale tracking record(s) for ' . Carbon::parse($month)->format('M Y'));
 
             notify()->success(count($created) . ' sale tracking record(s) created.', 'Success');
             return redirect($return_url);
@@ -166,12 +167,18 @@ class SaleTrackingController extends Controller
         ));
     }
 
-    public function export(Request $request, AdsPerformanceExportColumns $exportColumns): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function export(Request $request, AdsPerformanceExportColumns $exportColumns): \Symfony\Component\HttpFoundation\StreamedResponse|\Illuminate\Http\JsonResponse
     {
         Gate::authorize('general.sale_tracking.index');
 
-        $filters  = $request->except(['page', 'tables', 'export_columns']);
-        $sections = $this->reportService->buildExportSections($filters);
+        if (!$this->reportService->hasExportData($request->all())) {
+            return response()->json([
+                'message' => 'No data found for the selected filters.',
+            ], 404);
+        }
+
+        $filters  = $this->reportService->normalizeExportFilters($request->all());
+        $sections = $this->reportService->buildExportSections($request->all());
         $tables   = $exportColumns->parseTables($request->input('tables'), $request->input('export_columns'));
         $columns  = $exportColumns->parseSelection($request->input('export_columns'), $sections, $tables);
 
