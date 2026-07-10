@@ -170,6 +170,28 @@ class AdsPerformanceExportColumns
         return false;
     }
 
+    public function hasOverviewChartSelection(array $selection): bool
+    {
+        foreach ($selection[self::OVERVIEW_CHARTS] ?? [] as $key) {
+            if (in_array($key, array_column($this->overviewChartDefs(), 'key'), true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function hasPlatformChartSelection(array $selection): bool
+    {
+        foreach ($selection[self::PLATFORM_CHARTS] ?? [] as $key) {
+            if ($this->parsePlatformChartKey($key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function allowsEmptySelection(string $tableKey): bool
     {
         return in_array($tableKey, [
@@ -191,7 +213,11 @@ class AdsPerformanceExportColumns
 
     public function selectedOverviewCharts(array $selection): array
     {
-        return $selection[self::OVERVIEW_CHARTS] ?? array_column($this->overviewChartDefs(), 'key');
+        if (!array_key_exists(self::OVERVIEW_CHARTS, $selection)) {
+            return array_column($this->overviewChartDefs(), 'key');
+        }
+
+        return $selection[self::OVERVIEW_CHARTS];
     }
 
     public function selectedPlatformChartIds(array $selection): array
@@ -265,9 +291,13 @@ class AdsPerformanceExportColumns
 
     public function filterDefs(string $table, array $defs, array $selection): array
     {
-        $allowed = $selection[$table] ?? null;
-        if ($allowed === null || $allowed === []) {
+        if (!array_key_exists($table, $selection)) {
             return $defs;
+        }
+
+        $allowed = $selection[$table];
+        if ($allowed === []) {
+            return [];
         }
 
         $allowed = array_flip($allowed);

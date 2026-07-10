@@ -12,6 +12,18 @@ document.addEventListener('alpine:init', () => {
             defaultExpanded[section.key] = false;
         });
 
+        const CHART_SECTION_KEYS = ['overview_charts', 'platform_charts'];
+
+        const FILTER_PARAM_KEYS = [
+            'sale_platform_id',
+            'period',
+            'from_year_month',
+            'to_year_month',
+            'date_range',
+            'date_from',
+            'date_to',
+        ];
+
         return {
             exportOpen: false,
             sections: cfg.sections ?? [],
@@ -73,6 +85,10 @@ document.addEventListener('alpine:init', () => {
                 this.tables[sectionKey] = selected.size > 0;
             },
 
+            activeSectionKeys() {
+                return Object.keys(this.tables).filter(k => this.isSectionActive(k));
+            },
+
             isSectionActive(sectionKey) {
                 return this.tables[sectionKey] && this.sectionSelectedCount(sectionKey) > 0;
             },
@@ -107,12 +123,12 @@ document.addEventListener('alpine:init', () => {
                 const url = new URL(this.exportBaseUrl, window.location.origin);
                 const page = new URL(window.location.href);
 
-                ['sale_platform_id', 'period', 'from_year_month', 'to_year_month', 'date_range', 'date_from', 'date_to'].forEach(key => {
+                FILTER_PARAM_KEYS.forEach(key => {
                     const val = page.searchParams.get(key);
                     if (val) url.searchParams.set(key, val);
                 });
 
-                const selectedTables = Object.keys(this.tables).filter(k => this.isSectionActive(k));
+                const selectedTables = this.activeSectionKeys();
 
                 url.searchParams.set('tables', selectedTables.join(','));
 
@@ -126,7 +142,7 @@ document.addEventListener('alpine:init', () => {
             },
 
             canExport() {
-                return Object.keys(this.tables).some(k => this.isSectionActive(k));
+                return this.activeSectionKeys().length > 0;
             },
 
             columnLabel(col) {
@@ -160,10 +176,10 @@ document.addEventListener('alpine:init', () => {
             },
 
             exportSummary() {
-                const selected = Object.keys(this.tables).filter(k => this.isSectionActive(k));
-                const tableSections = selected.filter(k => !['overview_charts', 'platform_charts'].includes(k));
+                const selected = this.activeSectionKeys();
+                const tableSections = selected.filter(k => !CHART_SECTION_KEYS.includes(k));
                 const chartItems = selected.reduce((n, k) => {
-                    if (k === 'overview_charts' || k === 'platform_charts') {
+                    if (CHART_SECTION_KEYS.includes(k)) {
                         return n + (this.columns[k] || []).length;
                     }
                     return n;

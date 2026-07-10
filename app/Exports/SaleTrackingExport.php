@@ -81,9 +81,6 @@ class SaleTrackingExport
         private array $columnSelection = [],
     ) {
         $this->exportColumns = new AdsPerformanceExportColumns();
-        if ($this->tables === []) {
-            $this->tables = $this->exportColumns->parseTables(null);
-        }
     }
 
     public function download(SaleTrackingService $service): StreamedResponse
@@ -348,6 +345,12 @@ class SaleTrackingExport
             $platformData[$platName]['months'][$mk]['orders']           += $orders;
         }
 
+        ksort($monthGroups);
+        foreach ($platformData as &$platEntry) {
+            ksort($platEntry['months']);
+        }
+        unset($platEntry);
+
         $monthTotals = [];
         foreach ($monthGroups as $mk => $group) {
             $tc   = array_sum(array_column($group['entries'], 'ads_tax'));
@@ -387,11 +390,11 @@ class SaleTrackingExport
         $includePerformance   = $this->includesTable(AdsPerformanceExportColumns::AD_PERFORMANCE);
         $includeSummaryTable  = $this->includesTable(AdsPerformanceExportColumns::MONTHLY_SUMMARY);
         $includeOverviewCharts = $this->includesTable(AdsPerformanceExportColumns::OVERVIEW_CHARTS)
-            && $this->exportColumns->selectedOverviewCharts($this->columnSelection) !== [];
+            && $this->exportColumns->hasOverviewChartSelection($this->columnSelection);
         $includePlatformTables = $this->includesTable(AdsPerformanceExportColumns::PLATFORM_ENGAGEMENT)
             && $this->exportColumns->hasPlatformEngagementSelection($this->columnSelection);
         $includePlatformCharts = $this->includesTable(AdsPerformanceExportColumns::PLATFORM_CHARTS)
-            && $this->exportColumns->selectedPlatformChartIds($this->columnSelection) !== [];
+            && $this->exportColumns->hasPlatformChartSelection($this->columnSelection);
         $includeSummaryData   = $includeSummaryTable || $includeOverviewCharts;
         $includePlatformData  = $includePlatformTables || $includePlatformCharts;
 
@@ -765,8 +768,7 @@ class SaleTrackingExport
             $showTable = $item['show_table'];
             $showChart = $item['show_chart'];
             $colMap    = $item['col_map'];
-            $platform  = $platEntry['platform'];
-            $months    = $platEntry['months'];
+            $months    = $item['months'];
 
             $lastDataCol = array_key_last($colMap);
             $monthCount  = count($months);
@@ -922,11 +924,14 @@ class SaleTrackingExport
                 }
             }
 
+            ksort($months);
+
             $plan[$platName] = [
                 'entry'      => $platEntry,
                 'show_table' => $showTable,
                 'show_chart' => $showChart,
                 'col_map'    => $colMap,
+                'months'     => array_values($months),
             ];
         }
 
@@ -1249,12 +1254,12 @@ class SaleTrackingExport
         $r                = 7;
         $sl               = 1;
         $monthIndex       = 0;
-        $prevQRow         = null;
+        $prevMonthRevenue = $prevMonthTotalRevenue;
         $grandTotalReturn = 0.0;
         $mergeKeys        = ['month_label', 'total_cost', 'sales_growth', 'total_revenue', 'total_return', 'net_revenue', 'roi', 'roas'];
         $moneyKeys        = ['net_cost', 'ads_tax', 'total_cost', 'revenue', 'total_revenue', 'total_return', 'net_revenue'];
         $numKeys          = ['reach', 'impressions', 'clicks', 'sessions', 'engaged_sessions', 'users', 'orders', 'products'];
-        $firstNumeric     = $letters['reach'] ?? $letters['net_cost'] ?? $lastCol;
+        $firstNumeric     = $letters['reach'] ?? $letters['net_cost'] ?? $letters['revenue'] ?? $lastCol;
 
         foreach ($monthGroups as $mk => $group) {
             $monthStartRow = $r;
@@ -1301,42 +1306,11 @@ class SaleTrackingExport
             $ms = $monthStartRow;
             $me = $monthEndRow;
 
-            if (isset($letters['total_cost'], $letters['ads_tax'])) {
-                $sheet->setCellValue($letters['total_cost'] . $ms, "=SUM({$letters['ads_tax']}{$ms}:{$letters['ads_tax']}{$me})");
-            }
-            if (isset($letters['total_revenue'], $letters['revenue'])) {
-                $sheet->setCellValue($letters['total_revenue'] . $ms, "=SUM({$letters['revenue']}{$ms}:{$letters['revenue']}{$me})");
-            }
-            if (isset($letters['total_return'])) {
-                $sheet->setCellValue($letters['total_return'] . $ms, $mt['total_return'] ?: null);
-            }
-            if (isset($letters['sales_growth'], $letters['total_revenue'])) {
-                $revCol = $letters['total_revenue'];
-                if ($prevQRow !== null) {
-                    $sheet->setCellValue($letters['sales_growth'] . $ms, "=IFERROR(({$revCol}{$ms}-{$revCol}{$prevQRow})/{$revCol}{$prevQRow},\"\")");
-                } else {
-                    $firstMonthRevenue = (float) array_sum(array_column($group['entries'], 'revenue'));
-                    if ($prevMonthTotalRevenue !== null && $prevMonthTotalRevenue > 0) {
-                        $sheet->setCellValue($letters['sales_growth'] . $ms, ($firstMonthRevenue - $prevMonthTotalRevenue) / $prevMonthTotalRevenue);
-                    } else {
-                        $sheet->setCellValue($letters['sales_growth'] . $ms, 0.0);
-                    }
+            $mergeValues = $this->performanceMonthMergeValues($mt, $prevMonthRevenue);
+            foreach (['total_cost', 'total_revenue', 'total_return', 'net_revenue', 'roas', 'roi', 'sales_growth'] as $key) {
+                if (isset($letters[$key])) {
+                    $sheet->setCellValue($letters[$key] . $ms, $mergeValues[$key]);
                 }
-            }
-            if (isset($letters['net_revenue'], $letters['total_revenue'], $letters['total_return'])) {
-                $sheet->setCellValue(
-                    $letters['net_revenue'] . $ms,
-                    "=IFERROR({$letters['total_revenue']}{$ms}-{$letters['total_return']}{$ms},\"\")",
-                );
-            }
-            if (isset($letters['roas'], $letters['total_revenue'], $letters['total_cost'])) {
-                $sheet->setCellValue(
-                    $letters['roas'] . $ms,
-                    "=IFERROR(({$letters['total_revenue']}{$ms}/{$letters['total_cost']}{$ms})*100,\"\")",
-                );
-            }
-            if (isset($letters['roi'], $letters['roas'])) {
-                $sheet->setCellValue($letters['roi'] . $ms, "=IFERROR(ROUND({$letters['roas']}{$ms},0),\"\")");
             }
 
             if (isset($letters['month_label'])) {
@@ -1363,12 +1337,13 @@ class SaleTrackingExport
                     ->setVertical(Alignment::VERTICAL_CENTER);
             }
 
-            $prevQRow = isset($letters['total_revenue']) ? $ms : $prevQRow;
+            $prevMonthRevenue = (float) ($mt['total_revenue'] ?? 0);
             $monthIndex++;
         }
 
         $dataEndRow = $r - 1;
         $totalsRow  = $r;
+        $grandMerge = $this->performanceGrandMergeValues($monthTotals, $grandTotalReturn);
 
         if (isset($letters['platform'])) {
             $sheet->setCellValue($letters['platform'] . $r, 'TOTAL');
@@ -1379,32 +1354,31 @@ class SaleTrackingExport
             if (!isset($letters[$key]) || in_array($key, ['sl', 'month_label', 'platform', 'sales_growth', 'roi'], true)) {
                 continue;
             }
-            if ($key === 'total_cost' && isset($letters['ads_tax'])) {
-                $sheet->setCellValue($letters[$key] . $r, "=SUM({$letters['ads_tax']}7:{$letters['ads_tax']}{$dataEndRow})");
+            if ($key === 'total_cost') {
+                $sheet->setCellValue($letters[$key] . $r, $grandMerge['total_cost']);
                 continue;
             }
-            if ($key === 'total_revenue' && isset($letters['revenue'])) {
-                $sheet->setCellValue($letters[$key] . $r, "=SUM({$letters['revenue']}7:{$letters['revenue']}{$dataEndRow})");
+            if ($key === 'total_revenue') {
+                $sheet->setCellValue($letters[$key] . $r, $grandMerge['total_revenue']);
                 continue;
             }
             if ($key === 'total_return') {
-                $sheet->setCellValue($letters[$key] . $r, $grandTotalReturn ?: null);
+                $sheet->setCellValue($letters[$key] . $r, $grandMerge['total_return']);
                 continue;
             }
-            if (in_array($key, ['net_revenue', 'roas', 'roi'], true)) {
+            if ($key === 'net_revenue') {
+                $sheet->setCellValue($letters[$key] . $r, $grandMerge['net_revenue']);
+                continue;
+            }
+            if ($key === 'roas') {
+                $sheet->setCellValue($letters[$key] . $r, $grandMerge['roas']);
                 continue;
             }
             $sheet->setCellValue($letters[$key] . $r, "=SUM({$letters[$key]}7:{$letters[$key]}{$dataEndRow})");
         }
 
-        if (isset($letters['net_revenue'], $letters['total_revenue'], $letters['total_return'])) {
-            $sheet->setCellValue($letters['net_revenue'] . $r, "=IFERROR({$letters['total_revenue']}{$r}-{$letters['total_return']}{$r},\"\")");
-        }
-        if (isset($letters['roas'], $letters['total_revenue'], $letters['total_cost'])) {
-            $sheet->setCellValue($letters['roas'] . $r, "=IFERROR(({$letters['total_revenue']}{$r}/{$letters['total_cost']}{$r})*100,\"\")");
-        }
-        if (isset($letters['roi'], $letters['roas'])) {
-            $sheet->setCellValue($letters['roi'] . $r, "=IFERROR(ROUND({$letters['roas']}{$r},0),\"\")");
+        if (isset($letters['roi'])) {
+            $sheet->setCellValue($letters['roi'] . $r, $grandMerge['roi']);
         }
 
         $sheet->getStyle('A' . $r . ':' . $lastCol . $r)
@@ -1435,5 +1409,45 @@ class SaleTrackingExport
         }
 
         return $totalsRow;
+    }
+
+    private function performanceMonthMergeValues(array $mt, ?float $prevRevenue): array
+    {
+        $currentRevenue = (float) ($mt['total_revenue'] ?? 0);
+        $totalCost      = (float) ($mt['total_cost'] ?? 0);
+        $totalReturn    = (float) ($mt['total_return'] ?? 0);
+
+        if ($prevRevenue !== null && $prevRevenue > 0) {
+            $salesGrowth = ($currentRevenue - $prevRevenue) / $prevRevenue;
+        } else {
+            $salesGrowth = 0.0;
+        }
+
+        return [
+            'total_cost'    => $totalCost ?: null,
+            'total_revenue' => $currentRevenue ?: null,
+            'total_return'  => $totalReturn ?: null,
+            'net_revenue'   => ($mt['net_revenue'] ?? ($currentRevenue - $totalReturn)) ?: null,
+            'roas'          => $mt['roas'] ?? ($totalCost > 0 ? round(($currentRevenue / $totalCost) * 100, 4) : null),
+            'roi'           => $mt['roi'] ?? (isset($mt['roas']) && $mt['roas'] !== null ? (int) round($mt['roas']) : null),
+            'sales_growth'  => $salesGrowth,
+        ];
+    }
+
+    private function performanceGrandMergeValues(array $monthTotals, float $grandTotalReturn): array
+    {
+        $grandTotalCost    = array_sum(array_map(fn (array $mt) => (float) ($mt['total_cost'] ?? 0), $monthTotals));
+        $grandTotalRevenue = array_sum(array_map(fn (array $mt) => (float) ($mt['total_revenue'] ?? 0), $monthTotals));
+        $grandNetRevenue   = $grandTotalRevenue - $grandTotalReturn;
+        $grandRoas         = $grandTotalCost > 0 ? round(($grandTotalRevenue / $grandTotalCost) * 100, 4) : null;
+
+        return [
+            'total_cost'    => $grandTotalCost ?: null,
+            'total_revenue' => $grandTotalRevenue ?: null,
+            'total_return'  => $grandTotalReturn ?: null,
+            'net_revenue'   => $grandNetRevenue ?: null,
+            'roas'          => $grandRoas,
+            'roi'           => $grandRoas !== null ? (int) round($grandRoas) : null,
+        ];
     }
 }
