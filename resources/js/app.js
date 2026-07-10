@@ -2,6 +2,7 @@
 import Alpine from 'alpinejs';
 import collapse from '@alpinejs/collapse';
 import './pages/sales-analytics-report';
+import './pages/ads-performance-report-export';
 
 Alpine.plugin(collapse);
 window.Alpine = Alpine;

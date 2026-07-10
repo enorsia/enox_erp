@@ -21,6 +21,7 @@ class AdsPerformanceReportService
 
     public function __construct(
         private SaleTrackingService $trackingService,
+        private AdsPerformanceExportColumns $exportColumns,
     ) {}
 
     public function buildPageData(Request $request): array
@@ -29,7 +30,9 @@ class AdsPerformanceReportService
         $filterInput  = $this->extractFilterInput($request->all());
         $queryFilters = $this->normalizeQueryFilters($filterInput);
         $urlFilters   = $this->buildUrlFilters($request, $filterInput);
-        $dataset      = $this->buildDataset($queryFilters);
+        $dataset          = $this->buildDataset($queryFilters);
+        $exportPlatforms  = $this->buildExportPlatformList($dataset['platform_data'] ?? []);
+        $exportSections   = $this->exportColumns->buildSections($exportPlatforms);
 
         return [
             'title'              => 'Ads Performance Report',
@@ -66,7 +69,44 @@ class AdsPerformanceReportService
             'reset_filters_url'  => route('admin.ads-performance.report', ['view' => $view, 'period' => 'this_month']),
             'period_label'       => $this->buildPeriodLabel($filterInput),
             'active_filter_tags' => $this->buildActiveFilterTags($request, $filterInput, $urlFilters),
+            'export_sections'         => $exportSections,
+            'export_column_defaults'  => $this->exportColumns->defaultSelection($exportSections),
         ];
+    }
+
+    public function buildExportSections(array $input): array
+    {
+        $filterInput  = $this->extractFilterInput($input);
+        $queryFilters = $this->normalizeQueryFilters($filterInput);
+        $dataset      = $this->buildDataset($queryFilters);
+
+        return $this->exportColumns->buildSections(
+            $this->buildExportPlatformList($dataset['platform_data'] ?? []),
+        );
+    }
+
+    public function buildExportPlatformList(array $platformData): array
+    {
+        $list = [];
+
+        foreach ($platformData as $platName => $platEntry) {
+            $platform = $platEntry['platform'] ?? null;
+            $months   = $platEntry['months'] ?? [];
+            $columns  = $this->platformMetricColumns($platform);
+
+            if ($columns === [] || $months === []) {
+                continue;
+            }
+
+            $list[] = [
+                'name'         => $platName,
+                'parent_name'  => $platform?->parent?->name,
+                'platform_id'  => $platform?->id,
+                'columns'      => $columns,
+            ];
+        }
+
+        return $list;
     }
 
     private function extractFilterInput(array $input): array
@@ -229,6 +269,7 @@ class AdsPerformanceReportService
                 'summary_totals'     => $this->emptySummaryTotals(),
                 'platform_sections'     => [],
                 'platform_sections_all' => null,
+                'platform_data'         => [],
                 'chart_data'            => $this->emptyChartData(),
             ];
         }
@@ -402,6 +443,7 @@ class AdsPerformanceReportService
             'performance_totals'    => $performanceTotals,
             'summary_rows'          => $summaryRows,
             'summary_totals'        => $summaryTotals,
+            'platform_data'         => $platformData,
             'platform_sections'     => $platformSections,
             'platform_sections_all' => $platformSectionsAll,
             'chart_data'            => $chartData,

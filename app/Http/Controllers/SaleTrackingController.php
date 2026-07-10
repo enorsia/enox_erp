@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\SaleTrackingExport;
 use App\Models\DailyAdPerformance;
+use App\Services\AdsPerformanceExportColumns;
 use App\Services\AdsPerformanceReportService;
 use App\Services\SalePlatformService;
 use App\Services\SaleTrackingService;
@@ -165,9 +166,15 @@ class SaleTrackingController extends Controller
         ));
     }
 
-    public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function export(Request $request, AdsPerformanceExportColumns $exportColumns): \Symfony\Component\HttpFoundation\StreamedResponse
     {
         Gate::authorize('general.sale_tracking.index');
-        return (new SaleTrackingExport($request->except(['page'])))->download($this->service);
+
+        $filters  = $request->except(['page', 'tables', 'export_columns']);
+        $sections = $this->reportService->buildExportSections($filters);
+        $tables   = $exportColumns->parseTables($request->input('tables'), $request->input('export_columns'));
+        $columns  = $exportColumns->parseSelection($request->input('export_columns'), $sections, $tables);
+
+        return (new SaleTrackingExport($filters, $tables, $columns))->download($this->service);
     }
 }

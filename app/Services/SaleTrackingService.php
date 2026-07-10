@@ -281,7 +281,7 @@ class SaleTrackingService
 
     public function getExportQuery(array $filters): Builder
     {
-        return DailyAdPerformance::with('salePlatform')
+        return DailyAdPerformance::with(['salePlatform.parent'])
             ->whereHas('salePlatform', fn ($q) => $q->where('show_in_sale_tracking', true))
             ->filter($filters)
             ->orderBy('month')
