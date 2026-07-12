@@ -5,7 +5,7 @@
     $toYM   = $fi['to_year_month'] ?? now()->format('Y-m');
 @endphp
 
-<div class="an-card p-5" x-data="{
+<div class="an-card p-5 ap-report-filter" x-data="{
     period: '{{ $period }}',
     fromYM: '{{ $fromYM }}',
     toYM: '{{ $toYM }}',
@@ -22,7 +22,8 @@
                 <label class="f-label">Platform</label>
                 <select name="sale_platform_id"
                         class="tom-select w-full text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
-                        data-placeholder="All Platforms">
+                        data-placeholder="All Platforms"
+                        data-dropdown-parent="body">
                     <option value="">All Platforms</option>
                     @foreach($salePlatforms as $p)
                         <option value="{{ $p['id'] }}" {{ (string) ($fi['sale_platform_id'] ?? '') === (string) $p['id'] ? 'selected' : '' }}>

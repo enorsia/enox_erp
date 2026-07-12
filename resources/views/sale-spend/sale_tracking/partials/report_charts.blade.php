@@ -89,7 +89,7 @@
     {{-- Engagement metrics — single chart with platform filter --}}
     @if(($chart_data['engagement_all'] ?? null) || count($chart_data['platforms'] ?? []) > 0)
         <div class="an-card p-5 ap-fs-panel" data-ap-fs-panel>
-            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-1">
+            <div class="ap-engagement-toolbar flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-1">
                 <div class="min-w-0">
                     <div class="chart-title">
                         <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>

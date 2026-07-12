@@ -530,6 +530,7 @@ class AdsPerformanceReportService
             $platforms[] = [
                 'slug'        => \Illuminate\Support\Str::slug($platName),
                 'name'        => $platName,
+                'parent_name' => $platform?->parent?->name,
                 'platform_id' => $platform?->id,
                 'labels'      => $labels,
                 'datasets'    => $datasets,
@@ -616,9 +617,14 @@ class AdsPerformanceReportService
         }
 
         foreach ($platforms as $platform) {
+            $label = $platform['name'];
+            if (!empty($platform['parent_name'])) {
+                $label = "{$label} · {$platform['parent_name']}";
+            }
+
             $options[] = [
                 'value' => $platform['slug'],
-                'label' => $platform['name'],
+                'label' => $label,
             ];
         }
 
@@ -714,6 +720,7 @@ class AdsPerformanceReportService
             $sections[] = [
                 'slug'        => \Illuminate\Support\Str::slug($platName),
                 'name'        => $platName,
+                'parent_name' => $platform?->parent?->name,
                 'platform_id' => $platform?->id,
                 'columns'     => $columns,
                 'rows'        => $rows,

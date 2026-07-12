@@ -762,6 +762,33 @@
 #apPlatformEngagementSelect.ts-wrapper {
     margin-top: 0;
 }
+
+/* Ads Performance Report — filter toolbar above report table */
+#ads-performance-report-content > .an-card.ap-report-filter {
+    position: relative;
+    z-index: 10;
+    overflow: visible;
+}
+
+/* Engagement platform filter — keep Tom Select above sticky table headers */
+#ads-performance-report-content .ap-engagement-toolbar {
+    position: relative;
+    z-index: 40;
+    isolation: isolate;
+    overflow: visible;
+}
+#ads-performance-report-content .ap-engagement-toolbar .ts-wrapper {
+    position: relative;
+    z-index: 41;
+    overflow: visible;
+}
+#ads-performance-report-content .ap-engagement-toolbar .ts-dropdown {
+    z-index: 10060 !important;
+}
+.ap-fs-panel.ap-fs-open .ap-engagement-toolbar .ts-dropdown {
+    z-index: 10060 !important;
+}
+
 .ap-chart-wrap canvas {
     display: block;
 }

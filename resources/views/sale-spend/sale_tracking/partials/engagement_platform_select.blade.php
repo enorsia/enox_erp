@@ -2,25 +2,28 @@
     $selectId    = $selectId ?? 'apEngagementPlatformSelect';
     $selected    = $selected ?? 'all';
     $sections    = $sections ?? [];
-    $sectionBySlug = collect($sections)->keyBy('slug');
-    $sectionByName = collect($sections)->keyBy('name');
     $showAll     = ($showAll ?? true) && count($sections) > 1;
+
+    $sectionLabel = function (array $section): string {
+        $name = $section['name'] ?? '—';
+
+        if (!empty($section['parent_name'])) {
+            return "{$name} · {$section['parent_name']}";
+        }
+
+        return $name;
+    };
 @endphp
 
 <label class="f-label sr-only" for="{{ $selectId }}">Platform</label>
 <select id="{{ $selectId }}"
         class="tom-select f-input w-full text-[13px]"
-        data-placeholder="Select platform">
+        data-placeholder="Select platform"
+        data-dropdown-parent="body">
     @if($showAll)
         <option value="all" @selected($selected === 'all')>All Platforms</option>
     @endif
-    @foreach($salePlatforms ?? [] as $p)
-        @php
-            $slug = \Illuminate\Support\Str::slug($p['name']);
-            $hasEngagement = $sectionBySlug->has($slug) || $sectionByName->has($p['name']);
-        @endphp
-        @if($hasEngagement)
-            <option value="{{ $slug }}" @selected($selected === $slug)>{!! $p['label'] !!}</option>
-        @endif
+    @foreach($sections as $section)
+        <option value="{{ $section['slug'] }}" @selected($selected === $section['slug'])>{{ $sectionLabel($section) }}</option>
     @endforeach
 </select>

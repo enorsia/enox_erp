@@ -1,6 +1,6 @@
 @if(count($platform_sections) > 0)
     <div class="ap-fs-panel p-5" data-ap-fs-panel>
-        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+        <div class="ap-engagement-toolbar flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
             <div class="min-w-0">
                 <h3 id="apPlatformEngagementTitle" class="text-[14px] font-semibold text-slate-800 dark:text-slate-100">
                     {{ ($selected_engagement_slug ?? 'all') === 'all' ? 'All Platforms' : (collect($platform_sections)->firstWhere('slug', $selected_engagement_slug)['name'] ?? 'Platform Engagement') }}

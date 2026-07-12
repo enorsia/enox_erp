@@ -127,13 +127,20 @@ window.initTomSelectElements = function (root) {
 
     elements.forEach(element => {
         if (element.tomselect) return;
-        new TomSelect(element, {
+
+        const options = {
             create: false,
             searchField: 'text',
             sortField: [{ field: '$order' }, { field: '$score' }],
             placeholder: element.dataset.placeholder || 'Select an option',
             maxOptions: 50,
-        });
+        };
+
+        if (element.dataset.dropdownParent === 'body') {
+            options.dropdownParent = 'body';
+        }
+
+        new TomSelect(element, options);
     });
 };
 
