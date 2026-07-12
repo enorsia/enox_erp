@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\SalePlatformController;
+use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ReturnReasonTypeController;
 use App\Http\Controllers\MonthlyBudgetController;
