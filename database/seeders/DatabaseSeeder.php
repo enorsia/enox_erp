@@ -22,5 +22,15 @@ class DatabaseSeeder extends Seeder
             'email' => config('enoxsuite.super_admin_username') ?? 'admin@example.com',
             'password' => bcrypt(config('enoxsuite.super_admin_password')),
         ]);
+
+        // Call the seeders
+        $this->call([
+            ReturnReasonTypeSeeder::class,
+            SalePlatformSeeder::class,
+            MonthlyBudgetSeeder::class,
+            DailySaleSeeder::class,
+            DailyReturnSeeder::class,
+            DailyAdPerformanceSeeder::class,
+        ]);
     }
 }

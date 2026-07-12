@@ -45,11 +45,35 @@ return [
             ],
             'forecasting' => [
                 'guard' => 'web',
-                'actions' => ['index', 'show','enox', 'dbz','amz_uk','rkm','spr_uk'],
+                'actions' => ['index', 'show','enox', 'dbz','dbz_irl','amz_uk','rkm','spr_uk'],
             ],
             'discounts' => [
                 'guard' => 'web',
                 'actions' => ['index', 'show', 'update', 'approve', 'sent_mail'],
+            ],
+            'return_reason_type' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
+            ],
+            'sale_platform' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
+            ],
+            'monthly_budget' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
+            ],
+            'daily_sale' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
+            ],
+            'daily_return' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'show', 'delete'],
+            ],
+            'sale_tracking' => [
+                'guard' => 'web',
+                'actions' => ['index', 'create', 'edit', 'delete'],
             ],
         ],
 
@@ -58,7 +82,7 @@ return [
             'platforms' => [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'delete'],
-            ]
+            ],
         ],
 
     ],

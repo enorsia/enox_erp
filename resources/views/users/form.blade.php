@@ -114,8 +114,8 @@
                         <div class="position-relative form-group new_search row">
                             <label class="col-12 col-md-4 col-lg-3">Warehouse</label>
                             <div class="col-12 col-md-8 col-lg-9 new_select_field">
-                                <select id="warehouse_id" class="form-select js-example-basic-single @error('warehouse_id') is-invalid @enderror"
-                                    name="warehouse_id" autofocus>
+                                <select id="warehouse_id" class="tom-select form-select @error('warehouse_id') is-invalid @enderror"
+                                    name="warehouse_id" data-placeholder="Select Warehouse" autofocus>
                                     <option value="">Select Warehouse</option>
                                     @foreach ($warehouses as $warehouse)
                                         <option value="{{ $warehouse->id }}" {{ @$user->warehouse_id == $warehouse->id ? 'selected' : '' }}>
@@ -133,8 +133,8 @@
                         <div class="position-relative form-group new_search row">
                             <label class="col-12 col-md-4 col-lg-3">Outlet <span class="text-warning">(If required)</span></label>
                             <div class="col-12 col-md-8 col-lg-9 new_select_field">
-                                <select id="outlet_id" class="form-select js-example-basic-single @error('outlet_id') is-invalid @enderror"
-                                    name="outlet_id" autofocus>
+                                <select id="outlet_id" class="tom-select form-select @error('outlet_id') is-invalid @enderror"
+                                    name="outlet_id" data-placeholder="Select Outlet" autofocus>
                                     <option value="">Select Outlet</option>
                                     @foreach ($outlets as $outlet)
                                         <option value="{{ $outlet->id }}" {{ @$user->outlet_id == $outlet->id ? 'selected' : '' }}>
@@ -152,8 +152,8 @@
                         <div class="position-relative form-group new_search row">
                             <label class="col-12 col-md-4 col-lg-3">Factory <span class="text-warning">(If required)</span></label>
                             <div class="col-12 col-md-8 col-lg-9 new_select_field">
-                                <select id="factory_id" class="form-select js-example-basic-single @error('factory_id') is-invalid @enderror"
-                                    name="factory_id" autofocus>
+                                <select id="factory_id" class="tom-select form-select @error('factory_id') is-invalid @enderror"
+                                    name="factory_id" data-placeholder="Select Factory" autofocus>
                                     <option value="">Select Factory</option>
                                     @foreach ($factories as $factory)
                                         <option value="{{ $factory->id }}" {{ @$user->factory_id == $factory->id ? 'selected' : '' }}>
@@ -172,8 +172,8 @@
                             <label class="col-12 col-md-4 col-lg-3">Role</label>
                             <div class="col-12 col-md-8 col-lg-9 new_select_field">
                                 <select id="role"
-                                    class="form-control js-example-basic-single @error('role') is-invalid @enderror"
-                                    name="role" autofocus>
+                                    class="tom-select form-control @error('role') is-invalid @enderror"
+                                    name="role" data-placeholder="Select Role" autofocus>
                                     <option value="">Select Role</option>
                                     @foreach ($roles as $role)
                                         <option value="{{ $role->id }}"
@@ -236,7 +236,6 @@
                 dropifyInput.dropify('reset');
                 $("#avatar_hidden").val('');
             });
-            $('.js-example-basic-single').select2();
             var isEdit = {{ @$user ? 'false' : 'true' }};
 
             if ($('#validateForm').length && isEdit) {
@@ -287,8 +286,9 @@
                         }
                     },
                     errorPlacement: function(error, element) {
-                        if (element.hasClass('select2-hidden-accessible')) {
-                            error.insertAfter(element.next('.select2').first());
+                        const tsWrapper = element.closest('.ts-wrapper');
+                        if (tsWrapper.length) {
+                            error.insertAfter(tsWrapper);
                         } else {
                             error.insertAfter(element);
                         }

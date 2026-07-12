@@ -273,7 +273,7 @@
                                                 {{-- Save Type — first row only, spans all --}}
                                                 @if ($loop->index == 0)
                                                     <td class="px-3 py-2.5" rowspan="{{ count($chartInfo->sellingChartPrices) }}">
-                                                        <select name="save_type" class="save_type w-full px-2 py-1.5 text-[12px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors">
+                                                        <select name="save_type" class="tom-select save_type w-full px-2 py-1.5 text-[12px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400 transition-colors" data-placeholder="Select action">
                                                             <option value="1">Save</option>
                                                             @can('general.discounts.sent_mail')
                                                                 <option value="2">Save &amp; Send for Approval</option>

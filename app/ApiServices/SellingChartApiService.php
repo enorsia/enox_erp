@@ -57,7 +57,7 @@ class SellingChartApiService
             }
 
             if ($response->successful()) {
-                $lookupData = $response->json('data.lookupNames', collect());
+                $lookupData = collect($response->json('data.lookupNames', []));
             }
         } catch (Exception $e) {
             Log::error('Selling_chart lookup_names API Error', [
@@ -111,7 +111,64 @@ class SellingChartApiService
         return $categoriesData;
     }
 
-    public function getCommonData(): array
+    public function getCommonData()
+    {
+        $cacheKey = 'common_data_v1';
+
+        $cachedData = Cache::get($cacheKey);
+
+        if ($this->hasValidCommonData($cachedData)) {
+            return $cachedData;
+        }
+
+        try {
+            $data = [];
+
+            $lookupData = $this->getLookupResponse([1, 5, 8, 10, 11]);
+            // Split by type_id
+            $data['departments'] = $lookupData->where('type_id', 1)->map(fn($item) => (object) $item)->values();
+            $data['fabrics'] = $lookupData->where('type_id', 5)->map(fn($item) => (object) $item)->values();
+            $data['initialRepeats'] = $lookupData->where('type_id', 8)->map(fn($item) => (object) $item)->values();
+            $data['seasons'] = $lookupData->where('type_id', 10)->map(fn($item) => (object) $item)->values();
+            $data['seasons_phases'] = $lookupData->where('type_id', 11)->map(fn($item) => (object) $item)->values();
+
+            // 2️⃣ Product Categories
+            $getCategoryData = $this->getCategoryResponse();
+            $data['selling_chart_cats'] = $getCategoryData->map(fn($item) => (object) $item);
+
+            $data['selling_chart_types'] = SellingChartType::get();
+
+            // Store only when lookup data loaded successfully (avoid caching empty fallbacks)
+            if ($this->hasValidCommonData($data)) {
+                Cache::put($cacheKey, $data, now()->addHours(2));
+            }
+
+            return $data;
+        } catch (Exception $e) {
+
+            Log::error('getCommonData API call failed', [
+                'message' => $e->getMessage()
+            ]);
+
+            // 6️⃣ Fallback to old cache if exists
+            if (Cache::has($cacheKey)) {
+                Cache::forget($cacheKey);
+            }
+
+            // 7️⃣ Final safe fallback (never break UI)
+            return [
+                'departments' => [],
+                'fabrics' => [],
+                'initialRepeats' => [],
+                'seasons' => [],
+                'seasons_phases' => [],
+                'selling_chart_cats' => [],
+                'selling_chart_types' => [],
+            ];
+        }
+    }
+
+    public function getCommonDataOld(): array
     {
         // Cache::forget('common_data_v1');
         return Cache::remember('common_data_v1', now()->addHours(2), function () {
@@ -146,5 +203,16 @@ class SellingChartApiService
 
             return $data;
         });
+    }
+
+    protected function hasValidCommonData(?array $data): bool
+    {
+        if (empty($data)) {
+            return false;
+        }
+
+        $departments = collect($data['departments'] ?? []);
+
+        return $departments->isNotEmpty();
     }
 }

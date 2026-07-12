@@ -124,7 +124,8 @@
                             <div>
                                 <label class="f-label">Role <span class="f-required">*</span></label>
                                 <select name="role"
-                                    class="f-input custom-select @error('role') border-red-400 @enderror"
+                                    class="tom-select f-input @error('role') border-red-400 @enderror"
+                                    data-placeholder="Select Role"
                                     required>
                                     <option value="">Select Role</option>
                                     @foreach ($roles as $role)
@@ -146,9 +147,9 @@
                                         onclick="toggleSwitch('statusToggle')">
                                         <div class="toggle-thumb"></div>
                                     </div>
-                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium">Active status
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium" onclick="toggleSwitch('statusToggle')">Active status
                                     </span>
-                                    <input type="checkbox" name="status" class="hidden" id="statusCheckbox"
+                                    <input type="checkbox" name="status" id="statusCheckbox" class="hidden"
                                         {{ old('status') ? 'checked' : '' }}>
                                 </label>
                                 <p class="f-hint mt-1">Enable to activate this user immediately.</p>
@@ -186,13 +187,3 @@
         </form>
     </div>
 @endsection
-
-@push('js')
-<script>
-    // Sync toggle with hidden checkbox
-    document.getElementById('statusToggle').addEventListener('click', function() {
-        var cb = document.getElementById('statusCheckbox');
-        cb.checked = this.classList.contains('on');
-    });
-</script>
-@endpush

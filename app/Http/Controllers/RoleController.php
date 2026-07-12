@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -17,7 +19,7 @@ class RoleController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+    public function index(Request $request): View
     {
         Gate::authorize('authentication.roles.index');
         $roles = Role::select('id', 'name')
@@ -34,7 +36,7 @@ class RoleController extends Controller
     /**
      * Show the form for creating a new resource.
      */
-    public function create()
+    public function create(): View
     {
         Gate::authorize('authentication.roles.create');
         $permissions = Permission::all();
@@ -66,7 +68,7 @@ class RoleController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
 
         $formData = $request->validate([
@@ -111,7 +113,7 @@ class RoleController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(int $id): View
     {
         Gate::authorize('authentication.roles.show');
         $role = Role::with('permissions')->findOrFail($id);
@@ -144,7 +146,7 @@ class RoleController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(Role $role)
+    public function edit(Role $role): View
     {
         Gate::authorize('authentication.roles.edit');
         $rolePermissions = $role->permissions->pluck('id')->toArray();
@@ -177,7 +179,7 @@ class RoleController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, int $id): RedirectResponse
     {
         $formData = $request->validate([
             'name' => 'required|string|min:3|unique:roles,name,' . $id,
@@ -250,7 +252,7 @@ class RoleController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Role $role)
+    public function destroy(Role $role): RedirectResponse
     {
         Gate::authorize('authentication.roles.delete');
         $page = request('page');

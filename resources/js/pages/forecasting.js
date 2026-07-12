@@ -86,6 +86,10 @@ window.viewChart = function (id, page = 1) {
             if (response.status == true) {
                 $('#viewSellingChartItemModal').remove();
                 $('.setViewSellingChartItemModal').html(response.data);
+                if (typeof window.initTomSelectElements === 'function') {
+                    const modalRoot = document.querySelector('.setViewSellingChartItemModal');
+                    if (modalRoot) window.initTomSelectElements(modalRoot);
+                }
                 // Init Alpine.js on the freshly injected markup
                 if (window.Alpine) {
                     window.Alpine.initTree(document.querySelector('.setViewSellingChartItemModal'));

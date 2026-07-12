@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Jobs\CloudflareFileDeleteJob;
 use App\Jobs\CloudflareFileUploadJob;
 use App\Models\User;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -15,7 +17,7 @@ use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request): View
     {
         Gate::authorize('authentication.users.index');
         $data['users'] = User::filter($request->all())
@@ -30,7 +32,7 @@ class UserController extends Controller
         return view('users.index', $data);
     }
 
-    public function create()
+    public function create(): View
     {
         Gate::authorize('authentication.users.create');
         $roles = Role::all();
@@ -38,7 +40,7 @@ class UserController extends Controller
         return view('users.create', compact('roles'));
     }
 
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         $request->validate(
             [
@@ -91,7 +93,7 @@ class UserController extends Controller
         }
     }
 
-    public function show($id)
+    public function show(int $id): View
     {
         Gate::authorize('authentication.users.show');
         $user = User::with([
@@ -99,13 +101,12 @@ class UserController extends Controller
         ])
             ->findOrFail($id);
 
-        // dd($user);
         $roleName = $user->getRoleNames()->first();
 
         return view('users.show', compact('user', 'roleName'));
     }
 
-    public function edit(User $user)
+    public function edit(User $user): View
     {
         Gate::authorize('authentication.users.edit');
         $roles = Role::all();
@@ -113,7 +114,7 @@ class UserController extends Controller
         return view('users.edit', compact('user', 'roles'));
     }
 
-    public function update(Request $request, User $user)
+    public function update(Request $request, User $user): RedirectResponse
     {
         $request->validate([
             'name' => 'required|string|max:255',
@@ -223,7 +224,7 @@ class UserController extends Controller
         }
     }
 
-    public function destroy(User $user)
+    public function destroy(User $user): RedirectResponse
     {
          Gate::authorize('authentication.users.delete');
 

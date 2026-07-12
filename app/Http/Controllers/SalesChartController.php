@@ -57,10 +57,69 @@ class SalesChartController extends Controller
     {
         Gate::authorize('general.forecasting.index');
 
-        $data = $this->getChartPaginateData($request);
+        $platform_ncs = Platform::selectedPlatforms();
+        $platforms = Platform::all()->keyBy('code');
+        $platform_code = $request->platform_code;
 
-        $data["platform_ncs"] = Platform::selectedPlatforms();
-        $data["platforms"] = Platform::all()->keyBy('code');
+        if ($platform_code) {
+            $data = $this->sellingChartApiService->getCommonData();
+
+            $data["platform_ncs"] = $platform_ncs;
+            $data["platforms"] = $platforms;
+
+            $chartInfos = SellingChartBasicInfo::filter($request)
+                ->with(['sellingChartPrices'])
+                ->withCount(['sellingChartPrices'])
+                ->orderByDesc('id')
+                ->get();
+
+            $chartInfos = $chartInfos->map(function ($chartInfo) use ($platform_ncs, $platforms, $platform_code) {
+                $hasCanSell = false;
+
+                $chartInfo->sellingChartPrices->map(function ($price) use ($platform_ncs, $platforms, $platform_code, &$hasCanSell) {
+                    foreach ($platform_ncs as $p_code => $p_name) {
+                        $platform = $platforms->get($p_code);
+                        $cal_val = calculatePlatformProfit($price, $platform);
+                        $price->{$p_code . '_can_sell'} = ($cal_val['can_sell'] ?? 'No') === 'Yes';
+                        $price->{$p_code . '_cal_val'}   = $cal_val;
+                        if ($price->{$platform_code . '_can_sell'}) {
+                            $hasCanSell = true;
+                        }
+                    }
+                    return $price;
+                });
+
+                $chartInfo->hasCanSell = $hasCanSell;
+                // dd($chartInfo->toArray());
+
+                return $chartInfo;
+            })
+                ->filter(fn($c) => $c->hasCanSell)
+                ->values();
+
+            $page = request()->get('page', 1);
+            $perPage = 30;
+
+            $data['chartInfos'] = new \Illuminate\Pagination\LengthAwarePaginator(
+                $chartInfos->forPage($page, $perPage)->values(),
+                $chartInfos->count(),
+                $perPage,
+                $page,
+                ['path' => request()->url(), 'query' => request()->query()]
+            );
+
+            $designNos = $data['chartInfos']->pluck('design_no')->unique()->toArray();
+            $ecommerceProducts = $this->sellingChartApiService->getEcomProducts([
+                'designNos' => $designNos
+            ]);
+            $data['ecommerceMap'] = $ecommerceProducts->keyBy(fn($item) => $item['style']['name'] ?? null);
+
+            $data['start'] = ($data['chartInfos']->currentPage() - 1) * $data['chartInfos']->perPage() + 1;
+        } else {
+            $data = $this->getChartPaginateData($request);
+            $data["platform_ncs"] = $platform_ncs;
+            $data["platforms"] = $platforms;
+        }
 
         return view('selling_chart.forecasting.index', $data);
     }
@@ -173,7 +232,8 @@ class SalesChartController extends Controller
             ->with(['sellingChartPrices.discounts'])
             ->withCount(['sellingChartPrices'])
             ->orderByDesc('id')
-            ->paginate(30);
+            ->paginate(30)
+            ->withQueryString();
 
         $designNos = $data['chartInfos']->pluck('design_no')->unique()->toArray();
 
@@ -567,7 +627,9 @@ class SalesChartController extends Controller
     {
         Gate::authorize('general.chart.edit');
         $data = $this->sellingChartApiService->getCommonData();
-        $data['chartInfo'] = SellingChartBasicInfo::withCount('sellingChartPrices')->findOrFail($id);
+        $data['chartInfo'] = SellingChartBasicInfo::withCount('sellingChartPrices')
+            ->with('sellingChartPrices')
+            ->findOrFail($id);
         // $data['sizes'] = $this->getSizes($data['chartInfo']->department_id);
         $lookupData = $this->sellingChartApiService->getLookupResponse([13]);
         $data['ranges'] = collect($lookupData)->map(fn($item) => (object) $item);
@@ -690,37 +752,50 @@ class SalesChartController extends Controller
 
             $basic_info->save();
 
-            // Remove SellingChartPrice
-            SellingChartPrice::where('basic_info_id', $basic_info->id)
-                ->whereNotIn('id', $request->price_id)
-                ->delete();
-            // Remove SellingChartPrice
+            // Remove prices that were deleted from the form
+            $keepPriceIds = [];
 
-            foreach (array_keys($request->price_id) as $key) {
+            foreach (array_keys($request->color_code) as $key) {
                 $sizeRangeD = $this->getColorSizeRange(
                     size_id: null,
                     range_id: $request->range_id[$key] ?? null
                 );
 
-                SellingChartPrice::updateOrCreate(
-                    [
+                $priceData = [
+                    'color_id' => $request->color_id[$key],
+                    'color_code' => $request->color_code[$key],
+                    'color_name' => $request->color_name[$key],
+                    'size_id' => null,
+                    'size' => null,
+                    'range_id' => $sizeRangeD['rangeId'],
+                    'range' => $sizeRangeD['rangeName'],
+                    'po_order_qty' => $request->po_order_qty[$key],
+                    'price_fob' => $request->price_fob[$key],
+                    'unit_price' => $request->unit_price[$key],
+                ];
+
+                $priceId = $request->price_id[$key] ?? null;
+
+                if (!empty($priceId)) {
+                    $price = SellingChartPrice::updateOrCreate(
+                        [
+                            'basic_info_id' => $basic_info->id,
+                            'id' => $priceId,
+                        ],
+                        $priceData
+                    );
+                } else {
+                    $price = SellingChartPrice::create(array_merge($priceData, [
                         'basic_info_id' => $basic_info->id,
-                        'id' => $request->price_id[$key]
-                    ],
-                    [
-                        'color_id' => $request->color_id[$key],
-                        'color_code' => $request->color_code[$key],
-                        'color_name' => $request->color_name[$key],
-                        'size_id' => null,
-                        'size' => null,
-                        'range_id' => $sizeRangeD['rangeId'],
-                        'range' => $sizeRangeD['rangeName'],
-                        'po_order_qty' => $request->po_order_qty[$key],
-                        'price_fob' => $request->price_fob[$key],
-                        'unit_price' => $request->unit_price[$key],
-                    ]
-                );
+                    ]));
+                }
+
+                $keepPriceIds[] = $price->id;
             }
+
+            SellingChartPrice::where('basic_info_id', $basic_info->id)
+                ->whereNotIn('id', $keepPriceIds)
+                ->delete();
 
             DB::commit();
 
@@ -736,7 +811,7 @@ class SalesChartController extends Controller
                 $changes[] = "description";
             }
 
-            $newColorCount = count($request->price_id);
+            $newColorCount = count($request->color_code);
             if ($oldColorCount !== $newColorCount) {
                 $changes[] = "colors from {$oldColorCount} to {$newColorCount}";
             }

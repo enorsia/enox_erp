@@ -128,7 +128,7 @@
         </div>
 
         <!-- ── PAGINATION ── -->
-        @if($lookup_names && $lookup_names->hasPages())
+        @if(count($lookup_names) > 0 && $lookup_names->hasPages())
             @include('layouts.pagination', ['paginator' => $lookup_names])
         @endif
     </div>

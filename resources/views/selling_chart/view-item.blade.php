@@ -65,16 +65,16 @@
                         <div class="text-center">
                             <p class="text-[10px] font-semibold text-slate-400 uppercase mb-1">Design Image</p>
                             <img class="w-28 h-28 rounded-xl object-cover border border-slate-200 dark:border-slate-700 cursor-zoom-in hover:opacity-90 transition-opacity"
-                                src="{{ cloudflareImage($chartInfo->design_image, 130) }}"
-                                @click="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'" alt="Design Image">
+                                src="{{ sellingChartImage($chartInfo->design_image, 130, 'design') }}"
+                                @click="imagePopup = '{{ sellingChartImage($chartInfo->design_image, 1200, 'design') }}'" alt="Design Image">
                         </div>
                     @endif
                     @if ($chartInfo->inspiration_image)
                         <div class="text-center">
                             <p class="text-[10px] font-semibold text-slate-400 uppercase mb-1">Inspiration Image</p>
                             <img class="w-28 h-28 rounded-xl object-cover border border-slate-200 dark:border-slate-700 cursor-zoom-in hover:opacity-90 transition-opacity"
-                                src="{{ cloudflareImage($chartInfo->inspiration_image, 130) }}"
-                                @click="imagePopup = '{{ cloudflareImage($chartInfo->inspiration_image, 1200) }}'" alt="Inspiration Image">
+                                src="{{ sellingChartImage($chartInfo->inspiration_image, 130, 'inspiration') }}"
+                                @click="imagePopup = '{{ sellingChartImage($chartInfo->inspiration_image, 1200, 'inspiration') }}'" alt="Inspiration Image">
                         </div>
                     @endif
                 </div>

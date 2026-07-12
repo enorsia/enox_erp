@@ -22,6 +22,7 @@ class Platform extends BaseModel
         return [
             'enox'   => 'Enorsia',
             'dbz'    => 'Debenhams',
+            'dbz_irl'    => 'Debenhams (IRL)',
             'amz_uk' => 'Amazon',
             'rkm'    => 'Rackhams',
             'spr_uk' => 'Spartoo',
