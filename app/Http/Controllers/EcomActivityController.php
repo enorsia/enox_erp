@@ -29,7 +29,9 @@ class EcomActivityController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('session_id', 'like', "%{$search}%")
-                    ->orWhere('ip', 'like', "%{$search}%");
+                    ->orWhere('ip', 'like', "%{$search}%")
+                    ->orWhere('user_name', 'like', "%{$search}%")
+                    ->orWhere('user_email', 'like', "%{$search}%");
             });
         }
 
@@ -47,6 +49,14 @@ class EcomActivityController extends Controller
 
         if ($request->filled('logged_in')) {
             $query->where('is_logged_in', $request->logged_in === '1');
+        }
+
+        if ($request->filled('has_order')) {
+            if ($request->has_order === '1') {
+                $query->whereHas('actions', fn ($q) => $q->where('action_type', 'payment_success'));
+            } elseif ($request->has_order === '0') {
+                $query->whereDoesntHave('actions', fn ($q) => $q->where('action_type', 'payment_success'));
+            }
         }
 
         $sessions = $query
@@ -78,7 +88,7 @@ class EcomActivityController extends Controller
             ->values()
             ->all();
 
-        $returnQuery = request()->only(['search', 'date_from', 'date_to', 'device_type', 'logged_in', 'page']);
+        $returnQuery = request()->only(['search', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'page']);
 
         return view('ecom_activity.show', [
             'activityUser' => $activityUser,

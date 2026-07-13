@@ -235,6 +235,60 @@ test('track endpoint accepts payment success with checkout info', function () {
     expect($action->payment_success['checkout_info']['items'][0]['size_name'])->toBe('M');
 });
 
+test('payment success updates session user from checkout customer info', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Dress',
+        'product_code' => 'GS123',
+    ]], [
+        'is_logged_in' => false,
+    ]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'order_id' => 'ORD-2001',
+            'amount_paid' => 59.99,
+            'payment_method' => 'card',
+            'currency' => 'GBP',
+            'checkout_info' => [
+                'order_number' => 'ORD-2001',
+                'customer' => [
+                    'first_name' => 'Sam',
+                    'last_name' => 'Taylor',
+                    'email' => 'sam.taylor@example.com',
+                    'phone' => '07123456789',
+                ],
+                'items' => [[
+                    'product_id' => '101',
+                    'product_name' => 'Dress',
+                    'qty' => 1,
+                    'price' => 59.99,
+                    'color_name' => 'Navy',
+                ]],
+            ],
+        ],
+    ]], [
+        'is_logged_in' => false,
+    ]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session->user_name)->toBe('Sam Taylor');
+    expect($session->user_email)->toBe('sam.taylor@example.com');
+});
+
 test('payment success rejects disallowed fields', function () {
     $sessionId = Str::uuid()->toString();
 

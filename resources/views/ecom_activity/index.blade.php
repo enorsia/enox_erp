@@ -19,7 +19,7 @@
                          fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                         <circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
                     </svg>
-                    <input type="text" name="search" placeholder="Search session ID or IP…"
+                    <input type="text" name="search" placeholder="Search session ID, name, email or IP…"
                            value="{{ request('search') }}"
                            class="w-full pl-8 pr-3 h-9 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-accent-400 transition-colors"/>
                 </div>
@@ -35,6 +35,12 @@
                     <option value="">All users</option>
                     <option value="1" {{ request('logged_in') === '1' ? 'selected' : '' }}>Logged in</option>
                     <option value="0" {{ request('logged_in') === '0' ? 'selected' : '' }}>Guest</option>
+                </select>
+
+                <select name="has_order" class="h-9 px-3 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                    <option value="">All sessions</option>
+                    <option value="1" {{ request('has_order') === '1' ? 'selected' : '' }}>With order</option>
+                    <option value="0" {{ request('has_order') === '0' ? 'selected' : '' }}>No order</option>
                 </select>
 
                 <input type="date" name="date_from" value="{{ request('date_from') }}"

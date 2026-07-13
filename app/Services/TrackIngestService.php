@@ -65,6 +65,10 @@ class TrackIngestService
                 $row
             );
 
+            if (($event['action_type'] ?? '') === 'payment_success') {
+                $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
+            }
+
             $acceptedIds[] = $eventId;
 
             $this->logInfo('Event stored', [
@@ -194,6 +198,62 @@ class TrackIngestService
         }
 
         return $row;
+    }
+
+    /**
+     * Guest checkout often has no user on the session until payment_success.
+     *
+     * @param  array<string, mixed>  $event
+     */
+    private function syncSessionUserFromPaymentSuccess(string $sessionId, array $event): void
+    {
+        $payload = $event['payment_success'] ?? [];
+
+        if (! is_array($payload)) {
+            return;
+        }
+
+        $customer = $payload['checkout_info']['customer'] ?? [];
+
+        if (! is_array($customer)) {
+            return;
+        }
+
+        $firstName = trim((string) ($customer['first_name'] ?? ''));
+        $lastName = trim((string) ($customer['last_name'] ?? ''));
+        $email = trim((string) ($customer['email'] ?? ''));
+        $name = trim(implode(' ', array_filter([$firstName, $lastName])));
+
+        $updates = [];
+
+        if ($name !== '') {
+            $updates['user_name'] = $name;
+        }
+
+        if ($email !== '') {
+            $updates['user_email'] = $email;
+        }
+
+        if ($updates === []) {
+            return;
+        }
+
+        $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
+
+        if (! $session) {
+            return;
+        }
+
+        $updates['last_active_at'] = $this->formatDateTime($event['created_at'] ?? now());
+        $updates['updated_at'] = $this->formatDateTime(now());
+
+        $session->update($updates);
+
+        $this->logInfo('Session user synced from payment_success', [
+            'session_id' => $sessionId,
+            'user_name' => $updates['user_name'] ?? $session->user_name,
+            'user_email' => $updates['user_email'] ?? $session->user_email,
+        ]);
     }
 
     private function formatDateTime(mixed $value): ?string
