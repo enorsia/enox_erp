@@ -75,6 +75,14 @@ return [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'delete'],
             ],
+            'ecom_activity' => [
+                'guard' => 'web',
+                'actions' => ['index', 'show'],
+            ],
+            'ecom_tracker_dashboard' => [
+                'guard' => 'web',
+                'actions' => ['index'],
+            ],
         ],
 
         // SETTINGS MODULE
