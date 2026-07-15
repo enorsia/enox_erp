@@ -180,13 +180,23 @@ class TrackIngestService
                 continue;
             }
 
-            $row[$field] = in_array($field, ['start_time', 'end_time'], true)
+            $value = in_array($field, ['start_time', 'end_time'], true)
                 ? $this->formatDateTime($event[$field])
-                : $event[$field];
+                : $this->normalizeScalarField($field, $event[$field]);
+
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $row[$field] = $value;
         }
 
         if ($actionType === 'add_to_cart' && isset($event['add_to_cart'])) {
             $row['add_to_cart'] = json_encode($event['add_to_cart']);
+        }
+
+        if ($actionType === 'begin_checkout' && isset($event['begin_checkout'])) {
+            $row['begin_checkout'] = json_encode($event['begin_checkout']);
         }
 
         if ($actionType === 'proceed_checkout' && isset($event['proceed_to_checkout'])) {
@@ -263,6 +273,33 @@ class TrackIngestService
         }
 
         return Carbon::parse($value)->format('Y-m-d H:i:s');
+    }
+
+    private function normalizeScalarField(string $field, mixed $value): ?string
+    {
+        if (! is_scalar($value)) {
+            return null;
+        }
+
+        $text = trim((string) $value);
+
+        if ($text === '') {
+            return null;
+        }
+
+        $limit = config("tracker.scalar_field_limits.{$field}");
+
+        if (is_int($limit) && $limit > 0 && mb_strlen($text) > $limit) {
+            $this->logWarning('Truncated tracker scalar field', [
+                'field' => $field,
+                'original_length' => mb_strlen($text),
+                'limit' => $limit,
+            ]);
+
+            return mb_substr($text, 0, $limit);
+        }
+
+        return $text;
     }
 
     /**

@@ -9,7 +9,8 @@
             'product_view' => 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
             'product_view_popup' => 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
             'add_to_cart' => 'badge-amber',
-            'proceed_checkout' => 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+            'begin_checkout' => 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+            'proceed_checkout' => 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
             'payment_success' => 'badge-green',
         ];
     @endphp
@@ -51,6 +52,7 @@
                             $badgeClass = $badgeColors[$item->action_type] ?? 'badge-amber';
                             $jsonPayload = match ($item->action_type) {
                                 'add_to_cart' => $item->add_to_cart,
+                                'begin_checkout' => $item->begin_checkout,
                                 'proceed_checkout' => $item->proceed_to_checkout,
                                 'payment_success' => $item->payment_success,
                                 default => null,

@@ -156,15 +156,15 @@ test('track endpoint accepts add to cart with color and size details', function 
     expect($action->add_to_cart['size_name'])->toBe('M');
 });
 
-test('track endpoint accepts proceed checkout with product line details', function () {
+test('track endpoint accepts begin checkout with product line details', function () {
     $sessionId = Str::uuid()->toString();
     $eventId = Str::uuid()->toString();
 
     $response = $this->postJson('/api/track', trackPayload($sessionId, [[
         'id' => $eventId,
         'session_id' => $sessionId,
-        'action_type' => 'proceed_checkout',
-        'proceed_to_checkout' => [
+        'action_type' => 'begin_checkout',
+        'begin_checkout' => [
             'cart_total' => 59.98,
             'coupon_code' => 'SAVE10',
             'cart_items' => [[
@@ -187,8 +187,86 @@ test('track endpoint accepts proceed checkout with product line details', functi
 
     $action = ActivityEcomUserAction::where('event_id', $eventId)->first();
 
+    expect($action->begin_checkout['cart_items'][0]['product_id'])->toBe('101');
+    expect($action->begin_checkout['cart_items'][0]['color_name'])->toBe('Brown');
+});
+
+test('track endpoint accepts long product color slug codes', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+    $longSlug = str_repeat('a', 120);
+
+    $response = $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Dress',
+        'product_code' => 'SKU-1',
+        'product_color_id' => '42',
+        'product_color_code' => $longSlug,
+        'general_color_name' => 'Navy',
+        'product_price' => 29.99,
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk();
+
+    $action = ActivityEcomUserAction::where('event_id', $eventId)->first();
+
+    expect($action->product_color_code)->toBe($longSlug);
+    expect(strlen($action->product_color_code))->toBe(120);
+});
+
+test('track endpoint accepts proceed checkout with product line details', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'proceed_checkout',
+        'proceed_to_checkout' => [
+            'cart_total' => 59.98,
+            'coupon_code' => 'SAVE10',
+            'customer' => [
+                'full_name' => 'Jane Doe',
+                'first_name' => 'Jane',
+                'last_name' => 'Doe',
+                'email' => 'jane@example.com',
+                'phone' => '07123456789',
+                'shipping' => [
+                    'country' => 'United Kingdom',
+                    'line_1' => '10 High Street',
+                    'line_2' => '',
+                    'postcode' => 'SW1A 1AA',
+                    'town_city' => 'London',
+                ],
+            ],
+            'cart_items' => [[
+                'product_id' => '101',
+                'product_code' => 'GS123-M',
+                'product_name' => 'Dress',
+                'qty' => 2,
+                'price' => 29.99,
+                'color_id' => '42',
+                'color_name' => 'Brown',
+                'size_id' => '7',
+                'size_name' => 'M',
+            ]],
+        ],
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk();
+
+    $action = ActivityEcomUserAction::where('event_id', $eventId)->first();
+
     expect($action->proceed_to_checkout['cart_items'][0]['product_id'])->toBe('101');
     expect($action->proceed_to_checkout['cart_items'][0]['color_name'])->toBe('Brown');
+    expect($action->proceed_to_checkout['customer']['email'])->toBe('jane@example.com');
+    expect($action->proceed_to_checkout['customer']['shipping']['postcode'])->toBe('SW1A 1AA');
 });
 
 test('track endpoint accepts payment success with checkout info', function () {

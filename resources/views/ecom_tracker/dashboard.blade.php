@@ -106,7 +106,7 @@
         <div class="etd-panel">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Sessions &amp; conversion trend</h2>
-                <span class="etd-tag">14 days</span>
+                <span class="etd-tag">{{ $d['trend']['range_label'] ?? $d['range']['label'] }}</span>
             </div>
             <div class="etd-chart-wrap">
                 <canvas id="etdTrendChart"></canvas>
@@ -162,8 +162,8 @@
                     <tr>
                         <th>Product</th>
                         <th class="etd-num">Views</th>
-                        <th class="etd-num">Adds</th>
-                        <th class="etd-num">Buys</th>
+                        <th class="etd-num">Add to cart</th>
+                        <th class="etd-num">Purchases</th>
                         <th class="etd-num">Revenue</th>
                     </tr>
                 </thead>
@@ -176,7 +176,7 @@
                             </td>
                             <td class="etd-num">{{ number_format($product['views']) }}</td>
                             <td class="etd-num">{{ number_format($product['adds']) }}</td>
-                            <td class="etd-num">{{ number_format($product['buys']) }}</td>
+                            <td class="etd-num">{{ number_format($product['purchases']) }}</td>
                             <td class="etd-num">
                                 £{{ number_format($product['revenue'], 2) }}
                                 <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] }}%"></div></div>
@@ -240,7 +240,12 @@
         <div class="etd-panel" id="cart-abandon">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Cart abandoned</h2>
-                <span class="etd-stake-badge">{{ number_format($d['cart_abandonment']['session_count']) }} sessions · £{{ number_format($d['cart_abandonment']['at_stake'], 2) }} at stake</span>
+                <span class="etd-stake-badge">
+                    {{ number_format($d['cart_abandonment']['session_count']) }} sessions · £{{ number_format($d['cart_abandonment']['at_stake'], 2) }} at stake
+                    @if ($d['cart_abandonment']['session_count'] > count($d['cart_abandonment']['rows']))
+                        · latest {{ count($d['cart_abandonment']['rows']) }} shown
+                    @endif
+                </span>
             </div>
             <div class="etd-table-scroll etd-table-scroll--abandonment">
             <table class="etd-table etd-table--abandonment">
@@ -275,7 +280,12 @@
         <div class="etd-panel" id="checkout-abandon">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Checkout abandoned</h2>
-                <span class="etd-stake-badge">{{ number_format($d['checkout_abandonment']['session_count']) }} sessions · £{{ number_format($d['checkout_abandonment']['at_stake'], 2) }} at stake</span>
+                <span class="etd-stake-badge">
+                    {{ number_format($d['checkout_abandonment']['session_count']) }} sessions · £{{ number_format($d['checkout_abandonment']['at_stake'], 2) }} at stake
+                    @if ($d['checkout_abandonment']['session_count'] > count($d['checkout_abandonment']['rows']))
+                        · latest {{ count($d['checkout_abandonment']['rows']) }} shown
+                    @endif
+                </span>
             </div>
             <div class="etd-table-scroll etd-table-scroll--abandonment">
             <table class="etd-table etd-table--abandonment">

@@ -14,6 +14,7 @@ class EcomActivityController extends Controller
         'category_view',
         'product_view',
         'add_to_cart',
+        'begin_checkout',
         'proceed_checkout',
         'payment_success',
     ];

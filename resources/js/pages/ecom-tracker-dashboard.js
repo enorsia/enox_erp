@@ -2,6 +2,7 @@ import {
     Chart,
     CategoryScale,
     LinearScale,
+    LogarithmicScale,
     BarElement,
     LineElement,
     PointElement,
@@ -16,6 +17,7 @@ import {
 Chart.register(
     CategoryScale,
     LinearScale,
+    LogarithmicScale,
     BarElement,
     LineElement,
     PointElement,
@@ -39,6 +41,7 @@ const accent = () => getComputedStyle(document.querySelector('.etd-page') || doc
     .getPropertyValue('--etd-accent')
     .trim() || '#1D9E75';
 const gold = () => '#f59e0b';
+const purchaseGreen = () => '#22c55e';
 
 const tipStyle = () => ({
     backgroundColor: isDark() ? '#1e293b' : '#fff',
@@ -56,11 +59,44 @@ function ctx(id) {
     return el ? el.getContext('2d') : null;
 }
 
+function trendTickLimit(labelCount) {
+    if (isNarrow()) {
+        return Math.min(6, labelCount);
+    }
+
+    if (labelCount > 60) {
+        return 8;
+    }
+
+    if (labelCount > 30) {
+        return 10;
+    }
+
+    return Math.min(14, labelCount);
+}
+
+function sessionsForLogScale(values) {
+    return values.map((value) => {
+        const numeric = Number(value) || 0;
+
+        return numeric > 0 ? numeric : null;
+    });
+}
+
 const devicePalette = () => [accent(), gold(), '#64748b', '#3b82f6', '#8b5cf6'];
 
 const trendCtx = ctx('etdTrendChart');
 if (trendCtx && D.trend) {
-    const { labels = [], sessions = [], conversion_rates: conversionRates = [] } = D.trend;
+    const {
+        labels = [],
+        sessions = [],
+        purchases = [],
+        conversion_rates: conversionRates = [],
+        use_log_scale: useLogScale = false,
+    } = D.trend;
+
+    const sessionData = useLogScale ? sessionsForLogScale(sessions) : sessions;
+    const purchaseData = useLogScale ? sessionsForLogScale(purchases) : purchases;
 
     new Chart(trendCtx, {
         type: 'bar',
@@ -70,12 +106,23 @@ if (trendCtx && D.trend) {
                 {
                     type: 'bar',
                     label: 'Sessions',
-                    data: sessions,
+                    data: sessionData,
                     backgroundColor: `${accent()}8C`,
                     borderRadius: 3,
                     yAxisID: 'y',
+                    order: 3,
+                    barThickness: isNarrow() ? 8 : (labels.length > 30 ? 10 : 14),
+                },
+                {
+                    type: 'line',
+                    label: 'Purchases',
+                    data: purchaseData,
+                    borderColor: purchaseGreen(),
+                    backgroundColor: purchaseGreen(),
+                    pointRadius: 2.5,
+                    tension: 0.3,
+                    yAxisID: 'y',
                     order: 2,
-                    barThickness: isNarrow() ? 10 : 14,
                 },
                 {
                     type: 'line',
@@ -103,19 +150,44 @@ if (trendCtx && D.trend) {
                         font: { size: isNarrow() ? 9 : 11 },
                     },
                 },
-                tooltip: tipStyle(),
+                tooltip: {
+                    ...tipStyle(),
+                    callbacks: {
+                        label(context) {
+                            const value = context.parsed.y ?? context.parsed ?? 0;
+
+                            if (context.dataset.label === 'Conv. rate %') {
+                                return `${context.dataset.label}: ${value}%`;
+                            }
+
+                            return `${context.dataset.label}: ${value}`;
+                        },
+                    },
+                },
             },
             scales: {
                 x: {
                     grid: { display: false },
                     ticks: {
-                        maxRotation: isNarrow() ? 45 : 0,
+                        maxRotation: labels.length > 20 ? 45 : 0,
                         autoSkip: true,
-                        maxTicksLimit: isNarrow() ? 5 : 7,
+                        maxTicksLimit: trendTickLimit(labels.length),
                         font: { size: isNarrow() ? 9 : 11 },
                     },
                 },
-                y: { position: 'left', grid: { color: gridClr() }, beginAtZero: true },
+                y: {
+                    type: useLogScale ? 'logarithmic' : 'linear',
+                    position: 'left',
+                    grid: { color: gridClr() },
+                    beginAtZero: !useLogScale,
+                    min: useLogScale ? 1 : 0,
+                    title: {
+                        display: useLogScale,
+                        text: 'Log scale',
+                        color: isDark() ? '#94a3b8' : '#64748b',
+                        font: { size: 10 },
+                    },
+                },
                 y1: {
                     position: 'right',
                     grid: { display: false },

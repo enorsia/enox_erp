@@ -16,9 +16,18 @@ class EcomTrackerDashboardService
         ['key' => 'category_view', 'label' => 'Category view', 'types' => ['category_view']],
         ['key' => 'product_view', 'label' => 'Product view', 'types' => self::PRODUCT_VIEW_TYPES],
         ['key' => 'add_to_cart', 'label' => 'Add to cart', 'types' => ['add_to_cart']],
-        ['key' => 'proceed_checkout', 'label' => 'Checkout', 'types' => ['proceed_checkout']],
+        ['key' => 'begin_checkout', 'label' => 'Begin checkout', 'types' => ['begin_checkout']],
+        ['key' => 'proceed_checkout', 'label' => 'Proceed checkout', 'types' => ['proceed_checkout']],
         ['key' => 'payment_success', 'label' => 'Payment success', 'types' => ['payment_success']],
     ];
+
+    private const TABLE_DISPLAY_LIMIT = 20;
+
+    private const TREND_LOG_SCALE_DAYS = 31;
+
+    private const TREND_WEEKLY_THRESHOLD_DAYS = 32;
+
+    private const TREND_MONTHLY_THRESHOLD_DAYS = 91;
 
     /**
      * @param  array<string, mixed>  $filters
@@ -96,6 +105,7 @@ class EcomTrackerDashboardService
                 return [
                     'date' => $label,
                     'sessions' => $data['trend']['sessions'][$index] ?? 0,
+                    'purchases' => $data['trend']['purchases'][$index] ?? 0,
                     'conversion_rate' => $data['trend']['conversion_rates'][$index] ?? 0,
                 ];
             })->values()->all(),
@@ -110,8 +120,8 @@ class EcomTrackerDashboardService
                 'product' => $row['name'],
                 'code' => $row['code'],
                 'views' => $row['views'],
-                'adds' => $row['adds'],
-                'buys' => $row['buys'],
+                'add_to_cart' => $row['adds'],
+                'purchases' => $row['purchases'],
                 'revenue' => $row['revenue'],
             ])->values()->all(),
             'colors' => collect($data['colors']['products'] ?? [])
@@ -434,45 +444,110 @@ class EcomTrackerDashboardService
      */
     private function buildTrend(Carbon $from, Carbon $to): array
     {
-        $days = min(14, (int) $from->diffInDays($to) + 1);
-        $start = $to->copy()->subDays($days - 1)->startOfDay();
+        $from = $from->copy()->startOfDay();
+        $to = $to->copy()->endOfDay();
+        $totalDays = (int) $from->diffInDays($to) + 1;
+
+        $bucket = match (true) {
+            $totalDays >= self::TREND_MONTHLY_THRESHOLD_DAYS => 'month',
+            $totalDays >= self::TREND_WEEKLY_THRESHOLD_DAYS => 'week',
+            default => 'day',
+        };
 
         $labels = [];
         $sessions = [];
+        $purchases = [];
         $conversionRates = [];
 
-        for ($i = 0; $i < $days; $i++) {
-            $day = $start->copy()->addDays($i);
-            $dayEnd = $day->copy()->endOfDay();
-            $labels[] = $day->format('d M');
+        foreach ($this->trendPeriods($from, $to, $bucket) as [$periodStart, $periodEnd, $label]) {
+            $labels[] = $label;
 
-            $daySessionIds = ActivityEcomUser::query()
-                ->whereBetween('created_at', [$day, $dayEnd])
+            $periodSessionIds = ActivityEcomUser::query()
+                ->whereBetween('created_at', [$periodStart, $periodEnd])
                 ->pluck('session_id');
 
-            $sessions[] = $daySessionIds->count();
+            $sessionCount = $periodSessionIds->count();
+            $sessions[] = $sessionCount;
 
-            if ($daySessionIds->isEmpty()) {
+            if ($periodSessionIds->isEmpty()) {
+                $purchases[] = 0;
                 $conversionRates[] = 0;
 
                 continue;
             }
 
             $converted = ActivityEcomUserAction::query()
-                ->whereBetween('created_at', [$day, $dayEnd])
-                ->whereIn('session_id', $daySessionIds)
+                ->whereBetween('created_at', [$periodStart, $periodEnd])
+                ->whereIn('session_id', $periodSessionIds)
                 ->where('action_type', 'payment_success')
                 ->distinct('session_id')
                 ->count('session_id');
 
-            $conversionRates[] = round(($converted / max(1, $daySessionIds->count())) * 100, 1);
+            $purchases[] = $converted;
+            $conversionRates[] = round(($converted / max(1, $sessionCount)) * 100, 1);
         }
 
         return [
             'labels' => $labels,
             'sessions' => $sessions,
+            'purchases' => $purchases,
             'conversion_rates' => $conversionRates,
+            'bucket' => $bucket,
+            'total_days' => $totalDays,
+            'use_log_scale' => $totalDays > self::TREND_LOG_SCALE_DAYS,
+            'range_label' => $this->trendRangeLabel($totalDays, $bucket),
         ];
+    }
+
+    /**
+     * @return array<int, array{0: Carbon, 1: Carbon, 2: string}>
+     */
+    private function trendPeriods(Carbon $from, Carbon $to, string $bucket): array
+    {
+        $periods = [];
+        $cursor = $from->copy();
+
+        while ($cursor <= $to) {
+            if ($bucket === 'month') {
+                $periodStart = $cursor->copy();
+                $periodEnd = $cursor->copy()->endOfMonth()->endOfDay();
+
+                if ($periodEnd > $to) {
+                    $periodEnd = $to->copy();
+                }
+
+                $label = $periodStart->format('M Y');
+                $cursor = $periodEnd->copy()->addSecond()->startOfDay();
+            } elseif ($bucket === 'week') {
+                $periodStart = $cursor->copy();
+                $periodEnd = $cursor->copy()->addDays(6)->endOfDay();
+
+                if ($periodEnd > $to) {
+                    $periodEnd = $to->copy();
+                }
+
+                $label = $periodStart->format('d M').' – '.$periodEnd->format('d M');
+                $cursor = $periodEnd->copy()->addSecond()->startOfDay();
+            } else {
+                $periodStart = $cursor->copy()->startOfDay();
+                $periodEnd = $cursor->copy()->endOfDay();
+                $label = $cursor->format('d M');
+                $cursor->addDay();
+            }
+
+            $periods[] = [$periodStart, $periodEnd, $label];
+        }
+
+        return $periods;
+    }
+
+    private function trendRangeLabel(int $totalDays, string $bucket): string
+    {
+        return match ($bucket) {
+            'week' => "{$totalDays} days · weekly buckets",
+            'month' => "{$totalDays} days · monthly buckets",
+            default => "{$totalDays} days · daily",
+        };
     }
 
     /**
@@ -487,7 +562,7 @@ class EcomTrackerDashboardService
             ->whereNotNull('category_name')
             ->groupBy('category_name')
             ->orderByDesc('views')
-            ->limit(10)
+            ->limit(self::TABLE_DISPLAY_LIMIT)
             ->get();
 
         return $views->map(function ($row) use ($from, $to) {
@@ -555,114 +630,216 @@ class EcomTrackerDashboardService
      */
     private function buildProductPerformance(Carbon $from, Carbon $to): array
     {
-        $viewCounts = ActivityEcomUserAction::query()
-            ->select('product_code', 'product_name', DB::raw('COUNT(*) as views'))
+        /** @var Collection<string, array{name: string, code: string, views: int, adds: int, purchases: int, revenue: float}> $products */
+        $products = collect();
+
+        ActivityEcomUserAction::query()
             ->whereBetween('created_at', [$from, $to])
             ->whereIn('action_type', self::PRODUCT_VIEW_TYPES)
-            ->whereNotNull('product_code')
-            ->groupBy('product_code', 'product_name')
-            ->orderByDesc('views')
-            ->limit(10)
             ->get()
-            ->keyBy('product_code');
+            ->each(function (ActivityEcomUserAction $action) use ($products) {
+                $this->accumulateProductRow($products, [
+                    'code' => (string) ($action->product_code ?? ''),
+                    'name' => (string) ($action->product_name ?? ''),
+                    'product_id' => '',
+                ], views: 1);
+            });
 
-        $addCounts = ActivityEcomUserAction::query()
+        ActivityEcomUserAction::query()
             ->whereBetween('created_at', [$from, $to])
             ->where('action_type', 'add_to_cart')
             ->get()
-            ->groupBy(function (ActivityEcomUserAction $action) {
+            ->each(function (ActivityEcomUserAction $action) use ($products) {
                 $cart = $action->add_to_cart ?? [];
+                $lines = $this->cartPayloadLineItems($cart);
 
-                return (string) ($cart['product_code'] ?? $cart['product_id'] ?? '');
-            })
-            ->map(fn (Collection $group) => $group->count())
-            ->filter(fn (int $count, string $key) => $key !== '');
+                if ($lines === []) {
+                    $this->accumulateProductRow($products, [
+                        'code' => (string) ($cart['product_code'] ?? $action->product_code ?? ''),
+                        'name' => (string) ($action->product_name ?? ''),
+                        'product_id' => (string) ($cart['product_id'] ?? ''),
+                    ], adds: 1);
 
-        $purchaseStats = $this->aggregatePurchaseStats($from, $to);
+                    return;
+                }
 
-        $codes = $viewCounts->keys()
-            ->merge($purchaseStats->keys())
-            ->unique()
-            ->take(10);
-
-        return $codes->map(function (string $code) use ($viewCounts, $addCounts, $purchaseStats) {
-            $viewRow = $viewCounts->get($code);
-            $purchase = $purchaseStats->get($code, ['buys' => 0, 'revenue' => 0, 'name' => null]);
-
-            return [
-                'name' => $viewRow?->product_name ?: $purchase['name'] ?: $code,
-                'code' => $code,
-                'views' => (int) ($viewRow?->views ?? 0),
-                'adds' => (int) $addCounts->get($code, 0),
-                'buys' => (int) $purchase['buys'],
-                'revenue' => round((float) $purchase['revenue'], 2),
-            ];
-        })
-            ->sortByDesc('revenue')
-            ->values()
-            ->take(10)
-            ->values()
-            ->map(function (array $product) {
-                return $product;
-            })
-            ->pipe(function (Collection $products) {
-                $maxRevenue = max(1, (float) $products->max('revenue'));
-
-                return $products->map(function (array $product) use ($maxRevenue) {
-                    $product['revenue_bar_percent'] = (int) round(($product['revenue'] / $maxRevenue) * 100);
-
-                    return $product;
-                });
-            })
-            ->all();
-    }
-
-    /**
-     * @return Collection<string, array{name: ?string, buys: int, revenue: float}>
-     */
-    private function aggregatePurchaseStats(Carbon $from, Carbon $to): Collection
-    {
-        $stats = collect();
+                foreach ($lines as $line) {
+                    $this->accumulateProductRow($products, $line, adds: 1);
+                }
+            });
 
         ActivityEcomUserAction::query()
             ->whereBetween('created_at', [$from, $to])
             ->where('action_type', 'payment_success')
             ->get()
-            ->each(function (ActivityEcomUserAction $action) use ($stats) {
+            ->each(function (ActivityEcomUserAction $action) use ($products) {
                 $payload = $action->payment_success ?? [];
                 $items = $payload['checkout_info']['items'] ?? [];
 
                 foreach ($items as $item) {
-                    $code = $item['product_code'] ?? $item['product_id'] ?? null;
-                    if (! $code) {
+                    $line = $this->extractPurchaseLineIdentity(is_array($item) ? $item : []);
+
+                    if ($line === null) {
                         continue;
                     }
 
-                    $key = (string) $code;
-                    $existing = $stats->get($key, ['name' => null, 'buys' => 0, 'revenue' => 0.0]);
-                    $qty = (float) ($item['qty'] ?? 1);
-                    $price = (float) ($item['price'] ?? 0);
-
-                    $stats->put($key, [
-                        'name' => $item['product_name'] ?? $existing['name'],
-                        'buys' => $existing['buys'] + (int) $qty,
-                        'revenue' => $existing['revenue'] + ($qty * $price),
-                    ]);
+                    $this->accumulateProductRow(
+                        $products,
+                        $line,
+                        purchases: (int) $line['qty'],
+                        revenue: $line['qty'] * $line['price'],
+                    );
                 }
 
                 if ($items === [] && ! empty($action->product_code)) {
-                    $key = (string) $action->product_code;
                     $amount = (float) ($payload['amount_paid'] ?? 0);
-                    $existing = $stats->get($key, ['name' => $action->product_name, 'buys' => 0, 'revenue' => 0.0]);
-                    $stats->put($key, [
-                        'name' => $action->product_name ?: $existing['name'],
-                        'buys' => $existing['buys'] + 1,
-                        'revenue' => $existing['revenue'] + $amount,
-                    ]);
+                    $this->accumulateProductRow($products, [
+                        'code' => (string) $action->product_code,
+                        'name' => (string) ($action->product_name ?? ''),
+                        'product_id' => '',
+                    ], purchases: 1, revenue: $amount);
                 }
             });
 
-        return $stats;
+        $maxRevenue = max(1, (float) $products->max('revenue'));
+
+        return $products
+            ->map(function (array $product) use ($maxRevenue) {
+                if ($product['purchases'] > 0 && $product['views'] < $product['purchases']) {
+                    $product['views'] = $product['purchases'];
+                }
+
+                $product['revenue'] = round((float) $product['revenue'], 2);
+                $product['revenue_bar_percent'] = (int) round(($product['revenue'] / $maxRevenue) * 100);
+
+                return $product;
+            })
+            ->sortByDesc('revenue')
+            ->values()
+            ->take(self::TABLE_DISPLAY_LIMIT)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Collection<string, array{name: string, code: string, views: int, adds: int, purchases: int, revenue: float}>  $products
+     * @param  array{code?: string, name?: string, product_id?: string}  $identity
+     */
+    private function accumulateProductRow(
+        Collection $products,
+        array $identity,
+        int $views = 0,
+        int $adds = 0,
+        int $purchases = 0,
+        float $revenue = 0.0,
+    ): void {
+        $key = $this->productIdentityKey(
+            (string) ($identity['name'] ?? ''),
+            (string) ($identity['code'] ?? ''),
+            (string) ($identity['product_id'] ?? ''),
+        );
+
+        $existing = $products->get($key, [
+            'name' => '',
+            'code' => '',
+            'views' => 0,
+            'adds' => 0,
+            'purchases' => 0,
+            'revenue' => 0.0,
+        ]);
+
+        $name = $existing['name'] ?: trim((string) ($identity['name'] ?? ''));
+        $code = $existing['code'];
+        $incomingCode = trim((string) ($identity['code'] ?? ''));
+
+        if ($purchases > 0 && $incomingCode !== '') {
+            $code = $incomingCode;
+        } elseif ($incomingCode !== '' && (strlen($incomingCode) > strlen($code) || $code === '')) {
+            $code = $incomingCode;
+        }
+
+        $products->put($key, [
+            'name' => $name !== '' ? $name : ($code !== '' ? $code : 'Unknown product'),
+            'code' => $code,
+            'views' => $existing['views'] + $views,
+            'adds' => $existing['adds'] + $adds,
+            'purchases' => $existing['purchases'] + $purchases,
+            'revenue' => $existing['revenue'] + $revenue,
+        ]);
+    }
+
+    /**
+     * @return array<int, array{code: string, name: string, product_id: string}>
+     */
+    private function cartPayloadLineItems(array $payload): array
+    {
+        $items = $payload['items'] ?? $payload['cart_items'] ?? [];
+
+        if (! is_array($items)) {
+            return [];
+        }
+
+        return collect($items)
+            ->map(fn ($item) => [
+                'code' => trim((string) ($item['product_code'] ?? '')),
+                'name' => trim((string) ($item['product_name'] ?? '')),
+                'product_id' => trim((string) ($item['product_id'] ?? '')),
+            ])
+            ->filter(fn (array $line) => $line['code'] !== '' || $line['name'] !== '' || $line['product_id'] !== '')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{code: string, name: string, product_id: string, qty: float, price: float}|null
+     */
+    private function extractPurchaseLineIdentity(array $item): ?array
+    {
+        $code = trim((string) ($item['product_code'] ?? $item['sku'] ?? ''));
+        $name = trim((string) ($item['product_name'] ?? ''));
+        $productId = trim((string) ($item['product_id'] ?? ''));
+
+        if ($code === '' && $name === '' && $productId === '') {
+            return null;
+        }
+
+        return [
+            'code' => $code,
+            'name' => $name,
+            'product_id' => $productId,
+            'qty' => max(1, (float) ($item['qty'] ?? 1)),
+            'price' => (float) ($item['price'] ?? 0),
+        ];
+    }
+
+    private function productIdentityKey(string $name, string $code, string $productId = ''): string
+    {
+        $normalizedName = $this->normalizeProductName($name);
+
+        if ($normalizedName !== '') {
+            return 'name:'.$normalizedName;
+        }
+
+        $normalizedCode = strtoupper(trim($code));
+
+        if ($normalizedCode !== '') {
+            return 'code:'.$normalizedCode;
+        }
+
+        $normalizedId = trim($productId);
+
+        if ($normalizedId !== '') {
+            return 'id:'.$normalizedId;
+        }
+
+        return 'unknown:'.md5($name.$code.$productId);
+    }
+
+    private function normalizeProductName(string $name): string
+    {
+        $normalized = strtolower(trim(preg_replace('/\s+/', ' ', $name) ?? ''));
+
+        return $normalized;
     }
 
     /**
@@ -769,7 +946,7 @@ class EcomTrackerDashboardService
                 ];
             })
             ->sortByDesc(fn (array $product) => $product['viewed'] + $product['purchased'])
-            ->take(8)
+            ->take(self::TABLE_DISPLAY_LIMIT)
             ->values()
             ->all();
 
@@ -949,12 +1126,12 @@ class EcomTrackerDashboardService
      */
     private function buildCartAbandonment(Carbon $from, Carbon $to): array
     {
-        $rows = $this->abandonedSessions($from, $to, 'add_to_cart', 'add_to_cart');
+        $abandonment = $this->abandonedSessions($from, $to, 'add_to_cart', 'add_to_cart');
 
         return [
-            'session_count' => count($rows),
-            'at_stake' => round(collect($rows)->sum('value'), 2),
-            'rows' => $rows,
+            'session_count' => $abandonment['total_count'],
+            'at_stake' => $abandonment['total_at_stake'],
+            'rows' => $abandonment['rows'],
         ];
     }
 
@@ -963,17 +1140,17 @@ class EcomTrackerDashboardService
      */
     private function buildCheckoutAbandonment(Carbon $from, Carbon $to): array
     {
-        $rows = $this->abandonedSessions($from, $to, 'proceed_checkout', 'proceed_to_checkout');
+        $abandonment = $this->abandonedSessions($from, $to, 'proceed_checkout', 'proceed_to_checkout');
 
         return [
-            'session_count' => count($rows),
-            'at_stake' => round(collect($rows)->sum('value'), 2),
-            'rows' => $rows,
+            'session_count' => $abandonment['total_count'],
+            'at_stake' => $abandonment['total_at_stake'],
+            'rows' => $abandonment['rows'],
         ];
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @return array{total_count: int, total_at_stake: float, rows: array<int, array<string, mixed>>}
      */
     private function abandonedSessions(Carbon $from, Carbon $to, string $stage, string $payloadKey): array
     {
@@ -1009,14 +1186,29 @@ class EcomTrackerDashboardService
                 'value' => (float) ($payload['cart_total'] ?? $payload['amount_paid'] ?? 0),
                 'idle' => $this->formatIdleLabel((int) ($session?->last_active_at?->diffInSeconds(now()) ?? 0)),
                 'activity_url' => route('admin.ecom-activity.show', ['session' => $sessionId]),
+                'abandoned_at' => $latest->created_at,
             ];
-
-            if (count($rows) >= 10) {
-                break;
-            }
         }
 
-        return $rows;
+        $rows = collect($rows)
+            ->sortByDesc(fn (array $row) => $row['abandoned_at']?->timestamp ?? 0)
+            ->values();
+
+        $totalAtStake = round($rows->sum('value'), 2);
+        $displayRows = $rows
+            ->take(self::TABLE_DISPLAY_LIMIT)
+            ->map(function (array $row) {
+                unset($row['abandoned_at']);
+
+                return $row;
+            })
+            ->all();
+
+        return [
+            'total_count' => $rows->count(),
+            'total_at_stake' => $totalAtStake,
+            'rows' => $displayRows,
+        ];
     }
 
     /**
@@ -1104,7 +1296,7 @@ class EcomTrackerDashboardService
             ->whereBetween('created_at', [$from, $to])
             ->groupBy('source', 'medium')
             ->orderByDesc('sessions')
-            ->limit(10)
+            ->limit(self::TABLE_DISPLAY_LIMIT)
             ->get();
 
         return $sources->map(function ($row) use ($from, $to) {
@@ -1161,7 +1353,7 @@ class EcomTrackerDashboardService
             ->whereBetween('created_at', [$from, $to])
             ->groupBy('city', 'country')
             ->orderByDesc('sessions')
-            ->limit(10)
+            ->limit(self::TABLE_DISPLAY_LIMIT)
             ->get();
 
         return $locations->map(function ($row) use ($from, $to) {

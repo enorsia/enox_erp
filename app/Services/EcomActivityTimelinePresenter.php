@@ -98,6 +98,7 @@ class EcomActivityTimelinePresenter
                 'seconds' => $dwellSeconds,
             ]],
             'add_to_cart' => $action->add_to_cart,
+            'begin_checkout' => $action->begin_checkout,
             'proceed_to_checkout' => $action->proceed_to_checkout,
             'payment_success' => $action->payment_success,
         ];
@@ -159,6 +160,7 @@ class EcomActivityTimelinePresenter
             'color_timeline' => $colorTimeline,
             'color_segments' => $displaySegments->all(),
             'add_to_cart' => null,
+            'begin_checkout' => null,
             'proceed_to_checkout' => null,
             'payment_success' => null,
         ];

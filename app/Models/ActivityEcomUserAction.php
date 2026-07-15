@@ -26,6 +26,7 @@ class ActivityEcomUserAction extends Model
         'page_url',
         'referer',
         'add_to_cart',
+        'begin_checkout',
         'proceed_to_checkout',
         'payment_success',
         'start_time',
@@ -37,6 +38,7 @@ class ActivityEcomUserAction extends Model
     {
         return [
             'add_to_cart' => 'array',
+            'begin_checkout' => 'array',
             'proceed_to_checkout' => 'array',
             'payment_success' => 'array',
             'product_price' => 'decimal:2',
