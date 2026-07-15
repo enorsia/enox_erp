@@ -117,7 +117,7 @@
     <h2 class="etd-section-title"><span class="etd-section-num">01</span> Merchandising decisions</h2>
     <p class="etd-section-note">Where traffic goes vs where money is made — use to reorder homepage, deprioritize dead categories, and flag products that get eyeballs but not carts.</p>
 
-    <div class="etd-grid-2 mb-3">
+    <div class="etd-grid-4-8 mb-3">
         <div class="etd-panel" id="categories">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Category performance</h2>
