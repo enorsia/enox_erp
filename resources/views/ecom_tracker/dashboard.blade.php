@@ -123,7 +123,7 @@
                 <h2 class="etd-panel-title">Category performance</h2>
                 <span class="etd-panel-hint">views → conversion</span>
             </div>
-            <div class="etd-table-scroll">
+            <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table">
                 <thead>
                     <tr>
@@ -131,7 +131,23 @@
                         <th class="etd-num">Views</th>
                         <th class="etd-num">Add-rate</th>
                         <th class="etd-num">Conv.</th>
-                        <th>Signal</th>
+                        <th>
+                            <span class="etd-th-with-tip">
+                                Signal
+                                <button type="button" class="etd-tip-trigger" aria-label="Signal definitions">
+                                    <svg class="etd-tip-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+                                        <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.25"/>
+                                        <path fill="currentColor" d="M7.25 7h1.5V6.1c0-.69.56-1.25 1.25-1.25.69 0 1.25.56 1.25 1.25v.65c0 .69-.56 1.25-1.25 1.25H8.5v3.35H7.25V7z"/>
+                                        <circle cx="8" cy="4.35" r=".85" fill="currentColor"/>
+                                    </svg>
+                                    <span class="etd-tip-content" role="tooltip">
+                                        <span class="etd-tip-line"><span class="etd-badge high">Promote</span> View-to-purchase conversion ≥ 2.5%</span>
+                                        <span class="etd-tip-line"><span class="etd-badge mid">Steady</span> Conversion 1.5%–2.5%</span>
+                                        <span class="etd-tip-line"><span class="etd-badge low">Investigate</span> Conversion below 1.5%</span>
+                                    </span>
+                                </button>
+                            </span>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -156,7 +172,7 @@
                 <h2 class="etd-panel-title">Top products</h2>
                 <span class="etd-panel-hint">sorted by revenue</span>
             </div>
-            <div class="etd-table-scroll">
+            <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table">
                 <thead>
                     <tr>
@@ -196,7 +212,7 @@
             <h2 class="etd-panel-title">Color / variant performance — viewed vs purchased</h2>
             <span class="etd-panel-hint">grouped by product</span>
         </div>
-        <div class="etd-table-scroll etd-table-scroll--wide">
+        <div class="etd-table-scroll etd-table-scroll--wide etd-table-scroll--fixed etd-table-scroll--tall">
             <table class="etd-table etd-table--colors">
                 <thead>
                     <tr>
@@ -247,7 +263,7 @@
                     @endif
                 </span>
             </div>
-            <div class="etd-table-scroll etd-table-scroll--abandonment">
+            <div class="etd-table-scroll etd-table-scroll--abandonment etd-table-scroll--fixed">
             <table class="etd-table etd-table--abandonment">
                 <thead>
                     <tr>
@@ -287,7 +303,7 @@
                     @endif
                 </span>
             </div>
-            <div class="etd-table-scroll etd-table-scroll--abandonment">
+            <div class="etd-table-scroll etd-table-scroll--abandonment etd-table-scroll--fixed">
             <table class="etd-table etd-table--abandonment">
                 <thead>
                     <tr>
@@ -356,7 +372,7 @@
                 <h2 class="etd-panel-title">Traffic sources</h2>
                 <span class="etd-panel-hint">utm_source / utm_medium</span>
             </div>
-            <div class="etd-table-scroll">
+            <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table">
                 <thead>
                     <tr>
@@ -391,7 +407,7 @@
                 <h2 class="etd-panel-title">Geography</h2>
                 <span class="etd-panel-hint">country / city</span>
             </div>
-            <div class="etd-table-scroll etd-table-scroll--narrow">
+            <div class="etd-table-scroll etd-table-scroll--narrow etd-table-scroll--fixed">
             <table class="etd-table">
                 <thead>
                     <tr>
