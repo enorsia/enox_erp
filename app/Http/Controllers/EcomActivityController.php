@@ -3,13 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityEcomUser;
+use App\Models\ActivityEcomUserAction;
 use App\Services\EcomActivityTimelinePresenter;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 
 class EcomActivityController extends Controller
 {
+    private const TIMELINE_PER_PAGE = 15;
+
     private const FUNNEL_STEPS = [
         'category_view',
         'product_view',
@@ -72,24 +76,46 @@ class EcomActivityController extends Controller
         ]);
     }
 
-    public function show(string $session, EcomActivityTimelinePresenter $timelinePresenter): View
+    public function show(Request $request, string $session, EcomActivityTimelinePresenter $timelinePresenter): View
     {
         Gate::authorize('general.ecom_activity.show');
 
         $activityUser = ActivityEcomUser::query()
-            ->with(['actions' => fn ($q) => $q->orderByDesc('created_at')->orderByDesc('id')])
             ->where('session_id', $session)
             ->firstOrFail();
 
-        $timeline = $timelinePresenter->present($activityUser->actions);
+        $actions = ActivityEcomUserAction::query()
+            ->where('session_id', $session)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
 
-        $reachedSteps = $timeline
+        $fullTimeline = $timelinePresenter->present($actions);
+
+        $reachedSteps = $fullTimeline
             ->pluck('action_type')
             ->unique()
             ->values()
             ->all();
 
-        $returnQuery = request()->only(['search', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'page']);
+        $page = max(1, (int) $request->query('timeline_page', 1));
+        $total = $fullTimeline->count();
+        $items = $fullTimeline->slice(($page - 1) * self::TIMELINE_PER_PAGE, self::TIMELINE_PER_PAGE)->values();
+
+        $timeline = new LengthAwarePaginator(
+            $items,
+            $total,
+            self::TIMELINE_PER_PAGE,
+            $page,
+            [
+                'path' => route('admin.ecom-activity.show', ['session' => $session]),
+                'pageName' => 'timeline_page',
+            ],
+        );
+
+        $timeline->appends($request->except('timeline_page'));
+
+        $returnQuery = $request->only(['search', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'page']);
 
         return view('ecom_activity.show', [
             'activityUser' => $activityUser,

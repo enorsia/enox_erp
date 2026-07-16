@@ -40,12 +40,25 @@
 
             <div class="space-y-4">
                 <div class="section-card">
-                    <div class="section-title">
-                        <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                        Action Timeline
+                    <div class="section-title flex-wrap gap-2">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Action Timeline
+                        </div>
+                        @if ($timeline->total() > 0)
+                            <span class="text-[11px] font-normal text-slate-400">
+                                {{ $timeline->total() }} {{ Str::plural('event', $timeline->total()) }}
+                            </span>
+                        @endif
                     </div>
+
+                    @if ($timeline->total() > 0)
+                        <p class="text-[11px] text-slate-400 mb-3">
+                            Showing {{ $timeline->firstItem() }}–{{ $timeline->lastItem() }} of {{ $timeline->total() }}
+                        </p>
+                    @endif
 
                     @forelse ($timeline as $item)
                         @php
@@ -160,6 +173,8 @@
                     @empty
                         <p class="text-sm text-slate-400 dark:text-slate-500">No actions recorded for this session.</p>
                     @endforelse
+
+                    @include('layouts.pagination', ['paginator' => $timeline])
                 </div>
             </div>
 
