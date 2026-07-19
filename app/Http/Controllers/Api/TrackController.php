@@ -30,6 +30,7 @@ class TrackController extends Controller
             $validated = $request->validate([
                 'session' => ['nullable', 'array'],
                 'session.session_id' => ['nullable', 'string', 'max:64'],
+                'session.visitor_id' => ['nullable', 'string', 'max:64'],
                 'session.user_id' => ['nullable', 'integer'],
                 'session.user_name' => ['nullable', 'string', 'max:255'],
                 'session.user_email' => ['nullable', 'string', 'max:255'],

@@ -11,6 +11,7 @@ class ActivityEcomUser extends Model
 
     protected $fillable = [
         'session_id',
+        'visitor_id',
         'user_id',
         'user_name',
         'user_email',
@@ -27,6 +28,9 @@ class ActivityEcomUser extends Model
         'landing_page',
         'is_logged_in',
         'last_active_at',
+        'session_duration_seconds',
+        'created_at',
+        'updated_at',
     ];
 
     protected function casts(): array
@@ -34,6 +38,7 @@ class ActivityEcomUser extends Model
         return [
             'is_logged_in' => 'boolean',
             'last_active_at' => 'datetime',
+            'session_duration_seconds' => 'integer',
         ];
     }
 

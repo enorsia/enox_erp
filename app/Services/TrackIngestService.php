@@ -12,6 +12,10 @@ use Illuminate\Validation\ValidationException;
 
 class TrackIngestService
 {
+    public function __construct(
+        private VisitorSessionResolver $visitorSessionResolver,
+    ) {}
+
     /**
      * @param  array<string, mixed>  $payload
      * @return array<int, string>
@@ -26,6 +30,7 @@ class TrackIngestService
         }
 
         $sessionId = $sessionData['session_id'] ?? $events[0]['session_id'] ?? null;
+        $visitorId = $sessionData['visitor_id'] ?? null;
 
         if (! $sessionId) {
             $this->logError('Session ID missing in ingest payload');
@@ -35,8 +40,24 @@ class TrackIngestService
             ]);
         }
 
+        if (! empty($visitorId)) {
+            $resolved = $this->visitorSessionResolver->resolveForIngest(
+                $visitorId,
+                $sessionId,
+                [
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ],
+            );
+
+            $sessionId = $resolved['session_id'];
+            $sessionData['visitor_id'] = $visitorId;
+            $sessionData['session_id'] = $sessionId;
+        }
+
         $this->logInfo('Ingest started', [
             'session_id' => $sessionId,
+            'visitor_id' => $visitorId,
             'event_count' => count($events),
         ]);
 
@@ -45,6 +66,7 @@ class TrackIngestService
         $acceptedIds = [];
 
         foreach ($events as $event) {
+            $event['session_id'] = $sessionId;
             $eventId = $event['id'] ?? null;
 
             if (! $eventId) {
@@ -93,7 +115,7 @@ class TrackIngestService
     private function upsertSession(Request $request, string $sessionId, array $sessionData): void
     {
         $parsed = UserAgentParser::parse($request->userAgent());
-        $now = $this->formatDateTime(now());
+        $now = $this->formatDateTime($this->trackerNow());
 
         $existing = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
 
@@ -116,6 +138,10 @@ class TrackIngestService
             $attributes['is_logged_in'] = (bool) $sessionData['is_logged_in'];
         }
 
+        if (! empty($sessionData['visitor_id'])) {
+            $attributes['visitor_id'] = $sessionData['visitor_id'];
+        }
+
         if (! $existing) {
             $attributes['session_id'] = $sessionId;
             $attributes['utm_source'] = $sessionData['utm_source'] ?? null;
@@ -124,6 +150,7 @@ class TrackIngestService
             $attributes['landing_page'] = $sessionData['landing_page'] ?? null;
             $attributes['created_at'] = $now;
             $attributes['updated_at'] = $now;
+            $attributes['session_duration_seconds'] = 0;
 
             ActivityEcomUser::query()->create($attributes);
 
@@ -136,6 +163,7 @@ class TrackIngestService
             return;
         }
 
+        $attributes['session_duration_seconds'] = $this->sessionDurationSeconds($existing);
         $attributes['updated_at'] = $now;
         $existing->update($attributes);
 
@@ -254,8 +282,8 @@ class TrackIngestService
             return;
         }
 
-        $updates['last_active_at'] = $this->formatDateTime($event['created_at'] ?? now());
-        $updates['updated_at'] = $this->formatDateTime(now());
+        $updates['last_active_at'] = $this->formatDateTime($event['created_at'] ?? $this->trackerNow());
+        $updates['updated_at'] = $this->formatDateTime($this->trackerNow());
 
         $session->update($updates);
 
@@ -266,13 +294,30 @@ class TrackIngestService
         ]);
     }
 
+    private function trackerTimezone(): string
+    {
+        return config('tracker.visitor_timezone', 'Europe/London');
+    }
+
+    private function trackerNow(): Carbon
+    {
+        return Carbon::now($this->trackerTimezone());
+    }
+
+    private function sessionDurationSeconds(ActivityEcomUser $session): int
+    {
+        $createdAt = Carbon::parse($session->getRawOriginal('created_at'), $this->trackerTimezone());
+
+        return (int) $createdAt->diffInSeconds($this->trackerNow());
+    }
+
     private function formatDateTime(mixed $value): ?string
     {
         if ($value === null || $value === '') {
             return null;
         }
 
-        return Carbon::parse($value)->format('Y-m-d H:i:s');
+        return Carbon::parse($value, $this->trackerTimezone())->format('Y-m-d H:i:s');
     }
 
     private function normalizeScalarField(string $field, mixed $value): ?string

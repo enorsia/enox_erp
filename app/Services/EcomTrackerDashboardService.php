@@ -29,6 +29,10 @@ class EcomTrackerDashboardService
 
     private const TREND_MONTHLY_THRESHOLD_DAYS = 91;
 
+    public function __construct(
+        private VisitorAnalyticsService $visitorAnalytics,
+    ) {}
+
     /**
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
@@ -313,6 +317,8 @@ class EcomTrackerDashboardService
         $checkoutAbandonRate = $checkoutSessions->count() > 0 ? ($checkoutAbandoned / $checkoutSessions->count()) * 100 : 0;
 
         return [
+            'unique_visitors' => $this->visitorAnalytics->countNewVisitorsInRange($from, $to),
+            'avg_stay_seconds' => $this->visitorAnalytics->avgSessionDurationInRange($from, $to),
             'sessions' => $totalSessions,
             'conversion_rate' => round($conversionRate, 2),
             'revenue' => round($revenue, 2),
@@ -334,6 +340,8 @@ class EcomTrackerDashboardService
     private function attachKpiDeltas(array $current, array $prior): array
     {
         return [
+            $this->kpiCard('Unique visitors', $current['unique_visitors'], $prior['unique_visitors'], 'number', false),
+            $this->kpiCard('Avg stay time', $current['avg_stay_seconds'], $prior['avg_stay_seconds'], 'duration', false),
             $this->kpiCard('Sessions', $current['sessions'], $prior['sessions'], 'number', false),
             $this->kpiCard('Conversion rate', $current['conversion_rate'], $prior['conversion_rate'], 'percent', false),
             $this->kpiCard('Revenue', $current['revenue'], $prior['revenue'], 'currency', false),
@@ -396,6 +404,7 @@ class EcomTrackerDashboardService
         return match ($format) {
             'currency' => '£'.number_format((float) $value, 2),
             'percent' => number_format((float) $value, $value >= 10 ? 1 : 2).'%',
+            'duration' => $this->visitorAnalytics->formatDuration((int) $value),
             default => number_format((float) $value),
         };
     }

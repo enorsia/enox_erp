@@ -1,0 +1,186 @@
+<?php
+
+use App\Models\ActivityEcomDailyVisitor;
+use App\Models\ActivityEcomUser;
+use App\Services\VisitorAnalyticsService;
+use Carbon\Carbon;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
+
+uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    Carbon::setTestNow(Carbon::parse('2026-07-16 15:00:00', 'Europe/London'));
+    config(['tracker.visitor_timezone' => 'Europe/London']);
+});
+
+afterEach(function () {
+    Carbon::setTestNow();
+});
+
+test('visitor analytics counts visitors in last 3 hours', function () {
+    $service = app(VisitorAnalyticsService::class);
+    $visitorA = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorA,
+        'created_at' => Carbon::parse('2026-07-16 13:00:00', 'Europe/London'),
+        'updated_at' => Carbon::parse('2026-07-16 13:30:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 13:30:00', 'Europe/London'),
+        'session_duration_seconds' => 1800,
+    ]);
+
+    ActivityEcomDailyVisitor::query()->create([
+        'visitor_id' => $visitorA,
+        'visit_date' => '2026-07-16',
+        'first_seen_at' => Carbon::parse('2026-07-16 13:00:00', 'Europe/London'),
+        'last_seen_at' => Carbon::parse('2026-07-16 13:30:00', 'Europe/London'),
+        'total_duration_seconds' => 1800,
+        'session_count' => 1,
+    ]);
+
+    $since = $service->resolveWindow('3h');
+
+    expect($service->countActiveVisitors($since))->toBe(1);
+    expect($service->countSessions($since))->toBe(1);
+    expect($service->avgSessionDuration($since))->toBe(1800);
+});
+
+test('visitor analytics supports custom day window', function () {
+    $service = app(VisitorAnalyticsService::class);
+    $visitorId = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorId,
+        'created_at' => Carbon::parse('2026-07-10 12:00:00'),
+        'updated_at' => Carbon::parse('2026-07-10 12:20:00'),
+        'last_active_at' => Carbon::parse('2026-07-10 12:20:00'),
+        'session_duration_seconds' => 1200,
+    ]);
+
+    $since = $service->resolveWindow('days', 7);
+
+    expect($service->countActiveVisitors($since))->toBe(1);
+    expect($service->formatDuration(125))->toBe('2m 5s');
+});
+
+test('visitor analytics ignores legacy sessions without visitor_id for unique counts', function () {
+    $service = app(VisitorAnalyticsService::class);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => null,
+        'created_at' => Carbon::parse('2026-07-16 14:30:00', 'Europe/London'),
+        'updated_at' => Carbon::parse('2026-07-16 14:45:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 14:45:00', 'Europe/London'),
+        'session_duration_seconds' => null,
+    ]);
+
+    $since = $service->resolveWindow('3h');
+
+    expect($service->countActiveVisitors($since))->toBe(0);
+    expect($service->countNewVisitors($since))->toBe(0);
+    expect($service->countSessions($since))->toBe(1);
+
+    $breakdown = $service->buildVisitorBreakdown($since, 25);
+    expect($breakdown->total())->toBe(0);
+});
+
+test('new visitors count uses daily unique ledger only once per visitor per day', function () {
+    $service = app(VisitorAnalyticsService::class);
+    $visitorId = (string) Str::uuid();
+
+    ActivityEcomDailyVisitor::query()->create([
+        'visitor_id' => $visitorId,
+        'visit_date' => '2026-07-16',
+        'first_seen_at' => Carbon::parse('2026-07-16 10:00:00', 'Europe/London'),
+        'last_seen_at' => Carbon::parse('2026-07-16 12:00:00', 'Europe/London'),
+        'total_duration_seconds' => 3600,
+        'session_count' => 2,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorId,
+        'created_at' => Carbon::parse('2026-07-16 10:00:00', 'Europe/London'),
+        'updated_at' => Carbon::parse('2026-07-16 10:30:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 10:30:00', 'Europe/London'),
+        'session_duration_seconds' => 1800,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorId,
+        'created_at' => Carbon::parse('2026-07-16 12:00:00', 'Europe/London'),
+        'updated_at' => Carbon::parse('2026-07-16 12:20:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 12:20:00', 'Europe/London'),
+        'session_duration_seconds' => 1200,
+    ]);
+
+    $since = $service->resolveWindow('24h');
+
+    expect($service->countNewVisitors($since))->toBe(1);
+    expect($service->countSessions($since))->toBe(2);
+    expect($service->countActiveVisitors($since))->toBe(1);
+});
+
+test('visitor analytics supports custom datetime range', function () {
+    $service = app(VisitorAnalyticsService::class);
+    $visitorId = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorId,
+        'created_at' => Carbon::parse('2026-07-16 10:00:00', 'Europe/London'),
+        'updated_at' => Carbon::parse('2026-07-16 10:30:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 10:30:00', 'Europe/London'),
+        'session_duration_seconds' => 1800,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorId,
+        'created_at' => Carbon::parse('2026-07-16 14:00:00', 'Europe/London'),
+        'updated_at' => Carbon::parse('2026-07-16 14:20:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 14:20:00', 'Europe/London'),
+        'session_duration_seconds' => 1200,
+    ]);
+
+    $from = Carbon::parse('2026-07-16 09:00:00', 'Europe/London');
+    $to = Carbon::parse('2026-07-16 12:00:00', 'Europe/London');
+
+    expect($service->countActiveVisitors($from, $to))->toBe(1);
+    expect($service->countSessions($from, $to))->toBe(1);
+});
+
+test('visitor breakdown groups stay time per visitor', function () {
+    $service = app(VisitorAnalyticsService::class);
+    $visitorId = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorId,
+        'created_at' => Carbon::parse('2026-07-16 12:00:00'),
+        'updated_at' => Carbon::parse('2026-07-16 12:10:00'),
+        'last_active_at' => Carbon::parse('2026-07-16 12:10:00'),
+        'session_duration_seconds' => 600,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorId,
+        'created_at' => Carbon::parse('2026-07-16 13:00:00'),
+        'updated_at' => Carbon::parse('2026-07-16 13:20:00'),
+        'last_active_at' => Carbon::parse('2026-07-16 13:20:00'),
+        'session_duration_seconds' => 1200,
+    ]);
+
+    $since = $service->resolveWindow('24h');
+    $breakdown = $service->buildVisitorBreakdown($since, 25);
+
+    expect($breakdown->total())->toBe(1);
+    expect($breakdown->items()[0]['session_count'])->toBe(2);
+    expect($breakdown->items()[0]['total_stay_seconds'])->toBe(1800);
+});

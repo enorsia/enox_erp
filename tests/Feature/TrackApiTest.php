@@ -2,7 +2,9 @@
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -77,6 +79,87 @@ test('duplicate event id is deduped and still accepted', function () {
         ->assertJson(['accepted_ids' => [$eventId]]);
 
     expect(ActivityEcomUserAction::where('event_id', $eventId)->count())->toBe(1);
+});
+
+test('track endpoint stores visitor id and session duration', function () {
+    Carbon::setTestNow(Carbon::parse('2026-07-16 12:00:00', 'Europe/London'));
+    config(['tracker.visitor_timezone' => 'Europe/London', 'tracker.session_gap_minutes' => 30]);
+
+    $sessionId = Str::uuid()->toString();
+    $visitorId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+    $headers = ['Authorization' => 'Bearer ' . $this->apiKey];
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Women',
+        'category_code' => 'WOM',
+    ]], [
+        'visitor_id' => $visitorId,
+    ]), $headers)->assertOk();
+
+    Carbon::setTestNow(Carbon::parse('2026-07-16 12:05:00', 'Europe/London'));
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Women',
+        'category_code' => 'WOM',
+    ]], [
+        'visitor_id' => $visitorId,
+    ]), $headers)->assertOk();
+
+    $session = ActivityEcomUser::query()
+        ->where('visitor_id', $visitorId)
+        ->orderByDesc('last_active_at')
+        ->first();
+
+    expect(ActivityEcomUser::where('visitor_id', $visitorId)->count())->toBe(1);
+    expect($session)->not->toBeNull();
+    expect($session->visitor_id)->toBe($visitorId);
+    expect($session->session_duration_seconds)->toBe(300);
+
+    Carbon::setTestNow();
+});
+
+test('track endpoint applies manager session gap for same visitor', function () {
+    Carbon::setTestNow(Carbon::parse('2026-07-16 10:00:00', 'Europe/London'));
+    config(['tracker.visitor_timezone' => 'Europe/London', 'tracker.session_gap_minutes' => 30]);
+    Cache::flush();
+
+    $sessionId = Str::uuid()->toString();
+    $visitorId = Str::uuid()->toString();
+    $headers = ['Authorization' => 'Bearer ' . $this->apiKey];
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Women',
+        'category_code' => 'WOM',
+    ]], [
+        'visitor_id' => $visitorId,
+    ]), $headers)->assertOk();
+
+    Carbon::setTestNow(Carbon::parse('2026-07-16 12:00:00', 'Europe/London'));
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Women',
+        'category_code' => 'WOM',
+    ]], [
+        'visitor_id' => $visitorId,
+    ]), $headers)->assertOk();
+
+    expect(ActivityEcomUser::where('visitor_id', $visitorId)->count())->toBe(2);
+    expect(\App\Models\ActivityEcomDailyVisitor::where('visitor_id', $visitorId)->count())->toBe(1);
+
+    Carbon::setTestNow();
 });
 
 test('track endpoint accepts product view popup', function () {

@@ -77,6 +77,12 @@
         @endforeach
     </div>
 
+    <p class="mb-5">
+        <a href="{{ route('admin.ecom-tracker.visitors') }}" class="text-accent-600 hover:text-accent-700 text-sm font-medium">
+            View detailed visitor analytics &rarr;
+        </a>
+    </p>
+
     <div class="etd-grid-2 mb-3">
         <div class="etd-panel" id="funnel">
             <div class="etd-panel-head">

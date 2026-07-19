@@ -34,4 +34,22 @@ return [
         'general_color_name' => 255,
     ],
 
+    'session_gap_minutes' => (int) env('TRACKER_SESSION_GAP_MINUTES', 30),
+
+    'visitor_timezone' => env('TRACKER_VISITOR_TIMEZONE', 'Europe/London'),
+
+    'visitor_cookie_name' => 'enox_visitor_id',
+
+    'redis_prefix' => 'enox:tracker:',
+
+    'redis_ttl_seconds' => 172800,
+
+    'analytics_windows' => [
+        'hours' => [1, 3, 6, 12, 24],
+        'days' => [1, 7, 14, 30, 90],
+        'weeks' => [1, 4, 12, 52],
+        'months' => [1, 3, 6, 12],
+        'years' => [1],
+    ],
+
 ];
