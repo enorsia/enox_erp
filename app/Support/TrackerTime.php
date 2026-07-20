@@ -72,4 +72,14 @@ class TrackerTime
 
         return self::toLocal($value)?->toDateString() ?? self::localNow()->toDateString();
     }
+
+    /**
+     * Human-readable label for UI notices (IANA id + UTC offset).
+     */
+    public static function timezoneLabel(): string
+    {
+        $local = self::localNow();
+
+        return self::timezone().' (UTC'.$local->format('P').')';
+    }
 }

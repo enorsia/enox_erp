@@ -10,13 +10,8 @@
 <div class="etd-topbar">
     <div class="etd-topbar-intro">
         @if (count($breadcrumbs) > 0)
-            @include('ecom_tracker.partials.breadcrumbs', ['items' => $breadcrumbs])
-        @else
-            <div class="flex items-center gap-3 mb-2">
-                <a href="{{ request('back') ? urldecode(request('back')) : route($defaultBackRoute) }}"
-                   class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors no-underline">
-                    ← Back
-                </a>
+            <div class="mb-2">
+                @include('ecom_tracker.partials.breadcrumbs', ['items' => $breadcrumbs])
             </div>
         @endif
         <h1 class="etd-page-title">{{ $title }}</h1>
@@ -27,6 +22,10 @@
     </div>
 
     <div class="flex items-center gap-2 flex-wrap shrink-0">
+        <a href="{{ request('back') ? urldecode(request('back')) : route($defaultBackRoute) }}"
+           class="inline-flex items-center gap-1.5 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors no-underline shrink-0">
+            ← Back
+        </a>
         @if ($exportUrl)
             <a href="{{ $exportUrl }}"
                class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-emerald-200 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-colors font-medium no-underline">

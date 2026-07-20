@@ -40,10 +40,12 @@
         </div>
 
         <div class="etd-toolbar"
+             data-export-url="{{ route('admin.ecom-tracker.dashboard.export') }}"
+             data-export-query='@json($exportQuery)'
              x-data="{
                 period: '{{ $period }}',
-                dateFrom: '{{ $filters['date_from'] }}',
-                dateTo: '{{ $filters['date_to'] }}',
+                dateFrom: '{{ $filters['date_from'] ?? '' }}',
+                dateTo: '{{ $filters['date_to'] ?? '' }}',
                 apply(period) {
                     this.period = period;
                     const url = new URL(window.location.href);
@@ -62,9 +64,9 @@
                     window.location.href = url.toString();
                 },
                 exportUrl() {
-                    const url = new URL('{{ route('admin.ecom-tracker.dashboard.export') }}', window.location.origin);
-                    const params = @json($exportQuery);
-                    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+                    const url = new URL(this.$el.dataset.exportUrl, window.location.origin);
+                    const params = JSON.parse(this.$el.dataset.exportQuery || '{}');
+                    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, String(value)));
                     url.searchParams.set('period', this.period);
                     if (this.period === 'custom') {
                         url.searchParams.set('date_from', this.dateFrom);

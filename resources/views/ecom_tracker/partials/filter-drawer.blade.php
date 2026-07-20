@@ -54,54 +54,63 @@
         <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
             @include('ecom_tracker.partials.timezone-notice')
             @if ($showDashboardFilters)
-                <div>
+                <div x-data="{ drawerPeriod: @js($period) }">
                     <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Period</p>
                     <div class="grid grid-cols-2 gap-2">
                         @foreach (['7d' => '7 days', '30d' => '30 days', '90d' => '90 days', 'custom' => 'Custom'] as $key => $label)
-                            <label class="flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors {{ $period === $key ? 'border-accent-400 bg-accent-400/10 text-accent-700 dark:text-accent-200' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300' }}">
-                                <input type="radio" name="period" value="{{ $key }}" class="text-accent-400 border-slate-300" {{ $period === $key ? 'checked' : '' }}>
+                            <label class="flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors"
+                                   :class="drawerPeriod === @js($key) ? 'border-accent-400 bg-accent-400/10 text-accent-700 dark:text-accent-200' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300'">
+                                <input type="radio" name="period" value="{{ $key }}" x-model="drawerPeriod" class="text-accent-400 border-slate-300">
                                 <span class="text-[13px] font-medium">{{ $label }}</span>
                             </label>
                         @endforeach
                     </div>
-                    <div class="grid grid-cols-2 gap-2 mt-3">
+                    <div x-show="drawerPeriod === 'custom'" x-collapse class="grid grid-cols-2 gap-2 mt-3">
                         <div>
                             <label class="block text-[12px] text-slate-500 mb-1">From</label>
-                            <input type="date" name="date_from" value="{{ $dateFrom }}" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
+                            <input type="date" name="date_from" value="{{ $dateFrom }}"
+                                   :disabled="drawerPeriod !== 'custom'"
+                                   class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
                         </div>
                         <div>
                             <label class="block text-[12px] text-slate-500 mb-1">To</label>
-                            <input type="date" name="date_to" value="{{ $dateTo }}" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
+                            <input type="date" name="date_to" value="{{ $dateTo }}"
+                                   :disabled="drawerPeriod !== 'custom'"
+                                   class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
                         </div>
                     </div>
                 </div>
             @elseif ($showActivityFilters)
                 @include('ecom_activity.partials.activity-filters')
             @else
-                <div>
+                @php
+                    $drawerWindow = $hasCustomRange ? 'custom' : $window;
+                @endphp
+                <div x-data="{ drawerWindow: @js($drawerWindow) }">
                     <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Quick window</p>
                     <div class="grid grid-cols-2 gap-2">
-                        @foreach ($presetWindows as $key => $label)
-                            <label class="flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors {{ ! $hasCustomRange && $window === $key ? 'border-accent-400 bg-accent-400/10 text-accent-700 dark:text-accent-200' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300' }}">
-                                <input type="radio" name="window" value="{{ $key }}" class="text-accent-400 border-slate-300" {{ ! $hasCustomRange && $window === $key ? 'checked' : '' }}>
+                        @foreach (array_merge($presetWindows, ['custom' => 'Custom']) as $key => $label)
+                            <label class="flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors"
+                                   :class="drawerWindow === @js($key) ? 'border-accent-400 bg-accent-400/10 text-accent-700 dark:text-accent-200' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300'">
+                                <input type="radio" name="window" value="{{ $key }}" x-model="drawerWindow" class="text-accent-400 border-slate-300">
                                 <span class="text-[13px] font-medium">{{ $label }}</span>
                             </label>
                         @endforeach
                     </div>
-                </div>
 
-                <hr class="border-slate-100 dark:border-slate-700"/>
-
-                <div>
-                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Custom date range</p>
-                    <div class="space-y-3">
+                    <div x-show="drawerWindow === 'custom'" x-collapse class="mt-4 space-y-3">
+                        <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Custom date range</p>
                         <div>
                             <label class="block text-[12px] text-slate-500 mb-1">From</label>
-                            <input type="datetime-local" name="datetime_from" value="{{ $datetimeFromValue }}" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
+                            <input type="datetime-local" name="datetime_from" value="{{ $datetimeFromValue }}"
+                                   :disabled="drawerWindow !== 'custom'"
+                                   class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
                         </div>
                         <div>
                             <label class="block text-[12px] text-slate-500 mb-1">To</label>
-                            <input type="datetime-local" name="datetime_to" value="{{ $datetimeToValue }}" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
+                            <input type="datetime-local" name="datetime_to" value="{{ $datetimeToValue }}"
+                                   :disabled="drawerWindow !== 'custom'"
+                                   class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
                         </div>
                     </div>
                 </div>
