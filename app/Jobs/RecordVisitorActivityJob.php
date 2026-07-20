@@ -4,8 +4,8 @@ namespace App\Jobs;
 
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
+use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
-use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -34,10 +34,9 @@ class RecordVisitorActivityJob implements ShouldQueue
 
     public function handle(): void
     {
-        $timezone = config('tracker.visitor_timezone', 'Europe/London');
-        $now = Carbon::parse($this->resolvedAt ?? now(), $timezone);
-        $formattedNow = $now->format('Y-m-d H:i:s');
-        $visitDate = $now->toDateString();
+        $now = TrackerTime::toUtc($this->resolvedAt ?? TrackerTime::nowUtc()) ?? TrackerTime::nowUtc();
+        $formattedNow = TrackerTime::formatUtc($now);
+        $visitDate = TrackerTime::localDate($now);
 
         if ($this->isNewDailyVisitor) {
             ActivityEcomDailyVisitor::query()->firstOrCreate(
@@ -84,8 +83,8 @@ class RecordVisitorActivityJob implements ShouldQueue
                 ->first();
 
             if ($session) {
-                $createdAt = Carbon::parse($session->getRawOriginal('created_at'), $timezone);
-                $duration = (int) $createdAt->diffInSeconds($now);
+                $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
+                $duration = $createdAt ? (int) $createdAt->diffInSeconds($now) : 0;
 
                 $session->update([
                     'last_active_at' => $formattedNow,
@@ -100,9 +99,19 @@ class RecordVisitorActivityJob implements ShouldQueue
 
     private function rollupDailyDuration(string $visitorId, string $visitDate, string $now): void
     {
+        $localStart = TrackerTime::toLocal($visitDate.' 00:00:00');
+        $localEnd = TrackerTime::toLocal($visitDate.' 23:59:59');
+
+        if ($localStart === null || $localEnd === null) {
+            return;
+        }
+
+        $utcFrom = $localStart->copy()->utc()->format('Y-m-d H:i:s');
+        $utcTo = $localEnd->copy()->utc()->format('Y-m-d H:i:s');
+
         $totalDuration = (int) ActivityEcomUser::query()
             ->where('visitor_id', $visitorId)
-            ->whereDate('created_at', $visitDate)
+            ->whereBetween('created_at', [$utcFrom, $utcTo])
             ->sum('session_duration_seconds');
 
         ActivityEcomDailyVisitor::query()

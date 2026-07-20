@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -115,7 +116,7 @@ class TrackIngestService
     private function upsertSession(Request $request, string $sessionId, array $sessionData): void
     {
         $parsed = UserAgentParser::parse($request->userAgent());
-        $now = $this->formatDateTime($this->trackerNow());
+        $now = TrackerTime::formatUtc(TrackerTime::nowUtc());
 
         $existing = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
 
@@ -187,7 +188,7 @@ class TrackIngestService
             'action_type' => $actionType,
             'page_url' => $event['page_url'] ?? null,
             'referer' => $event['referer'] ?? null,
-            'created_at' => $this->formatDateTime($event['created_at'] ?? now()),
+            'created_at' => TrackerTime::formatUtc($event['created_at'] ?? TrackerTime::nowUtc()),
         ];
 
         $scalarFields = [
@@ -209,7 +210,7 @@ class TrackIngestService
             }
 
             $value = in_array($field, ['start_time', 'end_time'], true)
-                ? $this->formatDateTime($event[$field])
+                ? TrackerTime::formatUtc($event[$field])
                 : $this->normalizeScalarField($field, $event[$field]);
 
             if ($value === null || $value === '') {
@@ -282,8 +283,8 @@ class TrackIngestService
             return;
         }
 
-        $updates['last_active_at'] = $this->formatDateTime($event['created_at'] ?? $this->trackerNow());
-        $updates['updated_at'] = $this->formatDateTime($this->trackerNow());
+        $updates['last_active_at'] = TrackerTime::formatUtc($event['created_at'] ?? TrackerTime::nowUtc());
+        $updates['updated_at'] = TrackerTime::formatUtc(TrackerTime::nowUtc());
 
         $session->update($updates);
 
@@ -294,30 +295,20 @@ class TrackIngestService
         ]);
     }
 
-    private function trackerTimezone(): string
-    {
-        return config('tracker.visitor_timezone', 'Europe/London');
-    }
-
-    private function trackerNow(): Carbon
-    {
-        return Carbon::now($this->trackerTimezone());
-    }
-
     private function sessionDurationSeconds(ActivityEcomUser $session): int
     {
-        $createdAt = Carbon::parse($session->getRawOriginal('created_at'), $this->trackerTimezone());
+        $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
 
-        return (int) $createdAt->diffInSeconds($this->trackerNow());
+        if ($createdAt === null) {
+            return 0;
+        }
+
+        return (int) $createdAt->diffInSeconds(TrackerTime::nowUtc());
     }
 
     private function formatDateTime(mixed $value): ?string
     {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        return Carbon::parse($value, $this->trackerTimezone())->format('Y-m-d H:i:s');
+        return TrackerTime::formatUtc($value);
     }
 
     private function normalizeScalarField(string $field, mixed $value): ?string

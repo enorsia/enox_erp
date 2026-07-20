@@ -3,8 +3,9 @@
 namespace App\Services;
 
 use App\Jobs\RecordVisitorActivityJob;
+use App\Support\TrackerTime;
 use App\Support\VisitorSessionRedis;
-use Illuminate\Support\Carbon;
+use Carbon\Carbon;
 use Illuminate\Support\Str;
 
 class VisitorSessionResolver
@@ -59,7 +60,7 @@ class VisitorSessionResolver
             isNewDailyVisitor: $isNewDailyVisitor,
             isNewSession: $isNewSession,
             context: $context,
-            resolvedAt: $now->toDateTimeString(),
+            resolvedAt: $now->toIso8601String(),
         );
 
         return [
@@ -118,6 +119,6 @@ class VisitorSessionResolver
             return PHP_INT_MAX;
         }
 
-        return (int) Carbon::parse($lastActiveAt)->diffInMinutes($now);
+        return (int) TrackerTime::toUtc($lastActiveAt)?->diffInMinutes($now) ?? PHP_INT_MAX;
     }
 }

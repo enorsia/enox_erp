@@ -6,19 +6,37 @@
 @php
     $d = $dashboard;
     $period = $filters['period'] ?? '30d';
+    $back = urlencode(request()->fullUrl());
+    $queryParams = request()->only(['period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium']);
+    $exportQuery = array_filter($queryParams, fn ($value) => filled($value));
+    $detailLink = fn (string $section) => route('admin.ecom-tracker.dashboard.details', $section).'?'.http_build_query(array_merge($queryParams, ['back' => $back]));
+    $hasActiveFilters = ($activeFilterCount ?? 0) > 0;
 @endphp
 
-<div id="ecom-tracker-dashboard-content" class="etd-page">
+<div id="ecom-tracker-dashboard-content" class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
+    @include('ecom_tracker.partials.filter-drawer', [
+        'action' => route('admin.ecom-tracker.dashboard'),
+        'resetUrl' => route('admin.ecom-tracker.dashboard'),
+        'showDashboardFilters' => true,
+        'showSessionFilters' => true,
+        'period' => $period,
+        'dateFrom' => $filters['date_from'] ?? '',
+        'dateTo' => $filters['date_to'] ?? '',
+    ])
+
+    @include('ecom_tracker.partials.tracker-nav', ['current' => 'dashboard'])
 
     <div class="etd-topbar">
         <div class="etd-topbar-intro">
             <h1 class="etd-page-title">Store performance</h1>
-            <p class="etd-page-desc">
-                {{ $d['range']['label'] }}
-            </p>
+            <p class="etd-page-desc">{{ $d['range']['label'] }}</p>
+            @include('ecom_tracker.partials.timezone-notice')
             <p class="etd-page-live">
                 <span class="etd-live-dot"></span>Live · last event {{ $d['live']['label'] }}
             </p>
+            @if ($d['has_session_filters'] ?? false)
+                <p class="etd-filter-active-note">Showing filtered sessions — use Filters to adjust audience criteria.</p>
+            @endif
         </div>
 
         <div class="etd-toolbar"
@@ -33,8 +51,8 @@
                     if (period !== 'custom') {
                         url.searchParams.delete('date_from');
                         url.searchParams.delete('date_to');
-                        window.location.href = url.toString();
                     }
+                    window.location.href = url.toString();
                 },
                 applyCustom() {
                     const url = new URL(window.location.href);
@@ -45,6 +63,8 @@
                 },
                 exportUrl() {
                     const url = new URL('{{ route('admin.ecom-tracker.dashboard.export') }}', window.location.origin);
+                    const params = @json($exportQuery);
+                    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
                     url.searchParams.set('period', this.period);
                     if (this.period === 'custom') {
                         url.searchParams.set('date_from', this.dateFrom);
@@ -53,10 +73,16 @@
                     return url.toString();
                 }
              }">
-            @foreach (['7d' => '7d', '30d' => '30d', '90d' => '90d'] as $key => $label)
+            @foreach (['7d' => '7 days', '30d' => '30 days', '90d' => '90 days'] as $key => $label)
                 <button type="button" class="etd-pill {{ $period === $key ? 'active' : '' }}" @click="apply('{{ $key }}')">{{ $label }}</button>
             @endforeach
             <button type="button" class="etd-pill {{ $period === 'custom' ? 'active' : '' }}" @click="period = 'custom'">Custom</button>
+            <button type="button" @click="drawerOpen = true" class="etd-pill {{ $hasActiveFilters ? 'etd-pill-filtered' : '' }}">
+                Filters
+                @if ($hasActiveFilters)
+                    <span class="etd-pill-badge">{{ $activeFilterCount }}</span>
+                @endif
+            </button>
             <a :href="exportUrl()" class="etd-pill etd-pill-primary no-underline">Export Excel</a>
 
             <div x-show="period === 'custom'" x-collapse class="etd-custom-dates">
@@ -67,27 +93,34 @@
         </div>
     </div>
 
-    <div class="etd-kpi-grid mb-5">
-        @foreach ($d['kpis'] as $kpi)
-            <div class="etd-kpi">
-                <div class="etd-kpi-label">{{ $kpi['label'] }}</div>
-                <div class="etd-kpi-value">{{ $kpi['formatted'] }}</div>
-                <div class="etd-kpi-delta {{ $kpi['delta']['direction'] }}">{{ $kpi['delta']['text'] }}</div>
+    <div class="etd-kpi-rows">
+        @foreach ([
+            ['title' => 'Audience & engagement', 'items' => array_slice($d['kpis'], 0, 4)],
+            ['title' => 'Revenue & conversion', 'items' => array_slice($d['kpis'], 4, 4)],
+        ] as $group)
+            <div>
+                <p class="etd-kpi-section-label">{{ $group['title'] }}</p>
+                <div class="etd-kpi-grid">
+                    @foreach ($group['items'] as $kpi)
+                        <div class="etd-kpi">
+                            <div class="etd-kpi-label">{{ $kpi['label'] }}</div>
+                            <div class="etd-kpi-value">{{ $kpi['formatted'] }}</div>
+                            <div class="etd-kpi-delta {{ $kpi['delta']['direction'] }}">{{ $kpi['delta']['text'] }}</div>
+                        </div>
+                    @endforeach
+                </div>
             </div>
         @endforeach
     </div>
-
-    <p class="mb-5">
-        <a href="{{ route('admin.ecom-tracker.visitors') }}" class="text-accent-600 hover:text-accent-700 text-sm font-medium">
-            View detailed visitor analytics &rarr;
-        </a>
-    </p>
 
     <div class="etd-grid-2 mb-3">
         <div class="etd-panel" id="funnel">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Conversion funnel</h2>
-                <span class="etd-panel-hint">category_view → payment_success · {{ $d['range']['label'] }}</span>
+                <div class="flex items-center gap-2">
+                    <span class="etd-panel-hint">Browse to purchase · {{ $d['range']['label'] }}</span>
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('funnel')])
+                </div>
             </div>
             <div class="etd-funnel">
                 @foreach ($d['funnel'] as $row)
@@ -112,7 +145,10 @@
         <div class="etd-panel">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Sessions &amp; conversion trend</h2>
-                <span class="etd-tag">{{ $d['trend']['range_label'] ?? $d['range']['label'] }}</span>
+                <div class="flex items-center gap-2">
+                    <span class="etd-tag">{{ $d['trend']['range_label'] ?? $d['range']['label'] }}</span>
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('trend')])
+                </div>
             </div>
             <div class="etd-chart-wrap">
                 <canvas id="etdTrendChart"></canvas>
@@ -127,7 +163,10 @@
         <div class="etd-panel" id="categories">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Category performance</h2>
-                <span class="etd-panel-hint">views → conversion</span>
+                <div class="flex items-center gap-2">
+                    <span class="etd-panel-hint">Page views to sales</span>
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('categories')])
+                </div>
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table">
@@ -135,24 +174,10 @@
                     <tr>
                         <th>Category</th>
                         <th class="etd-num">Views</th>
-                        <th class="etd-num">Add-rate</th>
-                        <th class="etd-num">Conv.</th>
+                        <th class="etd-num">Add to cart</th>
+                        <th class="etd-num">Conversion</th>
                         <th>
-                            <span class="etd-th-with-tip">
-                                Signal
-                                <button type="button" class="etd-tip-trigger" aria-label="Signal definitions">
-                                    <svg class="etd-tip-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
-                                        <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.25"/>
-                                        <path fill="currentColor" d="M7.25 7h1.5V6.1c0-.69.56-1.25 1.25-1.25.69 0 1.25.56 1.25 1.25v.65c0 .69-.56 1.25-1.25 1.25H8.5v3.35H7.25V7z"/>
-                                        <circle cx="8" cy="4.35" r=".85" fill="currentColor"/>
-                                    </svg>
-                                    <span class="etd-tip-content" role="tooltip">
-                                        <span class="etd-tip-line"><span class="etd-badge high">Promote</span> View-to-purchase conversion ≥ 2.5%</span>
-                                        <span class="etd-tip-line"><span class="etd-badge mid">Steady</span> Conversion 1.5%–2.5%</span>
-                                        <span class="etd-tip-line"><span class="etd-badge low">Investigate</span> Conversion below 1.5%</span>
-                                    </span>
-                                </button>
-                            </span>
+                            @include('ecom_tracker.partials.signal-header')
                         </th>
                     </tr>
                 </thead>
@@ -176,7 +201,10 @@
         <div class="etd-panel" id="products">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Top products</h2>
-                <span class="etd-panel-hint">sorted by revenue</span>
+                <div class="flex items-center gap-2">
+                    <span class="etd-panel-hint">Highest revenue first</span>
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('products')])
+                </div>
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table">
@@ -216,7 +244,10 @@
     <div class="etd-panel mb-3" id="colors">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Color / variant performance — viewed vs purchased</h2>
-            <span class="etd-panel-hint">grouped by product</span>
+            <div class="flex items-center gap-2">
+                <span class="etd-panel-hint">Variants per product</span>
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('colors')])
+            </div>
         </div>
         <div class="etd-table-scroll etd-table-scroll--wide etd-table-scroll--fixed etd-table-scroll--tall">
             <table class="etd-table etd-table--colors">
@@ -262,12 +293,12 @@
         <div class="etd-panel" id="cart-abandon">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Cart abandoned</h2>
-                <span class="etd-stake-badge">
-                    {{ number_format($d['cart_abandonment']['session_count']) }} sessions · £{{ number_format($d['cart_abandonment']['at_stake'], 2) }} at stake
-                    @if ($d['cart_abandonment']['session_count'] > count($d['cart_abandonment']['rows']))
-                        · latest {{ count($d['cart_abandonment']['rows']) }} shown
-                    @endif
-                </span>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="etd-stake-badge">
+                        {{ number_format($d['cart_abandonment']['session_count']) }} sessions · £{{ number_format($d['cart_abandonment']['at_stake'], 2) }} at stake
+                    </span>
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('cart-abandonment')])
+                </div>
             </div>
             <div class="etd-table-scroll etd-table-scroll--abandonment etd-table-scroll--fixed">
             <table class="etd-table etd-table--abandonment">
@@ -302,12 +333,12 @@
         <div class="etd-panel" id="checkout-abandon">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Checkout abandoned</h2>
-                <span class="etd-stake-badge">
-                    {{ number_format($d['checkout_abandonment']['session_count']) }} sessions · £{{ number_format($d['checkout_abandonment']['at_stake'], 2) }} at stake
-                    @if ($d['checkout_abandonment']['session_count'] > count($d['checkout_abandonment']['rows']))
-                        · latest {{ count($d['checkout_abandonment']['rows']) }} shown
-                    @endif
-                </span>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="etd-stake-badge">
+                        {{ number_format($d['checkout_abandonment']['session_count']) }} sessions · £{{ number_format($d['checkout_abandonment']['at_stake'], 2) }} at stake
+                    </span>
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('checkout-abandonment')])
+                </div>
             </div>
             <div class="etd-table-scroll etd-table-scroll--abandonment etd-table-scroll--fixed">
             <table class="etd-table etd-table--abandonment">
@@ -347,7 +378,10 @@
         <div class="etd-panel" id="device">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Device &amp; browser</h2>
-                <span class="etd-panel-hint">device_type</span>
+                <div class="flex items-center gap-2">
+                    <span class="etd-panel-hint">Desktop, mobile & tablet</span>
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('devices')])
+                </div>
             </div>
             <div class="etd-two-donut">
                 <div class="etd-donut-block">
@@ -376,7 +410,10 @@
         <div class="etd-panel" id="traffic">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Traffic sources</h2>
-                <span class="etd-panel-hint">utm_source / utm_medium</span>
+                <div class="flex items-center gap-2">
+                    <span class="etd-panel-hint">Campaign & channel</span>
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('traffic-sources')])
+                </div>
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table">
@@ -385,7 +422,7 @@
                         <th>Source</th>
                         <th>Medium</th>
                         <th class="etd-num">Sessions</th>
-                        <th class="etd-num">Conv.</th>
+                        <th class="etd-num">Conversion</th>
                         <th class="etd-num">Revenue</th>
                     </tr>
                 </thead>
@@ -411,7 +448,10 @@
         <div class="etd-panel" id="geo">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Geography</h2>
-                <span class="etd-panel-hint">country / city</span>
+                <div class="flex items-center gap-2">
+                    <span class="etd-panel-hint">Country & city</span>
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('geography')])
+                </div>
             </div>
             <div class="etd-table-scroll etd-table-scroll--narrow etd-table-scroll--fixed">
             <table class="etd-table">
@@ -440,7 +480,10 @@
         <div class="etd-panel" id="engagement">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Engagement quality</h2>
-                <span class="etd-panel-hint">active dwell time, start_time/end_time</span>
+                <div class="flex items-center gap-2">
+                    <span class="etd-panel-hint">Time on page (active)</span>
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('engagement')])
+                </div>
             </div>
             <div class="etd-chart-wrap sm">
                 <canvas id="etdDwellChart"></canvas>

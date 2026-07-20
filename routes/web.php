@@ -19,6 +19,7 @@ use App\Http\Controllers\SellingChartExpenseController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\EcomActivityController;
 use App\Http\Controllers\EcomTrackerDashboardController;
+use App\Http\Controllers\EcomTrackerDashboardDetailController;
 use App\Http\Controllers\VisitorAnalyticsController;
 use App\Http\Controllers\SaleTrackingController;
 use Illuminate\Support\Facades\Auth;
@@ -45,7 +46,9 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     ]);
     Route::get('ecom-tracker/dashboard', [EcomTrackerDashboardController::class, 'index'])->name('ecom-tracker.dashboard');
     Route::get('ecom-tracker/dashboard/export', [EcomTrackerDashboardController::class, 'export'])->name('ecom-tracker.dashboard.export');
+    Route::get('ecom-tracker/dashboard/details/{section}', [EcomTrackerDashboardDetailController::class, 'show'])->name('ecom-tracker.dashboard.details');
     Route::get('ecom-tracker/visitors', [VisitorAnalyticsController::class, 'index'])->name('ecom-tracker.visitors');
+    Route::get('ecom-tracker/visitors/details/{section}', [VisitorAnalyticsController::class, 'detail'])->name('ecom-tracker.visitors.details');
     Route::get('ecom-tracker/visitors/export', [VisitorAnalyticsController::class, 'export'])->name('ecom-tracker.visitors.export');
 
     Route::controller(SalesChartController::class)->group(function () {

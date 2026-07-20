@@ -75,7 +75,7 @@
                             <div class="flex flex-wrap items-center gap-2 mb-2">
                                 <span class="badge-custom {{ $badgeClass }}">{{ str_replace('_', ' ', $item->action_type) }}</span>
                                 <span class="text-[12px] text-slate-400">
-                                    {{ $item->created_at?->format('d M Y, h:i:s A') }}
+                                    {{ \App\Support\TrackerTime::toLocal($item->created_at)?->format('d M Y, h:i:s A') }}
                                 </span>
                                 @if ($item->dwell_seconds !== null)
                                     <span class="text-[11px] text-slate-500">
@@ -163,7 +163,7 @@
                                                 @if ($segmentSeconds !== null)
                                                     <span class="text-slate-400">· {{ $segmentSeconds }}s</span>
                                                 @endif
-                                                <span class="text-slate-400">· {{ ($segmentAction->created_at ?? $segmentAction->start_time)?->format('h:i:s A') }}</span>
+                                                <span class="text-slate-400">· {{ \App\Support\TrackerTime::toLocal($segmentAction->created_at ?? $segmentAction->start_time)?->format('h:i:s A') }}</span>
                                             </div>
                                         @endforeach
                                     </div>
@@ -188,8 +188,8 @@
                             'User' => $activityUser->user_name
                                 ? $activityUser->user_name . ($activityUser->user_email ? ' (' . $activityUser->user_email . ')' : '')
                                 : ($activityUser->is_logged_in ? 'Logged in #' . $activityUser->user_id : 'Guest'),
-                            'First seen' => $activityUser->created_at?->format('d M Y, h:i A'),
-                            'Last active' => $activityUser->last_active_at?->format('d M Y, h:i A'),
+                            'First seen' => \App\Support\TrackerTime::toLocal($activityUser->created_at)?->format('d M Y, h:i A'),
+                            'Last active' => \App\Support\TrackerTime::toLocal($activityUser->last_active_at)?->format('d M Y, h:i A'),
                             'Landing page' => $activityUser->landing_page,
                             'UTM' => trim(($activityUser->utm_source ?? '') . ' / ' . ($activityUser->utm_medium ?? '') . ' / ' . ($activityUser->utm_campaign ?? ''), ' /'),
                         ] as $label => $value)

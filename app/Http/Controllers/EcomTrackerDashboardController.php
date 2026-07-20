@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exports\EcomTrackerDashboardExport;
+use App\Http\Controllers\Concerns\CountsTrackerFilters;
 use App\Services\EcomTrackerDashboardService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -12,6 +13,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EcomTrackerDashboardController extends Controller
 {
+    use CountsTrackerFilters;
+
     public function __construct(
         private EcomTrackerDashboardService $service,
     ) {}
@@ -20,8 +23,10 @@ class EcomTrackerDashboardController extends Controller
     {
         Gate::authorize('general.ecom_tracker_dashboard.index');
 
-        $filters = $request->only(['period', 'date_from', 'date_to']);
-        $filters['period'] = $filters['period'] ?? '30d';
+        $filters = array_merge(
+            $this->dashboardDateFilters($request),
+            $this->dashboardSessionFilters($request),
+        );
 
         $dashboard = $this->service->getDashboardData($filters);
         $dashboard['chart_payload'] = $this->service->chartPayload($dashboard);
@@ -29,6 +34,7 @@ class EcomTrackerDashboardController extends Controller
         return view('ecom_tracker.dashboard', [
             'dashboard' => $dashboard,
             'filters' => $dashboard['filters'],
+            'activeFilterCount' => $this->dashboardActiveFilterCount($request),
         ]);
     }
 
@@ -36,8 +42,10 @@ class EcomTrackerDashboardController extends Controller
     {
         Gate::authorize('general.ecom_tracker_dashboard.index');
 
-        $filters = $request->only(['period', 'date_from', 'date_to']);
-        $filters['period'] = $filters['period'] ?? '30d';
+        $filters = array_merge(
+            $this->dashboardDateFilters($request),
+            $this->dashboardSessionFilters($request),
+        );
 
         $range = $this->service->resolveDateRange($filters);
         $filename = 'ecom-tracker-dashboard-'.$range['from']->format('Y-m-d').'-'.$range['to']->format('Y-m-d').'.xlsx';

@@ -3,6 +3,7 @@
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Services\EcomTrackerDashboardService;
+use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
@@ -15,8 +16,8 @@ test('ecom tracker dashboard resolves custom date range', function () {
         'date_to' => '2026-07-10',
     ]);
 
-    expect($range['from']->toDateString())->toBe('2026-07-01');
-    expect($range['to']->toDateString())->toBe('2026-07-10');
+    expect(TrackerTime::toLocal($range['from'])?->toDateString())->toBe('2026-07-01');
+    expect(TrackerTime::toLocal($range['to'])?->toDateString())->toBe('2026-07-10');
     expect($range['days'])->toBe(10);
 });
 

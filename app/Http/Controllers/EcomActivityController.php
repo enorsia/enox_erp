@@ -34,6 +34,7 @@ class EcomActivityController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('session_id', 'like', "%{$search}%")
+                    ->orWhere('visitor_id', 'like', "%{$search}%")
                     ->orWhere('ip', 'like', "%{$search}%")
                     ->orWhere('user_name', 'like', "%{$search}%")
                     ->orWhere('user_email', 'like', "%{$search}%");

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\VisitorAnalyticsExport;
 use App\Services\VisitorAnalyticsService;
+use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -25,20 +26,84 @@ class VisitorAnalyticsController extends Controller
         $filters = $request->only(['window', 'datetime_from', 'datetime_to']);
         $filters['window_label'] = $range['label'];
 
+        $priorFrom = $range['from']->copy()->subSeconds((int) $range['from']->diffInSeconds($range['to'] ?: TrackerTime::nowUtc()));
+        $priorSummary = $this->analytics->buildSummary($priorFrom, $range['from']);
+
+        $overview = $this->analytics->buildOverview($range['from'], $range['until']);
+
         $data = [
             'window' => $request->input('window', '7d'),
             'from' => $range['from'],
             'to' => $range['to'],
-            'summary' => $this->analytics->buildSummary($range['from'], $range['until']),
-            'rolling_windows' => $this->analytics->buildRollingWindows(),
-            'duration_buckets' => $this->analytics->buildDurationBuckets($range['from'], $range['until']),
-            'visitors' => $this->analytics->buildVisitorBreakdown($range['from'], 25, $range['until']),
+            'summary' => $overview,
+            'prior_summary' => $priorSummary,
+            'duration_buckets' => $overview['duration_buckets'],
+            'new_returning' => $overview['new_returning'],
+            'trend' => $overview['trend'],
+            'top_visitors' => $overview['top_visitors'],
         ];
 
         return view('ecom_tracker.visitors', [
             'analytics' => $data,
             'filters' => $filters,
         ]);
+    }
+
+    public function detail(Request $request, string $section): View
+    {
+        Gate::authorize('general.ecom_tracker_dashboard.index');
+
+        $titles = [
+            'trend' => 'Visitors & sessions over time',
+            'new-returning' => 'New vs returning visitors',
+            'duration' => 'Session duration distribution',
+            'visitors' => 'All visitors',
+        ];
+
+        abort_unless(isset($titles[$section]), 404);
+
+        $range = $this->resolveRange($request);
+        $extraFilters = $request->only(['search', 'device_type', 'logged_in', 'has_order']);
+        $perPage = max(10, min(100, (int) $request->input('per_page', 25)));
+
+        $data = match ($section) {
+            'trend' => ['trend' => $this->analytics->buildVisitorTrend($range['from'], $range['until'])],
+            'new-returning' => ['new_returning' => $this->analytics->buildNewVsReturning($range['from'], $range['until'])],
+            'duration' => ['duration_buckets' => $this->analytics->buildDurationBuckets($range['from'], $range['until'])],
+            'visitors' => ['visitors' => $this->analytics->buildVisitorBreakdown($range['from'], $perPage, $range['until'], $extraFilters)],
+        };
+
+        return view('ecom_tracker.visitor_details.show', [
+            'section' => $section,
+            'title' => $titles[$section],
+            'range' => $range,
+            'data' => $data,
+            'filters' => array_merge(
+                $request->only(['window', 'datetime_from', 'datetime_to']),
+                $extraFilters,
+                ['window_label' => $range['label']],
+            ),
+            'activeFilterCount' => $this->visitorActiveFilterCount($request),
+        ]);
+    }
+
+    private function visitorActiveFilterCount(Request $request): int
+    {
+        $count = 0;
+
+        if (filled($request->input('datetime_from')) && filled($request->input('datetime_to'))) {
+            $count++;
+        } elseif ($request->has('window') && $request->input('window', '7d') !== '7d') {
+            $count++;
+        }
+
+        foreach (['search', 'device_type', 'logged_in', 'has_order'] as $key) {
+            if (filled($request->input($key))) {
+                $count++;
+            }
+        }
+
+        return $count;
     }
 
     public function export(Request $request): BinaryFileResponse
@@ -59,29 +124,32 @@ class VisitorAnalyticsController extends Controller
      */
     private function resolveRange(Request $request): array
     {
-        $timezone = config('tracker.visitor_timezone', 'Europe/London');
+        $timezone = TrackerTime::timezone();
         $datetimeFrom = $request->input('datetime_from');
         $datetimeTo = $request->input('datetime_to');
 
         if (filled($datetimeFrom) && filled($datetimeTo)) {
-            $from = Carbon::parse($datetimeFrom, $timezone);
-            $to = Carbon::parse($datetimeTo, $timezone);
+            $fromLocal = Carbon::parse($datetimeFrom, $timezone);
+            $toLocal = Carbon::parse($datetimeTo, $timezone);
 
-            if ($from->gt($to)) {
-                [$from, $to] = [$to, $from];
+            if ($fromLocal->gt($toLocal)) {
+                [$fromLocal, $toLocal] = [$toLocal, $fromLocal];
             }
+
+            $from = $fromLocal->copy()->utc();
+            $to = $toLocal->copy()->utc();
 
             return [
                 'from' => $from,
                 'to' => $to,
                 'until' => $to,
-                'label' => $from->format('d M Y, H:i').' – '.$to->format('d M Y, H:i'),
+                'label' => $fromLocal->format('d M Y, H:i').' – '.$toLocal->format('d M Y, H:i'),
             ];
         }
 
         $window = $request->input('window', '7d');
         $from = $this->resolveSince($request, $window);
-        $to = Carbon::now($timezone);
+        $to = TrackerTime::nowUtc();
 
         return [
             'from' => $from,

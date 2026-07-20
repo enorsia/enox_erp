@@ -2,7 +2,7 @@
 
 namespace App\Support;
 
-use Illuminate\Support\Carbon;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 
 class VisitorSessionRedis
@@ -70,11 +70,11 @@ class VisitorSessionRedis
 
     public function now(): Carbon
     {
-        return Carbon::now(config('tracker.visitor_timezone', 'Europe/London'));
+        return TrackerTime::nowUtc();
     }
 
     public function todayString(?Carbon $now = null): string
     {
-        return ($now ?? $this->now())->toDateString();
+        return TrackerTime::localDate($now);
     }
 }
