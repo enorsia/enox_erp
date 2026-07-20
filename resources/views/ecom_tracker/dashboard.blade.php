@@ -75,8 +75,8 @@
                     return url.toString();
                 }
              }">
-            @foreach (['7d' => '7 days', '30d' => '30 days', '90d' => '90 days'] as $key => $label)
-                <button type="button" class="etd-pill {{ $period === $key ? 'active' : '' }}" @click="apply('{{ $key }}')">{{ $label }}</button>
+            @foreach (['7d' => '7d', '30d' => '30d', '90d' => '90d'] as $periodKey => $periodLabel)
+                <button type="button" class="etd-pill {{ $period === $periodKey ? 'active' : '' }}" @click="apply('{{ $periodKey }}')">{{ $periodLabel }}</button>
             @endforeach
             <button type="button" class="etd-pill {{ $period === 'custom' ? 'active' : '' }}" @click="period = 'custom'">Custom</button>
             <button type="button" @click="drawerOpen = true" class="etd-pill {{ $hasActiveFilters ? 'etd-pill-filtered' : '' }}">
@@ -119,10 +119,7 @@
         <div class="etd-panel" id="funnel">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Conversion funnel</h2>
-                <div class="flex items-center gap-2">
-                    <span class="etd-panel-hint">Browse to purchase · {{ $d['range']['label'] }}</span>
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('funnel')])
-                </div>
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('funnel')])
             </div>
             <div class="etd-funnel">
                 @foreach ($d['funnel'] as $row)
@@ -147,10 +144,7 @@
         <div class="etd-panel">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Sessions &amp; conversion trend</h2>
-                <div class="flex items-center gap-2">
-                    <span class="etd-tag">{{ $d['trend']['range_label'] ?? $d['range']['label'] }}</span>
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('trend')])
-                </div>
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('trend')])
             </div>
             <div class="etd-chart-wrap">
                 <canvas id="etdTrendChart"></canvas>
@@ -165,10 +159,7 @@
         <div class="etd-panel" id="categories">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Category performance</h2>
-                <div class="flex items-center gap-2">
-                    <span class="etd-panel-hint">Page views to sales</span>
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('categories')])
-                </div>
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('categories')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table">
@@ -203,10 +194,7 @@
         <div class="etd-panel" id="products">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Top products</h2>
-                <div class="flex items-center gap-2">
-                    <span class="etd-panel-hint">Highest revenue first</span>
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('products')])
-                </div>
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('products')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table">
@@ -246,10 +234,7 @@
     <div class="etd-panel mb-3" id="colors">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Color / variant performance — viewed vs purchased</h2>
-            <div class="flex items-center gap-2">
-                <span class="etd-panel-hint">Variants per product</span>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('colors')])
-            </div>
+            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('colors')])
         </div>
         <div class="etd-table-scroll etd-table-scroll--wide etd-table-scroll--fixed etd-table-scroll--tall">
             <table class="etd-table etd-table--colors">
@@ -380,10 +365,7 @@
         <div class="etd-panel" id="device">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Device &amp; browser</h2>
-                <div class="flex items-center gap-2">
-                    <span class="etd-panel-hint">Desktop, mobile & tablet</span>
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('devices')])
-                </div>
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('devices')])
             </div>
             <div class="etd-two-donut">
                 <div class="etd-donut-block">
@@ -412,10 +394,7 @@
         <div class="etd-panel" id="traffic">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Traffic sources</h2>
-                <div class="flex items-center gap-2">
-                    <span class="etd-panel-hint">Campaign & channel</span>
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('traffic-sources')])
-                </div>
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('traffic-sources')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table">
@@ -450,10 +429,7 @@
         <div class="etd-panel" id="geo">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Geography</h2>
-                <div class="flex items-center gap-2">
-                    <span class="etd-panel-hint">Country & city</span>
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('geography')])
-                </div>
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('geography')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--narrow etd-table-scroll--fixed">
             <table class="etd-table">
@@ -482,10 +458,7 @@
         <div class="etd-panel" id="engagement">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Engagement quality</h2>
-                <div class="flex items-center gap-2">
-                    <span class="etd-panel-hint">Time on page (active)</span>
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('engagement')])
-                </div>
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('engagement')])
             </div>
             <div class="etd-chart-wrap sm">
                 <canvas id="etdDwellChart"></canvas>

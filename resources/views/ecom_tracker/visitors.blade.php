@@ -70,14 +70,14 @@
         <div class="etd-panel">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Visitors & sessions over time</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('trend'), 'label' => 'View report'])
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('trend')])
             </div>
             <div class="etd-chart-wrap"><canvas id="vaTrendMini"></canvas></div>
         </div>
         <div class="etd-panel">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">New vs returning</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('new-returning'), 'label' => 'View report'])
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('new-returning')])
             </div>
             <div class="etd-chart-wrap sm"><canvas id="vaNewReturningMini"></canvas></div>
         </div>
@@ -86,7 +86,7 @@
     <div class="etd-panel mb-5">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Session duration distribution</h2>
-            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('duration'), 'label' => 'View report'])
+            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('duration')])
         </div>
         <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
             @foreach ($a['duration_buckets'] as $bucket)
@@ -101,7 +101,7 @@
     <div class="etd-panel">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Top visitors by stay</h2>
-            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('visitors'), 'label' => 'View all visitors'])
+            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('visitors'), 'viewLabel' => 'View all'])
         </div>
         <table class="etd-table w-full">
             <thead><tr><th>Visitor</th><th class="etd-num">Sessions</th><th class="etd-num">Total stay</th><th>Last active</th></tr></thead>
