@@ -232,7 +232,7 @@
                     </div>
                 </div>
 
-                @canany(['general.ecom_tracker_dashboard.index', 'general.ecom_activity.index'])
+                @canany(Cache::get('permissions.available', [])['prefix']['ecom_tracker_'] ?? [])
                 <div x-data="{ open: {{ Request::is('admin/ecom-tracker*') || Request::is('admin/ecom-activity*') ? 'true' : 'false' }} }">
                     <button @click="open = !open"
                             class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/ecom-tracker*') || Request::is('admin/ecom-activity*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
@@ -251,18 +251,21 @@
 
                     <div x-show="open" x-collapse>
                         <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
-                            @can('general.ecom_tracker_dashboard.index')
+                            @can('ecom_tracker.dashboard.index')
                                 <a href="{{ route('admin.ecom-tracker.dashboard') }}"
                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-tracker/dashboard*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Dashboard
                                 </a>
+                            @endcan
+
+                            @can('ecom_tracker.visitors.index')
                                 <a href="{{ route('admin.ecom-tracker.visitors') }}"
                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-tracker/visitors*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Visitor analytics
                                 </a>
                             @endcan
 
-                            @can('general.ecom_activity.index')
+                            @can('ecom_tracker.activity.index')
                                 <a href="{{ route('admin.ecom-activity.index') }}"
                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-activity*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     User Activity

@@ -5,6 +5,22 @@ return [
     // Default guard
     'default_guard' => env('PERMISSION_DEFAULT_GUARD', config('auth.defaults.guard', 'web')),
 
+    'labels' => [
+        'modules' => [
+            'authentication' => 'Authentication',
+            'general' => 'General',
+            'ecom_tracker' => 'Ecom Tracker',
+            'settings' => 'Settings',
+        ],
+        'resources' => [
+            'ecom_tracker' => [
+                'dashboard' => 'Store Performance',
+                'visitors' => 'Visitor Analytics',
+                'activity' => 'User Activity',
+            ],
+        ],
+    ],
+
     // Permission map
     'map' => [
 
@@ -75,13 +91,21 @@ return [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'delete'],
             ],
-            'ecom_activity' => [
-                'guard' => 'web',
-                'actions' => ['index', 'show'],
-            ],
-            'ecom_tracker_dashboard' => [
+        ],
+
+        // ECOM TRACKER MODULE
+        'ecom_tracker' => [
+            'dashboard' => [
                 'guard' => 'web',
                 'actions' => ['index'],
+            ],
+            'visitors' => [
+                'guard' => 'web',
+                'actions' => ['index'],
+            ],
+            'activity' => [
+                'guard' => 'web',
+                'actions' => ['index', 'show'],
             ],
         ],
 

@@ -7,13 +7,13 @@ use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 
 beforeEach(function () {
-    Permission::findOrCreate('general.ecom_activity.index', 'web');
-    Permission::findOrCreate('general.ecom_activity.show', 'web');
+    Permission::findOrCreate('ecom_tracker.activity.index', 'web');
+    Permission::findOrCreate('ecom_tracker.activity.show', 'web');
 });
 
 test('ecom activity index searches by user name and email', function () {
     $user = User::factory()->create();
-    $user->givePermissionTo('general.ecom_activity.index');
+    $user->givePermissionTo('ecom_tracker.activity.index');
 
     $this->actingAs($user);
 
@@ -36,7 +36,7 @@ test('ecom activity index searches by user name and email', function () {
 
 test('ecom activity index filters sessions with orders', function () {
     $user = User::factory()->create();
-    $user->givePermissionTo('general.ecom_activity.index');
+    $user->givePermissionTo('ecom_tracker.activity.index');
 
     $this->actingAs($user);
 

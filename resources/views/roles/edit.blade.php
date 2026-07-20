@@ -60,7 +60,7 @@
                             <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
                                 <button type="button" onclick="toggleModule('{{ $colId }}')"
                                         class="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 text-left">
-                                    <span class="text-[13px] font-semibold text-slate-700 dark:text-slate-200 capitalize">{{ $moduleIndex }} Module</span>
+                                    <span class="text-[13px] font-semibold text-slate-700 dark:text-slate-200">{{ $moduleIndex }}</span>
                                     <svg id="{{ $colId }}-icon" class="w-4 h-4 text-slate-400 transition-transform duration-200"
                                          fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" d="M19 9l-7 7-7-7"/>
@@ -70,7 +70,7 @@
                                     @foreach ($models as $model => $modelPermissions)
                                         <div class="border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-white dark:bg-slate-900/40 model-box">
                                             <div class="flex items-center justify-between mb-2">
-                                                <span class="text-[12px] font-semibold text-accent-400 capitalize">{{ $model }}</span>
+                                                <span class="text-[12px] font-semibold text-accent-400">{{ $model }}</span>
                                                 <label class="flex items-center gap-1.5 cursor-pointer">
                                                     <input type="checkbox" class="select-all-model w-3.5 h-3.5 accent-accent-400" title="Select all" />
                                                     <span class="text-[10px] text-slate-400">All</span>

@@ -44,7 +44,7 @@ class EcomTrackerDashboardDetailController extends Controller
 
     public function show(Request $request, string $section): View
     {
-        Gate::authorize('general.ecom_tracker_dashboard.index');
+        Gate::authorize('ecom_tracker.dashboard.index');
 
         abort_unless(isset(self::SECTIONS[$section]), 404);
 

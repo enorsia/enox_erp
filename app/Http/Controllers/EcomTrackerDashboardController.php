@@ -21,7 +21,7 @@ class EcomTrackerDashboardController extends Controller
 
     public function index(Request $request): View
     {
-        Gate::authorize('general.ecom_tracker_dashboard.index');
+        Gate::authorize('ecom_tracker.dashboard.index');
 
         $filters = array_merge(
             $this->dashboardDateFilters($request),
@@ -40,7 +40,7 @@ class EcomTrackerDashboardController extends Controller
 
     public function export(Request $request): BinaryFileResponse
     {
-        Gate::authorize('general.ecom_tracker_dashboard.index');
+        Gate::authorize('ecom_tracker.dashboard.index');
 
         $filters = array_merge(
             $this->dashboardDateFilters($request),

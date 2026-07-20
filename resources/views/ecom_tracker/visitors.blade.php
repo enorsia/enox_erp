@@ -110,7 +110,7 @@
                     <tr>
                         <td>
                             <code class="text-xs" title="{{ $visitor['visitor_id'] }}">{{ Str::limit($visitor['visitor_id'], 12) }}</code>
-                            @can('general.ecom_activity.index')
+                            @can('ecom_tracker.activity.index')
                                 <div class="mt-1"><a href="{{ $activityLink($visitor['visitor_id']) }}" class="etd-link">View sessions</a></div>
                             @endcan
                         </td>

@@ -25,7 +25,7 @@ class EcomActivityController extends Controller
 
     public function index(Request $request): View
     {
-        Gate::authorize('general.ecom_activity.index');
+        Gate::authorize('ecom_tracker.activity.index');
 
         $query = ActivityEcomUser::query()
             ->withCount('actions');
@@ -79,7 +79,7 @@ class EcomActivityController extends Controller
 
     public function show(Request $request, string $session, EcomActivityTimelinePresenter $timelinePresenter): View
     {
-        Gate::authorize('general.ecom_activity.show');
+        Gate::authorize('ecom_tracker.activity.show');
 
         $activityUser = ActivityEcomUser::query()
             ->where('session_id', $session)

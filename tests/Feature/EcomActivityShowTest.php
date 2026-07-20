@@ -7,12 +7,12 @@ use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 
 beforeEach(function () {
-    Permission::findOrCreate('general.ecom_activity.show', 'web');
+    Permission::findOrCreate('ecom_tracker.activity.show', 'web');
 });
 
 test('ecom activity show paginates action timeline', function () {
     $user = User::factory()->create();
-    $user->givePermissionTo('general.ecom_activity.show');
+    $user->givePermissionTo('ecom_tracker.activity.show');
 
     $this->actingAs($user);
 

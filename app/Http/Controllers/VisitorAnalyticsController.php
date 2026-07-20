@@ -20,7 +20,7 @@ class VisitorAnalyticsController extends Controller
 
     public function index(Request $request): View
     {
-        Gate::authorize('general.ecom_tracker_dashboard.index');
+        Gate::authorize('ecom_tracker.visitors.index');
 
         $range = $this->resolveRange($request);
         $filters = $request->only(['window', 'datetime_from', 'datetime_to']);
@@ -51,7 +51,7 @@ class VisitorAnalyticsController extends Controller
 
     public function detail(Request $request, string $section): View
     {
-        Gate::authorize('general.ecom_tracker_dashboard.index');
+        Gate::authorize('ecom_tracker.visitors.index');
 
         $titles = [
             'trend' => 'Visitors & sessions over time',
@@ -108,7 +108,7 @@ class VisitorAnalyticsController extends Controller
 
     public function export(Request $request): BinaryFileResponse
     {
-        Gate::authorize('general.ecom_tracker_dashboard.index');
+        Gate::authorize('ecom_tracker.visitors.index');
 
         $range = $this->resolveRange($request);
         $filename = 'visitor-analytics-'.$range['from']->format('Y-m-d-His').'.xlsx';

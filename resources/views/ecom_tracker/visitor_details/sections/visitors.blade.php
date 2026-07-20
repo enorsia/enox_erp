@@ -25,7 +25,7 @@
                 <td>{{ TrackerTime::toLocal($visitor['last_active_at'])?->diffForHumans() ?? '—' }}</td>
                 <td>{{ trim(($visitor['device_type'] ?? '') . ' · ' . ($visitor['browser'] ?? ''), ' ·') ?: '—' }}</td>
                 <td class="etd-col-action">
-                    @can('general.ecom_activity.index')
+                    @can('ecom_tracker.activity.index')
                         <a href="{{ ($activityLink)($visitor['visitor_id']) }}" class="etd-link">View sessions</a>
                     @endcan
                 </td>
