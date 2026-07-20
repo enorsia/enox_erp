@@ -3,7 +3,7 @@
 <div class="etd-tracker-nav">
     @can('ecom_tracker.dashboard.index')
     <a href="{{ route('admin.ecom-tracker.dashboard') }}"
-       class="etd-tracker-nav-link {{ $current === 'dashboard' ? 'active' : '' }}">Store performance</a>
+       class="etd-tracker-nav-link {{ $current === 'dashboard' ? 'active' : '' }}">Dashboard</a>
     @endcan
     @can('ecom_tracker.visitors.index')
     <a href="{{ route('admin.ecom-tracker.visitors') }}"
