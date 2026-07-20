@@ -24,16 +24,16 @@ class VerifyTrackerApiKey
 
         $token = $request->bearerToken();
 
-//        if (! $token || ! Hash::check($token, $hash)) {
-//            if (config('tracker.logging_enabled')) {
-//                Log::warning('[EnoxTracker] Invalid API key', [
-//                    'ip' => $request->ip(),
-//                    'has_token' => (bool) $token,
-//                ]);
-//            }
-//
-//            abort(401, 'Invalid API key.');
-//        }
+        if (! $token || ! Hash::check($token, $hash)) {
+            if (config('tracker.logging_enabled')) {
+                Log::warning('[EnoxTracker] Invalid API key', [
+                    'ip' => $request->ip(),
+                    'has_token' => (bool) $token,
+                ]);
+            }
+
+            abort(401, 'Invalid API key.');
+        }
 
         if (config('tracker.logging_enabled')) {
             Log::debug('[EnoxTracker] API key middleware passed', [
