@@ -6,6 +6,7 @@ use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
+use App\Support\VisitorSessionRedis;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -30,7 +31,10 @@ class RecordVisitorActivityJob implements ShouldQueue
         public bool $isNewSession,
         public array $context = [],
         public ?string $resolvedAt = null,
-    ) {}
+    ) {
+        $this->onConnection((string) config('tracker.queue_connection', 'tracker'));
+        $this->onQueue((string) config('tracker.queue_name', 'tracker'));
+    }
 
     public function handle(): void
     {
@@ -38,22 +42,9 @@ class RecordVisitorActivityJob implements ShouldQueue
         $formattedNow = TrackerTime::formatUtc($now);
         $visitDate = TrackerTime::localDate($now);
 
-        if ($this->isNewDailyVisitor) {
-            ActivityEcomDailyVisitor::query()->firstOrCreate(
-                [
-                    'visitor_id' => $this->visitorId,
-                    'visit_date' => $visitDate,
-                ],
-                [
-                    'first_seen_at' => $formattedNow,
-                    'last_seen_at' => $formattedNow,
-                    'total_duration_seconds' => 0,
-                    'session_count' => 0,
-                ],
-            );
-        }
-
         if ($this->isNewSession) {
+            $this->ensureDailyLedgerRow($formattedNow, $visitDate);
+
             $parsed = UserAgentParser::parse($this->context['user_agent'] ?? null);
 
             ActivityEcomUser::query()->create([
@@ -94,7 +85,34 @@ class RecordVisitorActivityJob implements ShouldQueue
             }
         }
 
-        $this->rollupDailyDuration($this->visitorId, $visitDate, $formattedNow);
+        if ($this->isNewDailyVisitor) {
+            app(VisitorSessionRedis::class)->markSeenBefore($this->visitorId);
+        }
+
+        if (app(VisitorSessionRedis::class)->acquireRollupLock($this->visitorId, $visitDate)) {
+            $this->rollupDailyDuration($this->visitorId, $visitDate, $formattedNow);
+        }
+    }
+
+    private function ensureDailyLedgerRow(string $formattedNow, string $visitDate): void
+    {
+        $existing = ActivityEcomDailyVisitor::query()
+            ->where('visitor_id', $this->visitorId)
+            ->whereDate('visit_date', $visitDate)
+            ->first();
+
+        if ($existing !== null) {
+            return;
+        }
+
+        ActivityEcomDailyVisitor::query()->create([
+            'visitor_id' => $this->visitorId,
+            'visit_date' => $visitDate,
+            'first_seen_at' => $formattedNow,
+            'last_seen_at' => $formattedNow,
+            'total_duration_seconds' => 0,
+            'session_count' => 0,
+        ]);
     }
 
     private function rollupDailyDuration(string $visitorId, string $visitDate, string $now): void

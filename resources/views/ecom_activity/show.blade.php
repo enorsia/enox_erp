@@ -97,7 +97,10 @@
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
                                 @if ($item->category_name)
-                                    <div><span class="text-slate-400">Category:</span> {{ $item->category_name }} ({{ $item->category_code }})</div>
+                                    <div>
+                                        <span class="text-slate-400">Category:</span>
+                                        {{ $item->category_name }}@if ($item->category_code) ({{ $item->category_code }})@endif
+                                    </div>
                                 @endif
                                 @if ($item->product_name)
                                     <div><span class="text-slate-400">Product:</span> {{ $item->product_name }}</div>

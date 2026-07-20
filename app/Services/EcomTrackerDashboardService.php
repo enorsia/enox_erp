@@ -40,6 +40,28 @@ class EcomTrackerDashboardService
      */
     public function getDashboardData(array $filters): array
     {
+        $cache = app(\App\Support\TrackerRedisCache::class);
+        $ttl = (int) config('tracker.analytics_cache_ttl_seconds', 300);
+        $cacheKey = 'dashboard:'.hash('sha256', json_encode($this->cacheableFilters($filters)));
+
+        $cached = $cache->remember($cacheKey, $ttl, fn () => $this->buildDashboardData($filters));
+        $data = $cache->payload($cached);
+        $data['live'] = $this->buildLiveStatus();
+        $data['analytics_cache'] = [
+            'enabled' => (bool) config('tracker.analytics_cache_enabled', true),
+            'cached_at' => $cache->cachedAt($cached),
+            'ttl_seconds' => $ttl,
+        ];
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    private function buildDashboardData(array $filters): array
+    {
         $range = $this->resolveDateRange($filters);
         $priorRange = $this->priorRange($range['from'], $range['to'], $range['period'] ?? null);
         $extraFilters = $this->extractSessionFilters($filters);
@@ -61,7 +83,6 @@ class EcomTrackerDashboardService
             'filters' => $this->normalizeFilters($filters, $range),
             'range' => $range,
             'prior_range' => $priorRange,
-            'live' => $this->buildLiveStatus(),
             'kpis' => $this->attachKpiDeltas($currentKpis, $priorKpis),
             'funnel' => $this->buildFunnel($range['from'], $range['to'], $extraFilters),
             'trend' => $this->buildTrend($range['from'], $range['to'], $extraFilters, $range['period'] ?? null),
@@ -77,6 +98,17 @@ class EcomTrackerDashboardService
             'engagement' => $this->buildEngagement($range['from'], $range['to'], $extraFilters),
             'has_session_filters' => $extraFilters !== [],
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    private function cacheableFilters(array $filters): array
+    {
+        ksort($filters);
+
+        return array_filter($filters, static fn ($value) => $value !== null && $value !== '');
     }
 
     /**
@@ -433,7 +465,9 @@ class EcomTrackerDashboardService
             ->groupBy('session_id');
 
         $convertedSessions = $actions->filter(
-            fn (Collection $rows) => $rows->contains('action_type', 'payment_success')
+            fn (Collection $rows) => $rows
+                ->where('action_type', 'payment_success')
+                ->contains(fn (ActivityEcomUserAction $action) => $this->paymentSaleAmount($action->payment_success ?? []) > 0)
         )->count();
 
         $cartSessions = $actions->filter(
@@ -914,7 +948,7 @@ class EcomTrackerDashboardService
                 }
 
                 if ($items === [] && ! empty($action->product_code)) {
-                    $amount = (float) ($payload['amount_paid'] ?? 0);
+                    $amount = $this->paymentSaleAmount($payload);
                     $this->accumulateProductRow($products, [
                         'code' => (string) $action->product_code,
                         'name' => (string) ($action->product_name ?? ''),
@@ -1730,10 +1764,41 @@ class EcomTrackerDashboardService
         return $this->sumRevenueForSessions($from, $to, $sessionIds);
     }
 
-    private function sumRevenueForSessions(Carbon $from, Carbon $to, Collection $sessionIds): float
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function paymentSaleAmount(array $payload): float
+    {
+        $checkoutInfo = $payload['checkout_info'] ?? null;
+
+        if (! is_array($checkoutInfo)) {
+            return 0.0;
+        }
+
+        $items = $checkoutInfo['items'] ?? [];
+
+        if (is_array($items) && $items !== []) {
+            return collect($items)->sum(function (array $item) {
+                return (float) ($item['qty'] ?? 1) * (float) ($item['price'] ?? 0);
+            });
+        }
+
+        $grandTotal = (float) ($checkoutInfo['totals']['grand_total'] ?? 0);
+
+        if ($grandTotal > 0) {
+            return $grandTotal;
+        }
+
+        return (float) ($payload['amount_paid'] ?? 0);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, ActivityEcomUserAction>
+     */
+    private function qualifyingPaymentActions(Carbon $from, Carbon $to, Collection $sessionIds): Collection
     {
         if ($sessionIds->isEmpty()) {
-            return 0;
+            return collect();
         }
 
         return ActivityEcomUserAction::query()
@@ -1741,25 +1806,26 @@ class EcomTrackerDashboardService
             ->whereIn('session_id', $sessionIds)
             ->where('action_type', 'payment_success')
             ->get()
-            ->sum(function (ActivityEcomUserAction $action) {
-                $payload = $action->payment_success ?? [];
+            ->unique(function (ActivityEcomUserAction $action) {
+                $orderId = $action->payment_success['order_id'] ?? null;
 
-                return (float) ($payload['amount_paid'] ?? $payload['checkout_info']['totals']['grand_total'] ?? 0);
-            });
+                return filled($orderId) ? (string) $orderId : $action->event_id;
+            })
+            ->filter(function (ActivityEcomUserAction $action) {
+                return $this->paymentSaleAmount($action->payment_success ?? []) > 0;
+            })
+            ->values();
+    }
+
+    private function sumRevenueForSessions(Carbon $from, Carbon $to, Collection $sessionIds): float
+    {
+        return $this->qualifyingPaymentActions($from, $to, $sessionIds)
+            ->sum(fn (ActivityEcomUserAction $action) => $this->paymentSaleAmount($action->payment_success ?? []));
     }
 
     private function countPurchases(Carbon $from, Carbon $to, Collection $sessionIds): int
     {
-        if ($sessionIds->isEmpty()) {
-            return 0;
-        }
-
-        return ActivityEcomUserAction::query()
-            ->whereBetween('created_at', [$from, $to])
-            ->whereIn('session_id', $sessionIds)
-            ->where('action_type', 'payment_success')
-            ->distinct('session_id')
-            ->count('session_id');
+        return $this->qualifyingPaymentActions($from, $to, $sessionIds)->count();
     }
 
     private function sumCartAbandonValue(Carbon $from, Carbon $to, Collection $sessionIds): float

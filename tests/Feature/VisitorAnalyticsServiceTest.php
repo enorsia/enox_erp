@@ -88,7 +88,7 @@ test('visitor analytics ignores legacy sessions without visitor_id for unique co
     expect($breakdown->total())->toBe(0);
 });
 
-test('new visitors count uses daily unique ledger only once per visitor per day', function () {
+test('unique visitors count uses lifetime first session only once per cookie', function () {
     $service = app(VisitorAnalyticsService::class);
     $visitorId = (string) Str::uuid();
 

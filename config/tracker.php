@@ -40,9 +40,37 @@ return [
 
     'visitor_cookie_name' => 'enox_visitor_id',
 
-    'redis_prefix' => 'enox:tracker:',
+    /*
+    |--------------------------------------------------------------------------
+    | Tracker Redis
+    |--------------------------------------------------------------------------
+    |
+    | Visitor session state uses a dedicated Redis connection (database.php
+    | redis.tracker). This is separate from Laravel CACHE_STORE / app cache.
+    |
+    */
 
-    'redis_ttl_seconds' => 172800,
+    'redis_connection' => env('TRACKER_REDIS_CONNECTION', 'tracker'),
+
+    'redis_use_memory_store' => (bool) env('TRACKER_REDIS_USE_MEMORY_STORE', false),
+
+    'redis_prefix' => env('TRACKER_REDIS_PREFIX', 'enox:tracker:'),
+
+        'redis_ttl_seconds' => (int) env('TRACKER_REDIS_TTL_SECONDS', 172800),
+
+    'visitor_seen_ttl_seconds' => (int) env('TRACKER_VISITOR_SEEN_TTL_SECONDS', 31536000),
+
+    'rollup_lock_seconds' => (int) env('TRACKER_ROLLUP_LOCK_SECONDS', 45),
+
+    'queue_connection' => env('TRACKER_QUEUE_CONNECTION', 'tracker'),
+
+    'queue_name' => env('TRACKER_QUEUE_NAME', 'tracker'),
+
+    'queue_async' => (bool) env('TRACKER_QUEUE_ASYNC', true),
+
+    'analytics_cache_enabled' => (bool) env('TRACKER_ANALYTICS_CACHE_ENABLED', true),
+
+    'analytics_cache_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_SECONDS', 300),
 
     'analytics_windows' => [
         'hours' => [1, 3, 6, 12, 24],

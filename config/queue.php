@@ -81,6 +81,15 @@ return [
             'after_commit' => false,
         ],
 
+        'tracker' => [
+            'driver' => 'redis',
+            'connection' => 'tracker',
+            'queue' => env('TRACKER_QUEUE_NAME', 'tracker'),
+            'retry_after' => (int) env('TRACKER_QUEUE_RETRY_AFTER', 90),
+            'block_for' => null,
+            'after_commit' => false,
+        ],
+
         'deferred' => [
             'driver' => 'deferred',
         ],

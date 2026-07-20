@@ -31,6 +31,7 @@
             <h1 class="etd-page-title">Store performance</h1>
             <p class="etd-page-desc">{{ $d['range']['label'] }}</p>
             @include('ecom_tracker.partials.timezone-notice')
+            @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $d['analytics_cache'] ?? null])
             <p class="etd-page-live">
                 <span class="etd-live-dot"></span>Live · last event {{ $d['live']['label'] }}
             </p>

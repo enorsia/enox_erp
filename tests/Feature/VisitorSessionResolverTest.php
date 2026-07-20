@@ -3,15 +3,15 @@
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
 use App\Services\VisitorSessionResolver;
+use App\Support\VisitorSessionRedis;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    Cache::flush();
+    VisitorSessionRedis::flushMemoryStore();
     Carbon::setTestNow(Carbon::parse('2026-07-16 10:00:00', 'Europe/London'));
     config([
         'tracker.session_gap_minutes' => 30,
@@ -30,6 +30,7 @@ test('first visit creates new daily visitor and session', function () {
     $result = $resolver->resolve($visitorId);
 
     expect($result['is_new_daily_visitor'])->toBeTrue();
+    expect($result['is_new_unique_visitor'])->toBeTrue();
     expect($result['is_new_session'])->toBeTrue();
     expect(ActivityEcomDailyVisitor::where('visitor_id', $visitorId)->count())->toBe(1);
     expect(ActivityEcomUser::where('visitor_id', $visitorId)->count())->toBe(1);
@@ -79,7 +80,8 @@ test('returning visitor next day creates new daily visitor and session', functio
 
     $second = $resolver->resolve($visitorId);
 
-    expect($second['is_new_daily_visitor'])->toBeTrue();
+    expect($second['is_new_daily_visitor'])->toBeFalse();
+    expect($second['is_new_unique_visitor'])->toBeFalse();
     expect($second['is_new_session'])->toBeTrue();
     expect(ActivityEcomDailyVisitor::where('visitor_id', $visitorId)->count())->toBe(2);
     expect(ActivityEcomUser::where('visitor_id', $visitorId)->count())->toBe(2);

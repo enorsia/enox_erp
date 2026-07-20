@@ -27,9 +27,10 @@ class VisitorAnalyticsController extends Controller
         $filters['window_label'] = $range['label'];
 
         $priorFrom = $range['from']->copy()->subSeconds((int) $range['from']->diffInSeconds($range['to'] ?: TrackerTime::nowUtc()));
-        $priorSummary = $this->analytics->buildSummary($priorFrom, $range['from']);
+        $priorSummary = $this->analytics->getCachedSummary($priorFrom, $range['from'])['summary'];
 
-        $overview = $this->analytics->buildOverview($range['from'], $range['until']);
+        $cached = $this->analytics->getCachedOverview($range['from'], $range['until']);
+        $overview = $cached['overview'];
 
         $data = [
             'window' => $request->input('window', '24h'),
@@ -41,6 +42,7 @@ class VisitorAnalyticsController extends Controller
             'new_returning' => $overview['new_returning'],
             'trend' => $overview['trend'],
             'top_visitors' => $overview['top_visitors'],
+            'analytics_cache' => $cached['analytics_cache'],
         ];
 
         return view('ecom_tracker.visitors', [
@@ -55,7 +57,7 @@ class VisitorAnalyticsController extends Controller
 
         $titles = [
             'trend' => 'Visitors & sessions over time',
-            'new-returning' => 'New vs returning visitors',
+            'new-returning' => 'Unique vs returning visitors',
             'duration' => 'Session duration distribution',
             'visitors' => 'All visitors',
         ];

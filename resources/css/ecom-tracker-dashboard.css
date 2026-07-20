@@ -1149,6 +1149,12 @@
     flex-shrink: 0;
 }
 
+.etd-cache-notice {
+    margin: 0.25rem 0 0;
+    font-size: 11px;
+    color: #94a3b8;
+}
+
 .etd-breadcrumbs {
     display: flex;
     flex-wrap: wrap;

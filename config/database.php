@@ -197,7 +197,7 @@ return [
             ],
         ],
 
-        // ✅ Event-Driven Redis (DB 5)
+        // Event-Driven Redis (DB 5)
         'eventdriven' => [
             'url' => env('REDIS_EVENTDRIVEN_URL'),
             'host' => env('REDIS_EVENTDRIVEN_HOST', '127.0.0.1'),
@@ -211,6 +211,23 @@ return [
             'backoff_cap' => env('REDIS_EVENTDRIVEN_BACKOFF_CAP', 1000),
             'options' => [
                 'prefix' => env('REDIS_EVENTDRIVEN_PREFIX', 'eventdriven:'),
+            ],
+        ],
+
+        // Ecom tracker visitor session state (isolated Redis DB)
+        'tracker' => [
+            'url' => env('TRACKER_REDIS_URL'),
+            'host' => env('TRACKER_REDIS_HOST', env('REDIS_HOST', '127.0.0.1')),
+            'username' => env('TRACKER_REDIS_USERNAME', env('REDIS_USERNAME')),
+            'password' => env('TRACKER_REDIS_PASSWORD', env('REDIS_PASSWORD')),
+            'port' => env('TRACKER_REDIS_PORT', env('REDIS_PORT', '6379')),
+            'database' => env('TRACKER_REDIS_DB', '3'),
+            'max_retries' => env('TRACKER_REDIS_MAX_RETRIES', env('REDIS_MAX_RETRIES', 3)),
+            'backoff_algorithm' => env('TRACKER_REDIS_BACKOFF_ALGORITHM', env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter')),
+            'backoff_base' => env('TRACKER_REDIS_BACKOFF_BASE', env('REDIS_BACKOFF_BASE', 100)),
+            'backoff_cap' => env('TRACKER_REDIS_BACKOFF_CAP', env('REDIS_BACKOFF_CAP', 1000)),
+            'options' => [
+                'prefix' => env('TRACKER_REDIS_PREFIX', 'enox:tracker:'),
             ],
         ],
 

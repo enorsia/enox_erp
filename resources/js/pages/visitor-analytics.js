@@ -37,7 +37,7 @@ if (trendCtx && D.trend) {
             labels: D.trend.labels || [],
             datasets: [
                 {
-                    label: 'Visitors',
+                    label: 'Unique visitors',
                     data: D.trend.visitors || [],
                     borderColor: accent(),
                     backgroundColor: `${accent()}33`,

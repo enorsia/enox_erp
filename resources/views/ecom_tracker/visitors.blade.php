@@ -38,6 +38,7 @@
             <h1 class="etd-page-title">Visitor analytics</h1>
             <p class="etd-page-desc">{{ $filters['window_label'] ?? 'Last 24 hours' }}</p>
             @include('ecom_tracker.partials.timezone-notice')
+            @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $a['analytics_cache'] ?? null])
         </div>
         <div class="flex items-center gap-2 flex-wrap shrink-0">
             <a href="{{ route('admin.ecom-tracker.visitors.export', request()->query()) }}" class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-emerald-200 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-colors font-medium no-underline">Export</a>
@@ -47,13 +48,12 @@
         </div>
     </div>
 
-    <div class="etd-kpi-grid etd-kpi-grid--3 mb-5">
+    <div class="etd-kpi-grid mb-5">
         @foreach ([
-            ['label' => 'Active visitors', 'key' => 'active_visitors', 'format' => 'number'],
-            ['label' => 'New visitors', 'key' => 'new_visitors', 'format' => 'number'],
+            ['label' => 'Unique visitors', 'key' => 'unique_visitors', 'format' => 'number'],
+            ['label' => 'Returning visitors', 'key' => 'returning_visitors', 'format' => 'number'],
             ['label' => 'Sessions', 'key' => 'sessions', 'format' => 'number'],
             ['label' => 'Avg session duration', 'key' => 'avg_session_duration_label', 'format' => 'text'],
-            ['label' => 'Avg visitor stay', 'key' => 'avg_visitor_stay_label', 'format' => 'text'],
             ['label' => 'Total time on site', 'key' => 'total_stay_label', 'format' => 'text'],
         ] as $kpi)
             <div class="etd-kpi">
@@ -76,7 +76,7 @@
         </div>
         <div class="etd-panel">
             <div class="etd-panel-head">
-                <h2 class="etd-panel-title">New vs returning</h2>
+                <h2 class="etd-panel-title">Unique vs returning</h2>
                 @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('new-returning')])
             </div>
             <div class="etd-chart-wrap sm"><canvas id="vaNewReturningMini"></canvas></div>

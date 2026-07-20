@@ -22,6 +22,80 @@ test('ecom tracker dashboard resolves 24h rolling range', function () {
     Carbon::setTestNow();
 });
 
+test('ecom tracker dashboard sale excludes incomplete payment events and sums checkout line items', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $from = Carbon::parse('2026-07-20 00:00:00');
+    $to = Carbon::parse('2026-07-20 23:59:59');
+
+    foreach ([
+        Str::uuid()->toString(),
+        Str::uuid()->toString(),
+        Str::uuid()->toString(),
+    ] as $index => $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => $from,
+            'updated_at' => $from,
+            'last_active_at' => $from,
+        ]);
+
+        if ($index < 2) {
+            ActivityEcomUserAction::query()->create([
+                'event_id' => Str::uuid()->toString(),
+                'session_id' => $sessionId,
+                'action_type' => 'payment_success',
+                'payment_success' => [
+                    'order_id' => 'ORDER-'.$index,
+                    'amount_paid' => $index === 0 ? 45 : 35,
+                    'checkout_info' => [
+                        'order_pk' => (string) (4801 + $index),
+                        'items' => [[
+                            'product_code' => 'SKU-'.$index,
+                            'qty' => 1,
+                            'price' => $index === 0 ? 45 : 35,
+                        ]],
+                        'totals' => ['grand_total' => $index === 0 ? 45 : 35],
+                    ],
+                ],
+                'created_at' => $from->copy()->addHours(2 + $index),
+                'start_time' => $from->copy()->addHours(2 + $index),
+                'end_time' => $from->copy()->addHours(2 + $index)->addSeconds(10),
+            ]);
+
+            continue;
+        }
+
+        ActivityEcomUserAction::query()->create([
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => 'payment_success',
+            'payment_success' => [
+                'order_id' => 'ORD-E2E-1',
+                'amount_paid' => 99.99,
+                'payment_method' => 'card',
+                'currency' => 'GBP',
+            ],
+            'created_at' => $from->copy()->addHours(5),
+            'start_time' => $from->copy()->addHours(5),
+            'end_time' => $from->copy()->addHours(5)->addSeconds(10),
+        ]);
+    }
+
+    Carbon::setTestNow($to);
+
+    $data = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-20',
+        'date_to' => '2026-07-20',
+    ]);
+
+    expect(collect($data['kpis'])->firstWhere('label', 'Sale')['value'])->toBe(80.0);
+    expect(collect($data['kpis'])->firstWhere('label', 'Average sale')['value'])->toBe(40.0);
+
+    Carbon::setTestNow();
+});
+
 test('ecom tracker dashboard resolves custom date range', function () {
     $service = app(EcomTrackerDashboardService::class);
 

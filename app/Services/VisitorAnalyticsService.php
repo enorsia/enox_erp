@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Support\TrackerRedisCache;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -92,25 +93,41 @@ class VisitorAnalyticsService
 
     public function countNewVisitors(Carbon $from, ?Carbon $until = null): int
     {
-        $query = ActivityEcomDailyVisitor::query();
+        return $this->countUniqueVisitors($from, $until);
+    }
+
+    public function countUniqueVisitors(Carbon $from, ?Carbon $until = null): int
+    {
+        $firstVisits = ActivityEcomUser::query()
+            ->select('visitor_id', DB::raw('MIN(created_at) as first_seen_at'))
+            ->whereNotNull('visitor_id')
+            ->groupBy('visitor_id');
+
+        $query = DB::query()->fromSub($firstVisits, 'first_visits');
 
         if ($until !== null) {
-            $query->whereBetween('first_seen_at', [$from, $until]);
+            $query->whereBetween('first_seen_at', [
+                $from->format('Y-m-d H:i:s'),
+                $until->format('Y-m-d H:i:s'),
+            ]);
         } else {
-            $query->where('first_seen_at', '>=', $from);
+            $query->where('first_seen_at', '>=', $from->format('Y-m-d H:i:s'));
         }
 
         return (int) $query->count();
     }
 
+    public function countReturningVisitors(Carbon $from, ?Carbon $until = null): int
+    {
+        $sessions = $this->countSessions($from, $until);
+        $uniqueVisitors = $this->countUniqueVisitors($from, $until);
+
+        return max(0, $sessions - $uniqueVisitors);
+    }
+
     public function countNewVisitorsInRange(Carbon $from, Carbon $to): int
     {
-        $fromDate = TrackerTime::toLocal($from)?->toDateString();
-        $toDate = TrackerTime::toLocal($to)?->toDateString();
-
-        return (int) ActivityEcomDailyVisitor::query()
-            ->whereBetween('visit_date', [$fromDate, $toDate])
-            ->count();
+        return $this->countUniqueVisitors($from, $to);
     }
 
     public function countSessions(Carbon $from, ?Carbon $until = null): int
@@ -171,16 +188,22 @@ class VisitorAnalyticsService
      */
     public function buildSummary(Carbon $from, ?Carbon $until = null): array
     {
+        $avgSessionDuration = $this->avgSessionDuration($from, $until);
+        $totalStaySeconds = $this->totalStaySeconds($from, $until);
+
         return [
-            'active_visitors' => $this->countActiveVisitors($from, $until),
-            'new_visitors' => $this->countNewVisitors($from, $until),
+            'unique_visitors' => $this->countUniqueVisitors($from, $until),
+            'returning_visitors' => $this->countReturningVisitors($from, $until),
             'sessions' => $this->countSessions($from, $until),
-            'avg_session_duration' => $this->avgSessionDuration($from, $until),
-            'avg_session_duration_label' => $this->formatDuration($this->avgSessionDuration($from, $until)),
+            'avg_session_duration' => $avgSessionDuration,
+            'avg_session_duration_label' => $this->formatDuration($avgSessionDuration),
+            'total_stay_seconds' => $totalStaySeconds,
+            'total_stay_label' => $this->formatDuration($totalStaySeconds),
+            // Legacy keys kept for exports and rolling windows.
+            'active_visitors' => $this->countActiveVisitors($from, $until),
+            'new_visitors' => $this->countUniqueVisitors($from, $until),
             'avg_visitor_stay' => $this->avgVisitorStay($from, $until),
             'avg_visitor_stay_label' => $this->formatDuration($this->avgVisitorStay($from, $until)),
-            'total_stay_seconds' => $this->totalStaySeconds($from, $until),
-            'total_stay_label' => $this->formatDuration($this->totalStaySeconds($from, $until)),
         ];
     }
 
@@ -243,13 +266,15 @@ class VisitorAnalyticsService
         $avgStay = $this->avgSessionDuration($since);
 
         return [
-            'active_visitors' => $this->countActiveVisitors($since),
-            'new_visitors' => $this->countNewVisitors($since),
+            'unique_visitors' => $this->countUniqueVisitors($since),
+            'returning_visitors' => $this->countReturningVisitors($since),
             'sessions' => $this->countSessions($since),
             'avg_stay_seconds' => $avgStay,
             'avg_stay_label' => $this->formatDuration($avgStay),
             'total_stay_seconds' => $this->totalStaySeconds($since),
             'total_stay_label' => $this->formatDuration($this->totalStaySeconds($since)),
+            'active_visitors' => $this->countActiveVisitors($since),
+            'new_visitors' => $this->countUniqueVisitors($since),
         ];
     }
 
@@ -270,6 +295,63 @@ class VisitorAnalyticsService
             'trend' => $trend,
             'top_visitors' => $topVisitors->items(),
         ]);
+    }
+
+    /**
+     * @return array{overview: array<string, mixed>, analytics_cache: array<string, mixed>}
+     */
+    public function getCachedOverview(Carbon $from, ?Carbon $until = null): array
+    {
+        $cache = app(TrackerRedisCache::class);
+        $ttl = (int) config('tracker.analytics_cache_ttl_seconds', 300);
+        $cacheKey = 'visitors:overview:'.hash('sha256', json_encode($this->cacheIdentity($from, $until)));
+
+        $cached = $cache->remember($cacheKey, $ttl, fn () => $this->buildOverview($from, $until));
+
+        return [
+            'overview' => $cache->payload($cached),
+            'analytics_cache' => $this->analyticsCacheMeta($cache, $cached, $ttl),
+        ];
+    }
+
+    /**
+     * @return array{summary: array<string, mixed>, analytics_cache: array<string, mixed>}
+     */
+    public function getCachedSummary(Carbon $from, ?Carbon $until = null): array
+    {
+        $cache = app(TrackerRedisCache::class);
+        $ttl = (int) config('tracker.analytics_cache_ttl_seconds', 300);
+        $cacheKey = 'visitors:summary:'.hash('sha256', json_encode($this->cacheIdentity($from, $until)));
+
+        $cached = $cache->remember($cacheKey, $ttl, fn () => $this->buildSummary($from, $until));
+
+        return [
+            'summary' => $cache->payload($cached),
+            'analytics_cache' => $this->analyticsCacheMeta($cache, $cached, $ttl),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function cacheIdentity(Carbon $from, ?Carbon $until = null): array
+    {
+        return [
+            'from' => $from->toIso8601String(),
+            'until' => $until?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * @return array{enabled: bool, cached_at: ?string, ttl_seconds: int}
+     */
+    private function analyticsCacheMeta(TrackerRedisCache $cache, array $cached, int $ttl): array
+    {
+        return [
+            'enabled' => (bool) config('tracker.analytics_cache_enabled', true),
+            'cached_at' => $cache->cachedAt($cached),
+            'ttl_seconds' => $ttl,
+        ];
     }
 
     /**
@@ -295,7 +377,7 @@ class VisitorAnalyticsService
             $dayEnd = $cursor->copy()->endOfDay()->utc();
             $labels[] = $cursor->format('d M');
 
-            $visitors[] = $this->countActiveVisitors($dayStart, $dayEnd);
+            $visitors[] = $this->countUniqueVisitors($dayStart, $dayEnd);
             $sessions[] = $this->countSessions($dayStart, $dayEnd);
 
             $cursor->addDay();
@@ -309,29 +391,15 @@ class VisitorAnalyticsService
      */
     public function buildNewVsReturning(Carbon $from, ?Carbon $until = null): array
     {
-        $newVisitors = $this->countNewVisitors($from, $until);
-
-        $activeVisitorIds = $this->applyLastActiveRange(ActivityEcomUser::query(), $from, $until)
-            ->whereNotNull('visitor_id')
-            ->distinct()
-            ->pluck('visitor_id');
-
-        $fromDate = TrackerTime::toLocal($from)?->toDateString();
-        $returning = 0;
-
-        if ($activeVisitorIds->isNotEmpty() && $fromDate) {
-            $returning = (int) ActivityEcomDailyVisitor::query()
-                ->whereIn('visitor_id', $activeVisitorIds)
-                ->where('visit_date', '<', $fromDate)
-                ->distinct()
-                ->count('visitor_id');
-        }
+        $uniqueVisitors = $this->countUniqueVisitors($from, $until);
+        $returningVisitors = $this->countReturningVisitors($from, $until);
 
         return [
-            'new' => $newVisitors,
-            'returning' => $returning,
-            'labels' => ['New', 'Returning'],
-            'values' => [$newVisitors, $returning],
+            'unique' => $uniqueVisitors,
+            'returning' => $returningVisitors,
+            'new' => $uniqueVisitors,
+            'labels' => ['Unique', 'Returning'],
+            'values' => [$uniqueVisitors, $returningVisitors],
         ];
     }
 

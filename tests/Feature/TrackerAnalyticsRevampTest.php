@@ -89,7 +89,101 @@ test('build visitor trend and new vs returning methods work', function () {
     $split = $service->buildNewVsReturning($from);
 
     expect($trend['labels'])->not->toBeEmpty();
-    expect($split['new'])->toBe(1);
+    expect($split['unique'])->toBe(1);
+    expect($split['returning'])->toBe(0);
+    expect($split['values'])->toBe([1, 0]);
+    expect($service->countUniqueVisitors($from))->toBe(1);
+    expect($service->countReturningVisitors($from))->toBe(0);
+});
+
+test('unique vs returning uses sessions minus unique visitors for same-day returns', function () {
+    $service = app(VisitorAnalyticsService::class);
+    $returningVisitor = (string) Str::uuid();
+    $newVisitor = (string) Str::uuid();
+
+    ActivityEcomDailyVisitor::query()->create([
+        'visitor_id' => $returningVisitor,
+        'visit_date' => '2026-07-16',
+        'first_seen_at' => utcAt('2026-07-16 10:00:00'),
+        'last_seen_at' => utcAt('2026-07-16 12:30:00'),
+        'total_duration_seconds' => 3600,
+        'session_count' => 2,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $returningVisitor,
+        'created_at' => utcAt('2026-07-16 10:00:00'),
+        'updated_at' => utcAt('2026-07-16 10:30:00'),
+        'last_active_at' => utcAt('2026-07-16 10:30:00'),
+        'session_duration_seconds' => 1800,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $returningVisitor,
+        'created_at' => utcAt('2026-07-16 12:00:00'),
+        'updated_at' => utcAt('2026-07-16 12:30:00'),
+        'last_active_at' => utcAt('2026-07-16 12:30:00'),
+        'session_duration_seconds' => 1800,
+    ]);
+
+    ActivityEcomDailyVisitor::query()->create([
+        'visitor_id' => $newVisitor,
+        'visit_date' => '2026-07-16',
+        'first_seen_at' => utcAt('2026-07-16 12:00:00'),
+        'last_seen_at' => utcAt('2026-07-16 12:20:00'),
+        'total_duration_seconds' => 1200,
+        'session_count' => 1,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $newVisitor,
+        'created_at' => utcAt('2026-07-16 12:00:00'),
+        'updated_at' => utcAt('2026-07-16 12:20:00'),
+        'last_active_at' => utcAt('2026-07-16 12:20:00'),
+        'session_duration_seconds' => 1200,
+    ]);
+
+    $from = $service->resolveWindow('24h');
+    $split = $service->buildNewVsReturning($from);
+
+    expect($service->countUniqueVisitors($from))->toBe(2);
+    expect($service->countSessions($from))->toBe(3);
+    expect($service->countReturningVisitors($from))->toBe(1);
+    expect($split['unique'])->toBe(2);
+    expect($split['returning'])->toBe(1);
+    expect($split['values'])->toBe([2, 1]);
+});
+
+test('unique visitors only count first ever visit not each calendar day', function () {
+    $service = app(VisitorAnalyticsService::class);
+    $visitorId = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorId,
+        'created_at' => utcAt('2026-07-15 10:00:00'),
+        'updated_at' => utcAt('2026-07-15 10:30:00'),
+        'last_active_at' => utcAt('2026-07-15 10:30:00'),
+        'session_duration_seconds' => 1800,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorId,
+        'created_at' => utcAt('2026-07-16 10:00:00'),
+        'updated_at' => utcAt('2026-07-16 10:30:00'),
+        'last_active_at' => utcAt('2026-07-16 10:30:00'),
+        'session_duration_seconds' => 1800,
+    ]);
+
+    $from = $service->resolveWindow('24h');
+
+    expect($service->countUniqueVisitors($from))->toBe(0);
+    expect($service->countSessions($from))->toBe(1);
+    expect($service->countReturningVisitors($from))->toBe(1);
 });
 
 test('dashboard detail sections return uncapped data', function () {

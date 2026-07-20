@@ -40,15 +40,15 @@ class VisitorAnalyticsWindowsSheet implements FromCollection, WithHeadings, With
 
     public function headings(): array
     {
-        return ['Window', 'Active visitors', 'New visitors', 'Sessions', 'Avg stay', 'Total stay'];
+        return ['Window', 'Unique visitors', 'Returning visitors', 'Sessions', 'Avg session duration', 'Total time'];
     }
 
     public function collection(): Collection
     {
         return collect($this->analytics->buildRollingWindows())->map(fn (array $row) => [
             $row['label'],
-            $row['active_visitors'],
-            $row['new_visitors'],
+            $row['unique_visitors'],
+            $row['returning_visitors'],
             $row['sessions'],
             $row['avg_stay_label'],
             $row['total_stay_label'],
