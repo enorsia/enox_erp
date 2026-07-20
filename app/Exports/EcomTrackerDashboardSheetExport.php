@@ -244,6 +244,7 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'add_to_cart' => 14,
             'purchases' => 12,
             'revenue' => 16,
+            'sale' => 16,
             'add_rate' => 14,
             'viewed' => 14,
             'purchased' => 14,
@@ -308,6 +309,7 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'add_to_cart',
             'purchases',
             'revenue',
+            'sale',
             'sessions',
             'percent_of_top',
             'drop_off_percent',
@@ -321,7 +323,7 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
 
     private function isMoneyKey(string $key): bool
     {
-        return in_array($key, ['revenue', 'value', 'cart_value', 'total'], true);
+        return in_array($key, ['revenue', 'sale', 'value', 'cart_value', 'total'], true);
     }
 
     private function isPercentKey(string $key): bool

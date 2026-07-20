@@ -97,12 +97,13 @@
 
     <div class="etd-kpi-rows">
         @foreach ([
-            ['title' => 'Audience & engagement', 'items' => array_slice($d['kpis'], 0, 4)],
-            ['title' => 'Revenue & conversion', 'items' => array_slice($d['kpis'], 4, 4)],
+            ['title' => 'Audience & engagement', 'items' => array_slice($d['kpis'], 0, 4), 'grid' => 'etd-kpi-grid'],
+            ['title' => 'Sale & conversion', 'items' => array_slice($d['kpis'], 4, 2), 'grid' => 'etd-kpi-grid'],
+            ['title' => 'Funnel drop-off', 'items' => array_slice($d['kpis'], 6, 3), 'grid' => 'etd-kpi-grid etd-kpi-grid--3'],
         ] as $group)
             <div>
                 <p class="etd-kpi-section-label">{{ $group['title'] }}</p>
-                <div class="etd-kpi-grid">
+                <div class="{{ $group['grid'] }}">
                     @foreach ($group['items'] as $kpi)
                         <div class="etd-kpi">
                             <div class="etd-kpi-label">{{ $kpi['label'] }}</div>
@@ -204,7 +205,7 @@
                         <th class="etd-num">Views</th>
                         <th class="etd-num">Add to cart</th>
                         <th class="etd-num">Purchases</th>
-                        <th class="etd-num">Revenue</th>
+                        <th class="etd-num">Sale</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -273,89 +274,48 @@
         </div>
     </div>
 
-    <h2 class="etd-section-title"><span class="etd-section-num">02</span> Recoverable revenue</h2>
-    <p class="etd-section-note">Sessions that showed buying intent but didn't convert — review for retargeting.</p>
+    <h2 class="etd-section-title"><span class="etd-section-num">02</span> Recoverable sale</h2>
+    <p class="etd-section-note">Sessions that dropped off at each funnel step — review for retargeting.</p>
 
-    <div class="etd-grid-2 mb-3">
-        <div class="etd-panel" id="cart-abandon">
-            <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Cart abandoned</h2>
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span class="etd-stake-badge">
-                        {{ number_format($d['cart_abandonment']['session_count']) }} sessions · £{{ number_format($d['cart_abandonment']['at_stake'], 2) }} at stake
-                    </span>
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('cart-abandonment')])
-                </div>
-            </div>
-            <div class="etd-table-scroll etd-table-scroll--abandonment etd-table-scroll--fixed">
-            <table class="etd-table etd-table--abandonment">
-                <thead>
-                    <tr>
-                        <th>Session</th>
-                        <th>Last item</th>
-                        <th class="etd-num">Cart value</th>
-                        <th>Idle</th>
-                        <th class="etd-col-action">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($d['cart_abandonment']['rows'] as $row)
-                        <tr>
-                            <td><span class="etd-chip">{{ $row['session_label'] }}</span></td>
-                            <td>{{ $row['detail'] }}</td>
-                            <td class="etd-num">£{{ number_format($row['value'], 2) }}</td>
-                            <td>{{ $row['idle'] }}</td>
-                            <td class="etd-col-action"><a href="{{ $row['activity_url'] }}" class="etd-link">View session</a></td>
-                        </tr>
-                    @empty
-                        <tr class="etd-table-empty">
-                            <td colspan="5" class="etd-table-empty-cell text-slate-400">No cart abandonment in this period.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-            </div>
-        </div>
+    <div class="etd-grid-3 etd-grid-3--abandonment mb-3">
+        @include('ecom_tracker.partials.abandonment-panel', [
+            'd' => $d,
+            'detailLink' => $detailLink,
+            'panelId' => 'cart-abandon',
+            'title' => 'Cart abandoned',
+            'subtitle' => 'Added to cart but didn\'t begin checkout.',
+            'dataKey' => 'cart_abandonment',
+            'detailSection' => 'cart-abandonment',
+            'detailLabel' => 'Last item',
+            'valueLabel' => 'Cart value',
+            'emptyMessage' => 'No cart abandonment in this period.',
+        ])
 
-        <div class="etd-panel" id="checkout-abandon">
-            <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Checkout abandoned</h2>
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span class="etd-stake-badge">
-                        {{ number_format($d['checkout_abandonment']['session_count']) }} sessions · £{{ number_format($d['checkout_abandonment']['at_stake'], 2) }} at stake
-                    </span>
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('checkout-abandonment')])
-                </div>
-            </div>
-            <div class="etd-table-scroll etd-table-scroll--abandonment etd-table-scroll--fixed">
-            <table class="etd-table etd-table--abandonment">
-                <thead>
-                    <tr>
-                        <th>Session</th>
-                        <th>Coupon</th>
-                        <th class="etd-num">Total</th>
-                        <th>Idle</th>
-                        <th class="etd-col-action">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($d['checkout_abandonment']['rows'] as $row)
-                        <tr>
-                            <td><span class="etd-chip">{{ $row['session_label'] }}</span></td>
-                            <td>{{ $row['detail'] }}</td>
-                            <td class="etd-num">£{{ number_format($row['value'], 2) }}</td>
-                            <td>{{ $row['idle'] }}</td>
-                            <td class="etd-col-action"><a href="{{ $row['activity_url'] }}" class="etd-link">View session</a></td>
-                        </tr>
-                    @empty
-                        <tr class="etd-table-empty">
-                            <td colspan="5" class="etd-table-empty-cell text-slate-400">No checkout abandonment in this period.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-            </div>
-        </div>
+        @include('ecom_tracker.partials.abandonment-panel', [
+            'd' => $d,
+            'detailLink' => $detailLink,
+            'panelId' => 'begin-checkout-abandon',
+            'title' => 'Begin checkout abandoned',
+            'subtitle' => 'Began checkout but didn\'t proceed.',
+            'dataKey' => 'begin_checkout_abandonment',
+            'detailSection' => 'begin-checkout-abandonment',
+            'detailLabel' => 'Coupon',
+            'valueLabel' => 'Total',
+            'emptyMessage' => 'No begin checkout abandonment in this period.',
+        ])
+
+        @include('ecom_tracker.partials.abandonment-panel', [
+            'd' => $d,
+            'detailLink' => $detailLink,
+            'panelId' => 'proceed-checkout-abandon',
+            'title' => 'Proceed checkout abandoned',
+            'subtitle' => 'Proceeded to checkout but didn\'t complete payment.',
+            'dataKey' => 'proceed_checkout_abandonment',
+            'detailSection' => 'proceed-checkout-abandonment',
+            'detailLabel' => 'Coupon',
+            'valueLabel' => 'Total',
+            'emptyMessage' => 'No proceed checkout abandonment in this period.',
+        ])
     </div>
 
     <h2 class="etd-section-title"><span class="etd-section-num">03</span> Acquisition &amp; audience</h2>
@@ -404,7 +364,7 @@
                         <th>Medium</th>
                         <th class="etd-num">Sessions</th>
                         <th class="etd-num">Conversion</th>
-                        <th class="etd-num">Revenue</th>
+                        <th class="etd-num">Sale</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -437,7 +397,7 @@
                     <tr>
                         <th>Location</th>
                         <th class="etd-num">Sessions</th>
-                        <th class="etd-num">Revenue</th>
+                        <th class="etd-num">Sale</th>
                     </tr>
                 </thead>
                 <tbody>

@@ -95,7 +95,7 @@ test('build visitor trend and new vs returning methods work', function () {
 test('dashboard detail sections return uncapped data', function () {
     $service = app(EcomTrackerDashboardService::class);
 
-    foreach (['funnel', 'trend', 'categories', 'products', 'colors', 'cart-abandonment', 'checkout-abandonment', 'devices', 'traffic-sources', 'geography', 'engagement'] as $section) {
+    foreach (['funnel', 'trend', 'categories', 'products', 'colors', 'cart-abandonment', 'begin-checkout-abandonment', 'proceed-checkout-abandonment', 'devices', 'traffic-sources', 'geography', 'engagement'] as $section) {
         $detail = $service->getSectionDetail($section, ['period' => '30d'], [], null);
 
         expect($detail['section'])->toBe($section);

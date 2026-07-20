@@ -69,7 +69,8 @@ class EcomTrackerDashboardService
             'products' => $this->buildProductPerformance($range['from'], $range['to'], filters: $extraFilters),
             'colors' => $this->buildColorPerformance($range['from'], $range['to'], filters: $extraFilters),
             'cart_abandonment' => $this->buildCartAbandonment($range['from'], $range['to'], filters: $extraFilters),
-            'checkout_abandonment' => $this->buildCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters),
+            'begin_checkout_abandonment' => $this->buildBeginCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters),
+            'proceed_checkout_abandonment' => $this->buildProceedCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters),
             'devices' => $this->buildDeviceBreakdown($range['from'], $range['to'], $extraFilters),
             'traffic_sources' => $this->buildTrafficSources($range['from'], $range['to'], filters: $extraFilters),
             'geography' => $this->buildGeography($range['from'], $range['to'], filters: $extraFilters),
@@ -136,7 +137,7 @@ class EcomTrackerDashboardService
                 'views' => $row['views'],
                 'add_to_cart' => $row['adds'],
                 'purchases' => $row['purchases'],
-                'revenue' => $row['revenue'],
+                'sale' => $row['revenue'],
             ])->values()->all(),
             'colors' => collect($data['colors']['products'] ?? [])
                 ->flatMap(function (array $product) {
@@ -167,12 +168,12 @@ class EcomTrackerDashboardService
                 'medium' => $row['medium'],
                 'sessions' => $row['sessions'],
                 'conversion_rate' => $row['conversion_rate'],
-                'revenue' => $row['revenue'],
+                'sale' => $row['revenue'],
             ])->values()->all(),
             'geography' => collect($data['geography'])->map(fn (array $row) => [
                 'location' => $row['location'],
                 'sessions' => $row['sessions'],
-                'revenue' => $row['revenue'],
+                'sale' => $row['revenue'],
             ])->values()->all(),
             'devices' => collect($data['devices']['legend'])->map(fn (array $row) => [
                 'device' => $row['label'],
@@ -340,7 +341,8 @@ class EcomTrackerDashboardService
             'products' => ['section' => $section, 'range' => $range, 'data' => $this->buildProductPerformance($from, $to, $effectiveLimit, $extraFilters)],
             'colors' => ['section' => $section, 'range' => $range, 'data' => $this->buildColorPerformance($from, $to, $effectiveLimit, $extraFilters)],
             'cart-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildCartAbandonment($from, $to, $effectiveLimit, $extraFilters)],
-            'checkout-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildCheckoutAbandonment($from, $to, $effectiveLimit, $extraFilters)],
+            'begin-checkout-abandonment', 'checkout-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildBeginCheckoutAbandonment($from, $to, $effectiveLimit, $extraFilters)],
+            'proceed-checkout-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildProceedCheckoutAbandonment($from, $to, $effectiveLimit, $extraFilters)],
             'devices' => ['section' => $section, 'range' => $range, 'data' => $this->buildDeviceBreakdown($from, $to, $extraFilters)],
             'traffic-sources' => ['section' => $section, 'range' => $range, 'data' => $this->buildTrafficSources($from, $to, $effectiveLimit, $extraFilters)],
             'geography' => ['section' => $section, 'range' => $range, 'data' => $this->buildGeography($from, $to, $effectiveLimit, $extraFilters)],
@@ -407,14 +409,20 @@ class EcomTrackerDashboardService
         $cartSessions = $actions->filter(
             fn (Collection $rows) => $rows->contains('action_type', 'add_to_cart')
         );
-        $checkoutSessions = $actions->filter(
+        $beginCheckoutSessions = $actions->filter(
+            fn (Collection $rows) => $rows->contains('action_type', 'begin_checkout')
+        );
+        $proceedCheckoutSessions = $actions->filter(
             fn (Collection $rows) => $rows->contains('action_type', 'proceed_checkout')
         );
 
         $cartAbandoned = $cartSessions->filter(
-            fn (Collection $rows) => ! $rows->contains('action_type', 'payment_success')
+            fn (Collection $rows) => ! $rows->contains('action_type', 'begin_checkout')
         )->count();
-        $checkoutAbandoned = $checkoutSessions->filter(
+        $beginCheckoutAbandoned = $beginCheckoutSessions->filter(
+            fn (Collection $rows) => ! $rows->contains('action_type', 'proceed_checkout')
+        )->count();
+        $proceedCheckoutAbandoned = $proceedCheckoutSessions->filter(
             fn (Collection $rows) => ! $rows->contains('action_type', 'payment_success')
         )->count();
 
@@ -424,7 +432,8 @@ class EcomTrackerDashboardService
         $conversionRate = $totalSessions > 0 ? ($convertedSessions / $totalSessions) * 100 : 0;
         $aov = $purchases > 0 ? $revenue / $purchases : 0;
         $cartAbandonRate = $cartSessions->count() > 0 ? ($cartAbandoned / $cartSessions->count()) * 100 : 0;
-        $checkoutAbandonRate = $checkoutSessions->count() > 0 ? ($checkoutAbandoned / $checkoutSessions->count()) * 100 : 0;
+        $beginCheckoutAbandonRate = $beginCheckoutSessions->count() > 0 ? ($beginCheckoutAbandoned / $beginCheckoutSessions->count()) * 100 : 0;
+        $proceedCheckoutAbandonRate = $proceedCheckoutSessions->count() > 0 ? ($proceedCheckoutAbandoned / $proceedCheckoutSessions->count()) * 100 : 0;
 
         return [
             'unique_visitors' => $this->visitorAnalytics->countNewVisitorsInRange($from, $to),
@@ -434,11 +443,14 @@ class EcomTrackerDashboardService
             'revenue' => round($revenue, 2),
             'aov' => round($aov, 2),
             'cart_abandonment_rate' => round($cartAbandonRate, 1),
-            'checkout_abandonment_rate' => round($checkoutAbandonRate, 1),
+            'begin_checkout_abandonment_rate' => round($beginCheckoutAbandonRate, 1),
+            'proceed_checkout_abandonment_rate' => round($proceedCheckoutAbandonRate, 1),
             'cart_abandoned_sessions' => $cartAbandoned,
-            'checkout_abandoned_sessions' => $checkoutAbandoned,
+            'begin_checkout_abandoned_sessions' => $beginCheckoutAbandoned,
+            'proceed_checkout_abandoned_sessions' => $proceedCheckoutAbandoned,
             'cart_at_stake' => round($this->sumCartAbandonValue($from, $to, $sessionIds), 2),
-            'checkout_at_stake' => round($this->sumCheckoutAbandonValue($from, $to, $sessionIds), 2),
+            'begin_checkout_at_stake' => round($this->sumBeginCheckoutAbandonValue($from, $to, $sessionIds), 2),
+            'proceed_checkout_at_stake' => round($this->sumProceedCheckoutAbandonValue($from, $to, $sessionIds), 2),
         ];
     }
 
@@ -454,10 +466,11 @@ class EcomTrackerDashboardService
             $this->kpiCard('Avg stay time', $current['avg_stay_seconds'], $prior['avg_stay_seconds'], 'duration', false),
             $this->kpiCard('Sessions', $current['sessions'], $prior['sessions'], 'number', false),
             $this->kpiCard('Conversion rate', $current['conversion_rate'], $prior['conversion_rate'], 'percent', false),
-            $this->kpiCard('Revenue', $current['revenue'], $prior['revenue'], 'currency', false),
-            $this->kpiCard('AOV', $current['aov'], $prior['aov'], 'currency', false),
+            $this->kpiCard('Sale', $current['revenue'], $prior['revenue'], 'currency', false),
+            $this->kpiCard('Average sale', $current['aov'], $prior['aov'], 'currency', false),
             $this->kpiCard('Cart abandonment', $current['cart_abandonment_rate'], $prior['cart_abandonment_rate'], 'percent', true),
-            $this->kpiCard('Checkout abandonment', $current['checkout_abandonment_rate'], $prior['checkout_abandonment_rate'], 'percent', true),
+            $this->kpiCard('Begin checkout abandonment', $current['begin_checkout_abandonment_rate'], $prior['begin_checkout_abandonment_rate'], 'percent', true),
+            $this->kpiCard('Proceed checkout abandonment', $current['proceed_checkout_abandonment_rate'], $prior['proceed_checkout_abandonment_rate'], 'percent', true),
         ];
     }
 
@@ -1289,7 +1302,7 @@ class EcomTrackerDashboardService
      */
     private function buildCartAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
     {
-        $abandonment = $this->abandonedSessions($from, $to, 'add_to_cart', 'add_to_cart', $limit, $filters);
+        $abandonment = $this->abandonedSessions($from, $to, 'add_to_cart', 'add_to_cart', $limit, $filters, 'begin_checkout');
 
         return [
             'session_count' => $abandonment['total_count'],
@@ -1301,9 +1314,23 @@ class EcomTrackerDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function buildCheckoutAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
+    private function buildBeginCheckoutAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
     {
-        $abandonment = $this->abandonedSessions($from, $to, 'proceed_checkout', 'proceed_to_checkout', $limit, $filters);
+        $abandonment = $this->abandonedSessions($from, $to, 'begin_checkout', 'begin_checkout', $limit, $filters, 'proceed_checkout');
+
+        return [
+            'session_count' => $abandonment['total_count'],
+            'at_stake' => $abandonment['total_at_stake'],
+            'rows' => $abandonment['rows'],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildProceedCheckoutAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
+    {
+        $abandonment = $this->abandonedSessions($from, $to, 'proceed_checkout', 'proceed_to_checkout', $limit, $filters, 'payment_success');
 
         return [
             'session_count' => $abandonment['total_count'],
@@ -1315,7 +1342,7 @@ class EcomTrackerDashboardService
     /**
      * @return array{total_count: int, total_at_stake: float, rows: array<int, array<string, mixed>>}
      */
-    private function abandonedSessions(Carbon $from, Carbon $to, string $stage, string $payloadKey, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
+    private function abandonedSessions(Carbon $from, Carbon $to, string $stage, string $payloadKey, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], string $excludeActionType = 'payment_success'): array
     {
         $allowedSessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
 
@@ -1333,12 +1360,12 @@ class EcomTrackerDashboardService
         $rows = [];
 
         foreach ($candidates as $sessionId => $stageActions) {
-            $hasPurchase = ActivityEcomUserAction::query()
+            $hasExcludedAction = ActivityEcomUserAction::query()
                 ->where('session_id', $sessionId)
-                ->where('action_type', 'payment_success')
+                ->where('action_type', $excludeActionType)
                 ->exists();
 
-            if ($hasPurchase) {
+            if ($hasExcludedAction) {
                 continue;
             }
 
@@ -1348,10 +1375,12 @@ class EcomTrackerDashboardService
 
             $rows[] = [
                 'session_id' => $sessionId,
-                'session_label' => substr($sessionId, 0, 12).'…',
-                'detail' => $stage === 'add_to_cart'
-                    ? ($latest->product_name ?: ($payload['items'][0]['product_name'] ?? '—'))
-                    : ($payload['coupon_code'] ?? '—'),
+                'session_label' => substr($sessionId, 0, 8).'…',
+                'detail' => match ($stage) {
+                    'add_to_cart' => $latest->product_name ?: ($payload['items'][0]['product_name'] ?? '—'),
+                    'begin_checkout', 'proceed_checkout' => $payload['coupon_code'] ?? '—',
+                    default => '—',
+                },
                 'value' => (float) ($payload['cart_total'] ?? $payload['amount_paid'] ?? 0),
                 'idle' => $this->formatIdleLabel((int) (TrackerTime::toUtc($session?->last_active_at)?->diffInSeconds(TrackerTime::nowUtc()) ?? 0)),
                 'activity_url' => route('admin.ecom-activity.show', ['session' => $sessionId]),
@@ -1679,14 +1708,17 @@ class EcomTrackerDashboardService
 
     private function sumCartAbandonValue(Carbon $from, Carbon $to, Collection $sessionIds): float
     {
-        return collect($this->abandonedSessions($from, $to, 'add_to_cart', 'add_to_cart'))
-            ->sum('value');
+        return $this->abandonedSessions($from, $to, 'add_to_cart', 'add_to_cart', excludeActionType: 'begin_checkout')['total_at_stake'];
     }
 
-    private function sumCheckoutAbandonValue(Carbon $from, Carbon $to, Collection $sessionIds): float
+    private function sumBeginCheckoutAbandonValue(Carbon $from, Carbon $to, Collection $sessionIds): float
     {
-        return collect($this->abandonedSessions($from, $to, 'proceed_checkout', 'proceed_to_checkout'))
-            ->sum('value');
+        return $this->abandonedSessions($from, $to, 'begin_checkout', 'begin_checkout', excludeActionType: 'proceed_checkout')['total_at_stake'];
+    }
+
+    private function sumProceedCheckoutAbandonValue(Carbon $from, Carbon $to, Collection $sessionIds): float
+    {
+        return $this->abandonedSessions($from, $to, 'proceed_checkout', 'proceed_to_checkout', excludeActionType: 'payment_success')['total_at_stake'];
     }
 
     private function formatIdleLabel(int $seconds): string

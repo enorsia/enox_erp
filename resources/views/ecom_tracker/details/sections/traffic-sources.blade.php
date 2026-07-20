@@ -1,5 +1,5 @@
 <table class="etd-table w-full">
-    <thead><tr><th>Source</th><th>Medium</th><th class="etd-num">Sessions</th><th class="etd-num">Conv.</th><th class="etd-num">Revenue</th></tr></thead>
+    <thead><tr><th>Source</th><th>Medium</th><th class="etd-num">Sessions</th><th class="etd-num">Conv.</th><th class="etd-num">Sale</th></tr></thead>
     <tbody>
         @forelse ($data as $row)
             <tr>

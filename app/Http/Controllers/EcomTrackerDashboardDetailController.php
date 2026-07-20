@@ -20,7 +20,9 @@ class EcomTrackerDashboardDetailController extends Controller
         'products' => 'Product performance',
         'colors' => 'Color performance',
         'cart-abandonment' => 'Cart abandonment',
-        'checkout-abandonment' => 'Checkout abandonment',
+        'begin-checkout-abandonment' => 'Begin checkout abandonment',
+        'checkout-abandonment' => 'Begin checkout abandonment',
+        'proceed-checkout-abandonment' => 'Proceed checkout abandonment',
         'devices' => 'Device breakdown',
         'traffic-sources' => 'Traffic sources',
         'geography' => 'Geography',
@@ -32,7 +34,9 @@ class EcomTrackerDashboardDetailController extends Controller
         'products',
         'colors',
         'cart-abandonment',
+        'begin-checkout-abandonment',
         'checkout-abandonment',
+        'proceed-checkout-abandonment',
         'traffic-sources',
         'geography',
         'trend',
@@ -76,7 +80,7 @@ class EcomTrackerDashboardDetailController extends Controller
 
         $items = match ($section) {
             'colors' => $data['products'] ?? [],
-            'cart-abandonment', 'checkout-abandonment' => $data['rows'] ?? [],
+            'cart-abandonment', 'begin-checkout-abandonment', 'checkout-abandonment', 'proceed-checkout-abandonment' => $data['rows'] ?? [],
             'trend' => collect($data['labels'] ?? [])->map(fn (string $label, int $index) => [
                 'date' => $label,
                 'sessions' => $data['sessions'][$index] ?? 0,
@@ -90,7 +94,7 @@ class EcomTrackerDashboardDetailController extends Controller
 
         $data = match ($section) {
             'colors' => array_merge($data, ['products' => $paginator->items()]),
-            'cart-abandonment', 'checkout-abandonment' => array_merge($data, ['rows' => $paginator->items()]),
+            'cart-abandonment', 'begin-checkout-abandonment', 'checkout-abandonment', 'proceed-checkout-abandonment' => array_merge($data, ['rows' => $paginator->items()]),
             'trend' => array_merge($data, ['table_rows' => $paginator->items()]),
             default => $paginator->items(),
         };

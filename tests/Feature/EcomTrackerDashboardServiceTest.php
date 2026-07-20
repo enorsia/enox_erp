@@ -187,6 +187,94 @@ test('ecom tracker dashboard trend uses full filtered range with purchase qty', 
     Carbon::setTestNow();
 });
 
+test('ecom tracker dashboard counts all three funnel abandonment stages', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $from = Carbon::parse('2026-07-15 00:00:00');
+    $to = Carbon::parse('2026-07-15 23:59:59');
+
+    $cartAbandonedId = Str::uuid()->toString();
+    $beginCheckoutAbandonedId = Str::uuid()->toString();
+    $proceedCheckoutAbandonedId = Str::uuid()->toString();
+    $completedId = Str::uuid()->toString();
+
+    foreach ([$cartAbandonedId, $beginCheckoutAbandonedId, $proceedCheckoutAbandonedId, $completedId] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => $from,
+            'updated_at' => $from,
+            'last_active_at' => $from,
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $cartAbandonedId,
+        'action_type' => 'add_to_cart',
+        'add_to_cart' => ['cart_total' => 50, 'product_id' => '1'],
+        'created_at' => $from->copy()->addHour(),
+        'start_time' => $from->copy()->addHour(),
+        'end_time' => $from->copy()->addHour()->addSeconds(30),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $beginCheckoutAbandonedId,
+        'action_type' => 'begin_checkout',
+        'begin_checkout' => ['cart_total' => 120, 'coupon_code' => 'SAVE20'],
+        'created_at' => $from->copy()->addHours(2),
+        'start_time' => $from->copy()->addHours(2),
+        'end_time' => $from->copy()->addHours(2)->addSeconds(30),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $proceedCheckoutAbandonedId,
+        'action_type' => 'proceed_checkout',
+        'proceed_to_checkout' => ['cart_total' => 90, 'coupon_code' => 'SAVE10'],
+        'created_at' => $from->copy()->addHours(3),
+        'start_time' => $from->copy()->addHours(3),
+        'end_time' => $from->copy()->addHours(3)->addSeconds(30),
+    ]);
+
+    foreach ([
+        ['action_type' => 'add_to_cart', 'add_to_cart' => ['cart_total' => 80]],
+        ['action_type' => 'begin_checkout', 'begin_checkout' => ['cart_total' => 80, 'coupon_code' => 'SAVE10']],
+        ['action_type' => 'proceed_checkout', 'proceed_to_checkout' => ['cart_total' => 80, 'coupon_code' => 'SAVE10']],
+        ['action_type' => 'payment_success', 'payment_success' => ['amount_paid' => 80]],
+    ] as $index => $payload) {
+        ActivityEcomUserAction::query()->create(array_merge([
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $completedId,
+            'created_at' => $from->copy()->addHours(4 + $index),
+            'start_time' => $from->copy()->addHours(4 + $index),
+            'end_time' => $from->copy()->addHours(4 + $index)->addSeconds(30),
+        ], $payload));
+    }
+
+    Carbon::setTestNow($to);
+
+    $data = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-15',
+        'date_to' => '2026-07-15',
+    ]);
+
+    expect($data['cart_abandonment']['session_count'])->toBe(1);
+    expect($data['cart_abandonment']['at_stake'])->toBe(50.0);
+    expect($data['cart_abandonment']['rows'][0]['session_id'] ?? null)->toBe($cartAbandonedId);
+
+    expect($data['begin_checkout_abandonment']['session_count'])->toBe(1);
+    expect($data['begin_checkout_abandonment']['at_stake'])->toBe(120.0);
+    expect($data['begin_checkout_abandonment']['rows'][0]['session_id'] ?? null)->toBe($beginCheckoutAbandonedId);
+
+    expect($data['proceed_checkout_abandonment']['session_count'])->toBe(1);
+    expect($data['proceed_checkout_abandonment']['at_stake'])->toBe(90.0);
+    expect($data['proceed_checkout_abandonment']['rows'][0]['session_id'] ?? null)->toBe($proceedCheckoutAbandonedId);
+
+    Carbon::setTestNow();
+});
+
 test('ecom tracker dashboard matches purchased variants when checkout only has product id', function () {
     $service = app(EcomTrackerDashboardService::class);
     $sessionId = Str::uuid()->toString();
