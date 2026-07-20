@@ -6,9 +6,9 @@
 @php
     use App\Support\TrackerTime;
     $a = $analytics;
-    $window = $filters['window'] ?? '7d';
+    $window = $filters['window'] ?? '24h';
     $hasCustomRange = filled($filters['datetime_from'] ?? null) && filled($filters['datetime_to'] ?? null);
-    $activeFilterCount = $hasCustomRange ? 1 : ((request()->has('window') && $window !== '7d') ? 1 : 0);
+    $activeFilterCount = $hasCustomRange ? 1 : ((request()->has('window') && $window !== '24h') ? 1 : 0);
     $datetimeFromValue = filled($filters['datetime_from'] ?? null) ? TrackerTime::toLocal($filters['datetime_from'])?->format('Y-m-d\TH:i') : '';
     $datetimeToValue = filled($filters['datetime_to'] ?? null) ? TrackerTime::toLocal($filters['datetime_to'])?->format('Y-m-d\TH:i') : '';
     $presetWindows = ['3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year'];
@@ -36,7 +36,7 @@
     <div class="etd-topbar">
         <div class="etd-topbar-intro">
             <h1 class="etd-page-title">Visitor analytics</h1>
-            <p class="etd-page-desc">{{ $filters['window_label'] ?? 'Last 7 days' }}</p>
+            <p class="etd-page-desc">{{ $filters['window_label'] ?? 'Last 24 hours' }}</p>
             @include('ecom_tracker.partials.timezone-notice')
         </div>
         <div class="flex items-center gap-2 flex-wrap shrink-0">

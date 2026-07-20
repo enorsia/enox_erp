@@ -5,7 +5,7 @@
 @section('content')
 @php
     $d = $dashboard;
-    $period = $filters['period'] ?? '30d';
+    $period = $filters['period'] ?? '24h';
     $back = urlencode(request()->fullUrl());
     $queryParams = request()->only(['period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium']);
     $exportQuery = array_filter($queryParams, fn ($value) => filled($value));
@@ -75,7 +75,7 @@
                     return url.toString();
                 }
              }">
-            @foreach (['7d' => '7d', '30d' => '30d', '90d' => '90d'] as $periodKey => $periodLabel)
+            @foreach (['24h' => '24h', '7d' => '7d', '30d' => '30d', '90d' => '90d'] as $periodKey => $periodLabel)
                 <button type="button" class="etd-pill {{ $period === $periodKey ? 'active' : '' }}" @click="apply('{{ $periodKey }}')">{{ $periodLabel }}</button>
             @endforeach
             <button type="button" class="etd-pill {{ $period === 'custom' ? 'active' : '' }}" @click="period = 'custom'">Custom</button>

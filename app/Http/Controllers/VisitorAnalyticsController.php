@@ -32,7 +32,7 @@ class VisitorAnalyticsController extends Controller
         $overview = $this->analytics->buildOverview($range['from'], $range['until']);
 
         $data = [
-            'window' => $request->input('window', '7d'),
+            'window' => $request->input('window', '24h'),
             'from' => $range['from'],
             'to' => $range['to'],
             'summary' => $overview,
@@ -93,7 +93,7 @@ class VisitorAnalyticsController extends Controller
 
         if (filled($request->input('datetime_from')) && filled($request->input('datetime_to'))) {
             $count++;
-        } elseif ($request->has('window') && $request->input('window', '7d') !== '7d') {
+        } elseif ($request->has('window') && $request->input('window', '24h') !== '24h') {
             $count++;
         }
 
@@ -147,7 +147,7 @@ class VisitorAnalyticsController extends Controller
             ];
         }
 
-        $window = $request->input('window', '7d');
+        $window = $request->input('window', '24h');
         $from = $this->resolveSince($request, $window);
         $to = TrackerTime::nowUtc();
 
@@ -186,7 +186,7 @@ class VisitorAnalyticsController extends Controller
             '6m' => 'Last 6 months',
             '12m' => 'Last 12 months',
             '1y' => 'Last 1 year',
-            default => 'Last 7 days',
+            default => 'Last 24 hours',
         };
     }
 }

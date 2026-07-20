@@ -58,7 +58,7 @@ class VisitorAnalyticsService
             '6m' => $now->copy()->subMonths(6),
             '12m' => $now->copy()->subMonths(12),
             '1y' => $now->copy()->subYear(),
-            default => $now->copy()->subDays(7),
+            default => $now->copy()->subHours(24),
         };
 
         return $from->utc();

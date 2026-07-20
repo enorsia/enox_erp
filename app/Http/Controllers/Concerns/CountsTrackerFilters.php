@@ -16,7 +16,7 @@ trait CountsTrackerFilters
             }
         }
 
-        if (($request->input('period') ?? '30d') !== '30d' || filled($request->input('date_from'))) {
+        if (($request->input('period') ?? '24h') !== '24h' || filled($request->input('date_from'))) {
             $count++;
         }
 
@@ -37,7 +37,7 @@ trait CountsTrackerFilters
     protected function dashboardDateFilters(Request $request): array
     {
         $filters = $request->only(['period', 'date_from', 'date_to']);
-        $filters['period'] = $filters['period'] ?? '30d';
+        $filters['period'] = $filters['period'] ?? '24h';
 
         return $filters;
     }

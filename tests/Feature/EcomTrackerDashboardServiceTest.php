@@ -7,6 +7,21 @@ use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
+test('ecom tracker dashboard resolves 24h rolling range', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    $range = $service->resolveDateRange(['period' => '24h']);
+
+    expect($range['label'])->toBe('Last 24 hours');
+    expect($range['period'])->toBe('24h');
+    expect($range['days'])->toBe(1);
+    expect((int) TrackerTime::toLocal($range['from'])?->diffInHours(TrackerTime::toLocal($range['to'])))->toBe(24);
+
+    Carbon::setTestNow();
+});
+
 test('ecom tracker dashboard resolves custom date range', function () {
     $service = app(EcomTrackerDashboardService::class);
 

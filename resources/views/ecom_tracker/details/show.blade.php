@@ -6,7 +6,7 @@
 @php
     $range = $detail['range'];
     $data = $detail['data'];
-    $period = $filters['period'] ?? '30d';
+    $period = $filters['period'] ?? '24h';
     $resetQuery = array_filter(['back' => request('back')]);
     $queryParams = request()->only(['period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium']);
     $chartPayload = match ($section) {

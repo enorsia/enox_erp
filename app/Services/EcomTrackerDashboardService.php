@@ -41,7 +41,7 @@ class EcomTrackerDashboardService
     public function getDashboardData(array $filters): array
     {
         $range = $this->resolveDateRange($filters);
-        $priorRange = $this->priorRange($range['from'], $range['to']);
+        $priorRange = $this->priorRange($range['from'], $range['to'], $range['period'] ?? null);
         $extraFilters = $this->extractSessionFilters($filters);
 
         $currentSessions = $this->sessionsInRange($range['from'], $range['to']);
@@ -64,7 +64,7 @@ class EcomTrackerDashboardService
             'live' => $this->buildLiveStatus(),
             'kpis' => $this->attachKpiDeltas($currentKpis, $priorKpis),
             'funnel' => $this->buildFunnel($range['from'], $range['to'], $extraFilters),
-            'trend' => $this->buildTrend($range['from'], $range['to'], $extraFilters),
+            'trend' => $this->buildTrend($range['from'], $range['to'], $extraFilters, $range['period'] ?? null),
             'categories' => $this->buildCategoryPerformance($range['from'], $range['to'], filters: $extraFilters),
             'products' => $this->buildProductPerformance($range['from'], $range['to'], filters: $extraFilters),
             'colors' => $this->buildColorPerformance($range['from'], $range['to'], filters: $extraFilters),
@@ -189,7 +189,7 @@ class EcomTrackerDashboardService
      */
     public function resolveDateRange(array $filters): array
     {
-        $period = $filters['period'] ?? '30d';
+        $period = $filters['period'] ?? '24h';
 
         if ($period === 'custom' && ! empty($filters['date_from']) && ! empty($filters['date_to'])) {
             $fromLocal = Carbon::parse($filters['date_from'], TrackerTime::timezone())->startOfDay();
@@ -203,6 +203,20 @@ class EcomTrackerDashboardService
                 'to' => $to,
                 'label' => $fromLocal?->format('d M Y').' – '.$toLocal?->format('d M Y'),
                 'days' => (int) ($fromLocal?->diffInDays($toLocal) ?? 0) + 1,
+                'period' => 'custom',
+            ];
+        }
+
+        if ($period === '24h') {
+            $toLocal = TrackerTime::localNow();
+            $fromLocal = $toLocal->copy()->subHours(24);
+
+            return [
+                'from' => $fromLocal->copy()->utc(),
+                'to' => $toLocal->copy()->utc(),
+                'label' => 'Last 24 hours',
+                'days' => 1,
+                'period' => '24h',
             ];
         }
 
@@ -220,14 +234,29 @@ class EcomTrackerDashboardService
             'to' => $toLocal->copy()->utc(),
             'label' => "Last {$days} days",
             'days' => $days,
+            'period' => $period === '7d' || $period === '90d' ? $period : '30d',
         ];
     }
 
     /**
-     * @return array{from: Carbon, to: Carbon, label: string, days: int}
+     * @return array{from: Carbon, to: Carbon, label: string, days: int, period?: string}
      */
-    private function priorRange(Carbon $from, Carbon $to): array
+    private function priorRange(Carbon $from, Carbon $to, ?string $period = null): array
     {
+        if ($period === '24h') {
+            $seconds = (int) $from->diffInSeconds($to);
+            $priorTo = $from->copy()->subSecond();
+            $priorFrom = $priorTo->copy()->subSeconds($seconds);
+
+            return [
+                'from' => $priorFrom,
+                'to' => $priorTo,
+                'label' => 'Prior 24 hours',
+                'days' => 1,
+                'period' => '24h',
+            ];
+        }
+
         $days = (int) $from->diffInDays($to) + 1;
         $priorTo = $from->copy()->subDay()->endOfDay();
         $priorFrom = $priorTo->copy()->subDays($days - 1)->startOfDay();
@@ -237,6 +266,7 @@ class EcomTrackerDashboardService
             'to' => $priorTo,
             'label' => 'Prior '.$days.' days',
             'days' => $days,
+            'period' => $period,
         ];
     }
 
@@ -250,7 +280,7 @@ class EcomTrackerDashboardService
         $toLocal = TrackerTime::toLocal($range['to']);
 
         return [
-            'period' => $filters['period'] ?? '30d',
+            'period' => $filters['period'] ?? '24h',
             'date_from' => $filters['date_from'] ?? $fromLocal?->toDateString(),
             'date_to' => $filters['date_to'] ?? $toLocal?->toDateString(),
             'device_type' => $filters['device_type'] ?? '',
@@ -579,26 +609,41 @@ class EcomTrackerDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function buildTrend(Carbon $from, Carbon $to, array $filters = []): array
+    private function buildTrend(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): array
     {
-        $fromLocal = TrackerTime::toLocal($from)?->copy()->startOfDay();
-        $toLocal = TrackerTime::toLocal($to)?->copy()->endOfDay();
+        if ($period === '24h') {
+            $fromLocal = TrackerTime::toLocal($from)?->copy();
+            $toLocal = TrackerTime::toLocal($to)?->copy();
 
-        if ($fromLocal === null || $toLocal === null) {
-            $fromLocal = $from->copy();
-            $toLocal = $to->copy();
+            if ($fromLocal === null || $toLocal === null) {
+                $fromLocal = $from->copy();
+                $toLocal = $to->copy();
+            }
+
+            $from = $fromLocal->copy()->utc();
+            $to = $toLocal->copy()->utc();
+            $bucket = 'hour';
+            $totalDays = 1;
+        } else {
+            $fromLocal = TrackerTime::toLocal($from)?->copy()->startOfDay();
+            $toLocal = TrackerTime::toLocal($to)?->copy()->endOfDay();
+
+            if ($fromLocal === null || $toLocal === null) {
+                $fromLocal = $from->copy();
+                $toLocal = $to->copy();
+            }
+
+            $from = $fromLocal->copy()->utc();
+            $to = $toLocal->copy()->utc();
+            $totalDays = (int) $fromLocal->diffInDays($toLocal) + 1;
+            $bucket = match (true) {
+                $totalDays >= self::TREND_MONTHLY_THRESHOLD_DAYS => 'month',
+                $totalDays >= self::TREND_WEEKLY_THRESHOLD_DAYS => 'week',
+                default => 'day',
+            };
         }
 
-        $from = $fromLocal->copy()->utc();
-        $to = $toLocal->copy()->utc();
-        $totalDays = (int) $fromLocal->diffInDays($toLocal) + 1;
         $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
-
-        $bucket = match (true) {
-            $totalDays >= self::TREND_MONTHLY_THRESHOLD_DAYS => 'month',
-            $totalDays >= self::TREND_WEEKLY_THRESHOLD_DAYS => 'week',
-            default => 'day',
-        };
 
         $labels = [];
         $sessions = [];
@@ -682,6 +727,16 @@ class EcomTrackerDashboardService
 
                 $label = $periodStart->format('d M').' – '.$periodEnd->format('d M');
                 $cursor = $periodEnd->copy()->addSecond()->startOfDay();
+            } elseif ($bucket === 'hour') {
+                $periodStart = $cursor->copy()->startOfHour();
+                $periodEnd = $cursor->copy()->endOfHour();
+
+                if ($periodEnd > $to) {
+                    $periodEnd = $to->copy();
+                }
+
+                $label = $periodStart->format('H:i');
+                $cursor = $periodEnd->copy()->addSecond();
             } else {
                 $periodStart = $cursor->copy()->startOfDay();
                 $periodEnd = $cursor->copy()->endOfDay();
@@ -698,6 +753,7 @@ class EcomTrackerDashboardService
     private function trendRangeLabel(int $totalDays, string $bucket): string
     {
         return match ($bucket) {
+            'hour' => 'Last 24 hours · hourly',
             'week' => "{$totalDays} days · weekly buckets",
             'month' => "{$totalDays} days · monthly buckets",
             default => "{$totalDays} days · daily",

@@ -5,7 +5,7 @@
 @section('content')
 @php
     use App\Support\TrackerTime;
-    $window = $filters['window'] ?? '7d';
+    $window = $filters['window'] ?? '24h';
     $hasCustomRange = filled($filters['datetime_from'] ?? null) && filled($filters['datetime_to'] ?? null);
     $datetimeFromValue = filled($filters['datetime_from'] ?? null) ? TrackerTime::toLocal($filters['datetime_from'])?->format('Y-m-d\TH:i') : '';
     $datetimeToValue = filled($filters['datetime_to'] ?? null) ? TrackerTime::toLocal($filters['datetime_to'])?->format('Y-m-d\TH:i') : '';

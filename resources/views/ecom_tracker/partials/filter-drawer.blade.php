@@ -3,7 +3,7 @@
     'action',
     'resetUrl' => null,
     'presetWindows' => [],
-    'window' => '7d',
+    'window' => '24h',
     'hasCustomRange' => false,
     'datetimeFromValue' => '',
     'datetimeToValue' => '',
@@ -11,7 +11,7 @@
     'showSessionFilters' => false,
     'showVisitorFilters' => false,
     'showActivityFilters' => false,
-    'period' => '30d',
+    'period' => '24h',
     'dateFrom' => '',
     'dateTo' => '',
 ])
@@ -57,7 +57,7 @@
                 <div x-data="{ drawerPeriod: @js($period) }">
                     <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Period</p>
                     <div class="grid grid-cols-2 gap-2">
-                        @foreach (['7d' => '7 days', '30d' => '30 days', '90d' => '90 days', 'custom' => 'Custom'] as $periodKey => $periodOptionLabel)
+                        @foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', 'custom' => 'Custom'] as $periodKey => $periodOptionLabel)
                             <label class="flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors"
                                    :class="drawerPeriod === @js($periodKey) ? 'border-accent-400 bg-accent-400/10 text-accent-700 dark:text-accent-200' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300'">
                                 <input type="radio" name="period" value="{{ $periodKey }}" x-model="drawerPeriod" class="text-accent-400 border-slate-300">
