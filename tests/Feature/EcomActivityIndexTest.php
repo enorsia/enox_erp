@@ -76,6 +76,79 @@ test('ecom activity index filters sessions with orders', function () {
         ->assertDontSee(Str::limit($orderedSession, 14));
 });
 
+test('ecom activity index labels guest checkout sessions', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'user_name' => 'Alex Guest',
+        'user_email' => 'alex.guest@example.com',
+        'is_logged_in' => false,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'user_id' => 99,
+        'user_name' => 'Registered Shopper',
+        'user_email' => 'registered@example.com',
+        'is_logged_in' => true,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+    ]);
+
+    $this->get(route('admin.ecom-activity.index', ['period' => 'all']))
+        ->assertOk()
+        ->assertSee('Alex Guest')
+        ->assertSee('alex.guest@example.com')
+        ->assertSee('Registered Shopper')
+        ->assertSee('registered@example.com');
+});
+
+test('ecom activity index shows order count for sessions with payment success', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    $orderedSession = Str::uuid()->toString();
+    $guestSession = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $orderedSession,
+        'device_type' => 'mobile',
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $guestSession,
+        'device_type' => 'mobile',
+        'last_active_at' => now(),
+    ]);
+
+    foreach ([1, 2] as $index) {
+        ActivityEcomUserAction::query()->create([
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $orderedSession,
+            'action_type' => 'payment_success',
+            'payment_success' => ['amount_paid' => 50 * $index],
+            'created_at' => now(),
+            'start_time' => now(),
+            'end_time' => now(),
+        ]);
+    }
+
+    $this->get(route('admin.ecom-activity.index', ['period' => 'all']))
+        ->assertOk()
+        ->assertSee('2', false)
+        ->assertSee(Str::limit($orderedSession, 14))
+        ->assertSee(Str::limit($guestSession, 14));
+});
+
 test('ecom activity index defaults to last 24 hours', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.activity.index');

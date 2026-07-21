@@ -88,6 +88,10 @@ class TrackIngestService
                 $row
             );
 
+            if (($event['action_type'] ?? '') === 'proceed_checkout') {
+                $this->syncSessionUserFromProceedCheckout($sessionId, $event);
+            }
+
             if (($event['action_type'] ?? '') === 'payment_success') {
                 $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
             }
@@ -135,8 +139,10 @@ class TrackIngestService
             }
         }
 
-        if (array_key_exists('is_logged_in', $sessionData)) {
-            $attributes['is_logged_in'] = (bool) $sessionData['is_logged_in'];
+        if (! empty($sessionData['user_id'])) {
+            $attributes['is_logged_in'] = true;
+        } elseif (array_key_exists('is_logged_in', $sessionData)) {
+            $attributes['is_logged_in'] = ! empty($sessionData['user_id']) && (bool) $sessionData['is_logged_in'];
         }
 
         if (! empty($sessionData['visitor_id'])) {
@@ -240,6 +246,28 @@ class TrackIngestService
     }
 
     /**
+     * Guest checkout often has no user on the session until proceed_checkout or payment_success.
+     *
+     * @param  array<string, mixed>  $event
+     */
+    private function syncSessionUserFromProceedCheckout(string $sessionId, array $event): void
+    {
+        $payload = $event['proceed_to_checkout'] ?? [];
+
+        if (! is_array($payload)) {
+            return;
+        }
+
+        $customer = $payload['customer'] ?? [];
+
+        if (! is_array($customer)) {
+            return;
+        }
+
+        $this->syncSessionCustomerInfo($sessionId, $customer, $event['created_at'] ?? null);
+    }
+
+    /**
      * Guest checkout often has no user on the session until payment_success.
      *
      * @param  array<string, mixed>  $event
@@ -258,10 +286,19 @@ class TrackIngestService
             return;
         }
 
+        $this->syncSessionCustomerInfo($sessionId, $customer, $event['created_at'] ?? null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $customer
+     */
+    private function syncSessionCustomerInfo(string $sessionId, array $customer, mixed $eventCreatedAt = null): void
+    {
         $firstName = trim((string) ($customer['first_name'] ?? ''));
         $lastName = trim((string) ($customer['last_name'] ?? ''));
+        $fullName = trim((string) ($customer['full_name'] ?? ''));
         $email = trim((string) ($customer['email'] ?? ''));
-        $name = trim(implode(' ', array_filter([$firstName, $lastName])));
+        $name = trim($fullName !== '' ? $fullName : implode(' ', array_filter([$firstName, $lastName])));
 
         $updates = [];
 
@@ -283,15 +320,21 @@ class TrackIngestService
             return;
         }
 
-        $updates['last_active_at'] = TrackerTime::formatUtc($event['created_at'] ?? TrackerTime::nowUtc());
+        if (! $session->isRegisteredUser()) {
+            $updates['is_logged_in'] = false;
+            $updates['user_id'] = null;
+        }
+
+        $updates['last_active_at'] = TrackerTime::formatUtc($eventCreatedAt ?? TrackerTime::nowUtc());
         $updates['updated_at'] = TrackerTime::formatUtc(TrackerTime::nowUtc());
 
         $session->update($updates);
 
-        $this->logInfo('Session user synced from payment_success', [
+        $this->logInfo('Session user synced from checkout customer info', [
             'session_id' => $sessionId,
             'user_name' => $updates['user_name'] ?? $session->user_name,
             'user_email' => $updates['user_email'] ?? $session->user_email,
+            'is_logged_in' => $updates['is_logged_in'] ?? $session->is_logged_in,
         ]);
     }
 

@@ -160,14 +160,15 @@
 
     <div class="etd-panel">
         <div class="etd-table-scroll">
-            <table class="etd-table w-full">
+            <table class="etd-table etd-table--activity w-full">
                 <thead>
                     <tr>
                         <th>Session</th>
-                        <th>User</th>
+                        <th class="etd-col-user">User</th>
                         <th>Device</th>
                         <th>IP</th>
                         <th>Source</th>
+                        <th class="etd-num">Order</th>
                         <th class="etd-num">Actions</th>
                         <th>Duration</th>
                         <th>Last active</th>
@@ -181,15 +182,8 @@
                                 <span class="etd-chip" title="{{ $session->session_id }}">{{ Str::limit($session->session_id, 14) }}</span>
                                 <div class="etd-subtle mt-0.5">{{ \App\Support\TrackerTime::toLocal($session->created_at)?->format('d M Y, H:i') }}</div>
                             </td>
-                            <td>
-                                @if ($session->user_name || $session->user_email)
-                                    <div>{{ $session->user_name ?: '—' }}</div>
-                                    <div class="etd-subtle">{{ $session->user_email }}</div>
-                                @elseif ($session->is_logged_in && $session->user_id)
-                                    <span class="etd-badge mid">User #{{ $session->user_id }}</span>
-                                @else
-                                    <span class="etd-badge low">Guest</span>
-                                @endif
+                            <td class="etd-col-user">
+                                @include('ecom_tracker.partials.session-identity', ['session' => $session])
                             </td>
                             <td>
                                 {{ ucfirst($session->device_type ?? '—') }}
@@ -203,6 +197,13 @@
                                     —
                                 @endif
                             </td>
+                            <td class="etd-num">
+                                @if (($session->order_qty ?? 0) > 0)
+                                    {{ number_format($session->order_qty) }}
+                                @else
+                                    <span class="etd-subtle">—</span>
+                                @endif
+                            </td>
                             <td class="etd-num">{{ $session->actions_count }}</td>
                             <td>{{ format_duration((int) ($session->session_duration_seconds ?? 0)) }}</td>
                             <td>{{ \App\Support\TrackerTime::toLocal($session->last_active_at)?->diffForHumans() ?? '—' }}</td>
@@ -214,7 +215,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
+                            <td colspan="10" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
                         </tr>
                     @endforelse
                 </tbody>

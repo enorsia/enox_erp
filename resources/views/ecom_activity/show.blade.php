@@ -188,9 +188,7 @@
                         @foreach ([
                             'IP' => $activityUser->ip,
                             'Device' => ucfirst($activityUser->device_type ?? '—') . ' · ' . ($activityUser->browser ?? '') . ' · ' . ($activityUser->os ?? ''),
-                            'User' => $activityUser->user_name
-                                ? $activityUser->user_name . ($activityUser->user_email ? ' (' . $activityUser->user_email . ')' : '')
-                                : ($activityUser->is_logged_in ? 'Logged in #' . $activityUser->user_id : 'Guest'),
+                            'User' => $activityUser->identitySummary(),
                             'First seen' => \App\Support\TrackerTime::toLocal($activityUser->created_at)?->format('d M Y, h:i A'),
                             'Last active' => \App\Support\TrackerTime::toLocal($activityUser->last_active_at)?->format('d M Y, h:i A'),
                             'Landing page' => $activityUser->landing_page,

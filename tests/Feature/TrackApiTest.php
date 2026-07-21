@@ -448,6 +448,91 @@ test('payment success updates session user from checkout customer info', functio
 
     expect($session->user_name)->toBe('Sam Taylor');
     expect($session->user_email)->toBe('sam.taylor@example.com');
+    expect($session->is_logged_in)->toBeFalse();
+});
+
+test('proceed checkout updates session user from checkout customer info', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Dress',
+        'product_code' => 'GS123',
+    ]], [
+        'is_logged_in' => false,
+    ]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'proceed_checkout',
+        'proceed_to_checkout' => [
+            'customer' => [
+                'first_name' => 'Alex',
+                'last_name' => 'Guest',
+                'email' => 'alex.guest@example.com',
+            ],
+        ],
+    ]], [
+        'is_logged_in' => false,
+    ]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session->user_name)->toBe('Alex Guest');
+    expect($session->user_email)->toBe('alex.guest@example.com');
+    expect($session->is_logged_in)->toBeFalse();
+});
+
+test('session ingest only marks logged in when user id is present', function () {
+    $sessionId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Dress',
+        'product_code' => 'GS123',
+    ]], [
+        'user_name' => 'Guest Shopper',
+        'user_email' => 'guest@example.com',
+        'is_logged_in' => true,
+    ]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session->is_logged_in)->toBeFalse();
+    expect($session->user_name)->toBe('Guest Shopper');
+    expect($session->user_email)->toBe('guest@example.com');
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Dress',
+        'product_code' => 'GS124',
+    ]], [
+        'user_id' => 42,
+        'user_name' => 'Registered Shopper',
+        'user_email' => 'registered@example.com',
+        'is_logged_in' => false,
+    ]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $session->refresh();
+
+    expect($session->user_id)->toBe(42);
+    expect($session->is_logged_in)->toBeTrue();
 });
 
 test('payment success rejects disallowed fields', function () {

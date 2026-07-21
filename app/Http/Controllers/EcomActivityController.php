@@ -30,7 +30,8 @@ class EcomActivityController extends Controller
         Gate::authorize('ecom_tracker.activity.index');
 
         $query = ActivityEcomUser::query()
-            ->withCount('actions');
+            ->withCount('actions')
+            ->withCount(['actions as order_qty' => fn ($q) => $q->where('action_type', 'payment_success')]);
 
         $this->applySessionDateFilter($query, $request);
 
