@@ -8,7 +8,7 @@
     $a = $analytics;
     $window = $filters['window'] ?? '24h';
     $hasCustomRange = filled($filters['datetime_from'] ?? null) && filled($filters['datetime_to'] ?? null);
-    $activeFilterCount = $hasCustomRange ? 1 : ((request()->has('window') && $window !== '24h') ? 1 : 0);
+    $activeFilterCount = $hasCustomRange ? 0 : ((request()->has('window') && ! in_array($window, ['24h', '7d', '30d', '90d'], true)) ? 1 : 0);
     $datetimeFromValue = filled($filters['datetime_from'] ?? null) ? TrackerTime::toLocal($filters['datetime_from'])?->format('Y-m-d\TH:i') : '';
     $datetimeToValue = filled($filters['datetime_to'] ?? null) ? TrackerTime::toLocal($filters['datetime_to'])?->format('Y-m-d\TH:i') : '';
     $presetWindows = ['3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year'];
@@ -16,8 +16,8 @@
     $detailLink = fn (string $section) => route('admin.ecom-tracker.visitors.details', $section).'?'.http_build_query(array_merge(request()->only(['window', 'datetime_from', 'datetime_to']), ['back' => $back]));
     $activityLink = fn (string $visitorId) => route('admin.ecom-activity.index', ['search' => $visitorId]);
     $summary = $a['summary'];
-    $prior = $a['prior_summary'] ?? [];
-    $delta = fn (string $key) => ($prior[$key] ?? 0) > 0 ? round((($summary[$key] ?? 0) - $prior[$key]) / $prior[$key] * 100, 1) : null;
+    $activeWindow = $hasCustomRange ? 'custom' : $window;
+    $exportUrl = route('admin.ecom-tracker.visitors.export', request()->query());
 @endphp
 
 <div class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
@@ -31,24 +31,75 @@
         'datetimeToValue' => $datetimeToValue,
     ])
 
-    @include('ecom_tracker.partials.tracker-nav', ['current' => 'visitors'])
+    <header class="etd-page-header">
+        <div class="etd-page-header-bar"
+             x-data="{
+                windowKey: '{{ $activeWindow }}',
+                datetimeFrom: '{{ $datetimeFromValue }}',
+                datetimeTo: '{{ $datetimeToValue }}',
+                apply(window) {
+                    if (window === 'custom') {
+                        this.windowKey = 'custom';
+                        return;
+                    }
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('window', window);
+                    url.searchParams.delete('datetime_from');
+                    url.searchParams.delete('datetime_to');
+                    window.location.href = url.toString();
+                },
+                applyCustom() {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('window');
+                    url.searchParams.set('datetime_from', this.datetimeFrom);
+                    url.searchParams.set('datetime_to', this.datetimeTo);
+                    window.location.href = url.toString();
+                }
+             }">
+            <div class="etd-page-header-left">
+                <h1 class="etd-page-title">Visitor analytics</h1>
+                <span class="etd-header-sep" aria-hidden="true">·</span>
+                <span class="etd-page-range">{{ $filters['window_label'] ?? 'Last 24 hours' }}</span>
+                <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
+                <div class="etd-page-meta">
+                    @include('ecom_tracker.partials.timezone-notice')
+                    @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $a['analytics_cache'] ?? null])
+                </div>
+            </div>
 
-    <div class="etd-topbar">
-        <div class="etd-topbar-intro">
-            <h1 class="etd-page-title">Visitor analytics</h1>
-            <p class="etd-page-desc">{{ $filters['window_label'] ?? 'Last 24 hours' }}</p>
-            @include('ecom_tracker.partials.timezone-notice')
-            @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $a['analytics_cache'] ?? null])
-        </div>
-        <div class="flex items-center gap-2 flex-wrap shrink-0">
-            <a href="{{ route('admin.ecom-tracker.visitors.export', request()->query()) }}" class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-emerald-200 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-colors font-medium no-underline">Export</a>
-            <button type="button" @click="drawerOpen = true" class="flex items-center gap-2 px-3.5 py-2 text-[13px] border rounded-lg transition-colors {{ $activeFilterCount > 0 ? 'border-accent-200 bg-accent-400/10 text-accent-600' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600' }}">
-                Filters @if ($activeFilterCount > 0)<span class="bg-accent-400 text-white text-[9px] font-bold min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">{{ $activeFilterCount }}</span>@endif
-            </button>
-        </div>
-    </div>
+            <div class="etd-page-header-right">
+                <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Time window">
+                    @foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days'] as $windowKey => $windowLabel)
+                        <button type="button" class="etd-segmented-btn {{ $activeWindow === $windowKey ? 'active' : '' }}" aria-label="{{ $windowLabel }}" @click="apply('{{ $windowKey }}')">{{ $windowKey }}</button>
+                    @endforeach
+                    <button type="button" class="etd-segmented-btn {{ $activeWindow === 'custom' ? 'active' : '' }}" aria-label="Custom date range" @click="apply('custom')">Custom</button>
+                </div>
 
-    <div class="etd-kpi-grid mb-5">
+                <div class="etd-header-actions">
+                    <button type="button" @click="drawerOpen = true" class="etd-header-btn etd-header-btn--icon {{ $activeFilterCount > 0 ? 'etd-header-btn--filtered' : '' }}" aria-label="Filters">
+                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
+                        <span class="etd-header-btn-text">Filters</span>
+                        @if ($activeFilterCount > 0)
+                            <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
+                        @endif
+                    </button>
+                    <a href="{{ $exportUrl }}" class="etd-header-btn etd-header-btn--primary no-underline" title="Export">
+                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l4-4m-4 4L8 11M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg>
+                        <span class="etd-header-btn-text">Export</span>
+                    </a>
+                </div>
+            </div>
+
+            <div x-show="windowKey === 'custom'" x-collapse class="etd-custom-dates etd-custom-dates--inline">
+                <input type="datetime-local" x-model="datetimeFrom" class="f-input etd-date-input etd-date-input--datetime" aria-label="From date and time">
+                <span class="etd-custom-dates-sep">–</span>
+                <input type="datetime-local" x-model="datetimeTo" class="f-input etd-date-input etd-date-input--datetime" aria-label="To date and time">
+                <button type="button" class="etd-header-btn etd-header-btn--primary etd-pill-apply" @click="applyCustom()">Apply</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="etd-kpi-grid etd-kpi-grid--5 mb-5">
         @foreach ([
             ['label' => 'Unique visitors', 'key' => 'unique_visitors', 'format' => 'number'],
             ['label' => 'Returning visitors', 'key' => 'returning_visitors', 'format' => 'number'],
@@ -59,9 +110,6 @@
             <div class="etd-kpi">
                 <div class="etd-kpi-label">{{ $kpi['label'] }}</div>
                 <div class="etd-kpi-value">{{ $kpi['format'] === 'number' ? number_format($summary[$kpi['key']] ?? 0) : ($summary[$kpi['key']] ?? '—') }}</div>
-                @if ($kpi['format'] === 'number' && $delta($kpi['key']) !== null)
-                    <div class="etd-kpi-delta {{ $delta($kpi['key']) >= 0 ? 'up' : 'down' }}">{{ $delta($kpi['key']) >= 0 ? '+' : '' }}{{ $delta($kpi['key']) }}% vs prior</div>
-                @endif
             </div>
         @endforeach
     </div>

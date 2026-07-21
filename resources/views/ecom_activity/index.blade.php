@@ -4,7 +4,57 @@
 
 @section('content')
 @php
-    $activeFilterCount = collect(['search', 'device_type', 'logged_in', 'has_order', 'date_from', 'date_to'])
+    use App\Support\TrackerTime;
+    use Carbon\Carbon;
+
+    $today = TrackerTime::localNow()->copy()->startOfDay();
+    $todayStr = $today->toDateString();
+    $dateFrom = request('date_from');
+    $dateTo = request('date_to');
+    $activePreset = 'all';
+    $rangeLabel = 'All sessions';
+
+    if (filled($dateFrom) && filled($dateTo)) {
+        $from = Carbon::parse($dateFrom, TrackerTime::timezone())->startOfDay();
+        $to = Carbon::parse($dateTo, TrackerTime::timezone())->startOfDay();
+
+        if ($from->equalTo($today->copy()->subDays(6)) && $to->equalTo($today)) {
+            $activePreset = '7d';
+            $rangeLabel = 'Last 7 days';
+        } elseif ($from->equalTo($today->copy()->subDays(29)) && $to->equalTo($today)) {
+            $activePreset = '30d';
+            $rangeLabel = 'Last 30 days';
+        } elseif ($from->equalTo($today->copy()->subDays(89)) && $to->equalTo($today)) {
+            $activePreset = '90d';
+            $rangeLabel = 'Last 90 days';
+        } else {
+            $activePreset = 'custom';
+            $rangeLabel = $from->format('d M Y').' – '.$to->format('d M Y');
+        }
+    } elseif (filled($dateFrom) || filled($dateTo)) {
+        $activePreset = 'custom';
+        $rangeLabel = 'Custom range';
+    }
+
+    $baseQuery = request()->except(['date_from', 'date_to', 'page']);
+    $presetUrl = fn (string $preset) => match ($preset) {
+        'all' => route('admin.ecom-activity.index', $baseQuery),
+        '7d' => route('admin.ecom-activity.index', array_merge($baseQuery, [
+            'date_from' => $today->copy()->subDays(6)->toDateString(),
+            'date_to' => $todayStr,
+        ])),
+        '30d' => route('admin.ecom-activity.index', array_merge($baseQuery, [
+            'date_from' => $today->copy()->subDays(29)->toDateString(),
+            'date_to' => $todayStr,
+        ])),
+        '90d' => route('admin.ecom-activity.index', array_merge($baseQuery, [
+            'date_from' => $today->copy()->subDays(89)->toDateString(),
+            'date_to' => $todayStr,
+        ])),
+        default => route('admin.ecom-activity.index', $baseQuery),
+    };
+
+    $activeFilterCount = collect(['search', 'device_type', 'logged_in', 'has_order'])
         ->filter(fn (string $key) => filled(request($key)))
         ->count();
 @endphp
@@ -16,29 +66,70 @@
         'showActivityFilters' => true,
     ])
 
-    @include('ecom_tracker.partials.tracker-nav', ['current' => 'activity'])
+    <header class="etd-page-header">
+        <div class="etd-page-header-bar"
+             x-data="{
+                presetKey: '{{ $activePreset }}',
+                dateFrom: '{{ $dateFrom ?? '' }}',
+                dateTo: '{{ $dateTo ?? '' }}',
+                applyCustom() {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('page');
+                    if (this.dateFrom) {
+                        url.searchParams.set('date_from', this.dateFrom);
+                    } else {
+                        url.searchParams.delete('date_from');
+                    }
+                    if (this.dateTo) {
+                        url.searchParams.set('date_to', this.dateTo);
+                    } else {
+                        url.searchParams.delete('date_to');
+                    }
+                    window.location.href = url.toString();
+                }
+             }">
+            <div class="etd-page-header-left">
+                <h1 class="etd-page-title">User activity</h1>
+                <span class="etd-header-sep" aria-hidden="true">·</span>
+                <span class="etd-page-range">{{ $rangeLabel }}</span>
+                <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
+                <div class="etd-page-meta">
+                    @include('ecom_tracker.partials.timezone-notice')
+                </div>
+            </div>
 
-    <div class="etd-topbar">
-        <div class="etd-topbar-intro">
-            <h1 class="etd-page-title">User activity</h1>
-            <p class="etd-page-desc">Browse individual visitor sessions and funnel actions</p>
-            @include('ecom_tracker.partials.timezone-notice')
-            @if ($activeFilterCount > 0)
-                <p class="etd-filter-active-note">Filters applied — open Filters to change or reset.</p>
-            @endif
+            <div class="etd-page-header-right">
+                <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Session date range">
+                    <a href="{{ $presetUrl('all') }}" class="etd-segmented-btn {{ $activePreset === 'all' ? 'active' : '' }} no-underline">All</a>
+                    <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
+                    <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
+                    <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
+                    <button type="button" class="etd-segmented-btn {{ $activePreset === 'custom' ? 'active' : '' }}" aria-label="Custom date range" @click="presetKey = 'custom'">Custom</button>
+                </div>
+
+                <div class="etd-header-actions">
+                    <button type="button" @click="drawerOpen = true" class="etd-header-btn etd-header-btn--icon {{ $activeFilterCount > 0 ? 'etd-header-btn--filtered' : '' }}" aria-label="Filters">
+                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
+                        <span class="etd-header-btn-text">Filters</span>
+                        @if ($activeFilterCount > 0)
+                            <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
+                        @endif
+                    </button>
+                </div>
+            </div>
+
+            <div x-show="presetKey === 'custom'" x-collapse class="etd-custom-dates etd-custom-dates--inline">
+                <input type="date" x-model="dateFrom" class="f-input etd-date-input" aria-label="From date">
+                <span class="etd-custom-dates-sep">–</span>
+                <input type="date" x-model="dateTo" class="f-input etd-date-input" aria-label="To date">
+                <button type="button" class="etd-header-btn etd-header-btn--primary etd-pill-apply" @click="applyCustom()">Apply</button>
+            </div>
         </div>
-        <div class="flex items-center gap-2 flex-wrap shrink-0">
-            <button type="button"
-                    @click="drawerOpen = true"
-                    class="flex items-center gap-2 px-3.5 py-2 text-[13px] border rounded-lg transition-colors {{ $activeFilterCount > 0 ? 'border-accent-200 bg-accent-400/10 text-accent-600 dark:text-accent-200' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' }}">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 4h18M7 8h10M11 12h2"/></svg>
-                Filters
-                @if ($activeFilterCount > 0)
-                    <span class="bg-accent-400 text-white text-[9px] font-bold min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">{{ $activeFilterCount }}</span>
-                @endif
-            </button>
-        </div>
-    </div>
+
+        @if ($activeFilterCount > 0)
+            <p class="etd-filter-active-note etd-filter-active-note--compact">Filters applied — open Filters to change or reset.</p>
+        @endif
+    </header>
 
     <div class="etd-panel">
         <div class="etd-table-scroll">

@@ -26,9 +26,6 @@ class VisitorAnalyticsController extends Controller
         $filters = $request->only(['window', 'datetime_from', 'datetime_to']);
         $filters['window_label'] = $range['label'];
 
-        $priorFrom = $range['from']->copy()->subSeconds((int) $range['from']->diffInSeconds($range['to'] ?: TrackerTime::nowUtc()));
-        $priorSummary = $this->analytics->getCachedSummary($priorFrom, $range['from'])['summary'];
-
         $cached = $this->analytics->getCachedOverview($range['from'], $range['until']);
         $overview = $cached['overview'];
 
@@ -37,7 +34,6 @@ class VisitorAnalyticsController extends Controller
             'from' => $range['from'],
             'to' => $range['to'],
             'summary' => $overview,
-            'prior_summary' => $priorSummary,
             'duration_buckets' => $overview['duration_buckets'],
             'new_returning' => $overview['new_returning'],
             'trend' => $overview['trend'],

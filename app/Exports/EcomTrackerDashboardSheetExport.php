@@ -227,7 +227,6 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'metric' => 30,
             'value' => 18,
             'formatted' => 20,
-            'delta' => 26,
             'stage' => 24,
             'sessions' => 16,
             'percent_of_top' => 18,

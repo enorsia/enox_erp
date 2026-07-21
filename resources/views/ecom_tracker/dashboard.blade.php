@@ -24,23 +24,8 @@
         'dateTo' => $filters['date_to'] ?? '',
     ])
 
-    @include('ecom_tracker.partials.tracker-nav', ['current' => 'dashboard'])
-
-    <div class="etd-topbar">
-        <div class="etd-topbar-intro">
-            <h1 class="etd-page-title">Store performance</h1>
-            <p class="etd-page-desc">{{ $d['range']['label'] }}</p>
-            @include('ecom_tracker.partials.timezone-notice')
-            @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $d['analytics_cache'] ?? null])
-            <p class="etd-page-live">
-                <span class="etd-live-dot"></span>Live · last event {{ $d['live']['label'] }}
-            </p>
-            @if ($d['has_session_filters'] ?? false)
-                <p class="etd-filter-active-note">Showing filtered sessions — use Filters to adjust audience criteria.</p>
-            @endif
-        </div>
-
-        <div class="etd-toolbar"
+    <header class="etd-page-header">
+        <div class="etd-page-header-bar"
              data-export-url="{{ route('admin.ecom-tracker.dashboard.export') }}"
              data-export-query='@json($exportQuery)'
              x-data="{
@@ -76,45 +61,73 @@
                     return url.toString();
                 }
              }">
-            @foreach (['24h' => '24h', '7d' => '7d', '30d' => '30d', '90d' => '90d'] as $periodKey => $periodLabel)
-                <button type="button" class="etd-pill {{ $period === $periodKey ? 'active' : '' }}" @click="apply('{{ $periodKey }}')">{{ $periodLabel }}</button>
-            @endforeach
-            <button type="button" class="etd-pill {{ $period === 'custom' ? 'active' : '' }}" @click="period = 'custom'">Custom</button>
-            <button type="button" @click="drawerOpen = true" class="etd-pill {{ $hasActiveFilters ? 'etd-pill-filtered' : '' }}">
-                Filters
-                @if ($hasActiveFilters)
-                    <span class="etd-pill-badge">{{ $activeFilterCount }}</span>
-                @endif
-            </button>
-            <a :href="exportUrl()" class="etd-pill etd-pill-primary no-underline">Export Excel</a>
-
-            <div x-show="period === 'custom'" x-collapse class="etd-custom-dates">
-                <input type="date" x-model="dateFrom" class="f-input etd-date-input">
-                <input type="date" x-model="dateTo" class="f-input etd-date-input">
-                <button type="button" class="etd-pill etd-pill-primary etd-pill-apply" @click="applyCustom()">Apply</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="etd-kpi-rows">
-        @foreach ([
-            ['title' => 'Audience & engagement', 'items' => array_slice($d['kpis'], 0, 4), 'grid' => 'etd-kpi-grid'],
-            ['title' => 'Sale & conversion', 'items' => array_slice($d['kpis'], 4, 2), 'grid' => 'etd-kpi-grid'],
-            ['title' => 'Funnel drop-off', 'items' => array_slice($d['kpis'], 6, 3), 'grid' => 'etd-kpi-grid etd-kpi-grid--3'],
-        ] as $group)
-            <div>
-                <p class="etd-kpi-section-label">{{ $group['title'] }}</p>
-                <div class="{{ $group['grid'] }}">
-                    @foreach ($group['items'] as $kpi)
-                        <div class="etd-kpi">
-                            <div class="etd-kpi-label">{{ $kpi['label'] }}</div>
-                            <div class="etd-kpi-value">{{ $kpi['formatted'] }}</div>
-                            <div class="etd-kpi-delta {{ $kpi['delta']['direction'] }}">{{ $kpi['delta']['text'] }}</div>
-                        </div>
-                    @endforeach
+            <div class="etd-page-header-left">
+                <h1 class="etd-page-title">Store performance</h1>
+                <span class="etd-header-sep" aria-hidden="true">·</span>
+                <span class="etd-page-range">{{ $d['range']['label'] }}</span>
+                <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
+                <div class="etd-page-meta">
+                    @include('ecom_tracker.partials.timezone-notice')
+                    @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $d['analytics_cache'] ?? null])
                 </div>
             </div>
-        @endforeach
+
+            <div class="etd-page-header-right">
+                <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
+                    @foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days'] as $periodKey => $periodLabel)
+                        <button type="button" class="etd-segmented-btn {{ $period === $periodKey ? 'active' : '' }}" aria-label="{{ $periodLabel }}" @click="apply('{{ $periodKey }}')">{{ $periodKey }}</button>
+                    @endforeach
+                    <button type="button" class="etd-segmented-btn {{ $period === 'custom' ? 'active' : '' }}" aria-label="Custom date range" @click="period = 'custom'">Custom</button>
+                </div>
+
+                <div class="etd-header-actions">
+                    <button type="button" @click="drawerOpen = true" class="etd-header-btn etd-header-btn--icon {{ $hasActiveFilters ? 'etd-header-btn--filtered' : '' }}" aria-label="Filters">
+                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
+                        <span class="etd-header-btn-text">Filters</span>
+                        @if ($hasActiveFilters)
+                            <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
+                        @endif
+                    </button>
+                    <a :href="exportUrl()" class="etd-header-btn etd-header-btn--primary no-underline" title="Export Excel">
+                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l4-4m-4 4L8 11M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg>
+                        <span class="etd-header-btn-text">Export</span>
+                    </a>
+                </div>
+            </div>
+
+            <div x-show="period === 'custom'" x-collapse class="etd-custom-dates etd-custom-dates--inline">
+                <input type="date" x-model="dateFrom" class="f-input etd-date-input" aria-label="From date">
+                <span class="etd-custom-dates-sep">–</span>
+                <input type="date" x-model="dateTo" class="f-input etd-date-input" aria-label="To date">
+                <button type="button" class="etd-header-btn etd-header-btn--primary etd-pill-apply" @click="applyCustom()">Apply</button>
+            </div>
+        </div>
+
+        @if ($d['has_session_filters'] ?? false)
+            <p class="etd-filter-active-note etd-filter-active-note--compact">Filtered sessions active — open Filters to adjust.</p>
+        @endif
+    </header>
+
+    <div class="etd-kpi-panel mb-5">
+        <div class="etd-kpi-groups">
+            @foreach ([
+                ['title' => 'Audience & engagement', 'items' => array_slice($d['kpis'], 0, 4), 'cols' => 4],
+                ['title' => 'Sale & conversion', 'items' => array_slice($d['kpis'], 4, 2), 'cols' => 2],
+                ['title' => 'Funnel drop-off', 'items' => array_slice($d['kpis'], 6, 3), 'cols' => 3],
+            ] as $group)
+                <div class="etd-kpi-group etd-kpi-group--{{ $group['cols'] }}">
+                    <p class="etd-kpi-section-label">{{ $group['title'] }}</p>
+                    <div class="etd-kpi-group-grid">
+                        @foreach ($group['items'] as $kpi)
+                            <div class="etd-kpi etd-kpi--compact">
+                                <div class="etd-kpi-label">{{ $kpi['label'] }}</div>
+                                <div class="etd-kpi-value">{{ $kpi['formatted'] }}</div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endforeach
+        </div>
     </div>
 
     <div class="etd-grid-2 mb-3">
@@ -131,12 +144,6 @@
                             <div class="etd-funnel-fill" style="width: {{ max(8, $row['percent_of_top']) }}%">
                                 {{ number_format($row['count']) }}
                             </div>
-                        </div>
-                        <div class="etd-funnel-stats">
-                            {{ $row['percent_of_top'] }}% of top
-                            @if ($row['drop_off_percent'] !== null)
-                                <span class="etd-funnel-drop">−{{ $row['drop_off_percent'] }}% drop-off</span>
-                            @endif
                         </div>
                     </div>
                 @endforeach

@@ -63,27 +63,21 @@ class EcomTrackerDashboardService
     private function buildDashboardData(array $filters): array
     {
         $range = $this->resolveDateRange($filters);
-        $priorRange = $this->priorRange($range['from'], $range['to'], $range['period'] ?? null);
         $extraFilters = $this->extractSessionFilters($filters);
 
         $currentSessions = $this->sessionsInRange($range['from'], $range['to']);
-        $priorSessions = $this->sessionsInRange($priorRange['from'], $priorRange['to']);
 
         if ($extraFilters !== []) {
             $currentIds = $this->filteredSessionIds($range['from'], $range['to'], $extraFilters);
-            $priorIds = $this->filteredSessionIds($priorRange['from'], $priorRange['to'], $extraFilters);
             $currentSessions = $currentSessions->only($currentIds->all());
-            $priorSessions = $priorSessions->only($priorIds->all());
         }
 
         $currentKpis = $this->buildKpis($range['from'], $range['to'], $currentSessions);
-        $priorKpis = $this->buildKpis($priorRange['from'], $priorRange['to'], $priorSessions);
 
         return [
             'filters' => $this->normalizeFilters($filters, $range),
             'range' => $range,
-            'prior_range' => $priorRange,
-            'kpis' => $this->attachKpiDeltas($currentKpis, $priorKpis),
+            'kpis' => $this->buildKpiCards($currentKpis),
             'funnel' => $this->buildFunnel($range['from'], $range['to'], $extraFilters),
             'trend' => $this->buildTrend($range['from'], $range['to'], $extraFilters, $range['period'] ?? null),
             'categories' => $this->buildCategoryPerformance($range['from'], $range['to'], filters: $extraFilters),
@@ -140,7 +134,6 @@ class EcomTrackerDashboardService
                 'metric' => $kpi['label'],
                 'value' => $kpi['value'],
                 'formatted' => $kpi['formatted'],
-                'delta' => $kpi['delta']['text'] ?? '',
             ])->values()->all(),
             'funnel' => collect($data['funnel'])->map(fn (array $row) => [
                 'stage' => $row['stage'],
@@ -267,38 +260,6 @@ class EcomTrackerDashboardService
             'label' => "Last {$days} days",
             'days' => $days,
             'period' => $period === '7d' || $period === '90d' ? $period : '30d',
-        ];
-    }
-
-    /**
-     * @return array{from: Carbon, to: Carbon, label: string, days: int, period?: string}
-     */
-    private function priorRange(Carbon $from, Carbon $to, ?string $period = null): array
-    {
-        if ($period === '24h') {
-            $seconds = (int) $from->diffInSeconds($to);
-            $priorTo = $from->copy()->subSecond();
-            $priorFrom = $priorTo->copy()->subSeconds($seconds);
-
-            return [
-                'from' => $priorFrom,
-                'to' => $priorTo,
-                'label' => 'Prior 24 hours',
-                'days' => 1,
-                'period' => '24h',
-            ];
-        }
-
-        $days = (int) $from->diffInDays($to) + 1;
-        $priorTo = $from->copy()->subDay()->endOfDay();
-        $priorFrom = $priorTo->copy()->subDays($days - 1)->startOfDay();
-
-        return [
-            'from' => $priorFrom,
-            'to' => $priorTo,
-            'label' => 'Prior '.$days.' days',
-            'days' => $days,
-            'period' => $period,
         ];
     }
 
@@ -520,69 +481,32 @@ class EcomTrackerDashboardService
 
     /**
      * @param  array<string, mixed>  $current
-     * @param  array<string, mixed>  $prior
      * @return array<int, array<string, mixed>>
      */
-    private function attachKpiDeltas(array $current, array $prior): array
+    private function buildKpiCards(array $current): array
     {
         return [
-            $this->kpiCard('Unique visitors', $current['unique_visitors'], $prior['unique_visitors'], 'number', false),
-            $this->kpiCard('Avg stay time', $current['avg_stay_seconds'], $prior['avg_stay_seconds'], 'duration', false),
-            $this->kpiCard('Sessions', $current['sessions'], $prior['sessions'], 'number', false),
-            $this->kpiCard('Conversion rate', $current['conversion_rate'], $prior['conversion_rate'], 'percent', false),
-            $this->kpiCard('Sale', $current['revenue'], $prior['revenue'], 'currency', false),
-            $this->kpiCard('Average sale', $current['aov'], $prior['aov'], 'currency', false),
-            $this->kpiCard('Cart abandonment', $current['cart_abandonment_rate'], $prior['cart_abandonment_rate'], 'percent', true),
-            $this->kpiCard('Begin checkout abandonment', $current['begin_checkout_abandonment_rate'], $prior['begin_checkout_abandonment_rate'], 'percent', true),
-            $this->kpiCard('Proceed checkout abandonment', $current['proceed_checkout_abandonment_rate'], $prior['proceed_checkout_abandonment_rate'], 'percent', true),
+            $this->kpiCard('Unique visitors', $current['unique_visitors'], 'number'),
+            $this->kpiCard('Avg stay time', $current['avg_stay_seconds'], 'duration'),
+            $this->kpiCard('Sessions', $current['sessions'], 'number'),
+            $this->kpiCard('Conversion rate', $current['conversion_rate'], 'percent'),
+            $this->kpiCard('Sale', $current['revenue'], 'currency'),
+            $this->kpiCard('Average sale', $current['aov'], 'currency'),
+            $this->kpiCard('Cart abandonment', $current['cart_abandonment_rate'], 'percent'),
+            $this->kpiCard('Begin checkout abandonment', $current['begin_checkout_abandonment_rate'], 'percent'),
+            $this->kpiCard('Proceed checkout abandonment', $current['proceed_checkout_abandonment_rate'], 'percent'),
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function kpiCard(string $label, float|int $value, float|int $prior, string $format, bool $lowerIsBetter): array
+    private function kpiCard(string $label, float|int $value, string $format): array
     {
-        $delta = $this->buildDelta($value, $prior, $format, $lowerIsBetter);
-
         return [
             'label' => $label,
             'value' => $value,
             'formatted' => $this->formatKpiValue($value, $format),
-            'delta' => $delta,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function buildDelta(float|int $value, float|int $prior, string $format, bool $lowerIsBetter): array
-    {
-        if ($prior == 0) {
-            return [
-                'direction' => 'neutral',
-                'text' => '—',
-            ];
-        }
-
-        $diff = $value - $prior;
-        $pct = ($diff / $prior) * 100;
-        $improved = $lowerIsBetter ? $diff < 0 : $diff > 0;
-        $direction = abs($diff) < 0.0001 ? 'neutral' : ($improved ? 'up' : 'down');
-
-        $text = match ($format) {
-            'percent' => sprintf('%s%0.1fpp', $diff >= 0 ? '+' : '', $diff),
-            'currency' => sprintf('%s%0.1f%%', $pct >= 0 ? '+' : '', $pct),
-            default => sprintf('%s%0.1f%%', $pct >= 0 ? '+' : '', $pct),
-        };
-
-        if ($lowerIsBetter && $format === 'percent') {
-            $text .= $diff < 0 ? ' (better)' : ($diff > 0 ? ' (worse)' : '');
-        }
-
-        return [
-            'direction' => $direction,
-            'text' => $text.' vs prior period',
         ];
     }
 
