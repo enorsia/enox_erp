@@ -8,7 +8,8 @@
     $period = $filters['period'] ?? '24h';
     $back = urlencode(request()->fullUrl());
     $queryParams = request()->only(['period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium']);
-    $exportQuery = array_filter($queryParams, fn ($value) => filled($value));
+    $exportQuery = array_filter(array_merge($queryParams, ['period' => $period]), fn ($value) => filled($value));
+    $exportUrl = route('admin.ecom-tracker.dashboard.export', $exportQuery);
     $detailLink = fn (string $section) => route('admin.ecom-tracker.dashboard.details', $section).'?'.http_build_query(array_merge($queryParams, ['back' => $back]));
     $hasActiveFilters = ($activeFilterCount ?? 0) > 0;
 @endphp
@@ -26,8 +27,6 @@
 
     <header class="etd-page-header">
         <div class="etd-page-header-bar"
-             data-export-url="{{ route('admin.ecom-tracker.dashboard.export') }}"
-             data-export-query='@json($exportQuery)'
              x-data="{
                 period: '{{ $period }}',
                 dateFrom: '{{ $filters['date_from'] ?? '' }}',
@@ -48,17 +47,6 @@
                     url.searchParams.set('date_from', this.dateFrom);
                     url.searchParams.set('date_to', this.dateTo);
                     window.location.href = url.toString();
-                },
-                exportUrl() {
-                    const url = new URL(this.$el.dataset.exportUrl, window.location.origin);
-                    const params = JSON.parse(this.$el.dataset.exportQuery || '{}');
-                    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, String(value)));
-                    url.searchParams.set('period', this.period);
-                    if (this.period === 'custom') {
-                        url.searchParams.set('date_from', this.dateFrom);
-                        url.searchParams.set('date_to', this.dateTo);
-                    }
-                    return url.toString();
                 }
              }">
             <div class="etd-page-header-left">
@@ -88,7 +76,7 @@
                             <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
                         @endif
                     </button>
-                    <a :href="exportUrl()" class="etd-header-btn etd-header-btn--primary no-underline" title="Export Excel">
+                    <a href="{{ $exportUrl }}" class="etd-header-btn etd-header-btn--primary no-underline" title="Export Excel">
                         <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l4-4m-4 4L8 11M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg>
                         <span class="etd-header-btn-text">Export</span>
                     </a>

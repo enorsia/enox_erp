@@ -112,10 +112,15 @@ class VisitorAnalyticsController extends Controller
         Gate::authorize('ecom_tracker.visitors.index');
 
         $range = $this->resolveRange($request);
-        $filename = 'visitor-analytics-'.$range['from']->format('Y-m-d-His').'.xlsx';
+        $filename = 'visitor-analytics-'.$range['from']->format('Y-m-d').'-'.$range['to']->format('Y-m-d').'.xlsx';
 
         return Excel::download(
-            new VisitorAnalyticsExport($this->analytics, $range['from'], $range['until']),
+            VisitorAnalyticsExport::fromRange(
+                $this->analytics,
+                $range['from'],
+                $range['until'],
+                $range['label'],
+            ),
             $filename,
         );
     }

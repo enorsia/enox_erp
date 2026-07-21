@@ -33,6 +33,7 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
         private string $title,
         private array $rows,
         private string $rangeLabel = '',
+        private string $reportPrefix = 'ECOM TRACKER DASHBOARD',
     ) {}
 
     public function startCell(): string
@@ -80,7 +81,7 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
                 $this->applyHeaderRows(
                     $sheet,
                     $endCol,
-                    'ECOM TRACKER DASHBOARD — '.strtoupper($this->title),
+                    strtoupper($this->reportPrefix).' — '.strtoupper($this->title),
                     $this->rangeLabel,
                 );
                 $this->applyHeadingStyle($sheet, $endCol, $columnKeys);
@@ -259,6 +260,17 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'device' => 20,
             'share' => 12,
             'signal' => 16,
+            'visitor_id' => 28,
+            'session_count' => 14,
+            'orders' => 12,
+            'total_stay' => 16,
+            'avg_stay' => 16,
+            'first_seen' => 20,
+            'last_active' => 20,
+            'browser' => 18,
+            'segment' => 22,
+            'duration_bucket' => 18,
+            'unique_visitors' => 18,
         ];
 
         foreach ($columnKeys as $idx => $key) {
@@ -295,6 +307,14 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'signal_label',
             'code',
             'date',
+            'visitor_id',
+            'browser',
+            'segment',
+            'duration_bucket',
+            'first_seen',
+            'last_active',
+            'total_stay',
+            'avg_stay',
         ], true);
     }
 
@@ -317,6 +337,9 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'viewed',
             'purchased',
             'share',
+            'session_count',
+            'orders',
+            'unique_visitors',
         ], true) || str_contains($key, 'rate') || str_contains($key, 'percent');
     }
 

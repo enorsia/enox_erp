@@ -586,6 +586,56 @@ class VisitorAnalyticsService
         ], $buckets);
     }
 
+    /**
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    public function buildExportRows(Carbon $from, ?Carbon $until = null): array
+    {
+        $summary = $this->buildSummary($from, $until);
+        $trend = $this->buildVisitorTrend($from, $until);
+        $newReturning = $this->buildNewVsReturning($from, $until);
+        $durationBuckets = $this->buildDurationBuckets($from, $until);
+        $visitors = $this->buildVisitorBreakdown($from, 10000, $until)->items();
+
+        return [
+            'kpis' => [
+                ['metric' => 'Unique visitors', 'value' => $summary['unique_visitors'], 'formatted' => number_format($summary['unique_visitors'])],
+                ['metric' => 'Returning visitors', 'value' => $summary['returning_visitors'], 'formatted' => number_format($summary['returning_visitors'])],
+                ['metric' => 'Sessions', 'value' => $summary['sessions'], 'formatted' => number_format($summary['sessions'])],
+                ['metric' => 'Avg session duration', 'value' => $summary['avg_session_duration'], 'formatted' => $summary['avg_session_duration_label']],
+                ['metric' => 'Total time on site', 'value' => $summary['total_stay_seconds'], 'formatted' => $summary['total_stay_label']],
+            ],
+            'trend' => collect($trend['labels'])->map(function (string $label, int $index) use ($trend) {
+                return [
+                    'date' => $label,
+                    'unique_visitors' => $trend['visitors'][$index] ?? 0,
+                    'sessions' => $trend['sessions'][$index] ?? 0,
+                ];
+            })->values()->all(),
+            'new_returning' => [
+                ['segment' => 'Unique visitors', 'count' => $newReturning['unique']],
+                ['segment' => 'Returning visitors', 'count' => $newReturning['returning']],
+            ],
+            'duration' => collect($durationBuckets)->map(fn (array $bucket) => [
+                'duration_bucket' => $bucket['label'],
+                'sessions' => $bucket['count'],
+            ])->values()->all(),
+            'visitors' => collect($visitors)->map(function (array $row) {
+                return [
+                    'visitor_id' => $row['visitor_id'],
+                    'sessions' => $row['session_count'],
+                    'orders' => $row['order_qty'],
+                    'total_stay' => $row['total_stay_label'],
+                    'avg_stay' => $row['avg_stay_label'],
+                    'first_seen' => TrackerTime::toLocal($row['first_seen_at'])?->format('d M Y, H:i') ?? '',
+                    'last_active' => TrackerTime::toLocal($row['last_active_at'])?->format('d M Y, H:i') ?? '',
+                    'device' => $row['device_type'] ?? '',
+                    'browser' => $row['browser'] ?? '',
+                ];
+            })->values()->all(),
+        ];
+    }
+
     public function formatDuration(int $seconds): string
     {
         return format_duration($seconds);

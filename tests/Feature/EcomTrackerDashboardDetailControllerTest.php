@@ -10,6 +10,18 @@ beforeEach(function () {
     Permission::findOrCreate('ecom_tracker.dashboard.index', 'web');
 });
 
+test('visitor analytics export downloads excel for authorized users', function () {
+    Permission::findOrCreate('ecom_tracker.visitors.index', 'web');
+
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.visitors.index');
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-tracker.visitors.export', ['window' => '7d']))
+        ->assertOk()
+        ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+});
+
 test('visitor analytics detail pages are accessible for authorized users', function () {
     Permission::findOrCreate('ecom_tracker.visitors.index', 'web');
 
@@ -42,6 +54,16 @@ test('dashboard detail pages are accessible for authorized users', function () {
         ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'funnel', 'period' => '7d']))
         ->assertOk()
         ->assertSee('Conversion funnel');
+});
+
+test('dashboard export downloads excel for authorized users', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.dashboard.index');
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-tracker.dashboard.export', ['period' => '7d']))
+        ->assertOk()
+        ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 });
 
 test('dashboard chart detail pages expose chart payload keys', function () {

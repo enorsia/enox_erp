@@ -17,7 +17,8 @@
     $activityLink = fn (string $visitorId) => route('admin.ecom-activity.index', ['search' => $visitorId]);
     $summary = $a['summary'];
     $activeWindow = $hasCustomRange ? 'custom' : $window;
-    $exportUrl = route('admin.ecom-tracker.visitors.export', request()->query());
+    $exportQuery = array_filter(request()->only(['window', 'datetime_from', 'datetime_to']), fn ($value) => filled($value));
+    $exportUrl = route('admin.ecom-tracker.visitors.export', $exportQuery);
 @endphp
 
 <div class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">

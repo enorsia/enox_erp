@@ -4,89 +4,42 @@ namespace App\Exports;
 
 use App\Services\VisitorAnalyticsService;
 use Carbon\Carbon;
-use Illuminate\Support\Collection;
-use Maatwebsite\Excel\Concerns\FromCollection;
-use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
-use Maatwebsite\Excel\Concerns\WithTitle;
 
 class VisitorAnalyticsExport implements WithMultipleSheets
 {
+    private const REPORT_PREFIX = 'VISITOR ANALYTICS';
+
+    /**
+     * @param  array<string, array<int, array<string, mixed>>>  $rows
+     */
     public function __construct(
-        private VisitorAnalyticsService $analytics,
-        private Carbon $from,
-        private ?Carbon $until = null,
+        private array $rows,
+        private string $rangeLabel = '',
     ) {}
+
+    public static function fromRange(
+        VisitorAnalyticsService $analytics,
+        Carbon $from,
+        ?Carbon $until,
+        string $rangeLabel,
+    ): self {
+        return new self(
+            $analytics->buildExportRows($from, $until),
+            $rangeLabel,
+        );
+    }
 
     public function sheets(): array
     {
+        $rangeLabel = $this->rangeLabel;
+
         return [
-            new VisitorAnalyticsWindowsSheet($this->analytics),
-            new VisitorAnalyticsVisitorsSheet($this->analytics, $this->from, $this->until),
+            new EcomTrackerDashboardSheetExport('KPIs', $this->rows['kpis'] ?? [], $rangeLabel, self::REPORT_PREFIX),
+            new EcomTrackerDashboardSheetExport('Trend', $this->rows['trend'] ?? [], $rangeLabel, self::REPORT_PREFIX),
+            new EcomTrackerDashboardSheetExport('New vs Returning', $this->rows['new_returning'] ?? [], $rangeLabel, self::REPORT_PREFIX),
+            new EcomTrackerDashboardSheetExport('Duration', $this->rows['duration'] ?? [], $rangeLabel, self::REPORT_PREFIX),
+            new EcomTrackerDashboardSheetExport('Visitors', $this->rows['visitors'] ?? [], $rangeLabel, self::REPORT_PREFIX),
         ];
-    }
-}
-
-class VisitorAnalyticsWindowsSheet implements FromCollection, WithHeadings, WithTitle
-{
-    public function __construct(
-        private VisitorAnalyticsService $analytics,
-    ) {}
-
-    public function title(): string
-    {
-        return 'Rolling windows';
-    }
-
-    public function headings(): array
-    {
-        return ['Window', 'Unique visitors', 'Returning visitors', 'Sessions', 'Avg session duration', 'Total time'];
-    }
-
-    public function collection(): Collection
-    {
-        return collect($this->analytics->buildRollingWindows())->map(fn (array $row) => [
-            $row['label'],
-            $row['unique_visitors'],
-            $row['returning_visitors'],
-            $row['sessions'],
-            $row['avg_stay_label'],
-            $row['total_stay_label'],
-        ]);
-    }
-}
-
-class VisitorAnalyticsVisitorsSheet implements FromCollection, WithHeadings, WithTitle
-{
-    public function __construct(
-        private VisitorAnalyticsService $analytics,
-        private Carbon $from,
-        private ?Carbon $until = null,
-    ) {}
-
-    public function title(): string
-    {
-        return 'Visitors';
-    }
-
-    public function headings(): array
-    {
-        return ['Visitor ID', 'Sessions', 'Total stay', 'Avg stay/session', 'First seen', 'Last active', 'Device', 'Browser'];
-    }
-
-    public function collection(): Collection
-    {
-        $paginator = $this->analytics->buildVisitorBreakdown($this->from, 10000, $this->until);
-
-        return collect($paginator->items())->map(fn (array $row) => [
-            $row['visitor_id'],
-            $row['session_count'],
-            $row['total_stay_label'],
-            $row['avg_stay_label'],
-            $row['first_seen_at'],
-            $row['last_active_at'],
-            $row['device_type'] ?? '',
-            $row['browser'] ?? '',
-        ]);
     }
 }
