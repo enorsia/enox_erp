@@ -6,6 +6,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityTimelinePresenter;
+use App\Support\TrackerTime;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -31,6 +32,8 @@ class EcomActivityController extends Controller
         $query = ActivityEcomUser::query()
             ->withCount('actions');
 
+        $this->applySessionDateFilter($query, $request);
+
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -40,14 +43,6 @@ class EcomActivityController extends Controller
                     ->orWhere('user_name', 'like', "%{$search}%")
                     ->orWhere('user_email', 'like', "%{$search}%");
             });
-        }
-
-        if ($request->filled('date_from')) {
-            $query->whereDate('created_at', '>=', $request->date_from);
-        }
-
-        if ($request->filled('date_to')) {
-            $query->whereDate('created_at', '<=', $request->date_to);
         }
 
         if ($request->filled('device_type')) {
@@ -120,7 +115,7 @@ class EcomActivityController extends Controller
 
         $timeline->appends($request->except('timeline_page'));
 
-        $returnQuery = $request->only(['search', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium', 'page']);
+        $returnQuery = $request->only(['search', 'period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium', 'page']);
 
         return view('ecom_activity.show', [
             'activityUser' => $activityUser,
@@ -129,5 +124,32 @@ class EcomActivityController extends Controller
             'reachedSteps' => $reachedSteps,
             'returnQuery' => $returnQuery,
         ]);
+    }
+
+    private function applySessionDateFilter(\Illuminate\Database\Eloquent\Builder $query, Request $request): void
+    {
+        if ($request->input('period') === 'all') {
+            return;
+        }
+
+        if ($request->filled('date_from') || $request->filled('date_to')) {
+            if ($request->filled('date_from')) {
+                $query->whereDate('created_at', '>=', $request->date_from);
+            }
+
+            if ($request->filled('date_to')) {
+                $query->whereDate('created_at', '<=', $request->date_to);
+            }
+
+            return;
+        }
+
+        $from = TrackerTime::localNow()->subHours(24)->utc();
+        $to = TrackerTime::nowUtc();
+
+        $query->where(function ($inner) use ($from, $to) {
+            $inner->whereBetween('created_at', [$from, $to])
+                ->orWhereBetween('last_active_at', [$from, $to]);
+        });
     }
 }

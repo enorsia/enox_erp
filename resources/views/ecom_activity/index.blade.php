@@ -11,10 +11,11 @@
     $todayStr = $today->toDateString();
     $dateFrom = request('date_from');
     $dateTo = request('date_to');
-    $activePreset = 'all';
-    $rangeLabel = 'All sessions';
+    $period = request('period', '24h');
+    $activePreset = $period === 'all' ? 'all' : '24h';
+    $rangeLabel = $period === 'all' ? 'All sessions' : 'Last 24 hours';
 
-    if (filled($dateFrom) && filled($dateTo)) {
+    if ($period !== 'all' && filled($dateFrom) && filled($dateTo)) {
         $from = Carbon::parse($dateFrom, TrackerTime::timezone())->startOfDay();
         $to = Carbon::parse($dateTo, TrackerTime::timezone())->startOfDay();
 
@@ -36,9 +37,10 @@
         $rangeLabel = 'Custom range';
     }
 
-    $baseQuery = request()->except(['date_from', 'date_to', 'page']);
+    $baseQuery = request()->except(['date_from', 'date_to', 'page', 'period']);
     $presetUrl = fn (string $preset) => match ($preset) {
-        'all' => route('admin.ecom-activity.index', $baseQuery),
+        '24h' => route('admin.ecom-activity.index', $baseQuery),
+        'all' => route('admin.ecom-activity.index', array_merge($baseQuery, ['period' => 'all'])),
         '7d' => route('admin.ecom-activity.index', array_merge($baseQuery, [
             'date_from' => $today->copy()->subDays(6)->toDateString(),
             'date_to' => $todayStr,
@@ -100,10 +102,11 @@
 
             <div class="etd-page-header-right">
                 <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Session date range">
-                    <a href="{{ $presetUrl('all') }}" class="etd-segmented-btn {{ $activePreset === 'all' ? 'active' : '' }} no-underline">All</a>
+                    <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="Last 24 hours">24h</a>
                     <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
                     <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
                     <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
+                    <a href="{{ $presetUrl('all') }}" class="etd-segmented-btn {{ $activePreset === 'all' ? 'active' : '' }} no-underline">All</a>
                     <button type="button" class="etd-segmented-btn {{ $activePreset === 'custom' ? 'active' : '' }}" aria-label="Custom date range" @click="presetKey = 'custom'">Custom</button>
                 </div>
 

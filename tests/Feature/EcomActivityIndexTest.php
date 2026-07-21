@@ -75,3 +75,39 @@ test('ecom activity index filters sessions with orders', function () {
         ->assertSee(Str::limit($guestSession, 14))
         ->assertDontSee(Str::limit($orderedSession, 14));
 });
+
+test('ecom activity index defaults to last 24 hours', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    $recentSession = Str::uuid()->toString();
+    $oldSession = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $recentSession,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+        'created_at' => now(),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $oldSession,
+        'device_type' => 'desktop',
+        'last_active_at' => now()->subDays(10),
+        'created_at' => now()->subDays(10),
+    ]);
+
+    $this->get(route('admin.ecom-activity.index'))
+        ->assertOk()
+        ->assertSee('Last 24 hours')
+        ->assertSee(Str::limit($recentSession, 14))
+        ->assertDontSee(Str::limit($oldSession, 14));
+
+    $this->get(route('admin.ecom-activity.index', ['period' => 'all']))
+        ->assertOk()
+        ->assertSee('All sessions')
+        ->assertSee(Str::limit($recentSession, 14))
+        ->assertSee(Str::limit($oldSession, 14));
+});

@@ -217,6 +217,9 @@ class EcomTrackerDashboardService
     public function resolveDateRange(array $filters): array
     {
         $period = $filters['period'] ?? '24h';
+        if ($period === '' || $period === null) {
+            $period = '24h';
+        }
 
         if ($period === 'custom' && ! empty($filters['date_from']) && ! empty($filters['date_to'])) {
             $fromLocal = Carbon::parse($filters['date_from'], TrackerTime::timezone())->startOfDay();
@@ -886,8 +889,8 @@ class EcomTrackerDashboardService
                     $this->accumulateProductRow(
                         $products,
                         $line,
-                        purchases: (int) $line['qty'],
-                        revenue: $line['qty'] * $line['price'],
+                        purchases: 1,
+                        revenue: (float) $line['revenue'],
                     );
                 }
 
@@ -997,7 +1000,7 @@ class EcomTrackerDashboardService
     }
 
     /**
-     * @return array{code: string, name: string, product_id: string, qty: float, price: float}|null
+     * @return array{code: string, name: string, product_id: string, qty: int, revenue: float}|null
      */
     private function extractPurchaseLineIdentity(array $item): ?array
     {
@@ -1013,9 +1016,47 @@ class EcomTrackerDashboardService
             'code' => $code,
             'name' => $name,
             'product_id' => $productId,
-            'qty' => max(1, (float) ($item['qty'] ?? 1)),
-            'price' => (float) ($item['price'] ?? 0),
+            'qty' => $this->resolvePurchaseLineQty($item),
+            'revenue' => $this->resolvePurchaseLineRevenue($item),
         ];
+    }
+
+    private function resolvePurchaseLineQty(array $item): int
+    {
+        $qty = (float) ($item['qty'] ?? $item['quantity'] ?? 1);
+
+        return (int) max(1, $qty);
+    }
+
+    private function resolvePurchaseLineRevenue(array $item): float
+    {
+        foreach (['line_total', 'total', 'row_total', 'subtotal'] as $field) {
+            $lineTotal = (float) ($item[$field] ?? 0);
+
+            if ($lineTotal > 0) {
+                return round($lineTotal, 2);
+            }
+        }
+
+        $qty = $this->resolvePurchaseLineQty($item);
+        $unitPrice = (float) ($item['price'] ?? $item['unit_price'] ?? $item['discount_price'] ?? 0);
+
+        return round(max(0, $qty) * max(0, $unitPrice), 2);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, ActivityEcomUserAction>  $actions
+     * @return \Illuminate\Support\Collection<int, ActivityEcomUserAction>
+     */
+    private function uniquePaymentSuccessActions(Collection $actions): Collection
+    {
+        return $actions
+            ->unique(function (ActivityEcomUserAction $action) {
+                $orderId = $action->payment_success['order_id'] ?? null;
+
+                return filled($orderId) ? (string) $orderId : $action->event_id;
+            })
+            ->values();
     }
 
     private function productIdentityKey(string $name, string $code, string $productId = ''): string
@@ -1246,12 +1287,12 @@ class EcomTrackerDashboardService
         return match ($scenario) {
             'viewed_not_purchased' => $views > 0 && $purchases === 0,
             'added_not_purchased' => $adds > 0 && $purchases === 0,
-            'viewed_not_added' => $views > 0 && $adds === 0,
+            'viewed_not_added' => $views > 0 && $adds === 0 && $purchases === 0,
             'viewed_and_added' => $views > 0 && $adds > 0,
             'viewed_added_not_purchased' => $views > 0 && $adds > 0 && $purchases === 0,
             'full_funnel' => $views > 0 && $adds > 0 && $purchases > 0,
             'engagement_no_purchase' => ($views > 0 || $adds > 0) && $purchases === 0,
-            'purchased_only' => $purchases > 0 && $views === 0 && $adds === 0,
+            'purchased_only' => $purchases > 0,
             default => true,
         };
     }
@@ -1504,48 +1545,78 @@ class EcomTrackerDashboardService
                 }
             });
 
-        $actionQuery()
-            ->where('action_type', 'payment_success')
-            ->get()
-            ->each(function (ActivityEcomUserAction $action) use ($catalog) {
-                $items = $action->payment_success['checkout_info']['items'] ?? [];
+        $this->uniquePaymentSuccessActions(
+            $actionQuery()
+                ->where('action_type', 'payment_success')
+                ->get()
+        )->each(function (ActivityEcomUserAction $action) use ($catalog) {
+            $payload = $action->payment_success ?? [];
+            $items = $payload['checkout_info']['items'] ?? [];
+            $resolvedLines = [];
 
-                foreach ($items as $item) {
-                    if (! is_array($item)) {
-                        continue;
-                    }
-
-                    $line = $this->extractPurchaseLineIdentity($item);
-
-                    if ($line === null) {
-                        continue;
-                    }
-
-                    $qty = (int) $line['qty'];
-                    $this->accumulateCatalogEvent($catalog, $line, [
-                        'color' => (string) ($item['color_name'] ?? $item['general_color_name'] ?? ($item['options']['general_color'] ?? '')),
-                        'size' => (string) ($item['size_name'] ?? ''),
-                        'sku' => $line['code'],
-                        'category' => (string) ($item['category_name'] ?? $action->category_name ?? ''),
-                    ], purchases: $qty, qty: $qty, revenue: $qty * $line['price']);
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
                 }
 
-                if ($items === [] && ! empty($action->product_code)) {
-                    $amount = $this->paymentSaleAmount($action->payment_success ?? []);
-                    $this->accumulateCatalogEvent($catalog, [
-                        'name' => (string) ($action->product_name ?? ''),
-                        'code' => (string) $action->product_code,
-                        'product_id' => '',
-                    ], [
-                        'color' => (string) ($action->general_color_name ?? ''),
-                        'size' => '',
-                        'sku' => trim((string) $action->product_code),
-                        'category' => (string) ($action->category_name ?? ''),
-                    ], purchases: 1, qty: 1, revenue: $amount);
+                $line = $this->extractPurchaseLineIdentity($item);
+
+                if ($line === null) {
+                    continue;
                 }
-            });
+
+                $resolvedLines[] = [
+                    'item' => $item,
+                    'line' => $line,
+                ];
+            }
+
+            if ($resolvedLines === [] && ! empty($action->product_code)) {
+                $amount = $this->paymentSaleAmount($payload);
+                $this->accumulateCatalogEvent($catalog, [
+                    'name' => (string) ($action->product_name ?? ''),
+                    'code' => (string) $action->product_code,
+                    'product_id' => '',
+                ], [
+                    'color' => (string) ($action->general_color_name ?? ''),
+                    'size' => '',
+                    'sku' => trim((string) $action->product_code),
+                    'category' => (string) ($action->category_name ?? ''),
+                ], purchases: 1, qty: 1, revenue: $amount);
+
+                return;
+            }
+
+            $lineRevenueTotal = collect($resolvedLines)->sum(fn (array $row) => (float) $row['line']['revenue']);
+            $orderAmount = $lineRevenueTotal <= 0 ? $this->paymentSaleAmount($payload) : 0.0;
+            $fallbackShare = ($orderAmount > 0 && $resolvedLines !== [])
+                ? round($orderAmount / count($resolvedLines), 2)
+                : 0.0;
+
+            foreach ($resolvedLines as $row) {
+                $line = $row['line'];
+                $item = $row['item'];
+                $revenue = (float) $line['revenue'];
+
+                if ($revenue <= 0 && $fallbackShare > 0) {
+                    $revenue = $fallbackShare;
+                }
+
+                $this->accumulateCatalogEvent($catalog, $line, [
+                    'color' => (string) ($item['color_name'] ?? $item['general_color_name'] ?? ($item['options']['general_color'] ?? '')),
+                    'size' => (string) ($item['size_name'] ?? ''),
+                    'sku' => $line['code'],
+                    'category' => (string) ($item['category_name'] ?? $action->category_name ?? ''),
+                ], purchases: 1, qty: (int) $line['qty'], revenue: $revenue);
+            }
+        });
 
         $sortBy = $this->resolveProductCatalogSort($options['sort_by'] ?? null);
+
+        if ($this->shouldLimitProductCatalogToPurchases($filters, $options)) {
+            $options['purchased_only'] = true;
+        }
+
         $filterOptions = $this->buildProductCatalogFilterOptions($catalog);
         $products = $this->finalizeProductCatalog($catalog, $options, $sortBy);
 
@@ -1644,6 +1715,27 @@ class EcomTrackerDashboardService
         ]);
     }
 
+    /**
+     * @param  array<string, mixed>  $filters
+     * @param  array<string, mixed>  $options
+     */
+    private function shouldLimitProductCatalogToPurchases(array $filters, array $options): bool
+    {
+        if (($filters['has_order'] ?? '') === '1') {
+            return true;
+        }
+
+        if (($options['event_scenario'] ?? '') === 'purchased_only') {
+            return true;
+        }
+
+        if (($options['activity'] ?? '') === 'purchases') {
+            return true;
+        }
+
+        return ($options['has_purchases'] ?? '') === '1';
+    }
+
     private function catalogVariantKey(string $color, string $size, string $sku): string
     {
         return strtolower(trim($color)).'|'.strtolower(trim($size)).'|'.strtoupper(trim($sku));
@@ -1710,8 +1802,9 @@ class EcomTrackerDashboardService
         $hasViews = $hasViews || $activityFlags['views'];
         $hasAdds = $hasAdds || $activityFlags['adds'];
         $hasPurchases = $hasPurchases || $activityFlags['purchases'];
+        $purchasedOnly = (bool) ($options['purchased_only'] ?? false);
 
-        $products = $catalog->map(function (array $product) use ($colorFilter, $sizeFilter, $sortBy) {
+        $products = $catalog->map(function (array $product) use ($colorFilter, $sizeFilter, $sortBy, $purchasedOnly) {
             $variants = $product['variants']->map(function (array $variant) {
                 if ($variant['purchases'] > 0 && $variant['views'] < $variant['purchases']) {
                     $variant['views'] = $variant['purchases'];
@@ -1731,6 +1824,12 @@ class EcomTrackerDashboardService
             if ($sizeFilter !== '') {
                 $variants = $variants->filter(
                     fn (array $variant) => strcasecmp((string) $variant['size'], $sizeFilter) === 0
+                );
+            }
+
+            if ($purchasedOnly) {
+                $variants = $variants->filter(
+                    fn (array $variant) => (int) $variant['purchases'] > 0
                 );
             }
 
@@ -1793,6 +1892,10 @@ class EcomTrackerDashboardService
             $products = $products->filter(
                 fn (array $product) => $this->productMatchesEventScenario($product, $eventScenario)
             );
+        }
+
+        if ($purchasedOnly) {
+            $products = $products->filter(fn (array $product) => $product['purchases'] > 0);
         }
 
         $products = $products->filter(fn (array $product) => $product['variant_count'] > 0 || (
@@ -2472,9 +2575,9 @@ class EcomTrackerDashboardService
         $items = $checkoutInfo['items'] ?? [];
 
         if (is_array($items) && $items !== []) {
-            return collect($items)->sum(function (array $item) {
-                return (float) ($item['qty'] ?? 1) * (float) ($item['price'] ?? 0);
-            });
+            return collect($items)
+                ->filter(fn ($item) => is_array($item))
+                ->sum(fn (array $item) => $this->resolvePurchaseLineRevenue($item));
         }
 
         $grandTotal = (float) ($checkoutInfo['totals']['grand_total'] ?? 0);

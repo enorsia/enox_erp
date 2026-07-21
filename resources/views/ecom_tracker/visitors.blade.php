@@ -38,13 +38,13 @@
                 windowKey: '{{ $activeWindow }}',
                 datetimeFrom: '{{ $datetimeFromValue }}',
                 datetimeTo: '{{ $datetimeToValue }}',
-                apply(window) {
-                    if (window === 'custom') {
+                apply(preset) {
+                    if (preset === 'custom') {
                         this.windowKey = 'custom';
                         return;
                     }
                     const url = new URL(window.location.href);
-                    url.searchParams.set('window', window);
+                    url.searchParams.set('window', preset);
                     url.searchParams.delete('datetime_from');
                     url.searchParams.delete('datetime_to');
                     window.location.href = url.toString();

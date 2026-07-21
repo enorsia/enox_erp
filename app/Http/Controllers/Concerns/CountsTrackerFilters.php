@@ -56,7 +56,7 @@ trait CountsTrackerFilters
     protected function dashboardDateFilters(Request $request): array
     {
         $filters = $request->only(['period', 'date_from', 'date_to']);
-        $filters['period'] = $filters['period'] ?? '24h';
+        $filters['period'] = filled($filters['period'] ?? null) ? $filters['period'] : '24h';
 
         return $filters;
     }

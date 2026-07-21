@@ -505,3 +505,231 @@ test('product catalog filters apply funnel scenario and activity events with or 
     expect($sorted['products'][0]['name'])->toBe('Purchased Dress');
     expect($sorted['sort_by'])->toBe('top_purchases');
 });
+
+test('product catalog counts purchases as orders and qty as units with full sale value', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $from = Carbon::parse('2026-07-13 00:00:00');
+    $to = Carbon::parse('2026-07-13 23:59:59');
+
+    $createSession = function (string $suffix) use ($from) {
+        $sessionId = "purchase-session-{$suffix}";
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => $from,
+            'updated_at' => $from,
+            'last_active_at' => $from,
+        ]);
+
+        return $sessionId;
+    };
+
+    $bulkOrder = $createSession('bulk');
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $bulkOrder,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'order_id' => 'ORD-BULK',
+            'amount_paid' => 75,
+            'checkout_info' => [
+                'items' => [[
+                    'product_code' => 'SKU-BULK',
+                    'product_name' => 'Bulk Dress',
+                    'quantity' => 3,
+                    'price' => 25,
+                ]],
+            ],
+        ],
+        'created_at' => $from,
+        'start_time' => $from,
+        'end_time' => $from,
+    ]);
+
+    foreach (['A', 'B'] as $suffix) {
+        $sessionId = $createSession($suffix);
+        ActivityEcomUserAction::query()->create([
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => 'payment_success',
+            'payment_success' => [
+                'order_id' => "ORD-{$suffix}",
+                'amount_paid' => 40,
+                'checkout_info' => [
+                    'items' => [[
+                        'product_code' => 'SKU-MULTI',
+                        'product_name' => 'Multi Order Dress',
+                        'qty' => 1,
+                        'price' => 40,
+                    ]],
+                ],
+            ],
+            'created_at' => $from->copy()->addMinutes(5),
+            'start_time' => $from->copy()->addMinutes(5),
+            'end_time' => $from->copy()->addMinutes(5),
+        ]);
+    }
+
+    $catalog = $service->buildProductCatalogPerformance($from, $to, null, [], [
+        'sort_by' => 'top_purchases',
+    ]);
+
+    $bulk = collect($catalog['products'])->firstWhere('name', 'Bulk Dress');
+    expect($bulk['purchases'])->toBe(1);
+    expect($bulk['qty'])->toBe(3);
+    expect($bulk['revenue'])->toBe(75.0);
+
+    $multi = collect($catalog['products'])->firstWhere('name', 'Multi Order Dress');
+    expect($multi['purchases'])->toBe(2);
+    expect($multi['qty'])->toBe(2);
+    expect($multi['revenue'])->toBe(80.0);
+
+    expect($catalog['products'][0]['name'])->toBe('Multi Order Dress');
+});
+
+test('product catalog with has order session filter shows only purchased products', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $from = Carbon::parse('2026-07-14 00:00:00');
+    $to = Carbon::parse('2026-07-14 23:59:59');
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_code' => 'SKU-VIEWED',
+        'product_name' => 'Only Viewed Dress',
+        'created_at' => $from,
+        'start_time' => $from,
+        'end_time' => $from,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_code' => 'SKU-BOUGHT',
+        'product_name' => 'Purchased Dress',
+        'created_at' => $from,
+        'start_time' => $from,
+        'end_time' => $from,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'order_id' => 'ORD-ONLY-ONE',
+            'amount_paid' => 55,
+            'checkout_info' => [
+                'items' => [[
+                    'product_code' => 'SKU-BOUGHT',
+                    'product_name' => 'Purchased Dress',
+                    'qty' => 1,
+                    'price' => 55,
+                ]],
+            ],
+        ],
+        'created_at' => $from->copy()->addMinute(),
+        'start_time' => $from->copy()->addMinute(),
+        'end_time' => $from->copy()->addMinute(),
+    ]);
+
+    $allProducts = $service->buildProductCatalogPerformance($from, $to, null, [], []);
+    expect(collect($allProducts['products'])->pluck('name')->all())
+        ->toContain('Only Viewed Dress', 'Purchased Dress');
+
+    $orderedOnly = $service->buildProductCatalogPerformance($from, $to, null, ['has_order' => '1'], []);
+    expect(collect($orderedOnly['products'])->pluck('name')->all())
+        ->toBe(['Purchased Dress']);
+    expect($orderedOnly['products'][0]['purchases'])->toBe(1);
+});
+
+test('product catalog funnel and activity filters only show purchased products when required', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $from = Carbon::parse('2026-07-15 00:00:00');
+    $to = Carbon::parse('2026-07-15 23:59:59');
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    foreach ([
+        ['SKU-VIEW', 'Only Viewed Dress'],
+        ['SKU-BUY', 'Purchased Dress'],
+    ] as [$code, $name]) {
+        ActivityEcomUserAction::query()->create([
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => 'product_view',
+            'product_code' => $code,
+            'product_name' => $name,
+            'created_at' => $from,
+            'start_time' => $from,
+            'end_time' => $from,
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'order_id' => 'ORD-FUNNEL-1',
+            'amount_paid' => 60,
+            'checkout_info' => [
+                'items' => [[
+                    'product_code' => 'SKU-BUY',
+                    'product_name' => 'Purchased Dress',
+                    'qty' => 1,
+                    'price' => 60,
+                ]],
+            ],
+        ],
+        'created_at' => $from->copy()->addMinute(),
+        'start_time' => $from->copy()->addMinute(),
+        'end_time' => $from->copy()->addMinute(),
+    ]);
+
+    $purchasedOnly = $service->buildProductCatalogPerformance($from, $to, null, [], [
+        'event_scenario' => 'purchased_only',
+    ]);
+    expect(collect($purchasedOnly['products'])->pluck('name')->all())->toBe(['Purchased Dress']);
+
+    $activityPurchases = $service->buildProductCatalogPerformance($from, $to, null, [], [
+        'activity' => 'purchases',
+    ]);
+    expect(collect($activityPurchases['products'])->pluck('name')->all())->toBe(['Purchased Dress']);
+
+    $viewedNotPurchased = $service->buildProductCatalogPerformance($from, $to, null, [], [
+        'event_scenario' => 'viewed_not_purchased',
+    ]);
+    expect(collect($viewedNotPurchased['products'])->pluck('name')->all())->toBe(['Only Viewed Dress']);
+});
+
+test('product catalog empty period defaults to last 24 hours', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-15 16:00:00', TrackerTime::timezone()));
+
+    $range = $service->resolveDateRange(['period' => '']);
+
+    expect($range['period'])->toBe('24h');
+    expect($range['label'])->toBe('Last 24 hours');
+
+    Carbon::setTestNow();
+});

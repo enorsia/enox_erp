@@ -73,6 +73,9 @@ test('product catalog event scenario filters products on detail page', function 
     expect($service->productMatchesEventScenario(['views' => 5, 'adds' => 2, 'purchases' => 1], 'viewed_not_purchased'))->toBeFalse();
     expect($service->productMatchesEventScenario(['views' => 0, 'adds' => 3, 'purchases' => 0], 'added_not_purchased'))->toBeTrue();
     expect($service->productMatchesEventScenario(['views' => 2, 'adds' => 1, 'purchases' => 1], 'full_funnel'))->toBeTrue();
+    expect($service->productMatchesEventScenario(['views' => 2, 'adds' => 0, 'purchases' => 1], 'viewed_not_added'))->toBeFalse();
+    expect($service->productMatchesEventScenario(['views' => 2, 'adds' => 0, 'purchases' => 1], 'purchased_only'))->toBeTrue();
+    expect($service->productMatchesEventScenario(['views' => 2, 'adds' => 0, 'purchases' => 0], 'purchased_only'))->toBeFalse();
 });
 
 test('dashboard product catalog detail supports sort and variant drill-down', function () {
