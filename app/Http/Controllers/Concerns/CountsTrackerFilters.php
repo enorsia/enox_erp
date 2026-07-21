@@ -11,13 +11,18 @@ trait CountsTrackerFilters
     {
         $count = 0;
 
-        foreach (['device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'has_purchases', 'has_views', 'has_adds', 'event_scenario'] as $key) {
+        foreach (['device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario'] as $key) {
             if (filled($request->input($key))) {
                 $count++;
             }
         }
 
         if (($request->input('period') ?? '24h') !== '24h' || filled($request->input('date_from'))) {
+            $count++;
+        }
+
+        $defaultSort = app(\App\Services\EcomTrackerDashboardService::class)->productCatalogDefaultSort();
+        if (filled($request->input('sort_by')) && $request->input('sort_by') !== $defaultSort) {
             $count++;
         }
 
@@ -29,7 +34,7 @@ trait CountsTrackerFilters
      */
     protected function dashboardProductCatalogFilters(Request $request): array
     {
-        return $request->only(['search', 'category', 'color', 'size', 'sort_by', 'has_purchases', 'has_views', 'has_adds', 'event_scenario']);
+        return $request->only(['search', 'category', 'color', 'size', 'sort_by', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario']);
     }
 
     /**

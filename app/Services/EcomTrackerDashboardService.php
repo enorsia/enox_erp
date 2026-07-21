@@ -20,7 +20,7 @@ class EcomTrackerDashboardService
         ['key' => 'add_to_cart', 'label' => 'Add to cart', 'types' => ['add_to_cart']],
         ['key' => 'begin_checkout', 'label' => 'Begin checkout', 'types' => ['begin_checkout']],
         ['key' => 'proceed_checkout', 'label' => 'Proceed checkout', 'types' => ['proceed_checkout']],
-        ['key' => 'payment_success', 'label' => 'Payment success', 'types' => ['payment_success']],
+        ['key' => 'payment_success', 'label' => 'Purchase', 'types' => ['payment_success']],
     ];
 
     private const TABLE_DISPLAY_LIMIT = 20;
@@ -309,7 +309,7 @@ class EcomTrackerDashboardService
     {
         return array_filter(
             array_intersect_key($filters, array_flip([
-                'search', 'category', 'color', 'size', 'sort_by', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
+                'search', 'category', 'color', 'size', 'sort_by', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
             ])),
             fn ($value) => $value !== null && $value !== '',
         );
@@ -1174,15 +1174,52 @@ class EcomTrackerDashboardService
     public function productCatalogEventScenarioOptions(): array
     {
         return [
-            '' => 'All products',
+            '' => 'All',
             'viewed_not_purchased' => 'Viewed · not purchased',
             'added_not_purchased' => 'Added to cart · not purchased',
             'viewed_not_added' => 'Viewed · not added to cart',
             'viewed_and_added' => 'Viewed and added to cart',
-            'viewed_added_not_purchased' => 'Viewed + added · not purchased',
-            'full_funnel' => 'Full funnel (view → add → purchase)',
-            'engagement_no_purchase' => 'Any engagement · no purchase',
-            'purchased_only' => 'Purchased only (no view/add tracked)',
+            'viewed_added_not_purchased' => 'Viewed + cart · not purchased',
+            'full_funnel' => 'Full funnel (view → cart → purchase)',
+            'engagement_no_purchase' => 'Engaged · not purchased',
+            'purchased_only' => 'Purchases only',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function productCatalogActivityFilterOptions(): array
+    {
+        return [
+            '' => 'All',
+            'views' => 'Views',
+            'adds' => 'Cart adds',
+            'purchases' => 'Purchases',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     * @return array{views: bool, adds: bool, purchases: bool}
+     */
+    public function resolveProductCatalogActivityFlags(array $options): array
+    {
+        $activity = (string) ($options['activity'] ?? '');
+
+        if ($activity !== '') {
+            return match ($activity) {
+                'views' => ['views' => true, 'adds' => false, 'purchases' => false],
+                'adds' => ['views' => false, 'adds' => true, 'purchases' => false],
+                'purchases' => ['views' => false, 'adds' => false, 'purchases' => true],
+                default => ['views' => false, 'adds' => false, 'purchases' => false],
+            };
+        }
+
+        return [
+            'views' => ($options['has_views'] ?? '') === '1',
+            'adds' => ($options['has_adds'] ?? '') === '1',
+            'purchases' => ($options['has_purchases'] ?? '') === '1',
         ];
     }
 
@@ -1226,23 +1263,24 @@ class EcomTrackerDashboardService
     {
         return [
             [
-                'label' => 'Top performers',
+                'label' => 'Metrics',
                 'presets' => true,
                 'options' => [
-                    'top_revenue' => ['label' => 'Top sale', 'hint' => 'Highest revenue first'],
-                    'top_views' => ['label' => 'Top views', 'hint' => 'Most product views first'],
-                    'top_adds' => ['label' => 'Top adds', 'hint' => 'Most add-to-cart events first'],
-                    'top_purchases' => ['label' => 'Top purchases', 'hint' => 'Most purchases first'],
-                    'top_qty' => ['label' => 'Top qty', 'hint' => 'Highest quantity sold first'],
+                    'top_revenue' => ['label' => 'Revenue', 'hint' => 'Highest purchase revenue first'],
+                    'top_views' => ['label' => 'Views', 'hint' => 'Most product_view events first'],
+                    'top_adds' => ['label' => 'Cart adds', 'hint' => 'Most add_to_cart events first'],
+                    'top_purchases' => ['label' => 'Purchases', 'hint' => 'Most purchase orders first'],
+                    'top_qty' => ['label' => 'Units sold', 'hint' => 'Highest quantity purchased first'],
                 ],
             ],
             [
                 'label' => 'Insights',
+                'combinations' => true,
                 'options' => [
-                    'insight_engagement' => ['label' => 'Highest interest', 'hint' => 'Strong views and cart activity combined'],
-                    'insight_cart_abandon' => ['label' => 'Cart abandoners', 'hint' => 'Added to cart but few purchases'],
-                    'insight_window_shoppers' => ['label' => 'Window shoppers', 'hint' => 'High views with low or no purchases'],
-                    'insight_unconverted_views' => ['label' => 'Viewed, not bought', 'hint' => 'Views with zero purchases'],
+                    'insight_engagement' => ['label' => 'Views + cart adds', 'hint' => 'Combined view and cart activity'],
+                    'insight_cart_abandon' => ['label' => 'Cart adds · no purchase', 'hint' => 'Added to cart without purchase'],
+                    'insight_window_shoppers' => ['label' => 'Views · low purchase rate', 'hint' => 'High views with weak purchase conversion'],
+                    'insight_unconverted_views' => ['label' => 'Views · no purchase', 'hint' => 'Views with zero purchases'],
                 ],
             ],
             [
@@ -1300,6 +1338,24 @@ class EcomTrackerDashboardService
     /**
      * @return array<int, array{key: string, label: string, hint: string}>
      */
+    public function productCatalogSortCombinations(): array
+    {
+        return collect($this->productCatalogSortGroups())
+            ->filter(fn (array $group) => ! empty($group['combinations']))
+            ->flatMap(fn (array $group) => collect($group['options'])->map(
+                fn (array $option, string $key) => [
+                    'key' => $key,
+                    'label' => $option['label'],
+                    'hint' => $option['hint'],
+                ]
+            ))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{key: string, label: string, hint: string}>
+     */
     public function productCatalogSortPresets(): array
     {
         return collect($this->productCatalogSortGroups())
@@ -1313,6 +1369,40 @@ class EcomTrackerDashboardService
             ))
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<int, array{key: string, label: string, hint: string}>
+     */
+    public function productCatalogPrimarySortFilters(): array
+    {
+        return array_merge(
+            $this->productCatalogSortPresets(),
+            $this->productCatalogSortCombinations(),
+        );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function productCatalogAdditionalSortOptions(): array
+    {
+        $primaryKeys = collect($this->productCatalogPrimarySortFilters())
+            ->pluck('key')
+            ->all();
+
+        return collect($this->productCatalogSortGroups())
+            ->filter(fn (array $group) => empty($group['presets']) && empty($group['combinations']))
+            ->flatMap(fn (array $group) => collect($group['options'])->mapWithKeys(
+                fn (array $option, string $key) => [$key => $option['label']]
+            ))
+            ->reject(fn (string $label, string $key) => in_array($key, $primaryKeys, true))
+            ->all();
+    }
+
+    public function productCatalogDefaultSort(): string
+    {
+        return 'top_revenue';
     }
 
     public function resolveProductCatalogSort(?string $sortBy): string
@@ -1616,6 +1706,10 @@ class EcomTrackerDashboardService
         $hasViews = ($options['has_views'] ?? '') === '1';
         $hasAdds = ($options['has_adds'] ?? '') === '1';
         $eventScenario = $this->resolveProductCatalogEventScenario($options['event_scenario'] ?? null);
+        $activityFlags = $this->resolveProductCatalogActivityFlags($options);
+        $hasViews = $hasViews || $activityFlags['views'];
+        $hasAdds = $hasAdds || $activityFlags['adds'];
+        $hasPurchases = $hasPurchases || $activityFlags['purchases'];
 
         $products = $catalog->map(function (array $product) use ($colorFilter, $sizeFilter, $sortBy) {
             $variants = $product['variants']->map(function (array $variant) {
@@ -1675,16 +1769,24 @@ class EcomTrackerDashboardService
             );
         }
 
-        if ($hasPurchases) {
-            $products = $products->filter(fn (array $product) => $product['purchases'] > 0);
-        }
+        if ($hasPurchases || $hasViews || $hasAdds) {
+            $products = $products->filter(function (array $product) use ($hasPurchases, $hasViews, $hasAdds) {
+                $matches = [];
 
-        if ($hasViews) {
-            $products = $products->filter(fn (array $product) => $product['views'] > 0);
-        }
+                if ($hasViews) {
+                    $matches[] = $product['views'] > 0;
+                }
 
-        if ($hasAdds) {
-            $products = $products->filter(fn (array $product) => $product['adds'] > 0);
+                if ($hasAdds) {
+                    $matches[] = $product['adds'] > 0;
+                }
+
+                if ($hasPurchases) {
+                    $matches[] = $product['purchases'] > 0;
+                }
+
+                return in_array(true, $matches, true);
+            });
         }
 
         if ($eventScenario !== '') {

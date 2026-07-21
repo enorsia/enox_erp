@@ -1,94 +1,78 @@
 @props([
     'filterOptions' => ['categories' => [], 'colors' => [], 'sizes' => []],
     'eventScenarioOptions' => [],
+    'sortGroups' => [],
+    'activityOptions' => [],
+    'currentSort' => 'top_revenue',
 ])
 
 @php
     $selectedScenario = request('event_scenario', '');
+    $selectedSort = request('sort_by', '');
+    $selectedActivity = request('activity', '');
+    $tomSelectClass = 'tom-select etd-tom-select w-full';
 @endphp
 
-<div>
-    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Product search</p>
-    <input type="search"
-           name="search"
-           value="{{ request('search') }}"
-           placeholder="Product name or SKU"
-           class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
-</div>
+<div class="etd-product-filters-compact">
+    <label class="etd-filter-compact-field" for="product-catalog-search">
+        <span class="etd-filter-compact-label">Search</span>
+        <input type="search"
+               id="product-catalog-search"
+               name="search"
+               value="{{ request('search') }}"
+               placeholder="Product name or SKU"
+               class="etd-filter-input etd-filter-input--sm">
+    </label>
 
-<div>
-    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Category</p>
-    <select name="category" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
-        <option value="">All categories</option>
-        @foreach ($filterOptions['categories'] ?? [] as $category)
-            <option value="{{ $category }}" @selected(request('category') === $category)>{{ $category }}</option>
-        @endforeach
-    </select>
-</div>
-
-<div class="grid grid-cols-2 gap-2">
-    <div>
-        <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Color</p>
-        <select name="color" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
-            <option value="">All colors</option>
+    <label class="etd-filter-compact-field">
+        <span class="etd-filter-compact-label">Color</span>
+        <select id="product-catalog-color" name="color" class="{{ $tomSelectClass }}" data-placeholder="All">
+            <option value="" @selected(request('color', '') === '')>All</option>
             @foreach ($filterOptions['colors'] ?? [] as $color)
                 <option value="{{ $color }}" @selected(request('color') === $color)>{{ $color }}</option>
             @endforeach
         </select>
-    </div>
-    <div>
-        <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Size</p>
-        <select name="size" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
-            <option value="">All sizes</option>
+    </label>
+
+    <label class="etd-filter-compact-field">
+        <span class="etd-filter-compact-label">Size</span>
+        <select id="product-catalog-size" name="size" class="{{ $tomSelectClass }}" data-placeholder="All">
+            <option value="" @selected(request('size', '') === '')>All</option>
             @foreach ($filterOptions['sizes'] ?? [] as $size)
                 <option value="{{ $size }}" @selected(request('size') === $size)>{{ $size }}</option>
             @endforeach
         </select>
-    </div>
-</div>
+    </label>
 
-<div>
-    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Action events</p>
-    <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2">Show products that have at least one of these events. Combine multiple for stricter matching.</p>
-    <div class="etd-filter-event-grid">
-        <label class="etd-filter-event-card">
-            <input type="checkbox" name="has_views" value="1" @checked(request('has_views') === '1')>
-            <span class="etd-filter-event-card__body">
-                <span class="etd-filter-event-card__title">Product views</span>
-                <span class="etd-filter-event-card__desc">Has view activity</span>
-            </span>
-        </label>
-        <label class="etd-filter-event-card">
-            <input type="checkbox" name="has_adds" value="1" @checked(request('has_adds') === '1')>
-            <span class="etd-filter-event-card__body">
-                <span class="etd-filter-event-card__title">Add to cart</span>
-                <span class="etd-filter-event-card__desc">Has cart adds</span>
-            </span>
-        </label>
-        <label class="etd-filter-event-card">
-            <input type="checkbox" name="has_purchases" value="1" @checked(request('has_purchases') === '1')>
-            <span class="etd-filter-event-card__body">
-                <span class="etd-filter-event-card__title">Purchases</span>
-                <span class="etd-filter-event-card__desc">Has completed sales</span>
-            </span>
-        </label>
-    </div>
-</div>
+    <label class="etd-filter-compact-field">
+        <span class="etd-filter-compact-label">Sort</span>
+        <select id="product-catalog-sort" name="sort_by" class="{{ $tomSelectClass }}" data-placeholder="All">
+            <option value="" @selected($selectedSort === '')>All</option>
+            @foreach ($sortGroups as $group)
+                <optgroup label="{{ $group['label'] }}">
+                    @foreach ($group['options'] as $value => $option)
+                        <option value="{{ $value }}" @selected($selectedSort === $value)>{{ $option['label'] }}</option>
+                    @endforeach
+                </optgroup>
+            @endforeach
+        </select>
+    </label>
 
-<div x-data="{ scenario: @js($selectedScenario) }">
-    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Event combinations</p>
-    <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2">Ready-made scenarios across view, add, and purchase events.</p>
-    <div class="space-y-2">
-        @foreach ($eventScenarioOptions as $value => $label)
-            <label class="etd-filter-scenario-card"
-                   :class="{ 'is-active': scenario === @js($value) }">
-                <input type="radio"
-                       name="event_scenario"
-                       value="{{ $value }}"
-                       x-model="scenario"
-                       @checked($selectedScenario === $value)>
-                <span class="etd-filter-scenario-card__label">{{ $label }}</span>
-            </label>
-        @endforeach
-    </div>
+    <label class="etd-filter-compact-field">
+        <span class="etd-filter-compact-label">Funnel</span>
+        <select id="product-catalog-funnel" name="event_scenario" class="{{ $tomSelectClass }}" data-placeholder="All">
+            @foreach ($eventScenarioOptions as $value => $label)
+                <option value="{{ $value }}" @selected($selectedScenario === $value)>{{ $label }}</option>
+            @endforeach
+        </select>
+    </label>
+
+    <label class="etd-filter-compact-field">
+        <span class="etd-filter-compact-label">Activity</span>
+        <select id="product-catalog-activity" name="activity" class="{{ $tomSelectClass }}" data-placeholder="All">
+            @foreach ($activityOptions as $value => $label)
+                <option value="{{ $value }}" @selected($selectedActivity === $value)>{{ $label }}</option>
+            @endforeach
+        </select>
+    </label>
 </div>

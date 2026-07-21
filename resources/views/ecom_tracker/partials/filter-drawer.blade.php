@@ -14,6 +14,9 @@
     'showProductFilters' => false,
     'productFilterOptions' => ['categories' => [], 'colors' => [], 'sizes' => []],
     'eventScenarioOptions' => [],
+    'productSortGroups' => [],
+    'productActivityOptions' => [],
+    'currentProductSort' => 'top_revenue',
     'period' => '24h',
     'dateFrom' => '',
     'dateTo' => '',
@@ -37,9 +40,10 @@
      x-transition:leave="transition ease-in duration-200"
      x-transition:leave-start="translate-x-0"
      x-transition:leave-end="translate-x-full"
-     class="fixed top-0 right-0 bottom-0 w-full sm:w-[340px] bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col z-[201] shadow-2xl"
+     x-effect="if (drawerOpen) { $nextTick(() => window.refreshEtdFilterControls && window.refreshEtdFilterControls($el)) }"
+     class="fixed top-0 right-0 bottom-0 w-full sm:w-[340px] bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col z-[201] shadow-2xl etd-filter-drawer"
      style="display:none;">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
         <div class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 dark:text-slate-100">
             <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 4h18M7 8h10M11 12h2"/></svg>
             Filters
@@ -56,36 +60,51 @@
         @if ($showVisitorFilters && request('sort_by'))
             <input type="hidden" name="sort_by" value="{{ request('sort_by') }}">
         @endif
-        @if ($showProductFilters && request('sort_by'))
-            <input type="hidden" name="sort_by" value="{{ request('sort_by') }}">
-        @endif
 
-        <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        <div class="flex-1 overflow-y-auto px-5 py-2.5 space-y-3 etd-filter-drawer__body">
             @include('ecom_tracker.partials.timezone-notice')
             @if ($showDashboardFilters)
                 <div x-data="{ drawerPeriod: @js($period) }">
-                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Period</p>
-                    <div class="grid grid-cols-2 gap-2">
-                        @foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', 'custom' => 'Custom'] as $periodKey => $periodOptionLabel)
-                            <label class="flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors"
-                                   :class="drawerPeriod === @js($periodKey) ? 'border-accent-400 bg-accent-400/10 text-accent-700 dark:text-accent-200' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300'">
-                                <input type="radio" name="period" value="{{ $periodKey }}" x-model="drawerPeriod" class="text-accent-400 border-slate-300">
-                                <span class="text-[13px] font-medium">{{ $periodOptionLabel }}</span>
-                            </label>
-                        @endforeach
-                    </div>
-                    <div x-show="drawerPeriod === 'custom'" x-collapse class="grid grid-cols-2 gap-2 mt-3">
+                    <label class="etd-filter-compact-field">
+                        <span class="etd-filter-compact-label">Period</span>
+                        <select name="period"
+                                class="tom-select etd-tom-select w-full"
+                                data-placeholder="All"
+                                @change="drawerPeriod = $event.target.value">
+                            <option value="" @selected(! request()->filled('period'))>All</option>
+                            @foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', 'custom' => 'Custom'] as $periodKey => $periodOptionLabel)
+                                <option value="{{ $periodKey }}" @selected($period === $periodKey)>{{ $periodOptionLabel }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <div x-show="drawerPeriod === 'custom'"
+                         x-collapse
+                         x-effect="syncEtdFlatpickrEnabled($el, drawerPeriod === 'custom')"
+                         class="etd-date-range grid grid-cols-2 gap-2 mt-2"
+                         data-etd-date-range>
                         <div>
-                            <label class="block text-[12px] text-slate-500 mb-1">From</label>
-                            <input type="date" name="date_from" value="{{ $dateFrom }}"
-                                   :disabled="drawerPeriod !== 'custom'"
-                                   class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
+                            <label class="etd-filter-compact-label" for="filter-date-from">From</label>
+                            <input type="text"
+                                   id="filter-date-from"
+                                   name="date_from"
+                                   value="{{ $dateFrom }}"
+                                   data-range="from"
+                                   data-default="{{ $dateFrom }}"
+                                   placeholder="Select date"
+                                   readonly
+                                   class="etd-flatpickr-date etd-filter-input etd-filter-input--sm w-full">
                         </div>
                         <div>
-                            <label class="block text-[12px] text-slate-500 mb-1">To</label>
-                            <input type="date" name="date_to" value="{{ $dateTo }}"
-                                   :disabled="drawerPeriod !== 'custom'"
-                                   class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
+                            <label class="etd-filter-compact-label" for="filter-date-to">To</label>
+                            <input type="text"
+                                   id="filter-date-to"
+                                   name="date_to"
+                                   value="{{ $dateTo }}"
+                                   data-range="to"
+                                   data-default="{{ $dateTo }}"
+                                   placeholder="Select date"
+                                   readonly
+                                   class="etd-flatpickr-date etd-filter-input etd-filter-input--sm w-full">
                         </div>
                     </div>
                 </div>
@@ -96,43 +115,65 @@
                     $drawerWindow = $hasCustomRange ? 'custom' : $window;
                 @endphp
                 <div x-data="{ drawerWindow: @js($drawerWindow) }">
-                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Quick window</p>
-                    <div class="grid grid-cols-2 gap-2">
-                        @foreach (array_merge($presetWindows, ['custom' => 'Custom']) as $windowKey => $windowOptionLabel)
-                            <label class="flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors"
-                                   :class="drawerWindow === @js($windowKey) ? 'border-accent-400 bg-accent-400/10 text-accent-700 dark:text-accent-200' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300'">
-                                <input type="radio" name="window" value="{{ $windowKey }}" x-model="drawerWindow" class="text-accent-400 border-slate-300">
-                                <span class="text-[13px] font-medium">{{ $windowOptionLabel }}</span>
-                            </label>
-                        @endforeach
-                    </div>
+                    <label class="etd-filter-compact-field">
+                        <span class="etd-filter-compact-label">Quick window</span>
+                        <select name="window"
+                                class="tom-select etd-tom-select w-full"
+                                data-placeholder="All"
+                                @change="drawerWindow = $event.target.value">
+                            <option value="" @selected(! request()->filled('window'))>All</option>
+                            @foreach (array_merge($presetWindows, ['custom' => 'Custom']) as $windowKey => $windowOptionLabel)
+                                <option value="{{ $windowKey }}" @selected($drawerWindow === $windowKey)>{{ $windowOptionLabel }}</option>
+                            @endforeach
+                        </select>
+                    </label>
 
-                    <div x-show="drawerWindow === 'custom'" x-collapse class="mt-4 space-y-3">
-                        <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Custom date range</p>
+                    <div x-show="drawerWindow === 'custom'"
+                         x-collapse
+                         x-effect="syncEtdFlatpickrEnabled($el, drawerWindow === 'custom')"
+                         class="etd-date-range space-y-2 mt-2"
+                         data-etd-date-range>
                         <div>
-                            <label class="block text-[12px] text-slate-500 mb-1">From</label>
-                            <input type="datetime-local" name="datetime_from" value="{{ $datetimeFromValue }}"
-                                   :disabled="drawerWindow !== 'custom'"
-                                   class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
+                            <label class="etd-filter-compact-label" for="filter-datetime-from">From</label>
+                            <input type="text"
+                                   id="filter-datetime-from"
+                                   name="datetime_from"
+                                   value="{{ $datetimeFromValue }}"
+                                   data-range="from"
+                                   data-default="{{ $datetimeFromValue }}"
+                                   placeholder="Select date & time"
+                                   readonly
+                                   class="etd-flatpickr-datetime etd-filter-input etd-filter-input--sm w-full">
                         </div>
                         <div>
-                            <label class="block text-[12px] text-slate-500 mb-1">To</label>
-                            <input type="datetime-local" name="datetime_to" value="{{ $datetimeToValue }}"
-                                   :disabled="drawerWindow !== 'custom'"
-                                   class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
+                            <label class="etd-filter-compact-label" for="filter-datetime-to">To</label>
+                            <input type="text"
+                                   id="filter-datetime-to"
+                                   name="datetime_to"
+                                   value="{{ $datetimeToValue }}"
+                                   data-range="to"
+                                   data-default="{{ $datetimeToValue }}"
+                                   placeholder="Select date & time"
+                                   readonly
+                                   class="etd-flatpickr-datetime etd-filter-input etd-filter-input--sm w-full">
                         </div>
                     </div>
                 </div>
             @endif
 
             @if ($showSessionFilters || $showVisitorFilters || $showProductFilters)
-                <hr class="border-slate-100 dark:border-slate-700"/>
+                <hr class="etd-filter-divider"/>
                 @if ($showProductFilters)
+                    <div class="etd-filter-product-wrap">
                     @include('ecom_tracker.partials.product-catalog-filters', [
                         'filterOptions' => $productFilterOptions,
                         'eventScenarioOptions' => $eventScenarioOptions,
+                        'sortGroups' => $productSortGroups,
+                        'activityOptions' => $productActivityOptions,
+                        'currentSort' => $currentProductSort,
                     ])
-                    <hr class="border-slate-100 dark:border-slate-700"/>
+                    </div>
+                    <hr class="etd-filter-divider"/>
                 @endif
                 @if ($showSessionFilters)
                     @include('ecom_tracker.partials.session-filters')
@@ -143,7 +184,7 @@
             @endif
         </div>
 
-        <div class="flex gap-2.5 px-5 py-4 border-t border-slate-200 dark:border-slate-700 shrink-0">
+        <div class="flex gap-2.5 px-5 py-3 border-t border-slate-200 dark:border-slate-700 shrink-0">
             <a href="{{ $resetUrl ?? $action }}"
                class="flex-1 py-2.5 text-[13px] text-center border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors font-medium">
                 Reset

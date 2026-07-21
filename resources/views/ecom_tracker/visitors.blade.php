@@ -91,10 +91,30 @@
                 </div>
             </div>
 
-            <div x-show="windowKey === 'custom'" x-collapse class="etd-custom-dates etd-custom-dates--inline">
-                <input type="datetime-local" x-model="datetimeFrom" class="f-input etd-date-input etd-date-input--datetime" aria-label="From date and time">
+            <div x-show="windowKey === 'custom'"
+                 x-collapse
+                 x-effect="if (windowKey === 'custom') { $nextTick(() => window.refreshEtdFilterControls?.($el)) }"
+                 class="etd-custom-dates etd-custom-dates--inline etd-date-range"
+                 data-etd-date-range>
+                <input type="text"
+                       x-model="datetimeFrom"
+                       data-range="from"
+                       data-default="{{ $datetimeFromValue }}"
+                       value="{{ $datetimeFromValue }}"
+                       placeholder="From date & time"
+                       readonly
+                       class="etd-flatpickr-datetime f-input etd-date-input etd-date-input--datetime"
+                       aria-label="From date and time">
                 <span class="etd-custom-dates-sep">–</span>
-                <input type="datetime-local" x-model="datetimeTo" class="f-input etd-date-input etd-date-input--datetime" aria-label="To date and time">
+                <input type="text"
+                       x-model="datetimeTo"
+                       data-range="to"
+                       data-default="{{ $datetimeToValue }}"
+                       value="{{ $datetimeToValue }}"
+                       placeholder="To date & time"
+                       readonly
+                       class="etd-flatpickr-datetime f-input etd-date-input etd-date-input--datetime"
+                       aria-label="To date and time">
                 <button type="button" class="etd-header-btn etd-header-btn--primary etd-pill-apply" @click="applyCustom()">Apply</button>
             </div>
         </div>

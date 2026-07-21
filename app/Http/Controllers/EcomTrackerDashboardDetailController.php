@@ -69,9 +69,6 @@ class EcomTrackerDashboardDetailController extends Controller
         $detail = $this->service->getSectionDetail($section, $dateFilters, $extraFilters, null);
         [$detail['data'], $paginator] = $this->applyPagination($section, $detail['data'], $request);
 
-        $productSortGroups = in_array($section, ['products', 'colors'], true)
-            ? $this->service->productCatalogSortGroups()
-            : [];
         $currentProductSort = $this->service->resolveProductCatalogSort($request->input('sort_by'));
 
         return view('ecom_tracker.details.show', [
@@ -81,14 +78,13 @@ class EcomTrackerDashboardDetailController extends Controller
             'filters' => array_merge($dateFilters, $extraFilters),
             'activeFilterCount' => $this->dashboardActiveFilterCount($request),
             'paginator' => $paginator,
-            'productSortGroups' => $productSortGroups,
-            'productSortPresets' => in_array($section, ['products', 'colors'], true)
-                ? $this->service->productCatalogSortPresets()
+            'productSortGroups' => in_array($section, ['products', 'colors'], true)
+                ? $this->service->productCatalogSortGroups()
+                : [],
+            'productActivityOptions' => in_array($section, ['products', 'colors'], true)
+                ? $this->service->productCatalogActivityFilterOptions()
                 : [],
             'currentProductSort' => $currentProductSort,
-            'currentProductSortHint' => in_array($section, ['products', 'colors'], true)
-                ? $this->service->productCatalogSortHint($currentProductSort)
-                : '',
             'eventScenarioOptions' => in_array($section, ['products', 'colors'], true)
                 ? $this->service->productCatalogEventScenarioOptions()
                 : [],

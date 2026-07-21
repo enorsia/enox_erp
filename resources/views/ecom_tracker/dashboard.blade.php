@@ -83,10 +83,30 @@
                 </div>
             </div>
 
-            <div x-show="period === 'custom'" x-collapse class="etd-custom-dates etd-custom-dates--inline">
-                <input type="date" x-model="dateFrom" class="f-input etd-date-input" aria-label="From date">
+            <div x-show="period === 'custom'"
+                 x-collapse
+                 x-effect="if (period === 'custom') { $nextTick(() => window.refreshEtdFilterControls?.($el)) }"
+                 class="etd-custom-dates etd-custom-dates--inline etd-date-range"
+                 data-etd-date-range>
+                <input type="text"
+                       x-model="dateFrom"
+                       data-range="from"
+                       data-default="{{ $filters['date_from'] ?? '' }}"
+                       value="{{ $filters['date_from'] ?? '' }}"
+                       placeholder="From date"
+                       readonly
+                       class="etd-flatpickr-date f-input etd-date-input"
+                       aria-label="From date">
                 <span class="etd-custom-dates-sep">–</span>
-                <input type="date" x-model="dateTo" class="f-input etd-date-input" aria-label="To date">
+                <input type="text"
+                       x-model="dateTo"
+                       data-range="to"
+                       data-default="{{ $filters['date_to'] ?? '' }}"
+                       value="{{ $filters['date_to'] ?? '' }}"
+                       placeholder="To date"
+                       readonly
+                       class="etd-flatpickr-date f-input etd-date-input"
+                       aria-label="To date">
                 <button type="button" class="etd-header-btn etd-header-btn--primary etd-pill-apply" @click="applyCustom()">Apply</button>
             </div>
         </div>

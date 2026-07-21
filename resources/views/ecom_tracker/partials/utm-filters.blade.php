@@ -13,8 +13,9 @@
         <div>
             <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">UTM source</label>
             <select name="utm_source"
-                    class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-                <option value="">All sources</option>
+                    class="tom-select etd-tom-select w-full"
+                    data-placeholder="All">
+                <option value="" @selected($selectedSource === '')>All</option>
                 @foreach ($utmSources as $value => $label)
                     <option value="{{ $value }}" @selected($selectedSource === $value)>{{ $label }}</option>
                 @endforeach
@@ -23,8 +24,9 @@
         <div>
             <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">UTM medium</label>
             <select name="utm_medium"
-                    class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-                <option value="">All mediums</option>
+                    class="tom-select etd-tom-select w-full"
+                    data-placeholder="All">
+                <option value="" @selected($selectedMedium === '')>All</option>
                 @foreach ($utmMediums as $value => $label)
                     <option value="{{ $value }}" @selected($selectedMedium === $value)>{{ $label }}</option>
                 @endforeach

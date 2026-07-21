@@ -129,11 +129,27 @@ window.initTomSelectElements = function (root) {
         if (element.tomselect) return;
         new TomSelect(element, {
             create: false,
+            allowEmptyOption: true,
             searchField: 'text',
             sortField: [{ field: '$order' }, { field: '$score' }],
-            placeholder: element.dataset.placeholder || 'Select an option',
+            placeholder: element.dataset.placeholder || 'All',
             maxOptions: 50,
         });
+    });
+};
+
+window.refreshTomSelectIn = function (root) {
+    if (typeof window.initTomSelectElements !== 'function') {
+        return;
+    }
+
+    window.initTomSelectElements(root);
+
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll('.tom-select').forEach((element) => {
+        if (element.tomselect) {
+            element.tomselect.sync();
+        }
     });
 };
 

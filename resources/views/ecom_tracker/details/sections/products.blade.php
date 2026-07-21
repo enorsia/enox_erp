@@ -3,8 +3,8 @@
     $expandedProduct = request('product');
 @endphp
 
-<div x-data="{ expanded: @js($expandedProduct) }" class="etd-product-catalog etd-product-catalog--with-sort">
-    <table class="etd-table etd-table--catalog w-full">
+<div x-data="{ expanded: @js($expandedProduct) }" class="etd-product-catalog">
+    <table class="etd-table etd-table--catalog etd-table--compact-head w-full">
         <thead>
             <tr>
                 <th class="etd-catalog-expand-col"></th>
@@ -59,7 +59,7 @@
                     <tr class="etd-catalog-variant-wrap" x-show="expanded === @js($productKey)" x-cloak>
                         <td colspan="8" class="!p-0">
                             <div class="etd-catalog-variant-panel">
-                                <table class="etd-table etd-table--variant-nested w-full">
+                                <table class="etd-table etd-table--variant-nested etd-table--compact-head w-full">
                                     <thead>
                                         <tr>
                                             <th>Color</th>

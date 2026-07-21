@@ -83,19 +83,17 @@ test('dashboard product catalog detail supports sort and variant drill-down', fu
         ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d', 'sort_by' => 'top_views']))
         ->assertOk()
         ->assertSee('Product & variant performance')
-        ->assertSee('Sort products')
-        ->assertSee('Top views')
-        ->assertSee('Cart abandoners');
+        ->assertSee('Funnel')
+        ->assertSee('Purchases');
 
     $this->actingAs($user)
         ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d', 'sort_by' => 'insight_engagement']))
         ->assertOk()
-        ->assertSee('Highest interest');
+        ->assertSee('Views + cart adds');
 
     $this->actingAs($user)
         ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d', 'event_scenario' => 'added_not_purchased']))
         ->assertOk()
-        ->assertSee('Event combinations')
         ->assertSee('Added to cart · not purchased');
 
     $this->actingAs($user)
