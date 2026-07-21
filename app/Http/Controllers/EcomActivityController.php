@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityTimelinePresenter;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -65,6 +66,9 @@ class EcomActivityController extends Controller
             }
         }
 
+        TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
+        TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
+
         $sessions = $query
             ->orderByDesc('last_active_at')
             ->orderByDesc('created_at')
@@ -116,7 +120,7 @@ class EcomActivityController extends Controller
 
         $timeline->appends($request->except('timeline_page'));
 
-        $returnQuery = $request->only(['search', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'page']);
+        $returnQuery = $request->only(['search', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium', 'page']);
 
         return view('ecom_activity.show', [
             'activityUser' => $activityUser,

@@ -53,7 +53,7 @@
                         onchange="this.form.submit()"
                         class="h-[38px] min-w-[200px] max-w-[240px] px-3 pr-8 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                     @foreach ($sortOptions as $value => $label)
-                        <option value="{{ $value }}" @selected(($currentSort ?? 'last_active_desc') === $value)>{{ $label }}</option>
+                        <option value="{{ $value }}" @selected(($currentSort ?? 'revenue_desc') === $value)>{{ $label }}</option>
                     @endforeach
                 </select>
             </form>

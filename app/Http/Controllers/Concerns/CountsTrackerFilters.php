@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Models\TrackerUtmFilter;
 use Illuminate\Http\Request;
 
 trait CountsTrackerFilters
@@ -10,7 +11,7 @@ trait CountsTrackerFilters
     {
         $count = 0;
 
-        foreach (['device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium'] as $key) {
+        foreach (['device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'has_purchases', 'has_views', 'has_adds', 'event_scenario'] as $key) {
             if (filled($request->input($key))) {
                 $count++;
             }
@@ -26,9 +27,22 @@ trait CountsTrackerFilters
     /**
      * @return array<string, mixed>
      */
+    protected function dashboardProductCatalogFilters(Request $request): array
+    {
+        return $request->only(['search', 'category', 'color', 'size', 'sort_by', 'has_purchases', 'has_views', 'has_adds', 'event_scenario']);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     protected function dashboardSessionFilters(Request $request): array
     {
-        return $request->only(['device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium']);
+        $filters = $request->only(['device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium']);
+
+        $filters['utm_source'] = TrackerUtmFilter::resolveSource($filters['utm_source'] ?? null) ?? '';
+        $filters['utm_medium'] = TrackerUtmFilter::resolveMedium($filters['utm_medium'] ?? null) ?? '';
+
+        return $filters;
     }
 
     /**

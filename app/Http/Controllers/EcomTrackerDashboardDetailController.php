@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\CountsTrackerFilters;
 use App\Services\EcomTrackerDashboardService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
@@ -17,8 +18,8 @@ class EcomTrackerDashboardDetailController extends Controller
         'funnel' => 'Conversion funnel',
         'trend' => 'Sessions & conversion trend',
         'categories' => 'Category performance',
-        'products' => 'Product performance',
-        'colors' => 'Color performance',
+        'products' => 'Product & variant performance',
+        'colors' => 'Product & variant performance',
         'cart-abandonment' => 'Cart abandonment',
         'begin-checkout-abandonment' => 'Begin checkout abandonment',
         'checkout-abandonment' => 'Begin checkout abandonment',
@@ -46,17 +47,32 @@ class EcomTrackerDashboardDetailController extends Controller
         private EcomTrackerDashboardService $service,
     ) {}
 
-    public function show(Request $request, string $section): View
+    public function show(Request $request, string $section): View|RedirectResponse
     {
         Gate::authorize('ecom_tracker.dashboard.index');
 
         abort_unless(isset(self::SECTIONS[$section]), 404);
 
+        if ($section === 'colors') {
+            return redirect()->route('admin.ecom-tracker.dashboard.details', array_merge(
+                ['section' => 'products'],
+                $request->query(),
+            ));
+        }
+
         $dateFilters = $this->dashboardDateFilters($request);
-        $extraFilters = $this->dashboardSessionFilters($request);
+        $extraFilters = array_merge(
+            $this->dashboardSessionFilters($request),
+            $this->dashboardProductCatalogFilters($request),
+        );
 
         $detail = $this->service->getSectionDetail($section, $dateFilters, $extraFilters, null);
         [$detail['data'], $paginator] = $this->applyPagination($section, $detail['data'], $request);
+
+        $productSortGroups = in_array($section, ['products', 'colors'], true)
+            ? $this->service->productCatalogSortGroups()
+            : [];
+        $currentProductSort = $this->service->resolveProductCatalogSort($request->input('sort_by'));
 
         return view('ecom_tracker.details.show', [
             'section' => $section,
@@ -65,6 +81,17 @@ class EcomTrackerDashboardDetailController extends Controller
             'filters' => array_merge($dateFilters, $extraFilters),
             'activeFilterCount' => $this->dashboardActiveFilterCount($request),
             'paginator' => $paginator,
+            'productSortGroups' => $productSortGroups,
+            'productSortPresets' => in_array($section, ['products', 'colors'], true)
+                ? $this->service->productCatalogSortPresets()
+                : [],
+            'currentProductSort' => $currentProductSort,
+            'currentProductSortHint' => in_array($section, ['products', 'colors'], true)
+                ? $this->service->productCatalogSortHint($currentProductSort)
+                : '',
+            'eventScenarioOptions' => in_array($section, ['products', 'colors'], true)
+                ? $this->service->productCatalogEventScenarioOptions()
+                : [],
         ]);
     }
 
@@ -79,7 +106,7 @@ class EcomTrackerDashboardDetailController extends Controller
         }
 
         $items = match ($section) {
-            'colors' => $data['products'] ?? [],
+            'products', 'colors' => $data['products'] ?? [],
             'cart-abandonment', 'begin-checkout-abandonment', 'checkout-abandonment', 'proceed-checkout-abandonment' => $data['rows'] ?? [],
             'trend' => collect($data['labels'] ?? [])->map(fn (string $label, int $index) => [
                 'date' => $label,
@@ -93,7 +120,7 @@ class EcomTrackerDashboardDetailController extends Controller
         $paginator = $this->paginateArray(is_array($items) ? $items : [], $request);
 
         $data = match ($section) {
-            'colors' => array_merge($data, ['products' => $paginator->items()]),
+            'products', 'colors' => array_merge($data, ['products' => $paginator->items()]),
             'cart-abandonment', 'begin-checkout-abandonment', 'checkout-abandonment', 'proceed-checkout-abandonment' => array_merge($data, ['rows' => $paginator->items()]),
             'trend' => array_merge($data, ['table_rows' => $paginator->items()]),
             default => $paginator->items(),

@@ -35,7 +35,7 @@ class EcomTrackerDashboardExport implements WithMultipleSheets
             new EcomTrackerDashboardSheetExport('Trend', $this->rows['trend'] ?? [], $rangeLabel),
             new EcomTrackerDashboardSheetExport('Categories', $this->rows['categories'] ?? [], $rangeLabel),
             new EcomTrackerDashboardSheetExport('Products', $this->rows['products'] ?? [], $rangeLabel),
-            new EcomTrackerDashboardSheetExport('Colors', $this->rows['colors'] ?? [], $rangeLabel),
+            new EcomTrackerDashboardSheetExport('Variants', $this->rows['variants'] ?? [], $rangeLabel),
             new EcomTrackerDashboardSheetExport('Traffic Sources', $this->rows['traffic_sources'] ?? [], $rangeLabel),
             new EcomTrackerDashboardSheetExport('Geography', $this->rows['geography'] ?? [], $rangeLabel),
             new EcomTrackerDashboardSheetExport('Devices', $this->rows['devices'] ?? [], $rangeLabel),

@@ -8,7 +8,7 @@
     $data = $detail['data'];
     $period = $filters['period'] ?? '24h';
     $resetQuery = array_filter(['back' => request('back')]);
-    $queryParams = request()->only(['period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium']);
+    $queryParams = request()->only(['period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'sort_by', 'has_purchases', 'has_views', 'has_adds', 'event_scenario']);
     $chartPayload = match ($section) {
         'trend' => ['trend' => $data],
         'devices' => ['devices' => $data],
@@ -28,6 +28,9 @@
         'resetUrl' => route('admin.ecom-tracker.dashboard.details', array_merge(['section' => $section], $resetQuery)),
         'showDashboardFilters' => true,
         'showSessionFilters' => true,
+        'showProductFilters' => $section === 'products',
+        'productFilterOptions' => $section === 'products' ? ($data['filter_options'] ?? []) : [],
+        'eventScenarioOptions' => $eventScenarioOptions ?? [],
         'period' => $period,
         'dateFrom' => $filters['date_from'] ?? '',
         'dateTo' => $filters['date_to'] ?? '',
@@ -42,6 +45,15 @@
     ])
 
     <div class="etd-panel">
+        @if ($section === 'products')
+            @include('ecom_tracker.partials.product-catalog-sort-bar', [
+                'sortGroups' => $productSortGroups ?? [],
+                'presets' => $productSortPresets ?? [],
+                'currentSort' => $currentProductSort ?? 'top_revenue',
+                'currentHint' => $currentProductSortHint ?? '',
+                'sortAction' => route('admin.ecom-tracker.dashboard.details', $section),
+            ])
+        @endif
         @include('ecom_tracker.details.sections.'.$section, ['data' => $data, 'range' => $range, 'paginator' => $paginator])
     </div>
 

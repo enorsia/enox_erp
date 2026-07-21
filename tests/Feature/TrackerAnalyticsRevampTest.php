@@ -192,7 +192,7 @@ test('dashboard detail sections return uncapped data', function () {
     foreach (['funnel', 'trend', 'categories', 'products', 'colors', 'cart-abandonment', 'begin-checkout-abandonment', 'proceed-checkout-abandonment', 'devices', 'traffic-sources', 'geography', 'engagement'] as $section) {
         $detail = $service->getSectionDetail($section, ['period' => '30d'], [], null);
 
-        expect($detail['section'])->toBe($section);
+        expect($detail['section'])->toBe($section === 'colors' ? 'products' : $section);
         expect($detail['range'])->toHaveKeys(['from', 'to', 'label']);
     }
 });

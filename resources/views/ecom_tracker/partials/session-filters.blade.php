@@ -1,3 +1,5 @@
+@include('ecom_tracker.partials.utm-filters')
+
 <div>
     <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">Device</label>
     <select name="device_type" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
@@ -29,14 +31,4 @@
 <div>
     <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">Country</label>
     <input type="text" name="country" value="{{ request('country') }}" placeholder="e.g. GB" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
-</div>
-
-<div>
-    <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">UTM source</label>
-    <input type="text" name="utm_source" value="{{ request('utm_source') }}" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
-</div>
-
-<div>
-    <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">UTM medium</label>
-    <input type="text" name="utm_medium" value="{{ request('utm_medium') }}" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
 </div>

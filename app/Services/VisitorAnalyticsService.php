@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Models\TrackerUtmFilter;
 use App\Support\TrackerRedisCache;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -480,6 +481,9 @@ class VisitorAnalyticsService
                 $query->whereNotIn('session_id', $orderSessionIds);
             }
         }
+
+        TrackerUtmFilter::applySourceFilter($query, $filters['utm_source'] ?? null);
+        TrackerUtmFilter::applyMediumFilter($query, $filters['utm_medium'] ?? null);
 
         $paginator = $query->paginate($perPage)->withQueryString();
 

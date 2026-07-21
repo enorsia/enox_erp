@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exports\VisitorAnalyticsExport;
+use App\Models\TrackerUtmFilter;
 use App\Services\VisitorAnalyticsService;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -61,7 +62,7 @@ class VisitorAnalyticsController extends Controller
         abort_unless(isset($titles[$section]), 404);
 
         $range = $this->resolveRange($request);
-        $extraFilters = $request->only(['search', 'device_type', 'logged_in', 'has_order', 'sort_by']);
+        $extraFilters = $this->visitorSessionFilters($request);
         $perPage = max(10, min(100, (int) $request->input('per_page', 25)));
         $sortBy = $this->analytics->resolveVisitorSort($request->input('sort_by'));
 
@@ -98,7 +99,7 @@ class VisitorAnalyticsController extends Controller
             $count++;
         }
 
-        foreach (['search', 'device_type', 'logged_in', 'has_order'] as $key) {
+        foreach (['search', 'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium'] as $key) {
             if (filled($request->input($key))) {
                 $count++;
             }
@@ -194,5 +195,17 @@ class VisitorAnalyticsController extends Controller
             '1y' => 'Last 1 year',
             default => 'Last 24 hours',
         };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function visitorSessionFilters(Request $request): array
+    {
+        $filters = $request->only(['search', 'device_type', 'logged_in', 'has_order', 'sort_by', 'utm_source', 'utm_medium']);
+        $filters['utm_source'] = TrackerUtmFilter::resolveSource($filters['utm_source'] ?? null) ?? '';
+        $filters['utm_medium'] = TrackerUtmFilter::resolveMedium($filters['utm_medium'] ?? null) ?? '';
+
+        return $filters;
     }
 }

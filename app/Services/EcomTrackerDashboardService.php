@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Models\TrackerUtmFilter;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -42,7 +43,7 @@ class EcomTrackerDashboardService
     {
         $cache = app(\App\Support\TrackerRedisCache::class);
         $ttl = (int) config('tracker.analytics_cache_ttl_seconds', 300);
-        $cacheKey = 'dashboard:'.hash('sha256', json_encode($this->cacheableFilters($filters)));
+        $cacheKey = 'dashboard:v2:'.hash('sha256', json_encode($this->cacheableFilters($filters)));
 
         $cached = $cache->remember($cacheKey, $ttl, fn () => $this->buildDashboardData($filters));
         $data = $cache->payload($cached);
@@ -81,8 +82,7 @@ class EcomTrackerDashboardService
             'funnel' => $this->buildFunnel($range['from'], $range['to'], $extraFilters),
             'trend' => $this->buildTrend($range['from'], $range['to'], $extraFilters, $range['period'] ?? null),
             'categories' => $this->buildCategoryPerformance($range['from'], $range['to'], filters: $extraFilters),
-            'products' => $this->buildProductPerformance($range['from'], $range['to'], filters: $extraFilters),
-            'colors' => $this->buildColorPerformance($range['from'], $range['to'], filters: $extraFilters),
+            'products' => $this->buildProductCatalogPerformance($range['from'], $range['to'], filters: $extraFilters)['products'],
             'cart_abandonment' => $this->buildCartAbandonment($range['from'], $range['to'], filters: $extraFilters),
             'begin_checkout_abandonment' => $this->buildBeginCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters),
             'proceed_checkout_abandonment' => $this->buildProceedCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters),
@@ -159,28 +159,30 @@ class EcomTrackerDashboardService
             'products' => collect($data['products'])->map(fn (array $row) => [
                 'product' => $row['name'],
                 'code' => $row['code'],
+                'category' => $row['category'] ?? '',
                 'views' => $row['views'],
                 'add_to_cart' => $row['adds'],
                 'purchases' => $row['purchases'],
+                'qty' => $row['qty'] ?? 0,
                 'sale' => $row['revenue'],
             ])->values()->all(),
-            'colors' => collect($data['colors']['products'] ?? [])
+            'variants' => collect($data['products'])
                 ->flatMap(function (array $product) {
-                    $rows = [[
-                        'product' => $product['product'],
-                        'sku' => $product['sku'],
-                        'color' => '',
-                        'viewed' => $product['viewed'],
-                        'purchased' => $product['purchased'],
-                    ]];
+                    $rows = [];
 
-                    foreach ($product['variants'] as $variant) {
+                    foreach ($product['variants'] ?? [] as $variant) {
                         $rows[] = [
-                            'product' => '',
-                            'sku' => '',
-                            'color' => $variant['color'],
-                            'viewed' => $variant['viewed'],
-                            'purchased' => $variant['purchased'],
+                            'product' => $product['name'],
+                            'code' => $product['code'],
+                            'category' => $variant['category'] ?: ($product['category'] ?? ''),
+                            'color' => $variant['color'] ?: '—',
+                            'size' => $variant['size'] ?: '—',
+                            'sku' => $variant['sku'] ?: '—',
+                            'views' => $variant['views'],
+                            'add_to_cart' => $variant['adds'],
+                            'purchases' => $variant['purchases'],
+                            'qty' => $variant['qty'],
+                            'sale' => $variant['revenue'],
                         ];
                     }
 
@@ -301,6 +303,20 @@ class EcomTrackerDashboardService
 
     /**
      * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    private function extractProductCatalogOptions(array $filters): array
+    {
+        return array_filter(
+            array_intersect_key($filters, array_flip([
+                'search', 'category', 'color', 'size', 'sort_by', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
+            ])),
+            fn ($value) => $value !== null && $value !== '',
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
      */
     public function filteredSessionIds(Carbon $from, Carbon $to, array $filters = []): Collection
     {
@@ -322,13 +338,8 @@ class EcomTrackerDashboardService
             $query->where('country', $filters['country']);
         }
 
-        if (! empty($filters['utm_source'])) {
-            $query->where('utm_source', $filters['utm_source']);
-        }
-
-        if (! empty($filters['utm_medium'])) {
-            $query->where('utm_medium', $filters['utm_medium']);
-        }
+        TrackerUtmFilter::applySourceFilter($query, $filters['utm_source'] ?? null);
+        TrackerUtmFilter::applyMediumFilter($query, $filters['utm_medium'] ?? null);
 
         if (isset($filters['has_order']) && $filters['has_order'] !== '' && $filters['has_order'] !== null) {
             $orderSessionIds = ActivityEcomUserAction::query()
@@ -361,8 +372,17 @@ class EcomTrackerDashboardService
             'funnel' => ['section' => $section, 'range' => $range, 'data' => $this->buildFunnel($from, $to, $extraFilters)],
             'trend' => ['section' => $section, 'range' => $range, 'data' => $this->buildTrend($from, $to, $extraFilters)],
             'categories' => ['section' => $section, 'range' => $range, 'data' => $this->buildCategoryPerformance($from, $to, $effectiveLimit, $extraFilters)],
-            'products' => ['section' => $section, 'range' => $range, 'data' => $this->buildProductPerformance($from, $to, $effectiveLimit, $extraFilters)],
-            'colors' => ['section' => $section, 'range' => $range, 'data' => $this->buildColorPerformance($from, $to, $effectiveLimit, $extraFilters)],
+            'products', 'colors' => [
+                'section' => 'products',
+                'range' => $range,
+                'data' => $this->buildProductCatalogPerformance(
+                    $from,
+                    $to,
+                    $effectiveLimit,
+                    $this->extractSessionFilters($extraFilters),
+                    $this->extractProductCatalogOptions($extraFilters),
+                ),
+            ],
             'cart-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildCartAbandonment($from, $to, $effectiveLimit, $extraFilters)],
             'begin-checkout-abandonment', 'checkout-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildBeginCheckoutAbandonment($from, $to, $effectiveLimit, $extraFilters)],
             'proceed-checkout-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildProceedCheckoutAbandonment($from, $to, $effectiveLimit, $extraFilters)],
@@ -967,6 +987,9 @@ class EcomTrackerDashboardService
                 'code' => trim((string) ($item['product_code'] ?? '')),
                 'name' => trim((string) ($item['product_name'] ?? '')),
                 'product_id' => trim((string) ($item['product_id'] ?? '')),
+                'color_name' => trim((string) ($item['color_name'] ?? '')),
+                'size_name' => trim((string) ($item['size_name'] ?? '')),
+                'category' => trim((string) ($item['category_name'] ?? '')),
             ])
             ->filter(fn (array $line) => $line['code'] !== '' || $line['name'] !== '' || $line['product_id'] !== '')
             ->values()
@@ -1143,6 +1166,651 @@ class EcomTrackerDashboardService
         return [
             'products' => $products,
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function productCatalogEventScenarioOptions(): array
+    {
+        return [
+            '' => 'All products',
+            'viewed_not_purchased' => 'Viewed · not purchased',
+            'added_not_purchased' => 'Added to cart · not purchased',
+            'viewed_not_added' => 'Viewed · not added to cart',
+            'viewed_and_added' => 'Viewed and added to cart',
+            'viewed_added_not_purchased' => 'Viewed + added · not purchased',
+            'full_funnel' => 'Full funnel (view → add → purchase)',
+            'engagement_no_purchase' => 'Any engagement · no purchase',
+            'purchased_only' => 'Purchased only (no view/add tracked)',
+        ];
+    }
+
+    public function resolveProductCatalogEventScenario(?string $scenario): string
+    {
+        $options = $this->productCatalogEventScenarioOptions();
+
+        return array_key_exists($scenario ?? '', $options) ? (string) $scenario : '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $product
+     */
+    public function productMatchesEventScenario(array $product, string $scenario): bool
+    {
+        if ($scenario === '') {
+            return true;
+        }
+
+        $views = (int) ($product['views'] ?? 0);
+        $adds = (int) ($product['adds'] ?? 0);
+        $purchases = (int) ($product['purchases'] ?? 0);
+
+        return match ($scenario) {
+            'viewed_not_purchased' => $views > 0 && $purchases === 0,
+            'added_not_purchased' => $adds > 0 && $purchases === 0,
+            'viewed_not_added' => $views > 0 && $adds === 0,
+            'viewed_and_added' => $views > 0 && $adds > 0,
+            'viewed_added_not_purchased' => $views > 0 && $adds > 0 && $purchases === 0,
+            'full_funnel' => $views > 0 && $adds > 0 && $purchases > 0,
+            'engagement_no_purchase' => ($views > 0 || $adds > 0) && $purchases === 0,
+            'purchased_only' => $purchases > 0 && $views === 0 && $adds === 0,
+            default => true,
+        };
+    }
+
+    /**
+     * @return array<int, array{label: string, presets?: bool, options: array<string, array{label: string, hint: string}>}>
+     */
+    public function productCatalogSortGroups(): array
+    {
+        return [
+            [
+                'label' => 'Top performers',
+                'presets' => true,
+                'options' => [
+                    'top_revenue' => ['label' => 'Top sale', 'hint' => 'Highest revenue first'],
+                    'top_views' => ['label' => 'Top views', 'hint' => 'Most product views first'],
+                    'top_adds' => ['label' => 'Top adds', 'hint' => 'Most add-to-cart events first'],
+                    'top_purchases' => ['label' => 'Top purchases', 'hint' => 'Most purchases first'],
+                    'top_qty' => ['label' => 'Top qty', 'hint' => 'Highest quantity sold first'],
+                ],
+            ],
+            [
+                'label' => 'Insights',
+                'options' => [
+                    'insight_engagement' => ['label' => 'Highest interest', 'hint' => 'Strong views and cart activity combined'],
+                    'insight_cart_abandon' => ['label' => 'Cart abandoners', 'hint' => 'Added to cart but few purchases'],
+                    'insight_window_shoppers' => ['label' => 'Window shoppers', 'hint' => 'High views with low or no purchases'],
+                    'insight_unconverted_views' => ['label' => 'Viewed, not bought', 'hint' => 'Views with zero purchases'],
+                ],
+            ],
+            [
+                'label' => 'Alphabetical',
+                'options' => [
+                    'product_asc' => ['label' => 'Product A–Z', 'hint' => 'Sort products alphabetically'],
+                    'product_desc' => ['label' => 'Product Z–A', 'hint' => 'Reverse alphabetical order'],
+                    'code_asc' => ['label' => 'SKU A–Z', 'hint' => 'Sort by SKU ascending'],
+                    'code_desc' => ['label' => 'SKU Z–A', 'hint' => 'Sort by SKU descending'],
+                    'color_asc' => ['label' => 'Color A–Z', 'hint' => 'Primary color ascending'],
+                    'color_desc' => ['label' => 'Color Z–A', 'hint' => 'Primary color descending'],
+                    'size_asc' => ['label' => 'Size A–Z', 'hint' => 'Primary size ascending'],
+                    'size_desc' => ['label' => 'Size Z–A', 'hint' => 'Primary size descending'],
+                ],
+            ],
+            [
+                'label' => 'More metrics',
+                'options' => [
+                    'revenue_asc' => ['label' => 'Sale · lowest first', 'hint' => 'Lowest revenue at the top'],
+                    'views_asc' => ['label' => 'Views · lowest first', 'hint' => 'Fewest views at the top'],
+                    'purchases_asc' => ['label' => 'Purchases · lowest first', 'hint' => 'Fewest purchases at the top'],
+                    'qty_asc' => ['label' => 'Qty · lowest first', 'hint' => 'Lowest quantity sold first'],
+                    'adds_asc' => ['label' => 'Adds · lowest first', 'hint' => 'Fewest add-to-cart events first'],
+                    'variants_desc' => ['label' => 'Most variants', 'hint' => 'Products with the most color/size variants'],
+                    'category_asc' => ['label' => 'Category A–Z', 'hint' => 'Sort by category name'],
+                    'category_desc' => ['label' => 'Category Z–A', 'hint' => 'Reverse category order'],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function productCatalogSortOptions(): array
+    {
+        return collect($this->productCatalogSortGroups())
+            ->flatMap(fn (array $group) => collect($group['options'])->mapWithKeys(
+                fn (array $option, string $key) => [$key => $option['label']]
+            ))
+            ->all();
+    }
+
+    public function productCatalogSortHint(string $sortBy): string
+    {
+        foreach ($this->productCatalogSortGroups() as $group) {
+            if (isset($group['options'][$sortBy]['hint'])) {
+                return $group['options'][$sortBy]['hint'];
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @return array<int, array{key: string, label: string, hint: string}>
+     */
+    public function productCatalogSortPresets(): array
+    {
+        return collect($this->productCatalogSortGroups())
+            ->filter(fn (array $group) => ! empty($group['presets']))
+            ->flatMap(fn (array $group) => collect($group['options'])->map(
+                fn (array $option, string $key) => [
+                    'key' => $key,
+                    'label' => $option['label'],
+                    'hint' => $option['hint'],
+                ]
+            ))
+            ->values()
+            ->all();
+    }
+
+    public function resolveProductCatalogSort(?string $sortBy): string
+    {
+        $legacy = [
+            'revenue_desc' => 'top_revenue',
+            'views_desc' => 'top_views',
+            'adds_desc' => 'top_adds',
+            'purchases_desc' => 'top_purchases',
+            'qty_desc' => 'top_qty',
+        ];
+
+        $sortBy = $legacy[$sortBy ?? ''] ?? $sortBy;
+        $keys = array_keys($this->productCatalogSortOptions());
+
+        return in_array($sortBy ?? '', $keys, true) ? (string) $sortBy : 'top_revenue';
+    }
+
+    private function normalizeProductCatalogSortKey(string $sortBy): string
+    {
+        return match ($sortBy) {
+            'top_revenue' => 'revenue_desc',
+            'top_views' => 'views_desc',
+            'top_adds' => 'adds_desc',
+            'top_purchases' => 'purchases_desc',
+            'top_qty' => 'qty_desc',
+            default => $sortBy,
+        };
+    }
+
+    /**
+     * Unified product + color/size variant performance.
+     *
+     * @param  array<string, mixed>  $filters
+     * @param  array<string, mixed>  $options
+     * @return array{products: array<int, array<string, mixed>>, filter_options: array{categories: array<int, string>, colors: array<int, string>, sizes: array<int, string>}, sort_by: string}
+     */
+    public function buildProductCatalogPerformance(
+        Carbon $from,
+        Carbon $to,
+        ?int $limit = self::TABLE_DISPLAY_LIMIT,
+        array $filters = [],
+        array $options = [],
+    ): array {
+        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
+        /** @var Collection<string, array{key: string, name: string, code: string, category: string, variants: Collection<string, array<string, mixed>>}> $catalog */
+        $catalog = collect();
+
+        $actionQuery = fn () => ActivityEcomUserAction::query()
+            ->whereBetween('created_at', [$from, $to])
+            ->when($sessionIds !== null, fn ($q) => $q->whereIn('session_id', $sessionIds));
+
+        $actionQuery()
+            ->whereIn('action_type', self::PRODUCT_VIEW_TYPES)
+            ->get()
+            ->each(function (ActivityEcomUserAction $action) use ($catalog) {
+                $this->accumulateCatalogEvent($catalog, [
+                    'name' => (string) ($action->product_name ?? ''),
+                    'code' => (string) ($action->product_code ?? ''),
+                    'product_id' => '',
+                ], [
+                    'color' => (string) ($action->general_color_name ?? ''),
+                    'size' => '',
+                    'sku' => trim((string) ($action->product_code ?: $action->product_color_code ?: '')),
+                    'category' => (string) ($action->category_name ?? ''),
+                ], views: 1);
+            });
+
+        $actionQuery()
+            ->where('action_type', 'add_to_cart')
+            ->get()
+            ->each(function (ActivityEcomUserAction $action) use ($catalog) {
+                $cart = $action->add_to_cart ?? [];
+                $lines = $this->cartPayloadLineItems($cart);
+                $defaultCategory = (string) ($action->category_name ?? '');
+
+                if ($lines === []) {
+                    $this->accumulateCatalogEvent($catalog, [
+                        'name' => (string) ($action->product_name ?? ''),
+                        'code' => (string) ($cart['product_code'] ?? $action->product_code ?? ''),
+                        'product_id' => (string) ($cart['product_id'] ?? ''),
+                    ], [
+                        'color' => (string) ($cart['color_name'] ?? $action->general_color_name ?? ''),
+                        'size' => (string) ($cart['size_name'] ?? ''),
+                        'sku' => trim((string) ($cart['product_code'] ?? $action->product_code ?? '')),
+                        'category' => $defaultCategory,
+                    ], adds: 1);
+
+                    return;
+                }
+
+                foreach ($lines as $line) {
+                    $this->accumulateCatalogEvent($catalog, $line, [
+                        'color' => (string) ($line['color_name'] ?? $cart['color_name'] ?? $action->general_color_name ?? ''),
+                        'size' => (string) ($line['size_name'] ?? $cart['size_name'] ?? ''),
+                        'sku' => trim((string) ($line['code'] ?? '')),
+                        'category' => (string) ($line['category'] ?? $defaultCategory),
+                    ], adds: 1);
+                }
+            });
+
+        $actionQuery()
+            ->where('action_type', 'payment_success')
+            ->get()
+            ->each(function (ActivityEcomUserAction $action) use ($catalog) {
+                $items = $action->payment_success['checkout_info']['items'] ?? [];
+
+                foreach ($items as $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+
+                    $line = $this->extractPurchaseLineIdentity($item);
+
+                    if ($line === null) {
+                        continue;
+                    }
+
+                    $qty = (int) $line['qty'];
+                    $this->accumulateCatalogEvent($catalog, $line, [
+                        'color' => (string) ($item['color_name'] ?? $item['general_color_name'] ?? ($item['options']['general_color'] ?? '')),
+                        'size' => (string) ($item['size_name'] ?? ''),
+                        'sku' => $line['code'],
+                        'category' => (string) ($item['category_name'] ?? $action->category_name ?? ''),
+                    ], purchases: $qty, qty: $qty, revenue: $qty * $line['price']);
+                }
+
+                if ($items === [] && ! empty($action->product_code)) {
+                    $amount = $this->paymentSaleAmount($action->payment_success ?? []);
+                    $this->accumulateCatalogEvent($catalog, [
+                        'name' => (string) ($action->product_name ?? ''),
+                        'code' => (string) $action->product_code,
+                        'product_id' => '',
+                    ], [
+                        'color' => (string) ($action->general_color_name ?? ''),
+                        'size' => '',
+                        'sku' => trim((string) $action->product_code),
+                        'category' => (string) ($action->category_name ?? ''),
+                    ], purchases: 1, qty: 1, revenue: $amount);
+                }
+            });
+
+        $sortBy = $this->resolveProductCatalogSort($options['sort_by'] ?? null);
+        $filterOptions = $this->buildProductCatalogFilterOptions($catalog);
+        $products = $this->finalizeProductCatalog($catalog, $options, $sortBy);
+
+        if ($limit !== null) {
+            $products = array_slice($products, 0, $limit);
+        }
+
+        return [
+            'products' => $products,
+            'filter_options' => $filterOptions,
+            'sort_by' => $sortBy,
+        ];
+    }
+
+    /**
+     * @param  Collection<string, array{key: string, name: string, code: string, category: string, variants: Collection<string, array<string, mixed>>}>  $catalog
+     * @param  array{name?: string, code?: string, product_id?: string}  $identity
+     * @param  array{color?: string, size?: string, sku?: string, category?: string}  $variant
+     */
+    private function accumulateCatalogEvent(
+        Collection $catalog,
+        array $identity,
+        array $variant,
+        int $views = 0,
+        int $adds = 0,
+        int $purchases = 0,
+        int $qty = 0,
+        float $revenue = 0.0,
+    ): void {
+        $productKey = $this->productIdentityKey(
+            (string) ($identity['name'] ?? ''),
+            (string) ($identity['code'] ?? ''),
+            (string) ($identity['product_id'] ?? ''),
+        );
+
+        $product = $catalog->get($productKey, [
+            'key' => $productKey,
+            'name' => '',
+            'code' => '',
+            'category' => '',
+            'variants' => collect(),
+        ]);
+
+        $name = $product['name'] ?: trim((string) ($identity['name'] ?? ''));
+        $incomingCode = trim((string) ($identity['code'] ?? ''));
+        $code = $product['code'];
+
+        if ($purchases > 0 && $incomingCode !== '') {
+            $code = $incomingCode;
+        } elseif ($incomingCode !== '' && (strlen($incomingCode) > strlen($code) || $code === '')) {
+            $code = $incomingCode;
+        }
+
+        $category = $product['category'] ?: trim((string) ($variant['category'] ?? ''));
+
+        $variantKey = $this->catalogVariantKey(
+            (string) ($variant['color'] ?? ''),
+            (string) ($variant['size'] ?? ''),
+            (string) ($variant['sku'] ?? ''),
+        );
+
+        $variants = $product['variants'];
+        $variantRow = $variants->get($variantKey, [
+            'color' => trim((string) ($variant['color'] ?? '')),
+            'size' => trim((string) ($variant['size'] ?? '')),
+            'sku' => trim((string) ($variant['sku'] ?? '')),
+            'category' => $category,
+            'views' => 0,
+            'adds' => 0,
+            'purchases' => 0,
+            'qty' => 0,
+            'revenue' => 0.0,
+        ]);
+
+        if ($variantRow['category'] === '' && $category !== '') {
+            $variantRow['category'] = $category;
+        }
+
+        if ($variantRow['sku'] === '' && trim((string) ($variant['sku'] ?? '')) !== '') {
+            $variantRow['sku'] = trim((string) $variant['sku']);
+        }
+
+        $variantRow['views'] += $views;
+        $variantRow['adds'] += $adds;
+        $variantRow['purchases'] += $purchases;
+        $variantRow['qty'] += $qty;
+        $variantRow['revenue'] += $revenue;
+        $variants->put($variantKey, $variantRow);
+
+        $catalog->put($productKey, [
+            'key' => $productKey,
+            'name' => $name !== '' ? $name : ($code !== '' ? $code : 'Unknown product'),
+            'code' => $code,
+            'category' => $category,
+            'variants' => $variants,
+        ]);
+    }
+
+    private function catalogVariantKey(string $color, string $size, string $sku): string
+    {
+        return strtolower(trim($color)).'|'.strtolower(trim($size)).'|'.strtoupper(trim($sku));
+    }
+
+    /**
+     * @param  Collection<string, array{key: string, name: string, code: string, category: string, variants: Collection<string, array<string, mixed>>}>  $catalog
+     * @return array{categories: array<int, string>, colors: array<int, string>, sizes: array<int, string>}
+     */
+    private function buildProductCatalogFilterOptions(Collection $catalog): array
+    {
+        $categories = collect();
+        $colors = collect();
+        $sizes = collect();
+
+        foreach ($catalog as $product) {
+            if ($product['category'] !== '') {
+                $categories->push($product['category']);
+            }
+
+            foreach ($product['variants'] as $variant) {
+                if (($variant['category'] ?? '') !== '') {
+                    $categories->push($variant['category']);
+                }
+                if (($variant['color'] ?? '') !== '') {
+                    $colors->push($variant['color']);
+                }
+                if (($variant['size'] ?? '') !== '') {
+                    $sizes->push($variant['size']);
+                }
+            }
+        }
+
+        $sortValues = fn (Collection $values) => $values
+            ->filter()
+            ->unique(fn (string $value) => strtolower($value))
+            ->sort(fn (string $a, string $b) => strcasecmp($a, $b))
+            ->values()
+            ->all();
+
+        return [
+            'categories' => $sortValues($categories),
+            'colors' => $sortValues($colors),
+            'sizes' => $sortValues($sizes),
+        ];
+    }
+
+    /**
+     * @param  Collection<string, array{key: string, name: string, code: string, category: string, variants: Collection<string, array<string, mixed>>}>  $catalog
+     * @param  array<string, mixed>  $options
+     * @return array<int, array<string, mixed>>
+     */
+    private function finalizeProductCatalog(Collection $catalog, array $options, string $sortBy): array
+    {
+        $search = strtolower(trim((string) ($options['search'] ?? '')));
+        $categoryFilter = trim((string) ($options['category'] ?? ''));
+        $colorFilter = trim((string) ($options['color'] ?? ''));
+        $sizeFilter = trim((string) ($options['size'] ?? ''));
+        $hasPurchases = ($options['has_purchases'] ?? '') === '1';
+        $hasViews = ($options['has_views'] ?? '') === '1';
+        $hasAdds = ($options['has_adds'] ?? '') === '1';
+        $eventScenario = $this->resolveProductCatalogEventScenario($options['event_scenario'] ?? null);
+
+        $products = $catalog->map(function (array $product) use ($colorFilter, $sizeFilter, $sortBy) {
+            $variants = $product['variants']->map(function (array $variant) {
+                if ($variant['purchases'] > 0 && $variant['views'] < $variant['purchases']) {
+                    $variant['views'] = $variant['purchases'];
+                }
+
+                $variant['revenue'] = round((float) $variant['revenue'], 2);
+
+                return $variant;
+            });
+
+            if ($colorFilter !== '') {
+                $variants = $variants->filter(
+                    fn (array $variant) => strcasecmp((string) $variant['color'], $colorFilter) === 0
+                );
+            }
+
+            if ($sizeFilter !== '') {
+                $variants = $variants->filter(
+                    fn (array $variant) => strcasecmp((string) $variant['size'], $sizeFilter) === 0
+                );
+            }
+
+            $variants = $this->sortCatalogVariants($variants->values(), $sortBy)->values();
+
+            $category = $product['category'];
+            if ($category === '') {
+                $category = (string) ($variants->first()['category'] ?? '');
+            }
+
+            return [
+                'key' => $product['key'],
+                'name' => $product['name'],
+                'code' => $product['code'],
+                'category' => $category,
+                'views' => (int) $variants->sum('views'),
+                'adds' => (int) $variants->sum('adds'),
+                'purchases' => (int) $variants->sum('purchases'),
+                'qty' => (int) $variants->sum('qty'),
+                'revenue' => round((float) $variants->sum('revenue'), 2),
+                'variant_count' => $variants->count(),
+                'variants' => $variants->values()->all(),
+            ];
+        })->values();
+
+        if ($search !== '') {
+            $products = $products->filter(function (array $product) use ($search) {
+                return str_contains(strtolower($product['name']), $search)
+                    || str_contains(strtolower($product['code']), $search);
+            });
+        }
+
+        if ($categoryFilter !== '') {
+            $products = $products->filter(
+                fn (array $product) => strcasecmp((string) $product['category'], $categoryFilter) === 0
+            );
+        }
+
+        if ($hasPurchases) {
+            $products = $products->filter(fn (array $product) => $product['purchases'] > 0);
+        }
+
+        if ($hasViews) {
+            $products = $products->filter(fn (array $product) => $product['views'] > 0);
+        }
+
+        if ($hasAdds) {
+            $products = $products->filter(fn (array $product) => $product['adds'] > 0);
+        }
+
+        if ($eventScenario !== '') {
+            $products = $products->filter(
+                fn (array $product) => $this->productMatchesEventScenario($product, $eventScenario)
+            );
+        }
+
+        $products = $products->filter(fn (array $product) => $product['variant_count'] > 0 || (
+            $product['views'] + $product['adds'] + $product['purchases']
+        ) > 0);
+
+        $products = $this->sortProductCatalog($products, $sortBy)->values();
+
+        $maxRevenue = max(1.0, (float) $products->max('revenue'));
+
+        return $products
+            ->map(function (array $product) use ($maxRevenue) {
+                $product['revenue_bar_percent'] = (int) round(($product['revenue'] / $maxRevenue) * 100);
+
+                return $product;
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $products
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sortProductCatalog(Collection $products, string $sortBy): Collection
+    {
+        if (str_starts_with($sortBy, 'insight_')) {
+            return $this->sortProductCatalogByInsight($products, $sortBy);
+        }
+
+        $sortBy = $this->normalizeProductCatalogSortKey($sortBy);
+        $desc = str_ends_with($sortBy, '_desc');
+        $field = match (true) {
+            str_starts_with($sortBy, 'views') => 'views',
+            str_starts_with($sortBy, 'purchases') => 'purchases',
+            str_starts_with($sortBy, 'qty') => 'qty',
+            str_starts_with($sortBy, 'adds') => 'adds',
+            str_starts_with($sortBy, 'product') => 'name',
+            str_starts_with($sortBy, 'code') => 'code',
+            str_starts_with($sortBy, 'category') => 'category',
+            str_starts_with($sortBy, 'variants') => 'variant_count',
+            str_starts_with($sortBy, 'color') => 'primary_color',
+            str_starts_with($sortBy, 'size') => 'primary_size',
+            default => 'revenue',
+        };
+
+        $prepared = $products->map(function (array $product) {
+            $product['primary_color'] = (string) (($product['variants'][0]['color'] ?? '') ?: '');
+            $product['primary_size'] = (string) (($product['variants'][0]['size'] ?? '') ?: '');
+
+            return $product;
+        });
+
+        return $prepared->sortBy(
+            fn (array $product) => match ($field) {
+                'name', 'code', 'category', 'primary_color', 'primary_size' => strtolower((string) $product[$field]),
+                default => $product[$field],
+            },
+            SORT_REGULAR,
+            $desc,
+        );
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $products
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sortProductCatalogByInsight(Collection $products, string $sortBy): Collection
+    {
+        return $products->sortByDesc(function (array $product) use ($sortBy) {
+            $views = (int) $product['views'];
+            $adds = (int) $product['adds'];
+            $purchases = (int) $product['purchases'];
+
+            return match ($sortBy) {
+                'insight_engagement' => ($views * 1.0) + ($adds * 2.5) + ($purchases * 4.0),
+                'insight_cart_abandon' => $adds > 0
+                    ? ($adds * 1000) + max(0, $adds - $purchases)
+                    : 0,
+                'insight_window_shoppers' => $purchases === 0
+                    ? ($views * 1000) + $adds
+                    : max(0, $views - ($purchases * 5)),
+                'insight_unconverted_views' => $purchases === 0 ? $views : 0,
+                default => 0,
+            };
+        });
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $variants
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sortCatalogVariants(Collection $variants, string $sortBy): Collection
+    {
+        if (str_starts_with($sortBy, 'insight_')) {
+            return $variants->sortByDesc(fn (array $variant) => ($variant['views'] * 1.0) + ($variant['adds'] * 2.5) + ($variant['purchases'] * 4.0));
+        }
+
+        $sortBy = $this->normalizeProductCatalogSortKey($sortBy);
+        $desc = str_ends_with($sortBy, '_desc');
+        $field = match (true) {
+            str_starts_with($sortBy, 'views') => 'views',
+            str_starts_with($sortBy, 'purchases') => 'purchases',
+            str_starts_with($sortBy, 'qty') => 'qty',
+            str_starts_with($sortBy, 'adds') => 'adds',
+            str_starts_with($sortBy, 'product') => 'sku',
+            str_starts_with($sortBy, 'code') => 'sku',
+            str_starts_with($sortBy, 'category') => 'category',
+            str_starts_with($sortBy, 'color') => 'color',
+            str_starts_with($sortBy, 'size') => 'size',
+            default => 'revenue',
+        };
+
+        return $variants->sortBy(
+            fn (array $variant) => in_array($field, ['color', 'size', 'category', 'sku'], true)
+                ? strtolower((string) $variant[$field])
+                : $variant[$field],
+            SORT_REGULAR,
+            $desc,
+        );
     }
 
     /**

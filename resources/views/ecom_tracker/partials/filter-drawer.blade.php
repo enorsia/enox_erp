@@ -11,6 +11,9 @@
     'showSessionFilters' => false,
     'showVisitorFilters' => false,
     'showActivityFilters' => false,
+    'showProductFilters' => false,
+    'productFilterOptions' => ['categories' => [], 'colors' => [], 'sizes' => []],
+    'eventScenarioOptions' => [],
     'period' => '24h',
     'dateFrom' => '',
     'dateTo' => '',
@@ -51,6 +54,9 @@
             <input type="hidden" name="back" value="{{ request('back') }}">
         @endif
         @if ($showVisitorFilters && request('sort_by'))
+            <input type="hidden" name="sort_by" value="{{ request('sort_by') }}">
+        @endif
+        @if ($showProductFilters && request('sort_by'))
             <input type="hidden" name="sort_by" value="{{ request('sort_by') }}">
         @endif
 
@@ -119,8 +125,15 @@
                 </div>
             @endif
 
-            @if ($showSessionFilters || $showVisitorFilters)
+            @if ($showSessionFilters || $showVisitorFilters || $showProductFilters)
                 <hr class="border-slate-100 dark:border-slate-700"/>
+                @if ($showProductFilters)
+                    @include('ecom_tracker.partials.product-catalog-filters', [
+                        'filterOptions' => $productFilterOptions,
+                        'eventScenarioOptions' => $eventScenarioOptions,
+                    ])
+                    <hr class="border-slate-100 dark:border-slate-700"/>
+                @endif
                 @if ($showSessionFilters)
                     @include('ecom_tracker.partials.session-filters')
                 @endif

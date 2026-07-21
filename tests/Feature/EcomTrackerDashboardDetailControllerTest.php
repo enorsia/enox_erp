@@ -66,6 +66,43 @@ test('dashboard export downloads excel for authorized users', function () {
         ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 });
 
+test('product catalog event scenario filters products on detail page', function () {
+    $service = app(\App\Services\EcomTrackerDashboardService::class);
+
+    expect($service->productMatchesEventScenario(['views' => 5, 'adds' => 2, 'purchases' => 0], 'viewed_not_purchased'))->toBeTrue();
+    expect($service->productMatchesEventScenario(['views' => 5, 'adds' => 2, 'purchases' => 1], 'viewed_not_purchased'))->toBeFalse();
+    expect($service->productMatchesEventScenario(['views' => 0, 'adds' => 3, 'purchases' => 0], 'added_not_purchased'))->toBeTrue();
+    expect($service->productMatchesEventScenario(['views' => 2, 'adds' => 1, 'purchases' => 1], 'full_funnel'))->toBeTrue();
+});
+
+test('dashboard product catalog detail supports sort and variant drill-down', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.dashboard.index');
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d', 'sort_by' => 'top_views']))
+        ->assertOk()
+        ->assertSee('Product & variant performance')
+        ->assertSee('Sort products')
+        ->assertSee('Top views')
+        ->assertSee('Cart abandoners');
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d', 'sort_by' => 'insight_engagement']))
+        ->assertOk()
+        ->assertSee('Highest interest');
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d', 'event_scenario' => 'added_not_purchased']))
+        ->assertOk()
+        ->assertSee('Event combinations')
+        ->assertSee('Added to cart · not purchased');
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'colors', 'period' => '7d']))
+        ->assertRedirect(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d']));
+});
+
 test('dashboard chart detail pages expose chart payload keys', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.dashboard.index');

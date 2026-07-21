@@ -158,9 +158,8 @@ test('ecom tracker dashboard builds funnel and kpis from tracked actions', funct
     expect(collect($data['funnel'])->firstWhere('stage', 'Payment success')['count'])->toBe(1);
     expect($data['categories'][0]['name'] ?? null)->toBe('Women');
     expect($data['products'][0]['code'] ?? null)->toBe('SKU-1');
-    expect($data['colors']['products'][0]['product'] ?? null)->toBe('Dress');
-    expect($data['colors']['products'][0]['variants'][0]['color'] ?? null)->toBe('Navy');
-    expect($data['colors']['products'][0]['variants'][0]['purchased'] ?? null)->toBe(1);
+    expect($data['products'][0]['variants'][0]['color'] ?? null)->toBe('Navy');
+    expect($data['products'][0]['variants'][0]['purchases'] ?? null)->toBe(1);
 
     Carbon::setTestNow();
 });
@@ -416,6 +415,6 @@ test('ecom tracker dashboard matches purchased variants when checkout only has p
         'date_to' => '2026-07-11',
     ]);
 
-    expect($data['colors']['products'][0]['variants'][0]['viewed'] ?? null)->toBe(1);
-    expect($data['colors']['products'][0]['variants'][0]['purchased'] ?? null)->toBe(1);
+    expect($data['products'][0]['variants'][0]['views'] ?? null)->toBe(1);
+    expect($data['products'][0]['variants'][0]['purchases'] ?? null)->toBe(1);
 });

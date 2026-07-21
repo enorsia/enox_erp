@@ -80,4 +80,45 @@ return [
         'years' => [1],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | UTM filter dropdowns (key => label)
+    |--------------------------------------------------------------------------
+    |
+    | Keys should match values stored on activity_ecom_user.utm_source / utm_medium.
+    | Use (direct) and none for empty traffic in analytics.
+    |
+    */
+
+    'utm_sources' => [
+        'google' => 'Google',
+        'facebook' => 'Facebook',
+        'instagram' => 'Instagram',
+        'tiktok' => 'TikTok',
+        'youtube' => 'YouTube',
+        'awin' => 'Awin',
+        'bing' => 'Bing',
+        'pinterest' => 'Pinterest',
+        'linkedin' => 'LinkedIn',
+        'twitter' => 'Twitter / X',
+        'snapchat' => 'Snapchat',
+        'email' => 'Email',
+        '(direct)' => 'Direct',
+    ],
+
+    'utm_mediums' => [
+        'organic' => 'Organic',
+        'cpc' => 'CPC (paid search)',
+        'social' => 'Social',
+        'email' => 'Email',
+        'referral' => 'Referral',
+        'affiliate' => 'Affiliate',
+        'display' => 'Display',
+        'video' => 'Video',
+        'paid' => 'Paid',
+        'cpm' => 'CPM',
+        'awin' => 'Awin',
+        'none' => 'None',
+    ],
+
 ];

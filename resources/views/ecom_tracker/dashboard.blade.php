@@ -164,7 +164,7 @@
                     <tr>
                         <th>Category</th>
                         <th class="etd-num">Views</th>
-                        <th class="etd-num">Add to cart</th>
+                        <th class="etd-num">Adds</th>
                         <th class="etd-num">Conversion</th>
                         <th>
                             @include('ecom_tracker.partials.signal-header')
@@ -190,83 +190,51 @@
 
         <div class="etd-panel" id="products">
             <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Top products</h2>
+                <h2 class="etd-panel-title">Product & variant performance</h2>
                 @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('products')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
-            <table class="etd-table">
+            <table class="etd-table etd-table--product-catalog">
                 <thead>
                     <tr>
-                        <th>Product</th>
+                        <th class="etd-col-product">Product</th>
                         <th class="etd-num">Views</th>
-                        <th class="etd-num">Add to cart</th>
+                        <th class="etd-num">
+                            @include('ecom_tracker.partials.column-header-with-tip', [
+                                'label' => 'Adds',
+                                'tip' => 'Add to cart',
+                                'align' => 'right',
+                            ])
+                        </th>
                         <th class="etd-num">Purchases</th>
+                        <th class="etd-num">Qty</th>
                         <th class="etd-num">Sale</th>
+                        <th class="etd-num">Variants</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($d['products'] as $product)
                         <tr>
-                            <td>
+                            <td class="etd-col-product">
                                 {{ $product['name'] }}
                                 <div class="etd-subtle">{{ $product['code'] }}</div>
                             </td>
                             <td class="etd-num">{{ number_format($product['views']) }}</td>
                             <td class="etd-num">{{ number_format($product['adds']) }}</td>
                             <td class="etd-num">{{ number_format($product['purchases']) }}</td>
+                            <td class="etd-num">{{ number_format($product['qty'] ?? 0) }}</td>
                             <td class="etd-num">
                                 £{{ number_format($product['revenue'], 2) }}
                                 <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] }}%"></div></div>
                             </td>
+                            <td class="etd-num">{{ number_format($product['variant_count'] ?? count($product['variants'] ?? [])) }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="text-slate-400">No product activity in this period.</td></tr>
+                        <tr><td colspan="7" class="text-slate-400">No product activity in this period.</td></tr>
                     @endforelse
                 </tbody>
             </table>
             </div>
-        </div>
-    </div>
-
-    <div class="etd-panel mb-3" id="colors">
-        <div class="etd-panel-head">
-            <h2 class="etd-panel-title">Color / variant performance — viewed vs purchased</h2>
-            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('colors')])
-        </div>
-        <div class="etd-table-scroll etd-table-scroll--wide etd-table-scroll--fixed etd-table-scroll--tall">
-            <table class="etd-table etd-table--colors">
-                <thead>
-                    <tr>
-                        <th>Product</th>
-                        <th class="etd-num">SKU</th>
-                        <th>Color</th>
-                        <th class="etd-num">Viewed</th>
-                        <th class="etd-num">Purchased</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($d['colors']['products'] as $product)
-                        <tr class="etd-color-product-row">
-                            <td class="etd-color-product-name">{{ $product['product'] }}</td>
-                            <td class="etd-num"><span class="etd-chip">{{ $product['sku'] }}</span></td>
-                            <td></td>
-                            <td class="etd-num">{{ number_format($product['viewed']) }}</td>
-                            <td class="etd-num">{{ number_format($product['purchased']) }}</td>
-                        </tr>
-                        @foreach ($product['variants'] as $variant)
-                            <tr class="etd-color-variant-row">
-                                <td></td>
-                                <td></td>
-                                <td>{{ $variant['color'] }}</td>
-                                <td class="etd-num">{{ number_format($variant['viewed']) }}</td>
-                                <td class="etd-num">{{ number_format($variant['purchased']) }}</td>
-                            </tr>
-                        @endforeach
-                    @empty
-                        <tr><td colspan="5" class="text-slate-400">No color / variant activity in this period.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
         </div>
     </div>
 

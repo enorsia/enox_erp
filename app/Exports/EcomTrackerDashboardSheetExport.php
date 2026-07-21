@@ -271,6 +271,9 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'segment' => 22,
             'duration_bucket' => 18,
             'unique_visitors' => 18,
+            'size' => 12,
+            'qty' => 12,
+            'add_to_cart' => 14,
         ];
 
         foreach ($columnKeys as $idx => $key) {
@@ -315,6 +318,7 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'last_active',
             'total_stay',
             'avg_stay',
+            'size',
         ], true);
     }
 
@@ -340,6 +344,8 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'session_count',
             'orders',
             'unique_visitors',
+            'qty',
+            'add_to_cart',
         ], true) || str_contains($key, 'rate') || str_contains($key, 'percent');
     }
 

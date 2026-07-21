@@ -11,7 +11,7 @@
     $datetimeToValue = filled($filters['datetime_to'] ?? null) ? TrackerTime::toLocal($filters['datetime_to'])?->format('Y-m-d\TH:i') : '';
     $presetWindows = ['3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year'];
     $resetQuery = array_filter(['back' => request('back')]);
-    $queryParams = request()->only(['window', 'datetime_from', 'datetime_to', 'search', 'device_type', 'logged_in', 'has_order', 'sort_by']);
+    $queryParams = request()->only(['window', 'datetime_from', 'datetime_to', 'search', 'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium', 'sort_by']);
     $visitorsBack = request('back') ? urldecode(request('back')) : route('admin.ecom-tracker.visitors', $queryParams);
     $breadcrumbs = [
         ['label' => 'Visitor analytics', 'url' => $visitorsBack],

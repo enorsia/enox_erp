@@ -1,3 +1,5 @@
+@include('ecom_tracker.partials.utm-filters')
+
 <div>
     <label class="block text-[12px] text-slate-500 mb-1">Search visitor ID</label>
     <input type="text" name="search" value="{{ request('search') }}" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
