@@ -111,6 +111,10 @@
                 </div>
 
                 <div class="etd-header-actions">
+                    @include('ecom_tracker.partials.header-reset-button', [
+                        'url' => route('admin.ecom-activity.index'),
+                        'active' => count(request()->except('page')) > 0,
+                    ])
                     <button type="button" @click="drawerOpen = true" class="etd-header-btn etd-header-btn--icon {{ $activeFilterCount > 0 ? 'etd-header-btn--filtered' : '' }}" aria-label="Filters">
                         <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
                         <span class="etd-header-btn-text">Filters</span>
