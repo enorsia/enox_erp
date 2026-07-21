@@ -2,6 +2,7 @@
 
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
+use App\Models\ActivityEcomUserAction;
 use App\Services\VisitorAnalyticsService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -183,4 +184,79 @@ test('visitor breakdown groups stay time per visitor', function () {
     expect($breakdown->total())->toBe(1);
     expect($breakdown->items()[0]['session_count'])->toBe(2);
     expect($breakdown->items()[0]['total_stay_seconds'])->toBe(1800);
+});
+
+test('visitor breakdown supports sort by total stay', function () {
+    $service = app(VisitorAnalyticsService::class);
+
+    $visitorA = (string) Str::uuid();
+    $visitorB = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorA,
+        'created_at' => Carbon::parse('2026-07-16 10:00:00'),
+        'updated_at' => Carbon::parse('2026-07-16 10:05:00'),
+        'last_active_at' => Carbon::parse('2026-07-16 10:05:00'),
+        'session_duration_seconds' => 300,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => $visitorB,
+        'created_at' => Carbon::parse('2026-07-16 11:00:00'),
+        'updated_at' => Carbon::parse('2026-07-16 11:30:00'),
+        'last_active_at' => Carbon::parse('2026-07-16 11:30:00'),
+        'session_duration_seconds' => 1800,
+    ]);
+
+    $since = $service->resolveWindow('24h');
+    $breakdown = $service->buildVisitorBreakdown($since, 25, null, ['sort_by' => 'total_stay_desc']);
+
+    expect($breakdown->items()[0]['visitor_id'])->toBe($visitorB);
+    expect($breakdown->items()[1]['visitor_id'])->toBe($visitorA);
+});
+
+test('visitor breakdown includes order qty and can sort by orders', function () {
+    $service = app(VisitorAnalyticsService::class);
+
+    $buyer = (string) Str::uuid();
+    $browser = (string) Str::uuid();
+    $buyerSession = (string) Str::uuid();
+    $browserSession = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $buyerSession,
+        'visitor_id' => $buyer,
+        'created_at' => Carbon::parse('2026-07-16 12:00:00'),
+        'updated_at' => Carbon::parse('2026-07-16 12:30:00'),
+        'last_active_at' => Carbon::parse('2026-07-16 12:30:00'),
+        'session_duration_seconds' => 600,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $browserSession,
+        'visitor_id' => $browser,
+        'created_at' => Carbon::parse('2026-07-16 12:00:00'),
+        'updated_at' => Carbon::parse('2026-07-16 12:10:00'),
+        'last_active_at' => Carbon::parse('2026-07-16 12:10:00'),
+        'session_duration_seconds' => 300,
+    ]);
+
+    foreach (range(1, 2) as $index) {
+        ActivityEcomUserAction::query()->create([
+            'event_id' => (string) Str::uuid(),
+            'session_id' => $buyerSession,
+            'action_type' => 'payment_success',
+            'payment_success' => ['amount_paid' => 50 * $index],
+            'created_at' => Carbon::parse('2026-07-16 12:'.str_pad((string) (10 + $index), 2, '0', STR_PAD_LEFT).':00'),
+        ]);
+    }
+
+    $since = $service->resolveWindow('24h');
+    $breakdown = $service->buildVisitorBreakdown($since, 25, null, ['sort_by' => 'orders_desc']);
+
+    expect($breakdown->items()[0]['visitor_id'])->toBe($buyer);
+    expect($breakdown->items()[0]['order_qty'])->toBe(2);
+    expect($breakdown->items()[1]['order_qty'])->toBe(0);
 });

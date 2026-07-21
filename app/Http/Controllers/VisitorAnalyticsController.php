@@ -56,7 +56,7 @@ class VisitorAnalyticsController extends Controller
         Gate::authorize('ecom_tracker.visitors.index');
 
         $titles = [
-            'trend' => 'Visitors & sessions over time',
+            'trend' => 'Unique visitors vs sessions',
             'new-returning' => 'Unique vs returning visitors',
             'duration' => 'Session duration distribution',
             'visitors' => 'All visitors',
@@ -65,8 +65,9 @@ class VisitorAnalyticsController extends Controller
         abort_unless(isset($titles[$section]), 404);
 
         $range = $this->resolveRange($request);
-        $extraFilters = $request->only(['search', 'device_type', 'logged_in', 'has_order']);
+        $extraFilters = $request->only(['search', 'device_type', 'logged_in', 'has_order', 'sort_by']);
         $perPage = max(10, min(100, (int) $request->input('per_page', 25)));
+        $sortBy = $this->analytics->resolveVisitorSort($request->input('sort_by'));
 
         $data = match ($section) {
             'trend' => ['trend' => $this->analytics->buildVisitorTrend($range['from'], $range['until'])],
@@ -83,9 +84,11 @@ class VisitorAnalyticsController extends Controller
             'filters' => array_merge(
                 $request->only(['window', 'datetime_from', 'datetime_to']),
                 $extraFilters,
-                ['window_label' => $range['label']],
+                ['window_label' => $range['label'], 'sort_by' => $sortBy],
             ),
             'activeFilterCount' => $this->visitorActiveFilterCount($request),
+            'visitorSortOptions' => $section === 'visitors' ? $this->analytics->visitorSortOptions() : [],
+            'currentSort' => $section === 'visitors' ? $sortBy : null,
         ]);
     }
 

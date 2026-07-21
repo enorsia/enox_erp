@@ -1,6 +1,6 @@
 <div class="etd-chart-wrap lg"><canvas id="vaTrendMini"></canvas></div>
 <table class="etd-table mt-4 w-full">
-    <thead><tr><th>Date</th><th class="etd-num">Visitors</th><th class="etd-num">Sessions</th></tr></thead>
+    <thead><tr><th>Date</th><th class="etd-num">Unique visitors</th><th class="etd-num">Sessions</th></tr></thead>
     <tbody>
         @foreach ($data['trend']['labels'] ?? [] as $i => $label)
             <tr>

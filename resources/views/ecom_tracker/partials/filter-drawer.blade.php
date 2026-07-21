@@ -50,6 +50,9 @@
         @if (request('back'))
             <input type="hidden" name="back" value="{{ request('back') }}">
         @endif
+        @if ($showVisitorFilters && request('sort_by'))
+            <input type="hidden" name="sort_by" value="{{ request('sort_by') }}">
+        @endif
 
         <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
             @include('ecom_tracker.partials.timezone-notice')

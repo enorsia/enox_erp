@@ -5,6 +5,9 @@
     'exportUrl' => null,
     'activeFilterCount' => 0,
     'breadcrumbs' => [],
+    'sortOptions' => [],
+    'currentSort' => null,
+    'sortAction' => null,
 ])
 
 <div class="etd-topbar">
@@ -32,6 +35,28 @@
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                 Export
             </a>
+        @endif
+        @if (! empty($sortOptions) && $sortAction)
+            <form method="GET" action="{{ $sortAction }}" class="inline-flex items-center gap-2">
+                @foreach (request()->except(['sort_by', 'page']) as $name => $value)
+                    @if (is_array($value))
+                        @foreach ($value as $item)
+                            <input type="hidden" name="{{ $name }}[]" value="{{ $item }}">
+                        @endforeach
+                    @else
+                        <input type="hidden" name="{{ $name }}" value="{{ $value }}">
+                    @endif
+                @endforeach
+                <span class="text-[12px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Sort by</span>
+                <select id="visitor-sort-by"
+                        name="sort_by"
+                        onchange="this.form.submit()"
+                        class="h-[38px] min-w-[200px] max-w-[240px] px-3 pr-8 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                    @foreach ($sortOptions as $value => $label)
+                        <option value="{{ $value }}" @selected(($currentSort ?? 'last_active_desc') === $value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </form>
         @endif
         <button type="button"
                 @click="drawerOpen = true"

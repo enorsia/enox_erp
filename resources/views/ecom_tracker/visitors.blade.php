@@ -69,7 +69,7 @@
     <div class="etd-grid-2 mb-5">
         <div class="etd-panel">
             <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Visitors & sessions over time</h2>
+                <h2 class="etd-panel-title">Unique visitors vs sessions</h2>
                 @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('trend')])
             </div>
             <div class="etd-chart-wrap"><canvas id="vaTrendMini"></canvas></div>
@@ -100,11 +100,11 @@
 
     <div class="etd-panel">
         <div class="etd-panel-head">
-            <h2 class="etd-panel-title">Top visitors by stay</h2>
+            <h2 class="etd-panel-title">Recent visitors</h2>
             @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('visitors'), 'viewLabel' => 'View all'])
         </div>
         <table class="etd-table w-full">
-            <thead><tr><th>Visitor</th><th class="etd-num">Sessions</th><th class="etd-num">Total stay</th><th>Last active</th></tr></thead>
+            <thead><tr><th>Visitor</th><th class="etd-num">Sessions</th><th class="etd-num">Order qty</th><th class="etd-num">Total stay</th><th>Last active</th></tr></thead>
             <tbody>
                 @forelse ($a['top_visitors'] as $visitor)
                     <tr>
@@ -115,11 +115,12 @@
                             @endcan
                         </td>
                         <td class="etd-num">{{ $visitor['session_count'] }}</td>
+                        <td class="etd-num">{{ number_format($visitor['order_qty'] ?? 0) }}</td>
                         <td class="etd-num">{{ $visitor['total_stay_label'] }}</td>
                         <td>{{ TrackerTime::toLocal($visitor['last_active_at'])?->diffForHumans() ?? '—' }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="4" class="text-center text-slate-500 py-8">No visitors in this window.</td></tr>
+                    <tr><td colspan="5" class="text-center text-slate-500 py-8">No visitors in this window.</td></tr>
                 @endforelse
             </tbody>
         </table>

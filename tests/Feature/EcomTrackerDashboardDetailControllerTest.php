@@ -24,7 +24,14 @@ test('visitor analytics detail pages are accessible for authorized users', funct
     $this->actingAs($user)
         ->get(route('admin.ecom-tracker.visitors.details', ['section' => 'trend', 'window' => '7d']))
         ->assertOk()
-        ->assertSee('Visitors & sessions over time');
+        ->assertSee('Unique visitors vs sessions');
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-tracker.visitors.details', ['section' => 'visitors', 'window' => '7d']))
+        ->assertOk()
+        ->assertSee('All visitors')
+        ->assertSee('Sort by')
+        ->assertSee('Last active · newest first');
 });
 
 test('dashboard detail pages are accessible for authorized users', function () {

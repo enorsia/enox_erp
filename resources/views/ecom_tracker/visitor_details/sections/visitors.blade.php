@@ -4,6 +4,7 @@
         <tr>
             <th>Visitor ID</th>
             <th class="etd-num">Sessions</th>
+            <th class="etd-num">Order qty</th>
             <th class="etd-num">Total stay</th>
             <th class="etd-num">Avg / session</th>
             <th>First seen</th>
@@ -19,6 +20,7 @@
                     <code class="text-xs" title="{{ $visitor['visitor_id'] }}">{{ Str::limit($visitor['visitor_id'], 12) }}</code>
                 </td>
                 <td class="etd-num">{{ $visitor['session_count'] }}</td>
+                <td class="etd-num">{{ number_format($visitor['order_qty'] ?? 0) }}</td>
                 <td class="etd-num">{{ $visitor['total_stay_label'] }}</td>
                 <td class="etd-num">{{ $visitor['avg_stay_label'] }}</td>
                 <td>{{ TrackerTime::toLocal($visitor['first_seen_at'])?->format('d M Y, H:i') ?? '—' }}</td>
@@ -31,7 +33,7 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="8" class="text-center text-slate-500 py-8">No visitors in this window.</td></tr>
+            <tr><td colspan="9" class="text-center text-slate-500 py-8">No visitors in this window.</td></tr>
         @endforelse
     </tbody>
 </table>

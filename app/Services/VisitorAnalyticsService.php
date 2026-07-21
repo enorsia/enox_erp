@@ -13,6 +13,38 @@ use Illuminate\Support\Facades\DB;
 
 class VisitorAnalyticsService
 {
+    /**
+     * @return array<string, string>
+     */
+    public function visitorSortOptions(): array
+    {
+        return [
+            'last_active_desc' => 'Last active · newest first',
+            'last_active_asc' => 'Last active · oldest first',
+            'first_seen_desc' => 'First seen · newest first',
+            'first_seen_asc' => 'First seen · oldest first',
+            'sessions_desc' => 'Most sessions',
+            'sessions_asc' => 'Fewest sessions',
+            'total_stay_desc' => 'Longest total stay',
+            'total_stay_asc' => 'Shortest total stay',
+            'avg_stay_desc' => 'Longest avg session',
+            'avg_stay_asc' => 'Shortest avg session',
+            'orders_desc' => 'Most orders',
+            'orders_asc' => 'Fewest orders',
+        ];
+    }
+
+    public function resolveVisitorSort(?string $sortBy): string
+    {
+        $options = $this->visitorSortOptions();
+
+        if ($sortBy !== null && array_key_exists($sortBy, $options)) {
+            return $sortBy;
+        }
+
+        return 'last_active_desc';
+    }
+
     private function effectiveDurationSecondsSql(): string
     {
         if (DB::connection()->getDriverName() === 'sqlite') {
@@ -406,6 +438,8 @@ class VisitorAnalyticsService
     public function buildVisitorBreakdown(Carbon $from, int $perPage = 25, ?Carbon $until = null, array $filters = []): LengthAwarePaginator
     {
         $durationSql = $this->effectiveDurationSecondsSql();
+        $sortBy = $this->resolveVisitorSort($filters['sort_by'] ?? null);
+        $to = $until ?? TrackerTime::nowUtc();
 
         $query = $this->applyLastActiveRange(ActivityEcomUser::query(), $from, $until)
             ->select([
@@ -416,9 +450,11 @@ class VisitorAnalyticsService
                 DB::raw('MIN(created_at) as first_seen_at'),
                 DB::raw('MAX(last_active_at) as last_active_at'),
             ])
+            ->selectSub($this->visitorOrderQtySubquery($from, $to), 'order_qty')
             ->whereNotNull('visitor_id')
-            ->groupBy('visitor_id')
-            ->orderByDesc(DB::raw('MAX(last_active_at)'));
+            ->groupBy('visitor_id');
+
+        $this->applyVisitorBreakdownSort($query, $sortBy, $durationSql);
 
         if (! empty($filters['search'])) {
             $search = '%'.$filters['search'].'%';
@@ -465,12 +501,52 @@ class VisitorAnalyticsService
                 'avg_stay_label' => $this->formatDuration($avgStay),
                 'first_seen_at' => $row->first_seen_at,
                 'last_active_at' => $row->last_active_at,
+                'order_qty' => (int) ($row->order_qty ?? 0),
                 'device_type' => $latest?->device_type,
                 'browser' => $latest?->browser,
             ];
         });
 
         return $paginator;
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\ActivityEcomUser>  $query
+     */
+    private function applyVisitorBreakdownSort($query, string $sortBy, string $durationSql): void
+    {
+        match ($sortBy) {
+            'last_active_asc' => $query->orderBy(DB::raw('MAX(last_active_at)')),
+            'first_seen_desc' => $query->orderByDesc(DB::raw('MIN(created_at)')),
+            'first_seen_asc' => $query->orderBy(DB::raw('MIN(created_at)')),
+            'sessions_desc' => $query->orderByDesc(DB::raw('COUNT(*)')),
+            'sessions_asc' => $query->orderBy(DB::raw('COUNT(*)')),
+            'total_stay_desc' => $query->orderByDesc(DB::raw('SUM('.$durationSql.')')),
+            'total_stay_asc' => $query->orderBy(DB::raw('SUM('.$durationSql.')')),
+            'avg_stay_desc' => $query->orderByDesc(DB::raw('AVG('.$durationSql.')')),
+            'avg_stay_asc' => $query->orderBy(DB::raw('AVG('.$durationSql.')')),
+            'orders_desc' => $query->orderByDesc('order_qty'),
+            'orders_asc' => $query->orderBy('order_qty'),
+            default => $query->orderByDesc(DB::raw('MAX(last_active_at)')),
+        };
+    }
+
+    /**
+     * @return \Closure(\Illuminate\Database\Query\Builder): void
+     */
+    private function visitorOrderQtySubquery(Carbon $from, Carbon $to): \Closure
+    {
+        return function ($sub) use ($from, $to): void {
+            $sub->from('activity_ecom_user_actions as orders')
+                ->join('activity_ecom_user as order_sessions', 'order_sessions.session_id', '=', 'orders.session_id')
+                ->whereColumn('order_sessions.visitor_id', 'activity_ecom_user.visitor_id')
+                ->where('orders.action_type', 'payment_success')
+                ->whereBetween('orders.created_at', [
+                    TrackerTime::formatUtc($from),
+                    TrackerTime::formatUtc($to),
+                ])
+                ->selectRaw('count(*)');
+        };
     }
 
     /**
