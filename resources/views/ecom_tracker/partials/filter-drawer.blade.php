@@ -11,6 +11,7 @@
     'showSessionFilters' => false,
     'showVisitorFilters' => false,
     'showActivityFilters' => false,
+    'activityFiltersIncludeDateRange' => true,
     'showProductFilters' => false,
     'productFilterOptions' => ['categories' => [], 'colors' => [], 'sizes' => []],
     'eventScenarioOptions' => [],
@@ -20,6 +21,8 @@
     'period' => '24h',
     'dateFrom' => '',
     'dateTo' => '',
+    'compare' => 'previous_period',
+    'preservePeriodParams' => false,
 ])
 
 <div x-show="drawerOpen"
@@ -56,6 +59,14 @@
     <form method="GET" action="{{ $action }}" class="flex-1 flex flex-col overflow-hidden">
         @if (request('back'))
             <input type="hidden" name="back" value="{{ request('back') }}">
+        @endif
+        @if ($preservePeriodParams)
+            <input type="hidden" name="period" value="{{ $period }}">
+            <input type="hidden" name="compare" value="{{ $compare }}">
+            @if ($period === 'custom')
+                <input type="hidden" name="date_from" value="{{ $dateFrom }}">
+                <input type="hidden" name="date_to" value="{{ $dateTo }}">
+            @endif
         @endif
         @if ($showVisitorFilters && request('sort_by'))
             <input type="hidden" name="sort_by" value="{{ request('sort_by') }}">
@@ -109,7 +120,11 @@
                     </div>
                 </div>
             @elseif ($showActivityFilters)
-                @include('ecom_activity.partials.activity-filters')
+                @include('ecom_activity.partials.activity-filters', [
+                    'includeDateRange' => $activityFiltersIncludeDateRange,
+                ])
+            @elseif ($preservePeriodParams)
+                {{-- Period/compare controlled in page header; hidden fields preserve them on apply --}}
             @else
                 @php
                     $drawerWindow = $hasCustomRange ? 'custom' : $window;

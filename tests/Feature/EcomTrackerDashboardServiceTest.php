@@ -798,3 +798,12 @@ test('dashboard product table defaults to last 24 hours and applies session filt
 
     Carbon::setTestNow();
 });
+
+test('ecom tracker dashboard includes visitor quality summary', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    $data = $service->getDashboardData(['period' => '7d']);
+
+    expect($data)->toHaveKey('visitor_quality');
+    expect($data['visitor_quality'])->toHaveKeys(['real_shoppers', 'automated_traffic', 'not_classified', 'uk_shoppers']);
+});

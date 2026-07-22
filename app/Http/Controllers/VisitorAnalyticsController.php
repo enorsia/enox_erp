@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\VisitorAnalyticsExport;
 use App\Models\TrackerUtmFilter;
+use App\Services\BotTrafficAnalyticsService;
 use App\Services\VisitorAnalyticsService;
 use App\Support\EcomTrackerViewData;
 use App\Support\TrackerTime;
@@ -18,6 +19,7 @@ class VisitorAnalyticsController extends Controller
 {
     public function __construct(
         private VisitorAnalyticsService $analytics,
+        private BotTrafficAnalyticsService $botTrafficAnalytics,
     ) {}
 
     public function index(Request $request): View
@@ -41,6 +43,11 @@ class VisitorAnalyticsController extends Controller
             'trend' => $overview['trend'],
             'top_visitors' => $overview['top_visitors'],
             'analytics_cache' => $cached['analytics_cache'],
+            'visitor_quality' => $this->botTrafficAnalytics->summaryOnly([
+                'period' => 'custom',
+                'date_from' => TrackerTime::toLocal($range['from'])?->toDateString(),
+                'date_to' => TrackerTime::toLocal($range['until'] ?? $range['to'])?->toDateString(),
+            ]),
         ];
 
         return view('ecom_tracker.visitors', [

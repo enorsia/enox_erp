@@ -107,6 +107,10 @@ return [
                 'guard' => 'web',
                 'actions' => ['index', 'show'],
             ],
+            'bot_traffic' => [
+                'guard' => 'web',
+                'actions' => ['index'],
+            ],
         ],
 
         // SETTINGS MODULE

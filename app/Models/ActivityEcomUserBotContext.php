@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\VisitorClassificationLabels;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -72,5 +73,45 @@ class ActivityEcomUserBotContext extends Model
     public function getResolvedClientIpAttribute(): ?string
     {
         return $this->client_ip ?: $this->session?->ip;
+    }
+
+    public function getMarketerTypeLabelAttribute(): string
+    {
+        return VisitorClassificationLabels::typeLabel($this->is_bot ? 'bot' : 'human');
+    }
+
+    public function getMarketerReasonLabelAttribute(): string
+    {
+        return VisitorClassificationLabels::reason($this->bot_reason, $this->is_bot)['headline'];
+    }
+
+    public function getMarketerReasonHelpAttribute(): string
+    {
+        return VisitorClassificationLabels::reason($this->bot_reason, $this->is_bot)['help'];
+    }
+
+    public function getMarketerConfidenceLabelAttribute(): ?string
+    {
+        return VisitorClassificationLabels::confidenceLabel($this->bot_confidence);
+    }
+
+    public function getMarketerCountryLabelAttribute(): ?string
+    {
+        return VisitorClassificationLabels::countryLabel($this->ip_country);
+    }
+
+    public function getMarketerTrustScoreLabelAttribute(): string
+    {
+        return VisitorClassificationLabels::trustScoreLabel($this->cf_bot_score);
+    }
+
+    public function getMarketerUserAgentHintAttribute(): ?string
+    {
+        return VisitorClassificationLabels::userAgentHint($this->user_agent);
+    }
+
+    public function getMarketerTypeBadgeClassAttribute(): string
+    {
+        return VisitorClassificationLabels::typeBadgeClass($this->is_bot ? 'bot' : 'human');
     }
 }

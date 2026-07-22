@@ -29,16 +29,17 @@
 </div>
 
 <div>
-    <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">Visitor type</label>
+    <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">Visitor trust</label>
     <select name="visitor_type" class="tom-select etd-tom-select w-full" data-placeholder="All">
         <option value="" @selected(request('visitor_type', '') === '')>All</option>
-        <option value="human" {{ request('visitor_type') === 'human' ? 'selected' : '' }}>Humans only</option>
-        <option value="bot" {{ request('visitor_type') === 'bot' ? 'selected' : '' }}>Bots only</option>
-        <option value="unclassified" {{ request('visitor_type') === 'unclassified' ? 'selected' : '' }}>Unclassified</option>
+        <option value="human" {{ request('visitor_type') === 'human' ? 'selected' : '' }}>Real visitors</option>
+        <option value="bot" {{ request('visitor_type') === 'bot' ? 'selected' : '' }}>Automated traffic</option>
+        <option value="unclassified" {{ request('visitor_type') === 'unclassified' ? 'selected' : '' }}>Not classified</option>
     </select>
+    <p class="text-[10px] text-slate-400 mt-1 mb-0">Filter by how we classified each session's traffic.</p>
 </div>
 
 <div>
     <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">Country</label>
-    <input type="text" name="country" value="{{ request('country') }}" placeholder="e.g. GB" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
+    <input type="text" name="country" value="{{ request('country') }}" placeholder="GB for UK visitors" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
 </div>

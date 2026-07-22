@@ -511,6 +511,7 @@ class VisitorAnalyticsService
                 'order_qty' => (int) ($row->order_qty ?? 0),
                 'device_type' => $latest?->device_type,
                 'browser' => $latest?->browser,
+                'latest_session' => $latest,
             ];
         });
 
@@ -528,9 +529,10 @@ class VisitorAnalyticsService
         }
 
         return ActivityEcomUser::query()
+            ->with('botContext')
             ->whereIn('visitor_id', $visitorIds)
             ->orderByDesc('last_active_at')
-            ->get(['visitor_id', 'device_type', 'browser', 'last_active_at'])
+            ->get()
             ->unique('visitor_id')
             ->keyBy('visitor_id');
     }

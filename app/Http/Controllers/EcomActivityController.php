@@ -8,6 +8,7 @@ use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityTimelinePresenter;
 use App\Support\EcomTrackerViewData;
 use App\Support\TrackerTime;
+use App\Support\VisitorClassificationLabels;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -30,74 +31,21 @@ class EcomActivityController extends Controller
     {
         Gate::authorize('ecom_tracker.activity.index');
 
-        $query = ActivityEcomUser::query()
-            ->with('botContext')
-            ->withCount('actions')
-            ->withCount(['actions as order_qty' => fn ($q) => $q->where('action_type', 'payment_success')]);
+        $query = $this->buildIndexQuery($request);
 
-        $this->applySessionDateFilter($query, $request);
-
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('session_id', 'like', "%{$search}%")
-                    ->orWhere('visitor_id', 'like', "%{$search}%")
-                    ->orWhere('ip', 'like', "%{$search}%")
-                    ->orWhere('user_name', 'like', "%{$search}%")
-                    ->orWhere('user_email', 'like', "%{$search}%")
-                    ->orWhereHas('botContext', fn ($b) => $b
-                        ->where('client_ip', 'like', "%{$search}%")
-                        ->orWhere('ip_country', 'like', "%{$search}%")
-                        ->orWhere('cf_ray', 'like', "%{$search}%")
-                        ->orWhere('bot_reason', 'like', "%{$search}%"));
-            });
-        }
-
-        if ($request->filled('country')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('country', $request->country)
-                    ->orWhereHas('botContext', fn ($b) => $b->where('ip_country', $request->country));
-            });
-        }
-
-        $visitorType = $request->input('visitor_type');
-
-        if ($visitorType === 'bot') {
-            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
-        } elseif ($visitorType === 'human') {
-            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', false));
-        } elseif ($visitorType === 'unclassified') {
-            $query->whereDoesntHave('botContext');
-        }
-
-        if ($request->filled('device_type')) {
-            $query->where('device_type', $request->device_type);
-        }
-
-        if ($request->filled('logged_in')) {
-            $query->where('is_logged_in', $request->logged_in === '1');
-        }
-
-        if ($request->filled('has_order')) {
-            if ($request->has_order === '1') {
-                $query->whereHas('actions', fn ($q) => $q->where('action_type', 'payment_success'));
-            } elseif ($request->has_order === '0') {
-                $query->whereDoesntHave('actions', fn ($q) => $q->where('action_type', 'payment_success'));
-            }
-        }
-
-        TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
-        TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
-
-        $sessions = $query
+        $sessions = (clone $query)
             ->orderByDesc('last_active_at')
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->paginate(25)
             ->withQueryString();
 
+        $visitorQualitySummary = $this->visitorQualityCounts($request);
+
         return view('ecom_activity.index', [
             'sessions' => $sessions,
+            'visitorQualitySummary' => $visitorQualitySummary,
+            'filterChips' => $this->buildActivityFilterChips($request),
         ]);
     }
 
@@ -182,5 +130,115 @@ class EcomActivityController extends Controller
             $inner->whereBetween('created_at', [$from, $to])
                 ->orWhereBetween('last_active_at', [$from, $to]);
         });
+    }
+
+    private function buildIndexQuery(Request $request): \Illuminate\Database\Eloquent\Builder
+    {
+        $query = ActivityEcomUser::query()
+            ->with('botContext')
+            ->withCount('actions')
+            ->withCount(['actions as order_qty' => fn ($q) => $q->where('action_type', 'payment_success')]);
+
+        $this->applySessionDateFilter($query, $request);
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('session_id', 'like', "%{$search}%")
+                    ->orWhere('visitor_id', 'like', "%{$search}%")
+                    ->orWhere('ip', 'like', "%{$search}%")
+                    ->orWhere('user_name', 'like', "%{$search}%")
+                    ->orWhere('user_email', 'like', "%{$search}%")
+                    ->orWhereHas('botContext', fn ($b) => $b
+                        ->where('client_ip', 'like', "%{$search}%")
+                        ->orWhere('ip_country', 'like', "%{$search}%")
+                        ->orWhere('cf_ray', 'like', "%{$search}%")
+                        ->orWhere('bot_reason', 'like', "%{$search}%"));
+            });
+        }
+
+        if ($request->filled('country')) {
+            $query->where(function ($q) use ($request) {
+                $q->where('country', $request->country)
+                    ->orWhereHas('botContext', fn ($b) => $b->where('ip_country', $request->country));
+            });
+        }
+
+        $visitorType = $request->input('visitor_type');
+
+        if ($visitorType === 'bot') {
+            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
+        } elseif ($visitorType === 'human') {
+            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', false));
+        } elseif ($visitorType === 'unclassified') {
+            $query->whereDoesntHave('botContext');
+        }
+
+        if ($request->filled('device_type')) {
+            $query->where('device_type', $request->device_type);
+        }
+
+        if ($request->filled('logged_in')) {
+            $query->where('is_logged_in', $request->logged_in === '1');
+        }
+
+        if ($request->filled('has_order')) {
+            if ($request->has_order === '1') {
+                $query->whereHas('actions', fn ($q) => $q->where('action_type', 'payment_success'));
+            } elseif ($request->has_order === '0') {
+                $query->whereDoesntHave('actions', fn ($q) => $q->where('action_type', 'payment_success'));
+            }
+        }
+
+        TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
+        TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
+
+        return $query;
+    }
+
+    /**
+     * @return array{real_shoppers: int, automated_traffic: int, not_classified: int}
+     */
+    private function visitorQualityCounts(Request $request): array
+    {
+        $base = $this->buildIndexQuery($request);
+
+        return [
+            'real_shoppers' => (clone $base)->whereHas('botContext', fn ($b) => $b->where('is_bot', false))->count(),
+            'automated_traffic' => (clone $base)->whereHas('botContext', fn ($b) => $b->where('is_bot', true))->count(),
+            'not_classified' => (clone $base)->whereDoesntHave('botContext')->count(),
+        ];
+    }
+
+    /**
+     * @return array<int, array{label: string, remove_url: string}>
+     */
+    private function buildActivityFilterChips(Request $request): array
+    {
+        $chips = [];
+        $labels = VisitorClassificationLabels::filterTypeLabels();
+
+        if ($request->filled('visitor_type')) {
+            $chips[] = [
+                'label' => $labels[$request->visitor_type] ?? $request->visitor_type,
+                'remove_url' => $request->fullUrlWithQuery(['visitor_type' => null, 'page' => null]),
+            ];
+        }
+
+        if ($request->filled('country')) {
+            $chips[] = [
+                'label' => 'Country: '.$request->country,
+                'remove_url' => $request->fullUrlWithQuery(['country' => null, 'page' => null]),
+            ];
+        }
+
+        if ($request->filled('search')) {
+            $chips[] = [
+                'label' => '"'.$request->search.'"',
+                'remove_url' => $request->fullUrlWithQuery(['search' => null, 'page' => null]),
+            ];
+        }
+
+        return $chips;
     }
 }

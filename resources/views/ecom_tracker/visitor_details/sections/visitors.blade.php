@@ -9,6 +9,7 @@
             <th class="etd-num">Avg / session</th>
             <th>First seen</th>
             <th>Last active</th>
+            <th>Visitor trust</th>
             <th>Device</th>
             <th class="etd-col-action">Action</th>
         </tr>
@@ -25,6 +26,13 @@
                 <td class="etd-num">{{ $visitor['avg_stay_label'] }}</td>
                 <td>{{ TrackerTime::toLocal($visitor['first_seen_at'])?->format('d M Y, H:i') ?? '—' }}</td>
                 <td>{{ TrackerTime::toLocal($visitor['last_active_at'])?->diffForHumans() ?? '—' }}</td>
+                <td>
+                    @if (! empty($visitor['latest_session']))
+                        @include('ecom_tracker.partials.visitor-classification-badge', ['session' => $visitor['latest_session'], 'mode' => 'compact'])
+                    @else
+                        —
+                    @endif
+                </td>
                 <td>{{ trim(($visitor['device_type'] ?? '') . ' · ' . ($visitor['browser'] ?? ''), ' ·') ?: '—' }}</td>
                 <td class="etd-col-action">
                     @can('ecom_tracker.activity.index')
@@ -33,7 +41,7 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="9" class="text-center text-slate-500 py-8">No visitors in this window.</td></tr>
+            <tr><td colspan="10" class="text-center text-slate-500 py-8">No visitors in this window.</td></tr>
         @endforelse
     </tbody>
 </table>

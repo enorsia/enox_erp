@@ -102,6 +102,7 @@ class EcomTrackerDashboardService
             'geography' => $this->buildGeography($range['from'], $range['to'], filters: $extraFilters),
             'engagement' => $this->buildEngagement($range['from'], $range['to'], $extraFilters),
             'has_session_filters' => $extraFilters !== [],
+            'visitor_quality' => app(BotTrafficAnalyticsService::class)->summaryOnly($filters),
         ];
     }
 

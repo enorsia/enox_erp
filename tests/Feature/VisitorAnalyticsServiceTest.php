@@ -260,3 +260,31 @@ test('visitor breakdown includes order qty and can sort by orders', function () 
     expect($breakdown->items()[0]['order_qty'])->toBe(2);
     expect($breakdown->items()[1]['order_qty'])->toBe(0);
 });
+
+test('visitor breakdown includes latest session for classification badge', function () {
+    $service = app(VisitorAnalyticsService::class);
+    $visitorId = (string) Str::uuid();
+    $sessionId = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'visitor_id' => $visitorId,
+        'device_type' => 'mobile',
+        'browser' => 'Safari',
+        'created_at' => Carbon::parse('2026-07-16 12:00:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 12:30:00', 'Europe/London'),
+    ]);
+
+    \App\Models\ActivityEcomUserBotContext::query()->create([
+        'session_id' => $sessionId,
+        'is_bot' => false,
+        'bot_confidence' => 'low',
+        'bot_reason' => 'no bot signals detected',
+    ]);
+
+    $since = $service->resolveWindow('24h');
+    $breakdown = $service->buildVisitorBreakdown($since, 25);
+
+    expect($breakdown->items()[0]['latest_session'])->not->toBeNull();
+    expect($breakdown->items()[0]['latest_session']->marketer_type_label)->toBe('Real visitor');
+});

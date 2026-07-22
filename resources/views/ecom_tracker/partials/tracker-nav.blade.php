@@ -13,4 +13,8 @@
         <a href="{{ route('admin.ecom-activity.index') }}"
            class="etd-tracker-nav-link {{ $current === 'activity' ? 'active' : '' }}">User activity</a>
     @endcan
+    @can('ecom_tracker.bot_traffic.index')
+        <a href="{{ route('admin.ecom-tracker.bot-traffic') }}"
+           class="etd-tracker-nav-link {{ $current === 'bot-traffic' ? 'active' : '' }}">Bot traffic</a>
+    @endcan
 </div>

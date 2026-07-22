@@ -68,13 +68,13 @@ test('ecom activity index filters sessions with orders', function () {
 
     $this->get(route('admin.ecom-activity.index', ['has_order' => '1']))
         ->assertOk()
-        ->assertSee(Str::limit($orderedSession, 14))
-        ->assertDontSee(Str::limit($guestSession, 14));
+        ->assertSee($orderedSession)
+        ->assertDontSee($guestSession);
 
     $this->get(route('admin.ecom-activity.index', ['has_order' => '0']))
         ->assertOk()
-        ->assertSee(Str::limit($guestSession, 14))
-        ->assertDontSee(Str::limit($orderedSession, 14));
+        ->assertSee($guestSession)
+        ->assertDontSee($orderedSession);
 });
 
 test('ecom activity index labels guest checkout sessions', function () {
@@ -146,8 +146,8 @@ test('ecom activity index shows order count for sessions with payment success', 
     $this->get(route('admin.ecom-activity.index', ['period' => 'all']))
         ->assertOk()
         ->assertSee('2', false)
-        ->assertSee(Str::limit($orderedSession, 14))
-        ->assertSee(Str::limit($guestSession, 14));
+        ->assertSee($orderedSession)
+        ->assertSee($guestSession);
 });
 
 test('ecom activity index defaults to last 24 hours', function () {
@@ -176,14 +176,14 @@ test('ecom activity index defaults to last 24 hours', function () {
     $this->get(route('admin.ecom-activity.index'))
         ->assertOk()
         ->assertSee('Last 24 hours')
-        ->assertSee(Str::limit($recentSession, 14))
-        ->assertDontSee(Str::limit($oldSession, 14));
+        ->assertSee($recentSession)
+        ->assertDontSee($oldSession);
 
     $this->get(route('admin.ecom-activity.index', ['period' => 'all']))
         ->assertOk()
         ->assertSee('All sessions')
-        ->assertSee(Str::limit($recentSession, 14))
-        ->assertSee(Str::limit($oldSession, 14));
+        ->assertSee($recentSession)
+        ->assertSee($oldSession);
 });
 
 test('ecom activity index filters by visitor type bot human and unclassified', function () {
@@ -234,22 +234,51 @@ test('ecom activity index filters by visitor type bot human and unclassified', f
 
     $this->get(route('admin.ecom-activity.index', ['period' => 'all', 'visitor_type' => 'human']))
         ->assertOk()
-        ->assertSee('Human')
-        ->assertSee(Str::limit($humanSession, 14))
-        ->assertDontSee(Str::limit($botSession, 14))
-        ->assertDontSee(Str::limit($unclassifiedSession, 14));
+        ->assertSee('Real visitor')
+        ->assertSee('GB')
+        ->assertSee($humanSession)
+        ->assertDontSee($botSession)
+        ->assertDontSee($unclassifiedSession);
 
     $this->get(route('admin.ecom-activity.index', ['period' => 'all', 'visitor_type' => 'bot']))
         ->assertOk()
-        ->assertSee('Bot')
-        ->assertSee(Str::limit($botSession, 14))
-        ->assertDontSee(Str::limit($humanSession, 14))
-        ->assertDontSee(Str::limit($unclassifiedSession, 14));
+        ->assertSee('Automated traffic')
+        ->assertSee($botSession)
+        ->assertDontSee($humanSession)
+        ->assertDontSee($unclassifiedSession);
 
     $this->get(route('admin.ecom-activity.index', ['period' => 'all', 'visitor_type' => 'unclassified']))
         ->assertOk()
-        ->assertSee('Unclassified')
-        ->assertSee(Str::limit($unclassifiedSession, 14))
-        ->assertDontSee(Str::limit($humanSession, 14))
-        ->assertDontSee(Str::limit($botSession, 14));
+        ->assertSee('Not classified')
+        ->assertSee($unclassifiedSession)
+        ->assertDontSee($humanSession)
+        ->assertDontSee($botSession);
+});
+
+test('ecom activity index shows visitor quality summary strip', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserBotContext::query()->create([
+        'session_id' => $sessionId,
+        'is_bot' => false,
+        'bot_confidence' => 'low',
+        'bot_reason' => 'no bot signals detected',
+    ]);
+
+    $this->get(route('admin.ecom-activity.index', ['period' => 'all']))
+        ->assertOk()
+        ->assertSee('real visitors')
+        ->assertSee('automated')
+        ->assertSee('not classified');
 });

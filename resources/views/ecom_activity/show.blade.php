@@ -182,27 +182,12 @@
             </div>
 
             <div class="space-y-4">
+                @include('ecom_tracker.partials.visitor-trust-panel', ['session' => $activityUser])
+
                 <div class="section-card">
                     <div class="section-title">Session Summary</div>
                     <div class="divide-y divide-slate-100 dark:divide-slate-700/60 text-[13px]">
-                        @php $botCtx = $activityUser->botContext; @endphp
-                        <div class="py-2.5 first:pt-0">
-                            <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">Visitor classification</div>
-                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border {{ $activityUser->visitor_type_badge_class }}">
-                                {{ $activityUser->visitor_type_label }}
-                                @if($botCtx?->bot_confidence)
-                                    <span class="opacity-75">· {{ ucfirst($botCtx->bot_confidence) }}</span>
-                                @endif
-                            </span>
-                            @if($botCtx?->bot_reason)
-                                <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Bot signal: {{ $botCtx->bot_reason }}</div>
-                            @endif
-                        </div>
                         @foreach ([
-                            'IP' => $botCtx?->client_ip ?? $activityUser->ip,
-                            'Country' => $botCtx?->country_label ?? $activityUser->country,
-                            'CF-Ray' => $botCtx?->cf_ray,
-                            'CF bot score' => $botCtx?->cf_bot_score,
                             'Device' => ucfirst($activityUser->device_type ?? '—') . ' · ' . ($activityUser->browser ?? '') . ' · ' . ($activityUser->os ?? ''),
                             'User' => $activityUser->identitySummary(),
                             'First seen' => \App\Support\TrackerTime::toLocal($activityUser->created_at)?->format('d M Y, h:i A'),

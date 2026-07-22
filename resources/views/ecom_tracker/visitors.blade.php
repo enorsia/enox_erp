@@ -75,6 +75,33 @@
         </div>
     </div>
 
+    @if (! empty($a['visitor_quality']))
+        <div class="mb-5">
+            <div class="flex items-center justify-between mb-2">
+                <p class="etd-kpi-section-label m-0">Session quality</p>
+                @can('ecom_tracker.bot_traffic.index')
+                    <a href="{{ route('admin.ecom-tracker.bot-traffic') }}" class="text-[12px] text-accent-500 no-underline hover:underline">View bot traffic details →</a>
+                @endcan
+            </div>
+            <div class="etd-kpi-grid">
+                @php $metricLabels = \App\Support\VisitorClassificationLabels::summaryMetricLabels(); @endphp
+                @foreach ([
+                    ['key' => 'real_shoppers', 'label' => $metricLabels['real_shoppers']],
+                    ['key' => 'automated_traffic', 'label' => $metricLabels['automated_traffic']],
+                    ['key' => 'not_classified', 'label' => $metricLabels['not_classified']],
+                    ['key' => 'uk_shoppers', 'label' => $metricLabels['uk_shoppers']],
+                ] as $kpi)
+                    @php $m = $a['visitor_quality'][$kpi['key']]; @endphp
+                    @include('ecom_tracker.partials.ga4-kpi-card', [
+                        'label' => $kpi['label'],
+                        'value' => $m['current'],
+                        'compact' => true,
+                    ])
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     <div class="etd-panel mb-5">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Session duration distribution</h2>

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\VisitorClassificationLabels;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -87,6 +88,58 @@ class ActivityEcomUser extends Model
 
         return $this->botContext?->visitor_type_badge_class
             ?? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600';
+    }
+
+    public function getMarketerTypeLabelAttribute(): string
+    {
+        return VisitorClassificationLabels::typeLabel($this->visitorClassification());
+    }
+
+    public function getMarketerTypeBadgeClassAttribute(): string
+    {
+        return VisitorClassificationLabels::typeBadgeClass($this->visitorClassification());
+    }
+
+    public function getMarketerReasonLabelAttribute(): ?string
+    {
+        $context = $this->botContext;
+
+        if ($context === null) {
+            return null;
+        }
+
+        return $context->marketer_reason_label;
+    }
+
+    public function getMarketerReasonHelpAttribute(): string
+    {
+        $context = $this->botContext;
+
+        if ($context === null) {
+            return VisitorClassificationLabels::unclassifiedHelp();
+        }
+
+        return $context->marketer_reason_help;
+    }
+
+    public function getMarketerCountryLabelAttribute(): ?string
+    {
+        if ($this->botContext?->marketer_country_label) {
+            return $this->botContext->marketer_country_label;
+        }
+
+        return VisitorClassificationLabels::countryLabel($this->country);
+    }
+
+    public function getMarketerCountryCodeAttribute(): ?string
+    {
+        $code = $this->botContext?->ip_country ?? $this->country;
+
+        if (! filled($code)) {
+            return null;
+        }
+
+        return strtoupper((string) $code);
     }
 
     public function isRegisteredUser(): bool

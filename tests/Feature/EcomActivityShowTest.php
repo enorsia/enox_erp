@@ -75,3 +75,32 @@ test('ecom activity show paginates action timeline', function () {
         ->assertSee('Category 1')
         ->assertDontSee('Category 6');
 });
+
+test('ecom activity show displays visitor trust panel', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.show');
+
+    $this->actingAs($user);
+
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+    ]);
+
+    \App\Models\ActivityEcomUserBotContext::query()->create([
+        'session_id' => $sessionId,
+        'is_bot' => false,
+        'bot_confidence' => 'low',
+        'bot_reason' => 'no bot signals detected',
+        'cf_bot_score' => 88,
+    ]);
+
+    $this->get(route('admin.ecom-activity.show', ['session' => $sessionId]))
+        ->assertOk()
+        ->assertSee('Visitor trust')
+        ->assertSee('Real visitor')
+        ->assertSee('Technical details');
+});

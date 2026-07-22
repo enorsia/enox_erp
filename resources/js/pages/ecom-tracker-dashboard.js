@@ -258,3 +258,39 @@ if (dwellCtx && D.engagement) {
         },
     });
 }
+
+const botTrendCtx = ctx('botTrafficTrendChart');
+const botTrend = window.botTrafficTrendData || {};
+if (botTrendCtx && botTrend.labels) {
+    new Chart(botTrendCtx, {
+        type: 'bar',
+        data: {
+            labels: botTrend.labels,
+            datasets: [
+                {
+                    label: 'Real visitors',
+                    data: botTrend.human || [],
+                    backgroundColor: '#3b82f68C',
+                    borderRadius: 3,
+                    stack: 'traffic',
+                },
+                {
+                    label: 'Automated traffic',
+                    data: botTrend.bot || [],
+                    backgroundColor: '#f59e0b8C',
+                    borderRadius: 3,
+                    stack: 'traffic',
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { boxWidth: 10 } }, tooltip: tipStyle() },
+            scales: {
+                x: { stacked: true, grid: { display: false } },
+                y: { stacked: true, grid: { color: gridClr() }, beginAtZero: true },
+            },
+        },
+    });
+}

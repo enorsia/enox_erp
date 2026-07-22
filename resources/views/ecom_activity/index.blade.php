@@ -155,6 +155,19 @@
         @if ($activeFilterCount > 0)
             <p class="etd-filter-active-note etd-filter-active-note--compact">Filters applied — open Filters to change or reset.</p>
         @endif
+
+        @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
+
+        @if (! empty($visitorQualitySummary))
+            <p class="text-[12px] text-slate-500 dark:text-slate-400 mt-2 mb-0">
+                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['real_shoppers']) }}</span> real visitors ·
+                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['automated_traffic']) }}</span> automated ·
+                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['not_classified']) }}</span> not classified
+                @can('ecom_tracker.bot_traffic.index')
+                    · <a href="{{ route('admin.ecom-tracker.bot-traffic') }}" class="text-accent-500 no-underline hover:underline">View bot traffic details</a>
+                @endcan
+            </p>
+        @endif
     </header>
 
     <div class="etd-panel">
@@ -162,9 +175,14 @@
             <table class="etd-table etd-table--activity w-full">
                 <thead>
                     <tr>
-                        <th>Session</th>
+                        <th class="etd-col-session">Session</th>
                         <th class="etd-col-user">User</th>
-                        <th>Visitor</th>
+                        <th class="etd-col-trust">
+                            @include('ecom_tracker.partials.column-header-with-tip', [
+                                'label' => 'Visitor trust',
+                                'tip' => 'Whether this session looks like a real visitor, automated traffic, or could not be checked',
+                            ])
+                        </th>
                         <th>Device</th>
                         <th>IP</th>
                         <th>Source</th>
@@ -178,29 +196,15 @@
                 <tbody>
                     @forelse ($sessions as $session)
                         <tr>
-                            <td>
-                                <span class="etd-chip" title="{{ $session->session_id }}">{{ Str::limit($session->session_id, 14) }}</span>
+                            <td class="etd-col-session">
+                                @include('ecom_tracker.partials.session-id-chip', ['sessionId' => $session->session_id])
                                 <div class="etd-subtle mt-0.5">{{ \App\Support\TrackerTime::toLocal($session->created_at)?->format('d M Y, H:i') }}</div>
                             </td>
                             <td class="etd-col-user">
                                 @include('ecom_tracker.partials.session-identity', ['session' => $session])
                             </td>
-                            <td>
-                                @php $botCtx = $session->botContext; @endphp
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border {{ $session->visitor_type_badge_class }}"
-                                      title="{{ $botCtx?->bot_reason ? ucfirst(str_replace('_', ' ', $botCtx->bot_reason)) : '' }}">
-                                    {{ $session->visitor_type_label }}
-                                    @if($botCtx?->bot_confidence)
-                                        <span class="opacity-75">· {{ ucfirst($botCtx->bot_confidence) }}</span>
-                                    @endif
-                                </span>
-                                @if($botCtx?->country_label)
-                                    <div class="mt-1">
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ $botCtx->is_uk_visitor ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/50' : 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800/50' }}">
-                                            {{ $botCtx->country_label }}
-                                        </span>
-                                    </div>
-                                @endif
+                            <td class="etd-col-trust">
+                                @include('ecom_tracker.partials.visitor-classification-badge', ['session' => $session, 'mode' => 'compact'])
                             </td>
                             <td>
                                 {{ ucfirst($session->device_type ?? '—') }}

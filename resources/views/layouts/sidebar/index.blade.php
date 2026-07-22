@@ -271,6 +271,13 @@
                                     User Activity
                                 </a>
                             @endcan
+
+                            @can('ecom_tracker.bot_traffic.index')
+                                <a href="{{ route('admin.ecom-tracker.bot-traffic') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-tracker/bot-traffic*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    Bot traffic
+                                </a>
+                            @endcan
                         </div>
                     </div>
                 </div>
