@@ -106,7 +106,6 @@
                     <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
                     <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
                     <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
-                    <a href="{{ $presetUrl('all') }}" class="etd-segmented-btn {{ $activePreset === 'all' ? 'active' : '' }} no-underline">All</a>
                     <button type="button" class="etd-segmented-btn {{ $activePreset === 'custom' ? 'active' : '' }}" aria-label="Custom date range" @click="presetKey = 'custom'">Custom</button>
                 </div>
 
