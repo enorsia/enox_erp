@@ -10,6 +10,7 @@ use App\Support\TrackerRedisCache;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class VisitorAnalyticsService
@@ -224,6 +225,8 @@ class VisitorAnalyticsService
         $avgSessionDuration = $this->avgSessionDuration($from, $until);
         $totalStaySeconds = $this->totalStaySeconds($from, $until);
 
+        $avgVisitorStay = $this->avgVisitorStay($from, $until);
+
         return [
             'unique_visitors' => $this->countUniqueVisitors($from, $until),
             'returning_visitors' => $this->countReturningVisitors($from, $until),
@@ -235,8 +238,8 @@ class VisitorAnalyticsService
             // Legacy keys kept for exports and rolling windows.
             'active_visitors' => $this->countActiveVisitors($from, $until),
             'new_visitors' => $this->countUniqueVisitors($from, $until),
-            'avg_visitor_stay' => $this->avgVisitorStay($from, $until),
-            'avg_visitor_stay_label' => $this->formatDuration($this->avgVisitorStay($from, $until)),
+            'avg_visitor_stay' => $avgVisitorStay,
+            'avg_visitor_stay_label' => $this->formatDuration($avgVisitorStay),
         ];
     }
 
@@ -487,11 +490,11 @@ class VisitorAnalyticsService
 
         $paginator = $query->paginate($perPage)->withQueryString();
 
-        $paginator->getCollection()->transform(function ($row) {
-            $latest = ActivityEcomUser::query()
-                ->where('visitor_id', $row->visitor_id)
-                ->orderByDesc('last_active_at')
-                ->first(['device_type', 'browser']);
+        $visitorIds = $paginator->getCollection()->pluck('visitor_id')->filter()->unique()->values();
+        $latestSessions = $this->latestSessionsForVisitors($visitorIds);
+
+        $paginator->getCollection()->transform(function ($row) use ($latestSessions) {
+            $latest = $latestSessions->get($row->visitor_id);
 
             $totalStay = (int) $row->total_stay_seconds;
             $avgStay = (int) round((float) $row->avg_stay_seconds);
@@ -512,6 +515,24 @@ class VisitorAnalyticsService
         });
 
         return $paginator;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, string>  $visitorIds
+     * @return \Illuminate\Support\Collection<string, ActivityEcomUser>
+     */
+    private function latestSessionsForVisitors(Collection $visitorIds): Collection
+    {
+        if ($visitorIds->isEmpty()) {
+            return collect();
+        }
+
+        return ActivityEcomUser::query()
+            ->whereIn('visitor_id', $visitorIds)
+            ->orderByDesc('last_active_at')
+            ->get(['visitor_id', 'device_type', 'browser', 'last_active_at'])
+            ->unique('visitor_id')
+            ->keyBy('visitor_id');
     }
 
     /**

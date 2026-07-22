@@ -65,6 +65,7 @@ class EcomTrackerDashboardService
     {
         $range = $this->resolveDateRange($filters);
         $extraFilters = $this->extractSessionFilters($filters);
+        $productCatalogOptions = $this->extractProductCatalogOptions($filters);
 
         $currentSessions = $this->sessionsInRange($range['from'], $range['to']);
 
@@ -74,6 +75,13 @@ class EcomTrackerDashboardService
         }
 
         $currentKpis = $this->buildKpis($range['from'], $range['to'], $currentSessions);
+        $productCatalog = $this->buildProductCatalogPerformance(
+            $range['from'],
+            $range['to'],
+            self::TABLE_DISPLAY_LIMIT,
+            $extraFilters,
+            $productCatalogOptions,
+        );
 
         return [
             'filters' => $this->normalizeFilters($filters, $range),
@@ -82,7 +90,9 @@ class EcomTrackerDashboardService
             'funnel' => $this->buildFunnel($range['from'], $range['to'], $extraFilters),
             'trend' => $this->buildTrend($range['from'], $range['to'], $extraFilters, $range['period'] ?? null),
             'categories' => $this->buildCategoryPerformance($range['from'], $range['to'], filters: $extraFilters),
-            'products' => $this->buildProductCatalogPerformance($range['from'], $range['to'], filters: $extraFilters)['products'],
+            'products' => $productCatalog['products'],
+            'product_filter_options' => $productCatalog['filter_options'],
+            'product_sort_by' => $productCatalog['sort_by'],
             'cart_abandonment' => $this->buildCartAbandonment($range['from'], $range['to'], filters: $extraFilters),
             'begin_checkout_abandonment' => $this->buildBeginCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters),
             'proceed_checkout_abandonment' => $this->buildProceedCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters),
@@ -287,6 +297,16 @@ class EcomTrackerDashboardService
             'country' => $filters['country'] ?? '',
             'utm_source' => $filters['utm_source'] ?? '',
             'utm_medium' => $filters['utm_medium'] ?? '',
+            'search' => $filters['search'] ?? '',
+            'category' => $filters['category'] ?? '',
+            'color' => $filters['color'] ?? '',
+            'size' => $filters['size'] ?? '',
+            'sort_by' => $filters['sort_by'] ?? '',
+            'activity' => $filters['activity'] ?? '',
+            'has_purchases' => $filters['has_purchases'] ?? '',
+            'has_views' => $filters['has_views'] ?? '',
+            'has_adds' => $filters['has_adds'] ?? '',
+            'event_scenario' => $filters['event_scenario'] ?? '',
         ];
     }
 
@@ -1492,14 +1512,14 @@ class EcomTrackerDashboardService
         /** @var Collection<string, array{key: string, name: string, code: string, category: string, variants: Collection<string, array<string, mixed>>}> $catalog */
         $catalog = collect();
 
-        $actionQuery = fn () => ActivityEcomUserAction::query()
+        $actions = ActivityEcomUserAction::query()
             ->whereBetween('created_at', [$from, $to])
-            ->when($sessionIds !== null, fn ($q) => $q->whereIn('session_id', $sessionIds));
+            ->when($sessionIds !== null, fn ($q) => $q->whereIn('session_id', $sessionIds))
+            ->whereIn('action_type', array_merge(self::PRODUCT_VIEW_TYPES, ['add_to_cart', 'payment_success']))
+            ->get();
 
-        $actionQuery()
-            ->whereIn('action_type', self::PRODUCT_VIEW_TYPES)
-            ->get()
-            ->each(function (ActivityEcomUserAction $action) use ($catalog) {
+        foreach ($actions as $action) {
+            if (in_array($action->action_type, self::PRODUCT_VIEW_TYPES, true)) {
                 $this->accumulateCatalogEvent($catalog, [
                     'name' => (string) ($action->product_name ?? ''),
                     'code' => (string) ($action->product_code ?? ''),
@@ -1510,12 +1530,11 @@ class EcomTrackerDashboardService
                     'sku' => trim((string) ($action->product_code ?: $action->product_color_code ?: '')),
                     'category' => (string) ($action->category_name ?? ''),
                 ], views: 1);
-            });
 
-        $actionQuery()
-            ->where('action_type', 'add_to_cart')
-            ->get()
-            ->each(function (ActivityEcomUserAction $action) use ($catalog) {
+                continue;
+            }
+
+            if ($action->action_type === 'add_to_cart') {
                 $cart = $action->add_to_cart ?? [];
                 $lines = $this->cartPayloadLineItems($cart);
                 $defaultCategory = (string) ($action->category_name ?? '');
@@ -1532,7 +1551,7 @@ class EcomTrackerDashboardService
                         'category' => $defaultCategory,
                     ], adds: 1);
 
-                    return;
+                    continue;
                 }
 
                 foreach ($lines as $line) {
@@ -1543,13 +1562,12 @@ class EcomTrackerDashboardService
                         'category' => (string) ($line['category'] ?? $defaultCategory),
                     ], adds: 1);
                 }
-            });
 
-        $this->uniquePaymentSuccessActions(
-            $actionQuery()
-                ->where('action_type', 'payment_success')
-                ->get()
-        )->each(function (ActivityEcomUserAction $action) use ($catalog) {
+                continue;
+            }
+        }
+
+        $this->uniquePaymentSuccessActions($actions->where('action_type', 'payment_success'))->each(function (ActivityEcomUserAction $action) use ($catalog) {
             $payload = $action->payment_success ?? [];
             $items = $payload['checkout_info']['items'] ?? [];
             $resolvedLines = [];

@@ -5,20 +5,19 @@
 @section('content')
 @php
     use App\Support\TrackerTime;
+
     $a = $analytics;
-    $window = $filters['window'] ?? '24h';
-    $hasCustomRange = filled($filters['datetime_from'] ?? null) && filled($filters['datetime_to'] ?? null);
-    $activeFilterCount = $hasCustomRange ? 0 : ((request()->has('window') && ! in_array($window, ['24h', '7d', '30d', '90d'], true)) ? 1 : 0);
-    $datetimeFromValue = filled($filters['datetime_from'] ?? null) ? TrackerTime::toLocal($filters['datetime_from'])?->format('Y-m-d\TH:i') : '';
-    $datetimeToValue = filled($filters['datetime_to'] ?? null) ? TrackerTime::toLocal($filters['datetime_to'])?->format('Y-m-d\TH:i') : '';
-    $presetWindows = ['3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year'];
-    $back = urlencode(request()->fullUrl());
-    $detailLink = fn (string $section) => route('admin.ecom-tracker.visitors.details', $section).'?'.http_build_query(array_merge(request()->only(['window', 'datetime_from', 'datetime_to']), ['back' => $back]));
-    $activityLink = fn (string $visitorId) => route('admin.ecom-activity.index', ['search' => $visitorId]);
     $summary = $a['summary'];
-    $activeWindow = $hasCustomRange ? 'custom' : $window;
-    $exportQuery = array_filter(request()->only(['window', 'datetime_from', 'datetime_to']), fn ($value) => filled($value));
-    $exportUrl = route('admin.ecom-tracker.visitors.export', $exportQuery);
+    $presetWindows = $page['presetWindows'];
+    $window = $page['window'];
+    $hasCustomRange = $page['hasCustomRange'];
+    $datetimeFromValue = $page['datetimeFromValue'];
+    $datetimeToValue = $page['datetimeToValue'];
+    $activeWindow = $page['activeWindow'];
+    $activeFilterCount = $page['activeFilterCount'];
+    $exportUrl = $page['exportUrl'];
+    $detailLink = $page['detailLink'];
+    $activityLink = $page['activityLink'];
 @endphp
 
 <div class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">

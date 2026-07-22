@@ -44,6 +44,19 @@ final class TrackerUtmFilter
     }
 
     /**
+     * @return array{sources: array<string, string>, mediums: array<string, string>, selected_source: string, selected_medium: string}
+     */
+    public static function formState(?string $source = null, ?string $medium = null): array
+    {
+        return [
+            'sources' => self::sources(),
+            'mediums' => self::mediums(),
+            'selected_source' => self::resolveSource($source) ?? '',
+            'selected_medium' => self::resolveMedium($medium) ?? '',
+        ];
+    }
+
+    /**
      * @param  Builder<ActivityEcomUser>  $query
      */
     public static function applySourceFilter(Builder $query, ?string $source): void

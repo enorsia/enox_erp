@@ -5,13 +5,11 @@
 @section('content')
 @php
     $d = $dashboard;
-    $period = $filters['period'] ?? '24h';
-    $back = urlencode(request()->fullUrl());
-    $queryParams = request()->only(['period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium']);
-    $exportQuery = array_filter(array_merge($queryParams, ['period' => $period]), fn ($value) => filled($value));
-    $exportUrl = route('admin.ecom-tracker.dashboard.export', $exportQuery);
-    $detailLink = fn (string $section) => route('admin.ecom-tracker.dashboard.details', $section).'?'.http_build_query(array_merge($queryParams, ['back' => $back]));
-    $hasActiveFilters = ($activeFilterCount ?? 0) > 0;
+    $period = $page['period'];
+    $queryParams = $page['queryParams'];
+    $exportUrl = $page['exportUrl'];
+    $detailLink = $page['detailLink'];
+    $hasActiveFilters = $page['hasActiveFilters'];
 @endphp
 
 <div id="ecom-tracker-dashboard-content" class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
@@ -20,6 +18,12 @@
         'resetUrl' => route('admin.ecom-tracker.dashboard'),
         'showDashboardFilters' => true,
         'showSessionFilters' => true,
+        'showProductFilters' => true,
+        'productFilterOptions' => $d['product_filter_options'] ?? [],
+        'eventScenarioOptions' => $eventScenarioOptions ?? [],
+        'productSortGroups' => $productSortGroups ?? [],
+        'productActivityOptions' => $productActivityOptions ?? [],
+        'currentProductSort' => $d['product_sort_by'] ?? 'top_revenue',
         'period' => $period,
         'dateFrom' => $filters['date_from'] ?? '',
         'dateTo' => $filters['date_to'] ?? '',

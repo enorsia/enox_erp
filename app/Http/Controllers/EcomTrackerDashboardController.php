@@ -26,15 +26,25 @@ class EcomTrackerDashboardController extends Controller
         $filters = array_merge(
             $this->dashboardDateFilters($request),
             $this->dashboardSessionFilters($request),
+            $this->dashboardProductCatalogFilters($request),
         );
 
         $dashboard = $this->service->getDashboardData($filters);
         $dashboard['chart_payload'] = $this->service->chartPayload($dashboard);
+        $activeFilterCount = $this->dashboardActiveFilterCount($request);
 
         return view('ecom_tracker.dashboard', [
             'dashboard' => $dashboard,
             'filters' => $dashboard['filters'],
-            'activeFilterCount' => $this->dashboardActiveFilterCount($request),
+            'activeFilterCount' => $activeFilterCount,
+            'productSortGroups' => $this->service->productCatalogSortGroups(),
+            'productActivityOptions' => $this->service->productCatalogActivityFilterOptions(),
+            'eventScenarioOptions' => $this->service->productCatalogEventScenarioOptions(),
+            'page' => \App\Support\EcomTrackerViewData::forDashboard(
+                $request,
+                $dashboard['filters'],
+                $activeFilterCount,
+            ),
         ]);
     }
 
@@ -45,6 +55,7 @@ class EcomTrackerDashboardController extends Controller
         $filters = array_merge(
             $this->dashboardDateFilters($request),
             $this->dashboardSessionFilters($request),
+            $this->dashboardProductCatalogFilters($request),
         );
 
         $range = $this->service->resolveDateRange($filters);

@@ -733,3 +733,68 @@ test('product catalog empty period defaults to last 24 hours', function () {
 
     Carbon::setTestNow();
 });
+
+test('dashboard product table defaults to last 24 hours and applies session filters', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $now = Carbon::parse('2026-07-15 16:00:00', TrackerTime::timezone());
+
+    Carbon::setTestNow($now);
+
+    $recentSession = Str::uuid()->toString();
+    $oldSession = Str::uuid()->toString();
+    $recentFrom = $now->copy()->subHours(6)->utc();
+    $oldFrom = $now->copy()->subDays(3)->utc();
+
+    foreach ([[$recentSession, $recentFrom], [$oldSession, $oldFrom]] as [$sessionId, $createdAt]) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
+            'last_active_at' => $createdAt,
+        ]);
+
+        ActivityEcomUserAction::query()->create([
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => 'product_view',
+            'product_code' => "SKU-{$sessionId}",
+            'product_name' => $sessionId === $recentSession ? 'Recent Dress' : 'Old Dress',
+            'created_at' => $createdAt,
+            'start_time' => $createdAt,
+            'end_time' => $createdAt,
+        ]);
+    }
+
+    $defaultData = $service->getDashboardData([]);
+    expect($defaultData['range']['period'])->toBe('24h');
+    expect(collect($defaultData['products'])->pluck('name')->all())->toBe(['Recent Dress']);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $recentSession,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'amount_paid' => 50,
+            'checkout_info' => [
+                'items' => [[
+                    'product_code' => 'SKU-RECENT',
+                    'product_name' => 'Recent Dress',
+                    'qty' => 1,
+                    'price' => 50,
+                ]],
+            ],
+        ],
+        'created_at' => $recentFrom,
+        'start_time' => $recentFrom,
+        'end_time' => $recentFrom,
+    ]);
+
+    $orderedData = $service->getDashboardData(['has_order' => '1']);
+    expect(collect($orderedData['products'])->pluck('name')->all())->toBe(['Recent Dress']);
+
+    $searchData = $service->getDashboardData(['search' => 'Old']);
+    expect(collect($searchData['products'])->pluck('name')->all())->toBe([]);
+
+    Carbon::setTestNow();
+});

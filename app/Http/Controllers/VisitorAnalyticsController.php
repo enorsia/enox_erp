@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exports\VisitorAnalyticsExport;
 use App\Models\TrackerUtmFilter;
 use App\Services\VisitorAnalyticsService;
+use App\Support\EcomTrackerViewData;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -45,6 +46,7 @@ class VisitorAnalyticsController extends Controller
         return view('ecom_tracker.visitors', [
             'analytics' => $data,
             'filters' => $filters,
+            'page' => EcomTrackerViewData::forVisitors($request, $filters),
         ]);
     }
 
@@ -73,19 +75,22 @@ class VisitorAnalyticsController extends Controller
             'visitors' => ['visitors' => $this->analytics->buildVisitorBreakdown($range['from'], $perPage, $range['until'], $extraFilters)],
         };
 
+        $filters = array_merge(
+            $request->only(['window', 'datetime_from', 'datetime_to']),
+            $extraFilters,
+            ['window_label' => $range['label'], 'sort_by' => $sortBy],
+        );
+
         return view('ecom_tracker.visitor_details.show', [
             'section' => $section,
             'title' => $titles[$section],
             'range' => $range,
             'data' => $data,
-            'filters' => array_merge(
-                $request->only(['window', 'datetime_from', 'datetime_to']),
-                $extraFilters,
-                ['window_label' => $range['label'], 'sort_by' => $sortBy],
-            ),
+            'filters' => $filters,
             'activeFilterCount' => $this->visitorActiveFilterCount($request),
             'visitorSortOptions' => $section === 'visitors' ? $this->analytics->visitorSortOptions() : [],
             'currentSort' => $section === 'visitors' ? $sortBy : null,
+            'page' => EcomTrackerViewData::forVisitorDetail($request, $filters, $titles[$section]),
         ]);
     }
 

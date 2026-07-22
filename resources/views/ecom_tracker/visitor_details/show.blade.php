@@ -4,20 +4,14 @@
 
 @section('content')
 @php
-    use App\Support\TrackerTime;
-    $window = $filters['window'] ?? '24h';
-    $hasCustomRange = filled($filters['datetime_from'] ?? null) && filled($filters['datetime_to'] ?? null);
-    $datetimeFromValue = filled($filters['datetime_from'] ?? null) ? TrackerTime::toLocal($filters['datetime_from'])?->format('Y-m-d\TH:i') : '';
-    $datetimeToValue = filled($filters['datetime_to'] ?? null) ? TrackerTime::toLocal($filters['datetime_to'])?->format('Y-m-d\TH:i') : '';
-    $presetWindows = ['3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year'];
+    $presetWindows = $page['presetWindows'];
+    $window = $page['window'];
+    $hasCustomRange = $page['hasCustomRange'];
+    $datetimeFromValue = $page['datetimeFromValue'];
+    $datetimeToValue = $page['datetimeToValue'];
+    $breadcrumbs = $page['breadcrumbs'];
+    $activityLink = $page['activityLink'];
     $resetQuery = array_filter(['back' => request('back')]);
-    $queryParams = request()->only(['window', 'datetime_from', 'datetime_to', 'search', 'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium', 'sort_by']);
-    $visitorsBack = request('back') ? urldecode(request('back')) : route('admin.ecom-tracker.visitors', $queryParams);
-    $breadcrumbs = [
-        ['label' => 'Visitor analytics', 'url' => $visitorsBack],
-        ['label' => $title],
-    ];
-    $activityLink = fn (string $visitorId) => route('admin.ecom-activity.index', ['search' => $visitorId]);
 @endphp
 
 <div class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
@@ -35,7 +29,7 @@
     @include('ecom_tracker.partials.detail-header', [
         'title' => $title,
         'subtitle' => $range['label'] ?? null,
-        'defaultBackRoute' => 'admin.ecom-tracker.visitors',
+        'defaultBackRoute' => 'admin.ecom-tracker.dashboard',
         'activeFilterCount' => $activeFilterCount,
         'breadcrumbs' => $breadcrumbs,
         'sortOptions' => $visitorSortOptions ?? [],
