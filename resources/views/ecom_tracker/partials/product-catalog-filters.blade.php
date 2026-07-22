@@ -25,6 +25,16 @@
     </label>
 
     <label class="etd-filter-compact-field">
+        <span class="etd-filter-compact-label">Category</span>
+        <select id="product-catalog-category" name="category" class="{{ $tomSelectClass }}" data-placeholder="All">
+            <option value="" @selected(request('category', '') === '')>All</option>
+            @foreach ($filterOptions['categories'] ?? [] as $category)
+                <option value="{{ $category }}" @selected(request('category') === $category)>{{ $category }}</option>
+            @endforeach
+        </select>
+    </label>
+
+    <label class="etd-filter-compact-field">
         <span class="etd-filter-compact-label">Color</span>
         <select id="product-catalog-color" name="color" class="{{ $tomSelectClass }}" data-placeholder="All">
             <option value="" @selected(request('color', '') === '')>All</option>

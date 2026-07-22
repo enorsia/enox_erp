@@ -29,6 +29,7 @@
         'showDashboardFilters' => true,
         'showSessionFilters' => true,
         'showProductFilters' => $section === 'products',
+        'productFiltersHeading' => $section === 'products' ? 'Product catalog' : null,
         'productFilterOptions' => $section === 'products' ? ($data['filter_options'] ?? []) : [],
         'eventScenarioOptions' => $eventScenarioOptions ?? [],
         'productSortGroups' => $productSortGroups ?? [],

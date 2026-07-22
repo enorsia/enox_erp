@@ -6,50 +6,62 @@
 @php
     $d = $dashboard;
     $period = $page['period'];
+    $dateFrom = $filters['date_from'] ?? '';
+    $dateTo = $filters['date_to'] ?? '';
     $queryParams = $page['queryParams'];
     $exportUrl = $page['exportUrl'];
     $detailLink = $page['detailLink'];
     $hasActiveFilters = $page['hasActiveFilters'];
+
+    $activePreset = match ($period) {
+        '7d', '30d', '90d', 'custom' => $period,
+        default => '24h',
+    };
+
+    $basePreset = in_array($period, ['24h', '7d', '30d', '90d'], true) ? $period : '24h';
+    $baseQuery = request()->except([
+        'date_from', 'date_to', 'period',
+        'search', 'category', 'color', 'size', 'sort_by', 'activity',
+        'has_purchases', 'has_views', 'has_adds', 'event_scenario',
+    ]);
+    $presetUrl = fn (string $preset) => route('admin.ecom-tracker.dashboard', array_merge($baseQuery, ['period' => $preset]));
 @endphp
 
 <div id="ecom-tracker-dashboard-content" class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
     @include('ecom_tracker.partials.filter-drawer', [
         'action' => route('admin.ecom-tracker.dashboard'),
         'resetUrl' => route('admin.ecom-tracker.dashboard'),
-        'showDashboardFilters' => true,
+        'preservePeriodParams' => true,
         'showSessionFilters' => true,
-        'showProductFilters' => true,
-        'productFilterOptions' => $d['product_filter_options'] ?? [],
-        'eventScenarioOptions' => $eventScenarioOptions ?? [],
-        'productSortGroups' => $productSortGroups ?? [],
-        'productActivityOptions' => $productActivityOptions ?? [],
-        'currentProductSort' => $d['product_sort_by'] ?? 'top_revenue',
+        'sessionFiltersHeading' => 'Sessions & audience',
         'period' => $period,
-        'dateFrom' => $filters['date_from'] ?? '',
-        'dateTo' => $filters['date_to'] ?? '',
+        'dateFrom' => $dateFrom,
+        'dateTo' => $dateTo,
     ])
 
     <header class="etd-page-header">
         <div class="etd-page-header-bar"
              x-data="{
-                period: '{{ $period }}',
-                dateFrom: '{{ $filters['date_from'] ?? '' }}',
-                dateTo: '{{ $filters['date_to'] ?? '' }}',
-                apply(period) {
-                    this.period = period;
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('period', period);
-                    if (period !== 'custom') {
-                        url.searchParams.delete('date_from');
-                        url.searchParams.delete('date_to');
-                    }
-                    window.location.href = url.toString();
+                presetKey: '{{ $activePreset }}',
+                basePreset: '{{ $basePreset }}',
+                dateFrom: '{{ $dateFrom }}',
+                dateTo: '{{ $dateTo }}',
+                toggleCustom() {
+                    this.presetKey = this.presetKey === 'custom' ? this.basePreset : 'custom';
                 },
                 applyCustom() {
                     const url = new URL(window.location.href);
                     url.searchParams.set('period', 'custom');
-                    url.searchParams.set('date_from', this.dateFrom);
-                    url.searchParams.set('date_to', this.dateTo);
+                    if (this.dateFrom) {
+                        url.searchParams.set('date_from', this.dateFrom);
+                    } else {
+                        url.searchParams.delete('date_from');
+                    }
+                    if (this.dateTo) {
+                        url.searchParams.set('date_to', this.dateTo);
+                    } else {
+                        url.searchParams.delete('date_to');
+                    }
                     window.location.href = url.toString();
                 }
              }">
@@ -66,10 +78,15 @@
 
             <div class="etd-page-header-right">
                 <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
-                    @foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days'] as $periodKey => $periodLabel)
-                        <button type="button" class="etd-segmented-btn {{ $period === $periodKey ? 'active' : '' }}" aria-label="{{ $periodLabel }}" @click="apply('{{ $periodKey }}')">{{ $periodKey }}</button>
-                    @endforeach
-                    <button type="button" class="etd-segmented-btn {{ $period === 'custom' ? 'active' : '' }}" aria-label="Custom date range" @click="period = 'custom'">Custom</button>
+                    <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="Last 24 hours">24h</a>
+                    <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
+                    <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
+                    <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
+                    <button type="button"
+                            class="etd-segmented-btn"
+                            :class="{ 'active': presetKey === 'custom' }"
+                            aria-label="Custom date range"
+                            @click="toggleCustom()">Custom</button>
                 </div>
 
                 <div class="etd-header-actions">
@@ -91,16 +108,17 @@
                 </div>
             </div>
 
-            <div x-show="period === 'custom'"
+            <div x-show="presetKey === 'custom'"
                  x-collapse
-                 x-effect="if (period === 'custom') { $nextTick(() => window.refreshEtdFilterControls?.($el)) }"
+                 x-effect="if (presetKey === 'custom') { $nextTick(() => window.refreshEtdFilterControls?.($el)) }"
                  class="etd-custom-dates etd-custom-dates--inline etd-date-range"
-                 data-etd-date-range>
+                 data-etd-date-range
+                 @if ($activePreset !== 'custom') style="display: none" @endif>
                 <input type="text"
                        x-model="dateFrom"
                        data-range="from"
-                       data-default="{{ $filters['date_from'] ?? '' }}"
-                       value="{{ $filters['date_from'] ?? '' }}"
+                       data-default="{{ $dateFrom }}"
+                       value="{{ $dateFrom }}"
                        placeholder="From date"
                        readonly
                        class="etd-flatpickr-date f-input etd-date-input"
@@ -109,8 +127,8 @@
                 <input type="text"
                        x-model="dateTo"
                        data-range="to"
-                       data-default="{{ $filters['date_to'] ?? '' }}"
-                       value="{{ $filters['date_to'] ?? '' }}"
+                       data-default="{{ $dateTo }}"
+                       value="{{ $dateTo }}"
                        placeholder="To date"
                        readonly
                        class="etd-flatpickr-date f-input etd-date-input"
@@ -119,9 +137,11 @@
             </div>
         </div>
 
-        @if ($d['has_session_filters'] ?? false)
-            <p class="etd-filter-active-note etd-filter-active-note--compact">Filtered sessions active — open Filters to adjust.</p>
+        @if ($hasActiveFilters)
+            <p class="etd-filter-active-note etd-filter-active-note--compact">Filters applied — open Filters to change or reset.</p>
         @endif
+
+        @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
     </header>
 
     <div class="etd-kpi-panel mb-5">

@@ -22,6 +22,8 @@
     'dateFrom' => '',
     'dateTo' => '',
     'preservePeriodParams' => false,
+    'sessionFiltersHeading' => null,
+    'productFiltersHeading' => null,
 ])
 
 <div x-show="drawerOpen"
@@ -175,8 +177,19 @@
             @endif
 
             @if ($showSessionFilters || $showVisitorFilters || $showProductFilters)
-                <hr class="etd-filter-divider"/>
+                @if ($showSessionFilters)
+                    @if ($sessionFiltersHeading)
+                        <p class="etd-kpi-section-label mb-2">{{ $sessionFiltersHeading }}</p>
+                    @endif
+                    @include('ecom_tracker.partials.session-filters')
+                    @if ($showProductFilters || $showVisitorFilters)
+                        <hr class="etd-filter-divider"/>
+                    @endif
+                @endif
                 @if ($showProductFilters)
+                    @if ($productFiltersHeading)
+                        <p class="etd-kpi-section-label mb-2">{{ $productFiltersHeading }}</p>
+                    @endif
                     <div class="etd-filter-product-wrap">
                     @include('ecom_tracker.partials.product-catalog-filters', [
                         'filterOptions' => $productFilterOptions,
@@ -186,10 +199,9 @@
                         'currentSort' => $currentProductSort,
                     ])
                     </div>
-                    <hr class="etd-filter-divider"/>
-                @endif
-                @if ($showSessionFilters)
-                    @include('ecom_tracker.partials.session-filters')
+                    @if ($showVisitorFilters)
+                        <hr class="etd-filter-divider"/>
+                    @endif
                 @endif
                 @if ($showVisitorFilters)
                     @include('ecom_tracker.visitor_details.partials.visitor-filters')

@@ -12,6 +12,7 @@ use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -82,9 +83,10 @@ class VisitorAnalyticsController extends Controller
         $extraFilters = $this->visitorSessionFilters($request);
         $perPage = max(10, min(100, (int) $request->input('per_page', 25)));
         $sortBy = $this->analytics->resolveVisitorSort($request->input('sort_by'));
+        $paginator = null;
 
         $data = match ($section) {
-            'trend' => ['trend' => $this->analytics->buildVisitorTrend($range['from'], $range['until'])],
+            'trend' => $this->buildTrendDetailData($range, $request, $paginator),
             'new-returning' => ['new_returning' => $this->analytics->buildNewVsReturning($range['from'], $range['until'])],
             'duration' => ['duration_buckets' => $this->analytics->buildDurationBuckets($range['from'], $range['until'])],
             'visitors' => ['visitors' => $this->analytics->buildVisitorBreakdown($range['from'], $perPage, $range['until'], $extraFilters)],
@@ -102,6 +104,7 @@ class VisitorAnalyticsController extends Controller
             'range' => $range,
             'data' => $data,
             'filters' => $filters,
+            'paginator' => $paginator,
             'visitorSortOptions' => $section === 'visitors' ? $this->analytics->visitorSortOptions() : [],
             'currentSort' => $section === 'visitors' ? $sortBy : null,
             'page' => EcomTrackerViewData::forVisitorDetail(
@@ -232,5 +235,50 @@ class VisitorAnalyticsController extends Controller
         $filters['utm_medium'] = TrackerUtmFilter::resolveMedium($filters['utm_medium'] ?? null) ?? '';
 
         return $filters;
+    }
+
+    /**
+     * @param  array{from: Carbon, to: Carbon, until: ?Carbon, label: string}  $range
+     * @return array<string, mixed>
+     */
+    private function buildTrendDetailData(array $range, Request $request, ?LengthAwarePaginator &$paginator): array
+    {
+        $trend = $this->analytics->buildVisitorTrend($range['from'], $range['until']);
+
+        $rows = collect($trend['labels'] ?? [])->map(function (string $label, int $index) use ($trend) {
+            return [
+                'date' => $label,
+                'unique_visitors' => $trend['visitors'][$index] ?? 0,
+                'sessions' => $trend['sessions'][$index] ?? 0,
+            ];
+        })
+            ->filter(fn (array $row) => ($row['unique_visitors'] ?? 0) > 0 || ($row['sessions'] ?? 0) > 0)
+            ->values()
+            ->all();
+
+        $paginator = $this->paginateArray($rows, $request);
+
+        return [
+            'trend' => $trend,
+            'table_rows' => $paginator->items(),
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    private function paginateArray(array $items, Request $request): LengthAwarePaginator
+    {
+        $page = max(1, (int) $request->input('page', 1));
+        $perPage = max(10, min(100, (int) $request->input('per_page', 25)));
+        $collection = collect($items);
+
+        return new LengthAwarePaginator(
+            $collection->slice(($page - 1) * $perPage, $perPage)->values(),
+            $collection->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
     }
 }

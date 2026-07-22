@@ -44,10 +44,12 @@
     ])
 
     <div class="etd-panel">
-        @include('ecom_tracker.visitor_details.sections.'.$section, ['data' => $data, 'range' => $range, 'activityLink' => $activityLink])
+        @include('ecom_tracker.visitor_details.sections.'.$section, ['data' => $data, 'range' => $range, 'activityLink' => $activityLink, 'paginator' => $paginator ?? null])
     </div>
 
-    @if ($section === 'visitors' && ($data['visitors']->hasPages() ?? false))
+    @if ($paginator ?? null)
+        @include('layouts.pagination', ['paginator' => $paginator])
+    @elseif ($section === 'visitors' && ($data['visitors']->hasPages() ?? false))
         @include('layouts.pagination', ['paginator' => $data['visitors']])
     @endif
 </div>

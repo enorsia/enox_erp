@@ -83,7 +83,10 @@ class EcomTrackerDashboardDetailController extends Controller
             'title' => self::SECTIONS[$section],
             'detail' => $detail,
             'filters' => array_merge($dateFilters, $extraFilters),
-            'activeFilterCount' => $this->dashboardActiveFilterCount($request),
+            'activeFilterCount' => $this->dashboardActiveFilterCount(
+                $request,
+                includeProductCatalog: in_array($section, ['products', 'colors'], true),
+            ),
             'paginator' => $paginator,
             'productSortGroups' => in_array($section, ['products', 'colors'], true)
                 ? $this->service->productCatalogSortGroups()
