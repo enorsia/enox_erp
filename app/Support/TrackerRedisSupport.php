@@ -42,6 +42,10 @@ final class TrackerRedisSupport
                 return $response;
             }
 
+            if (is_object($response)) {
+                return strtoupper((string) $response) === 'PONG';
+            }
+
             return is_string($response) && strtoupper($response) === 'PONG';
         } catch (Throwable) {
             return false;

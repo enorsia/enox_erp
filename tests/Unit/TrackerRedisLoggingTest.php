@@ -2,6 +2,7 @@
 
 use App\Support\TrackerRedisSupport;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis;
 
 uses(Tests\TestCase::class);
 
@@ -40,4 +41,16 @@ test('tracker redis cache bypass logs when analytics cache disabled', function (
     $result = $cache->remember('test-key', 60, fn () => ['total' => 5]);
 
     expect($result)->toHaveKey('total', 5);
+});
+
+test('tracker redis ping accepts predis status response', function () {
+    $connection = Mockery::mock(\Illuminate\Redis\Connections\Connection::class);
+    $connection->shouldReceive('ping')->once()->andReturn(
+        new \Predis\Response\Status('PONG'),
+    );
+
+    Redis::shouldReceive('connection')->once()->with('tracker')->andReturn($connection);
+    config(['tracker.redis_use_memory_store' => false, 'tracker.redis_connection' => 'tracker']);
+
+    expect(TrackerRedisSupport::ping())->toBeTrue();
 });

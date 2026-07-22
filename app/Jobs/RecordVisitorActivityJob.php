@@ -9,6 +9,7 @@ use App\Support\EcomTrackerLogger;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use App\Support\VisitorSessionRedis;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -54,72 +55,30 @@ class RecordVisitorActivityJob implements ShouldQueue
         $formattedNow = TrackerTime::formatUtc($now);
         $visitDate = TrackerTime::localDate($now);
 
+        $session = ActivityEcomUser::query()
+            ->where('session_id', $this->sessionId)
+            ->first();
+
         if ($this->isNewSession) {
             $this->ensureDailyLedgerRow($formattedNow, $visitDate);
 
-            $parsed = UserAgentParser::parse($this->context['user_agent'] ?? null);
-
-            ActivityEcomUser::query()->create([
-                'session_id' => $this->sessionId,
-                'visitor_id' => $this->visitorId,
-                'ip' => $this->context['ip'] ?? null,
-                'user_agent' => $this->context['user_agent'] ?? null,
-                'country' => $this->context['country'] ?? null,
-                'device_type' => $parsed['device_type'],
-                'browser' => $parsed['browser'],
-                'os' => $parsed['os'],
-                'last_active_at' => $formattedNow,
-                'session_duration_seconds' => 0,
-                'created_at' => $formattedNow,
-                'updated_at' => $formattedNow,
-            ]);
-
-            EcomTrackerLogger::frontend()->info('job.record_visitor.new_session', 'New session saved in database', [
-                'visitor_id' => $this->visitorId,
-                'session_id' => $this->sessionId,
-                'device_type' => $parsed['device_type'],
-                'country' => $this->context['country'] ?? null,
-            ]);
-
-            $botResolved = $this->context['bot_resolved'] ?? null;
-
-            if (is_array($botResolved)) {
-                app(BotContextPersister::class)->persistIfAbsent($this->sessionId, $botResolved);
-            }
-
-            ActivityEcomDailyVisitor::query()
-                ->where('visitor_id', $this->visitorId)
-                ->whereDate('visit_date', $visitDate)
-                ->update([
-                    'last_seen_at' => $formattedNow,
-                    'session_count' => DB::raw('session_count + 1'),
-                ]);
-        } else {
-            $session = ActivityEcomUser::query()
-                ->where('session_id', $this->sessionId)
-                ->first();
-
-            if ($session) {
-                $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
-                $duration = $createdAt ? (int) $createdAt->diffInSeconds($now) : 0;
-
-                $session->update([
-                    'last_active_at' => $formattedNow,
-                    'session_duration_seconds' => $duration,
-                    'updated_at' => $formattedNow,
-                ]);
-
-                EcomTrackerLogger::frontend()->debug('job.record_visitor.update', 'Old session time updated', [
-                    'visitor_id' => $this->visitorId,
-                    'session_id' => $this->sessionId,
-                    'session_duration_seconds' => $duration,
-                ]);
+            if ($session === null) {
+                $session = $this->createSession($formattedNow);
+                $this->afterSessionCreated($session, $formattedNow, $visitDate);
             } else {
-                EcomTrackerLogger::frontend()->warning('job.record_visitor.missing_session', 'Session not found in database', [
+                $this->updateExistingSession($session, $now, $formattedNow);
+                EcomTrackerLogger::frontend()->debug('job.record_visitor.idempotent', 'Session already exists — updated instead of insert', [
                     'visitor_id' => $this->visitorId,
                     'session_id' => $this->sessionId,
                 ]);
             }
+        } elseif ($session !== null) {
+            $this->updateExistingSession($session, $now, $formattedNow);
+        } else {
+            EcomTrackerLogger::frontend()->warning('job.record_visitor.missing_session', 'Session not found in database', [
+                'visitor_id' => $this->visitorId,
+                'session_id' => $this->sessionId,
+            ]);
         }
 
         if ($this->isNewDailyVisitor) {
@@ -149,6 +108,95 @@ class RecordVisitorActivityJob implements ShouldQueue
             'session_id' => $this->sessionId,
             'message' => $exception->getMessage(),
         ]);
+    }
+
+    private function createSession(string $formattedNow): ActivityEcomUser
+    {
+        $parsed = UserAgentParser::parse($this->context['user_agent'] ?? null);
+
+        return ActivityEcomUser::query()->firstOrCreate(
+            ['session_id' => $this->sessionId],
+            [
+                'visitor_id' => $this->visitorId,
+                'ip' => $this->context['ip'] ?? null,
+                'user_agent' => $this->context['user_agent'] ?? null,
+                'country' => $this->context['country'] ?? null,
+                'device_type' => $parsed['device_type'],
+                'browser' => $parsed['browser'],
+                'os' => $parsed['os'],
+                'last_active_at' => $formattedNow,
+                'session_duration_seconds' => 0,
+                'created_at' => $formattedNow,
+                'updated_at' => $formattedNow,
+            ],
+        );
+    }
+
+    private function afterSessionCreated(ActivityEcomUser $session, string $formattedNow, string $visitDate): void
+    {
+        if (! $session->wasRecentlyCreated) {
+            return;
+        }
+
+        EcomTrackerLogger::frontend()->info('job.record_visitor.new_session', 'New session saved in database', [
+            'visitor_id' => $this->visitorId,
+            'session_id' => $this->sessionId,
+            'device_type' => $session->device_type,
+            'country' => $this->context['country'] ?? null,
+        ]);
+
+        $botResolved = $this->context['bot_resolved'] ?? null;
+
+        if (is_array($botResolved)) {
+            app(BotContextPersister::class)->persistIfAbsent($this->sessionId, $botResolved);
+        }
+
+        ActivityEcomDailyVisitor::query()
+            ->where('visitor_id', $this->visitorId)
+            ->whereDate('visit_date', $visitDate)
+            ->update([
+                'last_seen_at' => $formattedNow,
+                'session_count' => DB::raw('session_count + 1'),
+            ]);
+    }
+
+    private function updateExistingSession(ActivityEcomUser $session, Carbon $now, string $formattedNow): void
+    {
+        $existingLastActive = TrackerTime::toUtc($session->getRawOriginal('last_active_at'));
+
+        if ($existingLastActive !== null && $existingLastActive->gt($now)) {
+            EcomTrackerLogger::frontend()->debug('job.record_visitor.stale', 'Skipping stale session update', [
+                'visitor_id' => $this->visitorId,
+                'session_id' => $this->sessionId,
+                'job_time' => $formattedNow,
+            ]);
+
+            return;
+        }
+
+        $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
+        $duration = $this->sessionDurationSeconds($createdAt, $now);
+
+        $session->update([
+            'last_active_at' => $formattedNow,
+            'session_duration_seconds' => $duration,
+            'updated_at' => $formattedNow,
+        ]);
+
+        EcomTrackerLogger::frontend()->debug('job.record_visitor.update', 'Old session time updated', [
+            'visitor_id' => $this->visitorId,
+            'session_id' => $this->sessionId,
+            'session_duration_seconds' => $duration,
+        ]);
+    }
+
+    private function sessionDurationSeconds(?Carbon $createdAt, Carbon $now): int
+    {
+        if ($createdAt === null || $now->lt($createdAt)) {
+            return 0;
+        }
+
+        return max(0, (int) $createdAt->diffInSeconds($now, true));
     }
 
     private function ensureDailyLedgerRow(string $formattedNow, string $visitDate): void
