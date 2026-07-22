@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\EcomTrackerLogger;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class TrackerClientContextResolver
@@ -30,19 +30,29 @@ class TrackerClientContextResolver
         $sanitized = $this->sanitizeClientContext($request->input('client_context'));
 
         if ($sanitized === null) {
+            EcomTrackerLogger::frontend()->debug('bot.context.resolve', 'No bot info from website');
+
             return null;
         }
-
-        $request->merge(['client_context' => $sanitized]);
 
         $client = $this->clientContext->resolveFromContext($sanitized, $request);
         $bot = $this->botDetection->isLikelyBotFromContext($client);
 
-        return array_merge($client, [
+        $resolved = array_merge($client, [
             'is_bot' => $bot['is_bot'],
             'bot_confidence' => $bot['confidence'],
             'bot_reason' => $bot['reason'],
         ]);
+
+        EcomTrackerLogger::frontend()->info('bot.context.resolve', 'Bot check done', [
+            'is_bot' => $resolved['is_bot'],
+            'bot_confidence' => $resolved['bot_confidence'],
+            'bot_reason' => $resolved['bot_reason'],
+            'ip_country' => $resolved['ip_country'] ?? null,
+            'cf_bot_score' => $resolved['cf_bot_score'] ?? null,
+        ]);
+
+        return $resolved;
     }
 
     /**
@@ -63,7 +73,7 @@ class TrackerClientContextResolver
         ]);
 
         if ($validator->fails()) {
-            Log::warning('[EnoxTracker] Invalid client_context discarded', [
+            EcomTrackerLogger::frontend()->warning('bot.context.invalid', 'Bad bot info removed', [
                 'errors' => $validator->errors()->toArray(),
             ]);
 

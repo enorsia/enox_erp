@@ -621,7 +621,21 @@ test('track endpoint without client context creates session as unclassified', fu
 });
 
 test('track endpoint discards malformed client context and still stores events', function () {
-    Log::spy();
+    config(['tracker.logging_enabled' => true]);
+
+    $botWarningLogged = false;
+    $channel = Mockery::mock();
+    Log::shouldReceive('channel')->with('ecom_tracker')->andReturn($channel);
+    $channel->shouldReceive('info')->zeroOrMoreTimes();
+    $channel->shouldReceive('debug')->zeroOrMoreTimes();
+    $channel->shouldReceive('error')->zeroOrMoreTimes();
+    $channel->shouldReceive('warning')->andReturnUsing(function (string $message, array $context = []) use (&$botWarningLogged) {
+        if ($message === '[EcomTracker Frontend] Bad bot info removed') {
+            $botWarningLogged = true;
+            expect($context['step'] ?? '')->toBe('bot.context.invalid');
+            expect($context['flow'] ?? '')->toBe('frontend');
+        }
+    });
 
     $sessionId = Str::uuid()->toString();
     $eventId = Str::uuid()->toString();
@@ -644,9 +658,7 @@ test('track endpoint discards malformed client context and still stores events',
 
     expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
     expect(ActivityEcomUserBotContext::where('session_id', $sessionId)->exists())->toBeFalse();
-
-    Log::shouldHaveReceived('warning')
-        ->with('[EnoxTracker] Invalid client_context discarded', \Mockery::type('array'));
+    expect($botWarningLogged)->toBeTrue();
 });
 
 test('bot persist failure does not block event storage', function () {

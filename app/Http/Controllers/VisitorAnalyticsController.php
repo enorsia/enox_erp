@@ -6,6 +6,7 @@ use App\Exports\VisitorAnalyticsExport;
 use App\Models\TrackerUtmFilter;
 use App\Services\BotTrafficAnalyticsService;
 use App\Services\VisitorAnalyticsService;
+use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -24,6 +25,7 @@ class VisitorAnalyticsController extends Controller
 
     public function index(Request $request): View
     {
+        $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.visitors.index');
 
         $range = $this->resolveRange($request);
@@ -49,6 +51,12 @@ class VisitorAnalyticsController extends Controller
                 'date_to' => TrackerTime::toLocal($range['until'] ?? $range['to'])?->toDateString(),
             ]),
         ];
+
+        EcomTrackerLogger::backend()->info('analytics.visitors', 'Admin opened visitor analytics page', [
+            'window' => $data['window'],
+            'cache_hit' => $cached['analytics_cache']['hit'] ?? null,
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+        ]);
 
         return view('ecom_tracker.visitors', [
             'analytics' => $data,

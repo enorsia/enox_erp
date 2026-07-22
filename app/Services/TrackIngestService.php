@@ -4,11 +4,12 @@ namespace App\Services;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Support\EcomTrackerLogger;
+use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -37,12 +38,14 @@ class TrackIngestService
         $visitorId = $sessionData['visitor_id'] ?? null;
 
         if (! $sessionId) {
-            $this->logError('Session ID missing in ingest payload');
+            $this->logError('ingest.missing_session', 'No session ID in request');
 
             throw ValidationException::withMessages([
                 'session.session_id' => ['Session ID is required.'],
             ]);
         }
+
+        TrackerRedisSupport::logFrontendHealth('track_ingest');
 
         $clientContext = $this->clientContextResolver->resolve($request);
 
@@ -58,7 +61,7 @@ class TrackIngestService
             $sessionData['session_id'] = $sessionId;
         }
 
-        $this->logInfo('Ingest started', [
+        $this->logInfo('ingest.start', 'Saving user actions started', [
             'session_id' => $sessionId,
             'visitor_id' => $visitorId,
             'event_count' => count($events),
@@ -73,7 +76,7 @@ class TrackIngestService
             $eventId = $event['id'] ?? null;
 
             if (! $eventId) {
-                $this->logWarning('Skipped event without id', [
+                $this->logWarning('ingest.skip_event', 'Skipped one action (no ID)', [
                     'session_id' => $sessionId,
                     'action_type' => $event['action_type'] ?? null,
                 ]);
@@ -100,7 +103,7 @@ class TrackIngestService
 
             $acceptedIds[] = $eventId;
 
-            $this->logInfo('Event stored', [
+            $this->logInfo('ingest.event_stored', 'One action saved', [
                 'session_id' => $sessionId,
                 'event_id' => $eventId,
                 'action_type' => $event['action_type'] ?? null,
@@ -108,9 +111,11 @@ class TrackIngestService
             ]);
         }
 
-        $this->logInfo('Ingest completed', [
+        $this->logInfo('ingest.complete', 'All actions saved', [
             'session_id' => $sessionId,
             'accepted_count' => count($acceptedIds),
+            'redis_bypass' => TrackerRedisSupport::usesMemoryBypass(),
+            'redis_working' => TrackerRedisSupport::ping(),
         ]);
 
         return $acceptedIds;
@@ -169,7 +174,7 @@ class TrackIngestService
 
             ActivityEcomUser::query()->create($attributes);
 
-            $this->logInfo('Session created', [
+            $this->logInfo('ingest.session_created', 'New visitor session created', [
                 'session_id' => $sessionId,
                 'user_id' => $attributes['user_id'] ?? null,
                 'is_logged_in' => $attributes['is_logged_in'] ?? false,
@@ -184,7 +189,7 @@ class TrackIngestService
         $attributes['updated_at'] = $now;
         $existing->update($attributes);
 
-        $this->logInfo('Session updated', [
+        $this->logInfo('ingest.session_updated', 'Visitor session updated', [
             'session_id' => $sessionId,
             'user_id' => $attributes['user_id'] ?? $existing->user_id,
             'is_logged_in' => $attributes['is_logged_in'] ?? $existing->is_logged_in,
@@ -219,7 +224,7 @@ class TrackIngestService
         try {
             $this->botContextPersister->persistIfAbsent($sessionId, $clientContext);
         } catch (Throwable $e) {
-            Log::warning('[EnoxTracker] Failed to persist bot context at ingest', [
+            EcomTrackerLogger::frontend()->warning('ingest.bot_context_failed', 'Could not save bot info when saving action', [
                 'session_id' => $sessionId,
                 'message' => $e->getMessage(),
             ]);
@@ -375,7 +380,7 @@ class TrackIngestService
 
         $session->update($updates);
 
-        $this->logInfo('Session user synced from checkout customer info', [
+        $this->logInfo('ingest.checkout_user_sync', 'Logged-in user updated from checkout', [
             'session_id' => $sessionId,
             'user_name' => $updates['user_name'] ?? $session->user_name,
             'user_email' => $updates['user_email'] ?? $session->user_email,
@@ -414,7 +419,7 @@ class TrackIngestService
         $limit = config("tracker.scalar_field_limits.{$field}");
 
         if (is_int($limit) && $limit > 0 && mb_strlen($text) > $limit) {
-            $this->logWarning('Truncated tracker scalar field', [
+            $this->logWarning('ingest.field_truncated', 'Long text cut short', [
                 'field' => $field,
                 'original_length' => mb_strlen($text),
                 'limit' => $limit,
@@ -453,7 +458,7 @@ class TrackIngestService
         $extra = array_diff(array_keys($payload), $allowed);
 
         if ($extra !== []) {
-            $this->logError('payment_success payload validation failed', [
+            $this->logError('ingest.payment_success_invalid', 'Payment data has wrong fields', [
                 'disallowed_fields' => $extra,
             ]);
 
@@ -466,36 +471,24 @@ class TrackIngestService
     /**
      * @param  array<string, mixed>  $context
      */
-    private function logInfo(string $message, array $context = []): void
+    private function logInfo(string $step, string $message, array $context = []): void
     {
-        if (! config('tracker.logging_enabled')) {
-            return;
-        }
-
-        Log::info('[EnoxTracker] ' . $message, $context);
+        EcomTrackerLogger::frontend()->info($step, $message, $context);
     }
 
     /**
      * @param  array<string, mixed>  $context
      */
-    private function logWarning(string $message, array $context = []): void
+    private function logWarning(string $step, string $message, array $context = []): void
     {
-        if (! config('tracker.logging_enabled')) {
-            return;
-        }
-
-        Log::warning('[EnoxTracker] ' . $message, $context);
+        EcomTrackerLogger::frontend()->warning($step, $message, $context);
     }
 
     /**
      * @param  array<string, mixed>  $context
      */
-    private function logError(string $message, array $context = []): void
+    private function logError(string $step, string $message, array $context = []): void
     {
-        if (! config('tracker.logging_enabled')) {
-            return;
-        }
-
-        Log::error('[EnoxTracker] ' . $message, $context);
+        EcomTrackerLogger::frontend()->error($step, $message, $context);
     }
 }

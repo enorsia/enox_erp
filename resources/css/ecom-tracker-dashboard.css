@@ -473,41 +473,6 @@
     gap: 0.35rem;
 }
 
-.etd-bot-traffic-compare {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    margin-top: 0.35rem;
-}
-
-.etd-bot-traffic-compare__label {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: #64748b;
-    white-space: nowrap;
-}
-
-.etd-bot-traffic-compare__select {
-    min-width: 10rem;
-    padding: 0.3rem 0.55rem;
-    border-radius: 0.45rem;
-    border: 1px solid #e2e8f0;
-    background: #fff;
-    color: #334155;
-    font-size: 0.75rem;
-}
-
-.dark .etd-bot-traffic-compare__label {
-    color: #94a3b8;
-}
-
-.dark .etd-bot-traffic-compare__select {
-    background: #0f172a;
-    border-color: #334155;
-    color: #e2e8f0;
-}
-
 .etd-header-sort {
     display: inline-flex;
     align-items: center;

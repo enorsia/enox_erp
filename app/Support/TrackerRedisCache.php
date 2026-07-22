@@ -2,43 +2,85 @@
 
 namespace App\Support;
 
-use Illuminate\Support\Facades\Redis;
+use Throwable;
 
 class TrackerRedisCache
 {
     public function remember(string $key, int $ttlSeconds, callable $callback): array
     {
         if (! config('tracker.analytics_cache_enabled', true) || $ttlSeconds <= 0) {
+            EcomTrackerLogger::backend()->info('redis.cache.bypass', 'Analytics cache OFF — loading from database', [
+                'cache_key' => $key,
+                'reason' => 'cache_disabled',
+            ]);
+
             $value = $callback();
 
             return is_array($value) ? $value : ['data' => $value];
         }
 
         if ($this->usesMemoryStore()) {
+            EcomTrackerLogger::backend()->warning('redis.cache.bypass', 'Analytics using memory (Redis bypass ON)', [
+                'cache_key' => $key,
+                'storage' => 'memory',
+            ]);
+
             return $this->rememberInMemory($key, $ttlSeconds, $callback);
         }
 
+        TrackerRedisSupport::logBackendHealth('analytics_cache');
+
         $cacheKey = $this->cacheKey($key);
-        $connection = Redis::connection((string) config('tracker.redis_connection', 'tracker'));
-        $cached = $connection->get($cacheKey);
 
-        if (is_string($cached) && $cached !== '') {
-            $decoded = json_decode($cached, true);
+        try {
+            $connection = TrackerRedisSupport::connection();
+            $cached = $connection->get($cacheKey);
 
-            if (is_array($decoded)) {
-                return $decoded;
+            if (is_string($cached) && $cached !== '') {
+                $decoded = json_decode($cached, true);
+
+                if (is_array($decoded)) {
+                    EcomTrackerLogger::backend()->debug('redis.cache.read', 'Analytics data loaded from Redis OK', [
+                        'cache_key' => $key,
+                        'storage' => 'redis',
+                        'hit' => true,
+                    ]);
+
+                    return $decoded;
+                }
             }
+
+            $value = $callback();
+            $payload = [
+                'payload' => $value,
+                'cached_at' => TrackerTime::nowUtc()->toIso8601String(),
+            ];
+
+            $connection->setex($cacheKey, $ttlSeconds, json_encode($payload) ?: '{}');
+
+            EcomTrackerLogger::backend()->debug('redis.cache.write', 'Analytics data saved to Redis OK', [
+                'cache_key' => $key,
+                'storage' => 'redis',
+                'hit' => false,
+                'ttl_seconds' => $ttlSeconds,
+            ]);
+
+            return $payload;
+        } catch (Throwable $e) {
+            EcomTrackerLogger::backend()->error('redis.cache.failed', 'Redis cache failed — loading from database', [
+                'cache_key' => $key,
+                'storage' => 'redis',
+                'redis_working' => false,
+                'message' => $e->getMessage(),
+            ]);
+
+            $value = $callback();
+
+            return [
+                'payload' => $value,
+                'cached_at' => TrackerTime::nowUtc()->toIso8601String(),
+            ];
         }
-
-        $value = $callback();
-        $payload = [
-            'payload' => $value,
-            'cached_at' => TrackerTime::nowUtc()->toIso8601String(),
-        ];
-
-        $connection->setex($cacheKey, $ttlSeconds, json_encode($payload) ?: '{}');
-
-        return $payload;
     }
 
     public function payload(array $cached): mixed
@@ -61,7 +103,7 @@ class TrackerRedisCache
 
     private function usesMemoryStore(): bool
     {
-        return (bool) config('tracker.redis_use_memory_store', false);
+        return TrackerRedisSupport::usesMemoryBypass();
     }
 
     private function cacheKey(string $key): string
@@ -78,6 +120,12 @@ class TrackerRedisCache
         $entry = self::$memoryCache[$key] ?? null;
 
         if (is_array($entry) && $entry['expires_at'] >= $now) {
+            EcomTrackerLogger::backend()->debug('redis.cache.read', 'Analytics data loaded from memory OK', [
+                'cache_key' => $key,
+                'storage' => 'memory',
+                'hit' => true,
+            ]);
+
             return $entry['payload'];
         }
 
@@ -91,6 +139,13 @@ class TrackerRedisCache
             'expires_at' => $now + $ttlSeconds,
             'payload' => $payload,
         ];
+
+        EcomTrackerLogger::backend()->debug('redis.cache.write', 'Analytics data saved in memory OK', [
+            'cache_key' => $key,
+            'storage' => 'memory',
+            'hit' => false,
+            'ttl_seconds' => $ttlSeconds,
+        ]);
 
         return $payload;
     }

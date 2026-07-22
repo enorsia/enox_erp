@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\ActivityEcomUserBotContext;
-use Illuminate\Support\Facades\Log;
+use App\Support\EcomTrackerLogger;
 use Throwable;
 
 class BotContextPersister
@@ -25,7 +25,7 @@ class BotContextPersister
         try {
             $now = now()->toDateTimeString();
 
-            ActivityEcomUserBotContext::query()->insertOrIgnore([
+            $inserted = ActivityEcomUserBotContext::query()->insertOrIgnore([
                 'session_id' => $sessionId,
                 'client_ip' => $resolved['client_ip'] ?? null,
                 'user_agent' => $resolved['user_agent'] ?? null,
@@ -38,8 +38,15 @@ class BotContextPersister
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
+
+            EcomTrackerLogger::frontend()->info('bot.context.persist', 'Bot info saved', [
+                'session_id' => $sessionId,
+                'is_bot' => $resolved['is_bot'],
+                'bot_reason' => $resolved['bot_reason'],
+                'inserted' => (bool) $inserted,
+            ]);
         } catch (Throwable $e) {
-            Log::warning('[EnoxTracker] Failed to persist bot context', [
+            EcomTrackerLogger::frontend()->warning('bot.context.persist_failed', 'Could not save bot info', [
                 'session_id' => $sessionId,
                 'message' => $e->getMessage(),
             ]);

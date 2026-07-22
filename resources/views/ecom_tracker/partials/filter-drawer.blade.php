@@ -21,7 +21,6 @@
     'period' => '24h',
     'dateFrom' => '',
     'dateTo' => '',
-    'compare' => 'previous_period',
     'preservePeriodParams' => false,
 ])
 
@@ -62,7 +61,6 @@
         @endif
         @if ($preservePeriodParams)
             <input type="hidden" name="period" value="{{ $period }}">
-            <input type="hidden" name="compare" value="{{ $compare }}">
             @if ($period === 'custom')
                 <input type="hidden" name="date_from" value="{{ $dateFrom }}">
                 <input type="hidden" name="date_to" value="{{ $dateTo }}">

@@ -6,6 +6,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityTimelinePresenter;
+use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
@@ -29,6 +30,7 @@ class EcomActivityController extends Controller
 
     public function index(Request $request): View
     {
+        $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.activity.index');
 
         $query = $this->buildIndexQuery($request);
@@ -42,6 +44,11 @@ class EcomActivityController extends Controller
 
         $visitorQualitySummary = $this->visitorQualityCounts($request);
 
+        EcomTrackerLogger::backend()->info('analytics.activity.index', 'Admin opened user activity list', [
+            'session_count' => $sessions->total(),
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+        ]);
+
         return view('ecom_activity.index', [
             'sessions' => $sessions,
             'visitorQualitySummary' => $visitorQualitySummary,
@@ -51,6 +58,7 @@ class EcomActivityController extends Controller
 
     public function show(Request $request, string $session, EcomActivityTimelinePresenter $timelinePresenter): View
     {
+        $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.activity.show');
 
         $activityUser = ActivityEcomUser::query()
@@ -95,6 +103,12 @@ class EcomActivityController extends Controller
         $backUrl = $request->filled('back')
             ? urldecode((string) $request->input('back'))
             : route('admin.ecom-activity.index', $returnQuery);
+
+        EcomTrackerLogger::backend()->info('analytics.activity.show', 'Admin opened one user session', [
+            'session_id' => $session,
+            'action_count' => $actions->count(),
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+        ]);
 
         return view('ecom_activity.show', [
             'activityUser' => $activityUser,

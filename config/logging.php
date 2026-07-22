@@ -127,6 +127,19 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        /*
+        |--------------------------------------------------------------------------
+        | Ecom Tracker (daily files in storage/logs/ecom-tracker/)
+        |--------------------------------------------------------------------------
+        */
+        'ecom_tracker' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/ecom-tracker/ecom-tracker.log'),
+            'level' => env('TRACKER_LOG_LEVEL', env('LOG_LEVEL', 'debug')),
+            'days' => (int) env('TRACKER_LOG_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];

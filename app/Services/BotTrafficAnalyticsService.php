@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserBotContext;
 use App\Models\TrackerUtmFilter;
+use App\Support\EcomTrackerLogger;
+use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
@@ -35,8 +37,9 @@ class BotTrafficAnalyticsService
      */
     public function buildReport(array $filters): array
     {
+        $startedAt = microtime(true);
         $currentRange = $this->resolveRange($filters);
-        $compareMode = $filters['compare'] ?? 'previous_period';
+        $compareMode = $filters['compare'] ?? 'none';
         $comparisonRange = $this->resolveComparisonRange($currentRange, $compareMode);
 
         $cacheKey = 'bot_traffic_report:' . md5(json_encode([
@@ -63,6 +66,13 @@ class BotTrafficAnalyticsService
         });
 
         $sessions = $this->paginateSessions($currentRange, $filters);
+
+        EcomTrackerLogger::backend()->info('analytics.bot_traffic.build', 'Bot traffic data ready', [
+            'from' => $currentRange['from']->toIso8601String(),
+            'to' => $currentRange['to']->toIso8601String(),
+            'session_count' => $sessions->total(),
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+        ]);
 
         return array_merge($aggregated, [
             'range' => $currentRange,
@@ -491,9 +501,34 @@ class BotTrafficAnalyticsService
     private function remember(string $key, int $ttlSeconds, callable $callback): mixed
     {
         if (! config('tracker.analytics_cache_enabled', true)) {
+            EcomTrackerLogger::backend()->info('redis.cache.bypass', 'Analytics cache OFF — loading from database', [
+                'cache_key' => $key,
+                'reason' => 'cache_disabled',
+            ]);
+
             return $callback();
         }
 
-        return Cache::remember($key, $ttlSeconds, $callback);
+        if (TrackerRedisSupport::usesMemoryBypass()) {
+            EcomTrackerLogger::backend()->warning('redis.cache.bypass', 'Analytics using Laravel cache (Redis bypass ON)', [
+                'cache_key' => $key,
+            ]);
+        } else {
+            TrackerRedisSupport::logBackendHealth('bot_traffic_report');
+        }
+
+        $wasCached = Cache::has($key);
+        $result = Cache::remember($key, $ttlSeconds, $callback);
+
+        EcomTrackerLogger::backend()->debug('redis.cache.read', $wasCached
+            ? 'Analytics data loaded from cache OK'
+            : 'Analytics data loaded from database OK', [
+            'cache_key' => $key,
+            'storage' => TrackerRedisSupport::usesMemoryBypass() ? 'memory' : 'laravel_cache',
+            'hit' => $wasCached,
+            'ttl_seconds' => $ttlSeconds,
+        ]);
+
+        return $result;
     }
 }

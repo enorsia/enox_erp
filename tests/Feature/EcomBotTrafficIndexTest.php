@@ -60,13 +60,13 @@ test('bot traffic hub shows marketer labels and new delta when no prior data', f
         'period' => 'all',
         'date_from' => now()->subDay()->toDateString(),
         'date_to' => now()->toDateString(),
-        'compare' => 'previous_period',
     ]))
         ->assertOk()
         ->assertSee('Bot traffic')
         ->assertSee('24h', false)
         ->assertSee('Reset', false)
         ->assertSee('Filters', false)
+        ->assertDontSee('Previous period', false)
         ->assertSee('Real visitors')
         ->assertSee('Automated traffic')
         ->assertSee('Top detection reasons')
@@ -166,14 +166,4 @@ test('bot traffic hub lists detected countries for real visitors', function () {
         ->assertSee('United Kingdom (GB)')
         ->assertSee('US')
         ->assertDontSee('International');
-});
-
-test('bot traffic hub accepts comparison query param', function () {
-    $user = User::factory()->create();
-    $user->givePermissionTo('ecom_tracker.bot_traffic.index');
-    $this->actingAs($user);
-
-    $this->get(route('admin.ecom-tracker.bot-traffic', ['compare' => 'previous_year']))
-        ->assertOk()
-        ->assertSee('Previous year', false);
 });

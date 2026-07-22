@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
 use App\Services\BotContextPersister;
+use App\Support\EcomTrackerLogger;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use App\Support\VisitorSessionRedis;
@@ -14,6 +15,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class RecordVisitorActivityJob implements ShouldQueue
 {
@@ -39,6 +41,15 @@ class RecordVisitorActivityJob implements ShouldQueue
 
     public function handle(): void
     {
+        $startedAt = microtime(true);
+
+        EcomTrackerLogger::frontend()->info('job.record_visitor.start', 'Background job started for visitor', [
+            'visitor_id' => $this->visitorId,
+            'session_id' => $this->sessionId,
+            'is_new_session' => $this->isNewSession,
+            'is_new_daily_visitor' => $this->isNewDailyVisitor,
+        ]);
+
         $now = TrackerTime::toUtc($this->resolvedAt ?? TrackerTime::nowUtc()) ?? TrackerTime::nowUtc();
         $formattedNow = TrackerTime::formatUtc($now);
         $visitDate = TrackerTime::localDate($now);
@@ -61,6 +72,13 @@ class RecordVisitorActivityJob implements ShouldQueue
                 'session_duration_seconds' => 0,
                 'created_at' => $formattedNow,
                 'updated_at' => $formattedNow,
+            ]);
+
+            EcomTrackerLogger::frontend()->info('job.record_visitor.new_session', 'New session saved in database', [
+                'visitor_id' => $this->visitorId,
+                'session_id' => $this->sessionId,
+                'device_type' => $parsed['device_type'],
+                'country' => $this->context['country'] ?? null,
             ]);
 
             $botResolved = $this->context['bot_resolved'] ?? null;
@@ -90,6 +108,17 @@ class RecordVisitorActivityJob implements ShouldQueue
                     'session_duration_seconds' => $duration,
                     'updated_at' => $formattedNow,
                 ]);
+
+                EcomTrackerLogger::frontend()->debug('job.record_visitor.update', 'Old session time updated', [
+                    'visitor_id' => $this->visitorId,
+                    'session_id' => $this->sessionId,
+                    'session_duration_seconds' => $duration,
+                ]);
+            } else {
+                EcomTrackerLogger::frontend()->warning('job.record_visitor.missing_session', 'Session not found in database', [
+                    'visitor_id' => $this->visitorId,
+                    'session_id' => $this->sessionId,
+                ]);
             }
         }
 
@@ -99,7 +128,27 @@ class RecordVisitorActivityJob implements ShouldQueue
 
         if (app(VisitorSessionRedis::class)->acquireRollupLock($this->visitorId, $visitDate)) {
             $this->rollupDailyDuration($this->visitorId, $visitDate, $formattedNow);
+
+            EcomTrackerLogger::frontend()->debug('job.record_visitor.rollup', 'Daily visit time counted', [
+                'visitor_id' => $this->visitorId,
+                'visit_date' => $visitDate,
+            ]);
         }
+
+        EcomTrackerLogger::frontend()->info('job.record_visitor.complete', 'Background job done', [
+            'visitor_id' => $this->visitorId,
+            'session_id' => $this->sessionId,
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+        ]);
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        EcomTrackerLogger::frontend()->error('job.record_visitor.failed', 'Background job failed', [
+            'visitor_id' => $this->visitorId,
+            'session_id' => $this->sessionId,
+            'message' => $exception->getMessage(),
+        ]);
     }
 
     private function ensureDailyLedgerRow(string $formattedNow, string $visitDate): void
@@ -120,6 +169,11 @@ class RecordVisitorActivityJob implements ShouldQueue
             'last_seen_at' => $formattedNow,
             'total_duration_seconds' => 0,
             'session_count' => 0,
+        ]);
+
+        EcomTrackerLogger::frontend()->debug('job.record_visitor.daily_ledger', 'New daily visitor record created', [
+            'visitor_id' => $this->visitorId,
+            'visit_date' => $visitDate,
         ]);
     }
 

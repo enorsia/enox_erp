@@ -6,6 +6,10 @@ return [
 
     'logging_enabled' => (bool) env('TRACKER_LOGGING', env('APP_DEBUG', false)),
 
+    'log_channel' => env('TRACKER_LOG_CHANNEL', 'ecom_tracker'),
+
+    'log_days' => (int) env('TRACKER_LOG_DAYS', 30),
+
     'allowed_action_types' => [
         'category_view',
         'product_view',

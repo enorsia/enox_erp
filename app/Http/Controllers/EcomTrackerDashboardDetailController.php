@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\CountsTrackerFilters;
 use App\Services\EcomTrackerDashboardService;
+use App\Support\EcomTrackerLogger;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -49,6 +50,7 @@ class EcomTrackerDashboardDetailController extends Controller
 
     public function show(Request $request, string $section): View|RedirectResponse
     {
+        $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.dashboard.index');
 
         abort_unless(isset(self::SECTIONS[$section]), 404);
@@ -70,6 +72,11 @@ class EcomTrackerDashboardDetailController extends Controller
         [$detail['data'], $paginator] = $this->applyPagination($section, $detail['data'], $request);
 
         $currentProductSort = $this->service->resolveProductCatalogSort($request->input('sort_by'));
+
+        EcomTrackerLogger::backend()->info('analytics.dashboard.detail', 'Admin opened dashboard detail page', [
+            'section' => $section,
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+        ]);
 
         return view('ecom_tracker.details.show', [
             'section' => $section,

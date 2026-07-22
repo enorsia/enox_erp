@@ -7,12 +7,10 @@
     $summary = $report['summary'];
     $trend = $report['trend'];
     $range = $report['range'];
-    $comparisonRange = $report['comparison_range'];
 
     $period = $filters['period'] ?? '24h';
     $dateFrom = $filters['date_from'] ?? '';
     $dateTo = $filters['date_to'] ?? '';
-    $compare = $filters['compare'] ?? 'previous_period';
     $activePreset = in_array($period, ['24h', '7d', '30d', '90d'], true) ? $period : '24h';
 
     if ($period === 'custom' || (filled($dateFrom) && filled($dateTo))) {
@@ -37,7 +35,6 @@
         'activityFiltersIncludeDateRange' => false,
         'preservePeriodParams' => true,
         'period' => $period,
-        'compare' => $compare,
         'dateFrom' => $dateFrom,
         'dateTo' => $dateTo,
     ])
@@ -46,7 +43,6 @@
         <div class="etd-page-header-bar"
              x-data="{
                 presetKey: '{{ $activePreset }}',
-                compare: '{{ $compare }}',
                 dateFrom: '{{ $dateFrom }}',
                 dateTo: '{{ $dateTo }}',
                 applyCustom() {
@@ -63,12 +59,6 @@
                     } else {
                         url.searchParams.delete('date_to');
                     }
-                    window.location.href = url.toString();
-                },
-                applyCompare() {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('compare', this.compare);
-                    url.searchParams.delete('page');
                     window.location.href = url.toString();
                 }
              }">
@@ -131,18 +121,6 @@
                        class="etd-flatpickr-date f-input etd-date-input"
                        aria-label="To date">
                 <button type="button" class="etd-header-btn etd-header-btn--primary etd-pill-apply" @click="applyCustom()">Apply</button>
-            </div>
-
-            <div class="etd-bot-traffic-compare">
-                <label class="etd-bot-traffic-compare__label" for="bot-traffic-compare">Compare</label>
-                <select id="bot-traffic-compare"
-                        x-model="compare"
-                        @change="applyCompare()"
-                        class="etd-bot-traffic-compare__select">
-                    <option value="previous_period">Previous period</option>
-                    <option value="previous_year">Previous year</option>
-                    <option value="none">None</option>
-                </select>
             </div>
         </div>
 

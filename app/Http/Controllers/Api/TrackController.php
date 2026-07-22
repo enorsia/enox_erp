@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\TrackIngestService;
+use App\Support\EcomTrackerLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -18,10 +18,12 @@ class TrackController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $this->logInfo('Incoming track request', [
+        $startedAt = microtime(true);
+
+        EcomTrackerLogger::frontend()->info('api.track.request', 'Website sent user actions', [
             'ip' => $request->ip(),
-            'user_agent' => $request->userAgent(),
             'session_id' => $request->input('session.session_id'),
+            'visitor_id' => $request->input('session.visitor_id'),
             'event_count' => count($request->input('events', [])),
             'action_types' => collect($request->input('events', []))->pluck('action_type')->filter()->values()->all(),
         ]);
@@ -64,53 +66,33 @@ class TrackController extends Controller
 
             $acceptedIds = $this->ingestService->ingest($request, $validated);
 
-            $this->logInfo('Track request processed', [
+            EcomTrackerLogger::frontend()->info('api.track.success', 'User actions saved OK', [
                 'session_id' => $validated['session']['session_id'] ?? ($validated['events'][0]['session_id'] ?? null),
+                'visitor_id' => $validated['session']['visitor_id'] ?? null,
                 'accepted_count' => count($acceptedIds),
                 'accepted_ids' => $acceptedIds,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             return response()->json([
                 'accepted_ids' => $acceptedIds,
             ]);
         } catch (ValidationException $e) {
-            $this->logError('Track validation failed', [
+            EcomTrackerLogger::frontend()->warning('api.track.validation_failed', 'Website sent wrong data', [
                 'session_id' => $request->input('session.session_id'),
                 'errors' => $e->errors(),
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             throw $e;
         } catch (Throwable $e) {
-            $this->logError('Track ingest failed', [
+            EcomTrackerLogger::frontend()->error('api.track.failed', 'Could not save user actions', [
                 'session_id' => $request->input('session.session_id'),
                 'message' => $e->getMessage(),
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
             throw $e;
         }
-    }
-
-    /**
-     * @param  array<string, mixed>  $context
-     */
-    private function logInfo(string $message, array $context = []): void
-    {
-        if (! config('tracker.logging_enabled')) {
-            return;
-        }
-
-        Log::info('[EnoxTracker] ' . $message, $context);
-    }
-
-    /**
-     * @param  array<string, mixed>  $context
-     */
-    private function logError(string $message, array $context = []): void
-    {
-        if (! config('tracker.logging_enabled')) {
-            return;
-        }
-
-        Log::error('[EnoxTracker] ' . $message, $context);
     }
 }

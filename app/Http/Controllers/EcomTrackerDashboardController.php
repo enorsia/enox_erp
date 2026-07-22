@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Exports\EcomTrackerDashboardExport;
 use App\Http\Controllers\Concerns\CountsTrackerFilters;
 use App\Services\EcomTrackerDashboardService;
+use App\Support\EcomTrackerLogger;
+use App\Support\TrackerRedisSupport;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -21,6 +23,7 @@ class EcomTrackerDashboardController extends Controller
 
     public function index(Request $request): View
     {
+        $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.dashboard.index');
 
         $filters = array_merge(
@@ -32,6 +35,15 @@ class EcomTrackerDashboardController extends Controller
         $dashboard = $this->service->getDashboardData($filters);
         $dashboard['chart_payload'] = $this->service->chartPayload($dashboard);
         $activeFilterCount = $this->dashboardActiveFilterCount($request);
+
+        TrackerRedisSupport::logBackendHealth('store_dashboard');
+
+        EcomTrackerLogger::backend()->info('analytics.dashboard', 'Admin opened store dashboard', [
+            'date_from' => $filters['date_from'] ?? null,
+            'date_to' => $filters['date_to'] ?? null,
+            'active_filter_count' => $activeFilterCount,
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+        ]);
 
         return view('ecom_tracker.dashboard', [
             'dashboard' => $dashboard,
