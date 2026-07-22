@@ -11,7 +11,7 @@ trait CountsTrackerFilters
     {
         $count = 0;
 
-        foreach (['device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario'] as $key) {
+        foreach (['device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario'] as $key) {
             if (filled($request->input($key))) {
                 $count++;
             }
@@ -42,7 +42,7 @@ trait CountsTrackerFilters
      */
     protected function dashboardSessionFilters(Request $request): array
     {
-        $filters = $request->only(['device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium']);
+        $filters = $request->only(['device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium']);
 
         $filters['utm_source'] = TrackerUtmFilter::resolveSource($filters['utm_source'] ?? null) ?? '';
         $filters['utm_medium'] = TrackerUtmFilter::resolveMedium($filters['utm_medium'] ?? null) ?? '';

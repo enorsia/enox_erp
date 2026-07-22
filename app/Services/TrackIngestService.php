@@ -10,11 +10,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class TrackIngestService
 {
     public function __construct(
         private VisitorSessionResolver $visitorSessionResolver,
+        private TrackerClientContextResolver $clientContextResolver,
+        private BotContextPersister $botContextPersister,
     ) {}
 
     /**
@@ -41,14 +44,13 @@ class TrackIngestService
             ]);
         }
 
+        $clientContext = $this->clientContextResolver->resolve($request);
+
         if (! empty($visitorId)) {
             $resolved = $this->visitorSessionResolver->resolveForIngest(
                 $visitorId,
                 $sessionId,
-                [
-                    'ip' => $request->ip(),
-                    'user_agent' => $request->userAgent(),
-                ],
+                $this->buildSessionContext($request, $clientContext),
             );
 
             $sessionId = $resolved['session_id'];
@@ -62,7 +64,7 @@ class TrackIngestService
             'event_count' => count($events),
         ]);
 
-        $this->upsertSession($request, $sessionId, $sessionData);
+        $this->upsertSession($request, $sessionId, $sessionData, $clientContext);
 
         $acceptedIds = [];
 
@@ -116,22 +118,28 @@ class TrackIngestService
 
     /**
      * @param  array<string, mixed>  $sessionData
+     * @param  array<string, mixed>|null  $clientContext
      */
-    private function upsertSession(Request $request, string $sessionId, array $sessionData): void
+    private function upsertSession(Request $request, string $sessionId, array $sessionData, ?array $clientContext = null): void
     {
-        $parsed = UserAgentParser::parse($request->userAgent());
+        $userAgent = $clientContext['user_agent'] ?? $request->userAgent();
+        $parsed = UserAgentParser::parse($userAgent);
         $now = TrackerTime::formatUtc(TrackerTime::nowUtc());
 
         $existing = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
 
         $attributes = [
-            'ip' => $request->ip(),
-            'user_agent' => $request->userAgent(),
+            'ip' => $clientContext['client_ip'] ?? $request->ip(),
+            'user_agent' => $userAgent,
             'device_type' => $parsed['device_type'],
             'browser' => $parsed['browser'],
             'os' => $parsed['os'],
             'last_active_at' => $now,
         ];
+
+        if ($clientContext !== null && ! empty($clientContext['ip_country'])) {
+            $attributes['country'] = $clientContext['ip_country'];
+        }
 
         foreach (['user_id', 'user_name', 'user_email'] as $field) {
             if (array_key_exists($field, $sessionData)) {
@@ -167,6 +175,8 @@ class TrackIngestService
                 'is_logged_in' => $attributes['is_logged_in'] ?? false,
             ]);
 
+            $this->persistBotContextIfNeeded($sessionId, $clientContext);
+
             return;
         }
 
@@ -179,6 +189,41 @@ class TrackIngestService
             'user_id' => $attributes['user_id'] ?? $existing->user_id,
             'is_logged_in' => $attributes['is_logged_in'] ?? $existing->is_logged_in,
         ]);
+
+        $this->persistBotContextIfNeeded($sessionId, $clientContext);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $clientContext
+     * @return array<string, mixed>
+     */
+    private function buildSessionContext(Request $request, ?array $clientContext = null): array
+    {
+        return [
+            'ip' => $clientContext['client_ip'] ?? $request->ip(),
+            'user_agent' => $clientContext['user_agent'] ?? $request->userAgent(),
+            'country' => $clientContext['ip_country'] ?? null,
+            'bot_resolved' => $clientContext,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $clientContext
+     */
+    private function persistBotContextIfNeeded(string $sessionId, ?array $clientContext): void
+    {
+        if ($clientContext === null) {
+            return;
+        }
+
+        try {
+            $this->botContextPersister->persistIfAbsent($sessionId, $clientContext);
+        } catch (Throwable $e) {
+            Log::warning('[EnoxTracker] Failed to persist bot context at ingest', [
+                'session_id' => $sessionId,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

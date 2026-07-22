@@ -31,6 +31,7 @@ class EcomActivityController extends Controller
         Gate::authorize('ecom_tracker.activity.index');
 
         $query = ActivityEcomUser::query()
+            ->with('botContext')
             ->withCount('actions')
             ->withCount(['actions as order_qty' => fn ($q) => $q->where('action_type', 'payment_success')]);
 
@@ -43,8 +44,30 @@ class EcomActivityController extends Controller
                     ->orWhere('visitor_id', 'like', "%{$search}%")
                     ->orWhere('ip', 'like', "%{$search}%")
                     ->orWhere('user_name', 'like', "%{$search}%")
-                    ->orWhere('user_email', 'like', "%{$search}%");
+                    ->orWhere('user_email', 'like', "%{$search}%")
+                    ->orWhereHas('botContext', fn ($b) => $b
+                        ->where('client_ip', 'like', "%{$search}%")
+                        ->orWhere('ip_country', 'like', "%{$search}%")
+                        ->orWhere('cf_ray', 'like', "%{$search}%")
+                        ->orWhere('bot_reason', 'like', "%{$search}%"));
             });
+        }
+
+        if ($request->filled('country')) {
+            $query->where(function ($q) use ($request) {
+                $q->where('country', $request->country)
+                    ->orWhereHas('botContext', fn ($b) => $b->where('ip_country', $request->country));
+            });
+        }
+
+        $visitorType = $request->input('visitor_type');
+
+        if ($visitorType === 'bot') {
+            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
+        } elseif ($visitorType === 'human') {
+            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', false));
+        } elseif ($visitorType === 'unclassified') {
+            $query->whereDoesntHave('botContext');
         }
 
         if ($request->filled('device_type')) {
@@ -83,6 +106,7 @@ class EcomActivityController extends Controller
         Gate::authorize('ecom_tracker.activity.show');
 
         $activityUser = ActivityEcomUser::query()
+            ->with('botContext')
             ->where('session_id', $session)
             ->firstOrFail();
 
@@ -119,7 +143,7 @@ class EcomActivityController extends Controller
 
         $timeline->appends($request->except('timeline_page'));
 
-        $returnQuery = $request->only(['search', 'period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium', 'page']);
+        $returnQuery = $request->only(['search', 'period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium', 'page']);
         $backUrl = $request->filled('back')
             ? urldecode((string) $request->input('back'))
             : route('admin.ecom-activity.index', $returnQuery);

@@ -12,7 +12,7 @@ final class EcomTrackerViewData
     public static function dashboardQueryKeys(): array
     {
         return [
-            'period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country',
+            'period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
             'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'sort_by', 'activity',
             'has_purchases', 'has_views', 'has_adds', 'event_scenario',
         ];

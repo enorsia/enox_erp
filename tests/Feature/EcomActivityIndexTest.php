@@ -2,6 +2,7 @@
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Models\ActivityEcomUserBotContext;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
@@ -183,4 +184,72 @@ test('ecom activity index defaults to last 24 hours', function () {
         ->assertSee('All sessions')
         ->assertSee(Str::limit($recentSession, 14))
         ->assertSee(Str::limit($oldSession, 14));
+});
+
+test('ecom activity index filters by visitor type bot human and unclassified', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    $humanSession = Str::uuid()->toString();
+    $botSession = Str::uuid()->toString();
+    $unclassifiedSession = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $humanSession,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $botSession,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $unclassifiedSession,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserBotContext::query()->create([
+        'session_id' => $humanSession,
+        'client_ip' => '203.0.113.1',
+        'ip_country' => 'GB',
+        'is_bot' => false,
+        'bot_confidence' => 'low',
+        'bot_reason' => 'no bot signals detected',
+    ]);
+
+    ActivityEcomUserBotContext::query()->create([
+        'session_id' => $botSession,
+        'client_ip' => '203.0.113.2',
+        'ip_country' => 'US',
+        'is_bot' => true,
+        'bot_confidence' => 'high',
+        'bot_reason' => 'known crawler/script UA',
+    ]);
+
+    $this->get(route('admin.ecom-activity.index', ['period' => 'all', 'visitor_type' => 'human']))
+        ->assertOk()
+        ->assertSee('Human')
+        ->assertSee(Str::limit($humanSession, 14))
+        ->assertDontSee(Str::limit($botSession, 14))
+        ->assertDontSee(Str::limit($unclassifiedSession, 14));
+
+    $this->get(route('admin.ecom-activity.index', ['period' => 'all', 'visitor_type' => 'bot']))
+        ->assertOk()
+        ->assertSee('Bot')
+        ->assertSee(Str::limit($botSession, 14))
+        ->assertDontSee(Str::limit($humanSession, 14))
+        ->assertDontSee(Str::limit($unclassifiedSession, 14));
+
+    $this->get(route('admin.ecom-activity.index', ['period' => 'all', 'visitor_type' => 'unclassified']))
+        ->assertOk()
+        ->assertSee('Unclassified')
+        ->assertSee(Str::limit($unclassifiedSession, 14))
+        ->assertDontSee(Str::limit($humanSession, 14))
+        ->assertDontSee(Str::limit($botSession, 14));
 });

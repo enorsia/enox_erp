@@ -296,6 +296,7 @@ class EcomTrackerDashboardService
             'logged_in' => $filters['logged_in'] ?? '',
             'has_order' => $filters['has_order'] ?? '',
             'country' => $filters['country'] ?? '',
+            'visitor_type' => $filters['visitor_type'] ?? '',
             'utm_source' => $filters['utm_source'] ?? '',
             'utm_medium' => $filters['utm_medium'] ?? '',
             'search' => $filters['search'] ?? '',
@@ -319,7 +320,7 @@ class EcomTrackerDashboardService
     {
         return array_filter(
             array_intersect_key($filters, array_flip([
-                'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium',
+                'device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium',
             ])),
             fn ($value) => $value !== null && $value !== '',
         );
@@ -359,7 +360,20 @@ class EcomTrackerDashboardService
         }
 
         if (! empty($filters['country'])) {
-            $query->where('country', $filters['country']);
+            $query->where(function ($inner) use ($filters) {
+                $inner->where('country', $filters['country'])
+                    ->orWhereHas('botContext', fn ($b) => $b->where('ip_country', $filters['country']));
+            });
+        }
+
+        $visitorType = $filters['visitor_type'] ?? '';
+
+        if ($visitorType === 'bot') {
+            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
+        } elseif ($visitorType === 'human') {
+            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', false));
+        } elseif ($visitorType === 'unclassified') {
+            $query->whereDoesntHave('botContext');
         }
 
         TrackerUtmFilter::applySourceFilter($query, $filters['utm_source'] ?? null);

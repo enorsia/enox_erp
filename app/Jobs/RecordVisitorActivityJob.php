@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
+use App\Services\BotContextPersister;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use App\Support\VisitorSessionRedis;
@@ -52,6 +53,7 @@ class RecordVisitorActivityJob implements ShouldQueue
                 'visitor_id' => $this->visitorId,
                 'ip' => $this->context['ip'] ?? null,
                 'user_agent' => $this->context['user_agent'] ?? null,
+                'country' => $this->context['country'] ?? null,
                 'device_type' => $parsed['device_type'],
                 'browser' => $parsed['browser'],
                 'os' => $parsed['os'],
@@ -60,6 +62,12 @@ class RecordVisitorActivityJob implements ShouldQueue
                 'created_at' => $formattedNow,
                 'updated_at' => $formattedNow,
             ]);
+
+            $botResolved = $this->context['bot_resolved'] ?? null;
+
+            if (is_array($botResolved)) {
+                app(BotContextPersister::class)->persistIfAbsent($this->sessionId, $botResolved);
+            }
 
             ActivityEcomDailyVisitor::query()
                 ->where('visitor_id', $this->visitorId)

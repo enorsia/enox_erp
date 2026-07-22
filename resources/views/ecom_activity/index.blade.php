@@ -56,7 +56,7 @@
         default => route('admin.ecom-activity.index', $baseQuery),
     };
 
-    $activeFilterCount = collect(['search', 'device_type', 'logged_in', 'has_order'])
+    $activeFilterCount = collect(['search', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type'])
         ->filter(fn (string $key) => filled(request($key)))
         ->count();
 @endphp
@@ -164,6 +164,7 @@
                     <tr>
                         <th>Session</th>
                         <th class="etd-col-user">User</th>
+                        <th>Visitor</th>
                         <th>Device</th>
                         <th>IP</th>
                         <th>Source</th>
@@ -185,10 +186,27 @@
                                 @include('ecom_tracker.partials.session-identity', ['session' => $session])
                             </td>
                             <td>
+                                @php $botCtx = $session->botContext; @endphp
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border {{ $session->visitor_type_badge_class }}"
+                                      title="{{ $botCtx?->bot_reason ? ucfirst(str_replace('_', ' ', $botCtx->bot_reason)) : '' }}">
+                                    {{ $session->visitor_type_label }}
+                                    @if($botCtx?->bot_confidence)
+                                        <span class="opacity-75">· {{ ucfirst($botCtx->bot_confidence) }}</span>
+                                    @endif
+                                </span>
+                                @if($botCtx?->country_label)
+                                    <div class="mt-1">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ $botCtx->is_uk_visitor ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/50' : 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800/50' }}">
+                                            {{ $botCtx->country_label }}
+                                        </span>
+                                    </div>
+                                @endif
+                            </td>
+                            <td>
                                 {{ ucfirst($session->device_type ?? '—') }}
                                 <div class="etd-subtle">{{ $session->browser }} · {{ $session->os }}</div>
                             </td>
-                            <td>{{ $session->ip ?? '—' }}</td>
+                            <td>{{ $session->botContext?->client_ip ?? $session->ip ?? '—' }}</td>
                             <td class="etd-subtle">
                                 @if ($session->utm_source)
                                     {{ $session->utm_source }}/{{ $session->utm_medium }}
@@ -214,7 +232,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
+                            <td colspan="11" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
                         </tr>
                     @endforelse
                 </tbody>

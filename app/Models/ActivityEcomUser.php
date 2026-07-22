@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ActivityEcomUser extends Model
 {
@@ -45,6 +46,47 @@ class ActivityEcomUser extends Model
     public function actions(): HasMany
     {
         return $this->hasMany(ActivityEcomUserAction::class, 'session_id', 'session_id');
+    }
+
+    public function botContext(): HasOne
+    {
+        return $this->hasOne(ActivityEcomUserBotContext::class, 'session_id', 'session_id');
+    }
+
+    public function visitorClassification(): string
+    {
+        if ($this->relationLoaded('botContext')) {
+            $context = $this->botContext;
+        } else {
+            $context = $this->botContext()->first();
+        }
+
+        if ($context === null) {
+            return 'unclassified';
+        }
+
+        return $context->is_bot ? 'bot' : 'human';
+    }
+
+    public function getVisitorTypeLabelAttribute(): string
+    {
+        return match ($this->visitorClassification()) {
+            'bot' => 'Bot',
+            'human' => 'Human',
+            default => 'Unclassified',
+        };
+    }
+
+    public function getVisitorTypeBadgeClassAttribute(): string
+    {
+        $classification = $this->visitorClassification();
+
+        if ($classification === 'unclassified') {
+            return 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600';
+        }
+
+        return $this->botContext?->visitor_type_badge_class
+            ?? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600';
     }
 
     public function isRegisteredUser(): bool

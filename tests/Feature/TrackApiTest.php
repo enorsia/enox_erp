@@ -2,9 +2,12 @@
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Models\ActivityEcomUserBotContext;
+use App\Services\BotContextPersister;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -554,4 +557,153 @@ test('payment success rejects disallowed fields', function () {
     ]);
 
     $response->assertUnprocessable();
+});
+
+function validClientContext(array $overrides = []): array
+{
+    return array_merge([
+        'client_ip' => '203.0.113.10',
+        'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'ip_country' => 'GB',
+        'cf_ray' => '7abc123def456789-LHR',
+        'cf_bot_score' => 85,
+    ], $overrides);
+}
+
+test('track endpoint with valid client context stores bot row and session ip', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/track', array_merge(
+        trackPayload($sessionId, [[
+            'id' => $eventId,
+            'session_id' => $sessionId,
+            'action_type' => 'category_view',
+            'category_name' => 'Women',
+            'category_code' => 'WOM',
+        ]]),
+        ['client_context' => validClientContext()],
+    ), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+    $botContext = ActivityEcomUserBotContext::where('session_id', $sessionId)->first();
+
+    expect($session->ip)->toBe('203.0.113.10');
+    expect($session->country)->toBe('GB');
+    expect($botContext)->not->toBeNull();
+    expect($botContext->is_bot)->toBeFalse();
+    expect($botContext->client_ip)->toBe('203.0.113.10');
+    expect($botContext->ip_country)->toBe('GB');
+});
+
+test('track endpoint without client context creates session as unclassified', function () {
+    $sessionId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Women',
+        'category_code' => 'WOM',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session)->not->toBeNull();
+    expect(ActivityEcomUserBotContext::where('session_id', $sessionId)->exists())->toBeFalse();
+    expect($session->visitorClassification())->toBe('unclassified');
+});
+
+test('track endpoint discards malformed client context and still stores events', function () {
+    Log::spy();
+
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/track', array_merge(
+        trackPayload($sessionId, [[
+            'id' => $eventId,
+            'session_id' => $sessionId,
+            'action_type' => 'category_view',
+            'category_name' => 'Women',
+            'category_code' => 'WOM',
+        ]]),
+        ['client_context' => ['cf_bot_score' => 500, 'client_ip' => 'not-an-ip-but-string']],
+    ), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk()
+        ->assertJson(['accepted_ids' => [$eventId]]);
+
+    expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
+    expect(ActivityEcomUserBotContext::where('session_id', $sessionId)->exists())->toBeFalse();
+
+    Log::shouldHaveReceived('warning')
+        ->with('[EnoxTracker] Invalid client_context discarded', \Mockery::type('array'));
+});
+
+test('bot persist failure does not block event storage', function () {
+    $this->mock(BotContextPersister::class, function ($mock) {
+        $mock->shouldReceive('persistIfAbsent')->andThrow(new RuntimeException('DB connection lost'));
+    });
+
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/track', array_merge(
+        trackPayload($sessionId, [[
+            'id' => $eventId,
+            'session_id' => $sessionId,
+            'action_type' => 'product_view',
+            'product_name' => 'Dress',
+            'product_code' => 'GS123',
+        ]]),
+        ['client_context' => validClientContext()],
+    ), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk()
+        ->assertJson(['accepted_ids' => [$eventId]]);
+
+    expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
+});
+
+test('concurrent bot context persist creates exactly one row', function () {
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $persister = app(BotContextPersister::class);
+
+    $resolved = array_merge(validClientContext(), [
+        'is_bot' => false,
+        'bot_confidence' => 'low',
+        'bot_reason' => 'no bot signals detected',
+    ]);
+
+    $persister->persistIfAbsent($sessionId, $resolved);
+    $persister->persistIfAbsent($sessionId, array_merge($resolved, [
+        'is_bot' => true,
+        'bot_reason' => 'should not overwrite',
+    ]));
+
+    $rows = ActivityEcomUserBotContext::where('session_id', $sessionId)->get();
+
+    expect($rows)->toHaveCount(1);
+    expect($rows->first()->is_bot)->toBeFalse();
+    expect($rows->first()->bot_reason)->toBe('no bot signals detected');
 });
