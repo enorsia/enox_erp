@@ -209,7 +209,7 @@
                             <td>{{ \App\Support\TrackerTime::toLocal($session->last_active_at)?->diffForHumans() ?? '—' }}</td>
                             <td class="etd-col-action">
                                 @can('ecom_tracker.activity.show')
-                                    <a href="{{ route('admin.ecom-activity.show', $session->session_id) }}" class="etd-link">View session</a>
+                                    <a href="{{ \App\Support\EcomTrackerViewData::activityShowUrl($session->session_id) }}" class="etd-link">View session</a>
                                 @endcan
                             </td>
                         </tr>

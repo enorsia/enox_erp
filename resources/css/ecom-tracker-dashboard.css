@@ -473,6 +473,28 @@
     gap: 0.35rem;
 }
 
+.etd-header-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.etd-header-sort-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.dark .etd-header-sort-label {
+    color: #94a3b8;
+}
+
+.etd-header-sort-select {
+    min-width: 11rem;
+    max-width: 14rem;
+}
+
 .etd-header-btn {
     display: inline-flex;
     align-items: center;

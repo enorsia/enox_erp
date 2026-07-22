@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
+use App\Support\EcomTrackerViewData;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -2288,7 +2289,7 @@ class EcomTrackerDashboardService
                 },
                 'value' => (float) ($payload['cart_total'] ?? $payload['amount_paid'] ?? 0),
                 'idle' => $this->formatIdleLabel((int) (TrackerTime::toUtc($session?->last_active_at)?->diffInSeconds(TrackerTime::nowUtc()) ?? 0)),
-                'activity_url' => route('admin.ecom-activity.show', ['session' => $sessionId]),
+                'activity_url' => EcomTrackerViewData::activityShowUrl($sessionId),
                 'abandoned_at' => $latest->created_at,
             ];
         }

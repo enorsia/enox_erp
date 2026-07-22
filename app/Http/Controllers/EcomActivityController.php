@@ -6,6 +6,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityTimelinePresenter;
+use App\Support\EcomTrackerViewData;
 use App\Support\TrackerTime;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -103,13 +104,15 @@ class EcomActivityController extends Controller
         $total = $fullTimeline->count();
         $items = $fullTimeline->slice(($page - 1) * self::TIMELINE_PER_PAGE, self::TIMELINE_PER_PAGE)->values();
 
+        $showRouteParams = EcomTrackerViewData::activityShowParams($session, $request->input('back'));
+
         $timeline = new LengthAwarePaginator(
             $items,
             $total,
             self::TIMELINE_PER_PAGE,
             $page,
             [
-                'path' => route('admin.ecom-activity.show', ['session' => $session]),
+                'path' => route('admin.ecom-activity.show', $showRouteParams),
                 'pageName' => 'timeline_page',
             ],
         );
@@ -117,13 +120,16 @@ class EcomActivityController extends Controller
         $timeline->appends($request->except('timeline_page'));
 
         $returnQuery = $request->only(['search', 'period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium', 'page']);
+        $backUrl = $request->filled('back')
+            ? urldecode((string) $request->input('back'))
+            : route('admin.ecom-activity.index', $returnQuery);
 
         return view('ecom_activity.show', [
             'activityUser' => $activityUser,
             'timeline' => $timeline,
             'funnelSteps' => self::FUNNEL_STEPS,
             'reachedSteps' => $reachedSteps,
-            'returnQuery' => $returnQuery,
+            'backUrl' => $backUrl,
         ]);
     }
 

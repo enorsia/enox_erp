@@ -13,7 +13,6 @@
     $hasCustomRange = $page['hasCustomRange'];
     $datetimeFromValue = $page['datetimeFromValue'];
     $datetimeToValue = $page['datetimeToValue'];
-    $activeWindow = $page['activeWindow'];
     $activeFilterCount = $page['activeFilterCount'];
     $exportUrl = $page['exportUrl'];
     $detailLink = $page['detailLink'];
@@ -31,97 +30,18 @@
         'datetimeToValue' => $datetimeToValue,
     ])
 
-    <header class="etd-page-header">
-        <div class="etd-page-header-bar"
-             x-data="{
-                windowKey: '{{ $activeWindow }}',
-                datetimeFrom: '{{ $datetimeFromValue }}',
-                datetimeTo: '{{ $datetimeToValue }}',
-                apply(preset) {
-                    if (preset === 'custom') {
-                        this.windowKey = 'custom';
-                        return;
-                    }
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('window', preset);
-                    url.searchParams.delete('datetime_from');
-                    url.searchParams.delete('datetime_to');
-                    window.location.href = url.toString();
-                },
-                applyCustom() {
-                    const url = new URL(window.location.href);
-                    url.searchParams.delete('window');
-                    url.searchParams.set('datetime_from', this.datetimeFrom);
-                    url.searchParams.set('datetime_to', this.datetimeTo);
-                    window.location.href = url.toString();
-                }
-             }">
-            <div class="etd-page-header-left">
-                <h1 class="etd-page-title">Visitor analytics</h1>
-                <span class="etd-header-sep" aria-hidden="true">·</span>
-                <span class="etd-page-range">{{ $filters['window_label'] ?? 'Last 24 hours' }}</span>
-                <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
-                <div class="etd-page-meta">
-                    @include('ecom_tracker.partials.timezone-notice')
-                    @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $a['analytics_cache'] ?? null])
-                </div>
-            </div>
-
-            <div class="etd-page-header-right">
-                <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Time window">
-                    @foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days'] as $windowKey => $windowLabel)
-                        <button type="button" class="etd-segmented-btn {{ $activeWindow === $windowKey ? 'active' : '' }}" aria-label="{{ $windowLabel }}" @click="apply('{{ $windowKey }}')">{{ $windowKey }}</button>
-                    @endforeach
-                    <button type="button" class="etd-segmented-btn {{ $activeWindow === 'custom' ? 'active' : '' }}" aria-label="Custom date range" @click="apply('custom')">Custom</button>
-                </div>
-
-                <div class="etd-header-actions">
-                    @include('ecom_tracker.partials.header-reset-button', [
-                        'url' => route('admin.ecom-tracker.visitors'),
-                        'active' => count(request()->query()) > 0,
-                    ])
-                    <button type="button" @click="drawerOpen = true" class="etd-header-btn etd-header-btn--icon {{ $activeFilterCount > 0 ? 'etd-header-btn--filtered' : '' }}" aria-label="Filters">
-                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
-                        <span class="etd-header-btn-text">Filters</span>
-                        @if ($activeFilterCount > 0)
-                            <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
-                        @endif
-                    </button>
-                    <a href="{{ $exportUrl }}" class="etd-header-btn etd-header-btn--primary no-underline" title="Export">
-                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l4-4m-4 4L8 11M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg>
-                        <span class="etd-header-btn-text">Export</span>
-                    </a>
-                </div>
-            </div>
-
-            <div x-show="windowKey === 'custom'"
-                 x-collapse
-                 x-effect="if (windowKey === 'custom') { $nextTick(() => window.refreshEtdFilterControls?.($el)) }"
-                 class="etd-custom-dates etd-custom-dates--inline etd-date-range"
-                 data-etd-date-range>
-                <input type="text"
-                       x-model="datetimeFrom"
-                       data-range="from"
-                       data-default="{{ $datetimeFromValue }}"
-                       value="{{ $datetimeFromValue }}"
-                       placeholder="From date & time"
-                       readonly
-                       class="etd-flatpickr-datetime f-input etd-date-input etd-date-input--datetime"
-                       aria-label="From date and time">
-                <span class="etd-custom-dates-sep">–</span>
-                <input type="text"
-                       x-model="datetimeTo"
-                       data-range="to"
-                       data-default="{{ $datetimeToValue }}"
-                       value="{{ $datetimeToValue }}"
-                       placeholder="To date & time"
-                       readonly
-                       class="etd-flatpickr-datetime f-input etd-date-input etd-date-input--datetime"
-                       aria-label="To date and time">
-                <button type="button" class="etd-header-btn etd-header-btn--primary etd-pill-apply" @click="applyCustom()">Apply</button>
-            </div>
-        </div>
-    </header>
+    @include('ecom_tracker.partials.visitor-page-header', [
+        'title' => 'Visitor analytics',
+        'rangeLabel' => $page['rangeLabel'],
+        'activeWindow' => $page['activeWindow'],
+        'datetimeFromValue' => $datetimeFromValue,
+        'datetimeToValue' => $datetimeToValue,
+        'activeFilterCount' => $activeFilterCount,
+        'resetUrl' => $page['resetUrl'],
+        'exportUrl' => $exportUrl,
+        'resetActive' => $page['resetActive'],
+        'analyticsCache' => $a['analytics_cache'] ?? null,
+    ])
 
     <div class="etd-kpi-grid etd-kpi-grid--5 mb-5">
         @foreach ([

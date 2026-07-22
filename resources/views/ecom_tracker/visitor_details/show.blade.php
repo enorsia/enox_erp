@@ -26,12 +26,18 @@
         'showVisitorFilters' => $section === 'visitors',
     ])
 
-    @include('ecom_tracker.partials.detail-header', [
+    @include('ecom_tracker.partials.visitor-page-header', [
         'title' => $title,
-        'subtitle' => $range['label'] ?? null,
-        'defaultBackRoute' => 'admin.ecom-tracker.dashboard',
-        'activeFilterCount' => $activeFilterCount,
+        'rangeLabel' => $page['rangeLabel'],
+        'activeWindow' => $page['activeWindow'],
+        'datetimeFromValue' => $datetimeFromValue,
+        'datetimeToValue' => $datetimeToValue,
+        'activeFilterCount' => $page['activeFilterCount'],
+        'resetUrl' => $page['resetUrl'],
+        'exportUrl' => $page['exportUrl'],
+        'resetActive' => $page['resetActive'],
         'breadcrumbs' => $breadcrumbs,
+        'backUrl' => $page['backUrl'],
         'sortOptions' => $visitorSortOptions ?? [],
         'currentSort' => $currentSort ?? null,
         'sortAction' => $section === 'visitors' ? route('admin.ecom-tracker.visitors.details', $section) : null,

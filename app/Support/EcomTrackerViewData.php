@@ -77,6 +77,9 @@ final class EcomTrackerViewData
             'datetimeFromValue' => $datetimeFromValue,
             'datetimeToValue' => $datetimeToValue,
             'activeFilterCount' => $activeFilterCount,
+            'rangeLabel' => $filters['window_label'] ?? 'Last 24 hours',
+            'resetUrl' => route('admin.ecom-tracker.visitors'),
+            'resetActive' => count($request->query()) > 0,
             'presetWindows' => [
                 '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours',
                 '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year',
@@ -90,7 +93,7 @@ final class EcomTrackerViewData
     /**
      * @return array<string, mixed>
      */
-    public static function forVisitorDetail(Request $request, array $filters, string $title): array
+    public static function forVisitorDetail(Request $request, array $filters, string $title, string $section, int $activeFilterCount): array
     {
         $window = $filters['window'] ?? '24h';
         $hasCustomRange = filled($filters['datetime_from'] ?? null) && filled($filters['datetime_to'] ?? null);
@@ -106,12 +109,23 @@ final class EcomTrackerViewData
         $visitorsBack = $request->filled('back')
             ? urldecode((string) $request->input('back'))
             : route('admin.ecom-tracker.visitors', $queryParams);
+        $exportQuery = array_filter($request->only(self::visitorQueryKeys()), fn ($value) => filled($value));
+        $resetQuery = array_filter([
+            'section' => $section,
+            'back' => $request->input('back'),
+        ], fn ($value) => filled($value));
 
         return [
             'window' => $window,
+            'activeWindow' => $hasCustomRange ? 'custom' : $window,
             'hasCustomRange' => $hasCustomRange,
             'datetimeFromValue' => $datetimeFromValue,
             'datetimeToValue' => $datetimeToValue,
+            'activeFilterCount' => $activeFilterCount,
+            'rangeLabel' => $filters['window_label'] ?? 'Last 24 hours',
+            'exportUrl' => route('admin.ecom-tracker.visitors.export', $exportQuery),
+            'resetUrl' => route('admin.ecom-tracker.visitors.details', $resetQuery),
+            'resetActive' => count($request->query()) > 0,
             'presetWindows' => [
                 '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours',
                 '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year',
@@ -120,7 +134,31 @@ final class EcomTrackerViewData
                 ['label' => 'Visitor analytics', 'url' => $visitorsBack],
                 ['label' => $title],
             ],
+            'backUrl' => $visitorsBack,
             'activityLink' => fn (string $visitorId) => route('admin.ecom-activity.index', ['search' => $visitorId]),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function activityShowParams(string $sessionId, ?string $back = null): array
+    {
+        $params = ['session' => $sessionId];
+
+        if (filled($back)) {
+            $params['back'] = $back;
+        } elseif (request()->filled('back')) {
+            $params['back'] = request()->input('back');
+        } else {
+            $params['back'] = urlencode(request()->fullUrl());
+        }
+
+        return $params;
+    }
+
+    public static function activityShowUrl(string $sessionId, ?string $back = null): string
+    {
+        return route('admin.ecom-activity.show', self::activityShowParams($sessionId, $back));
     }
 }

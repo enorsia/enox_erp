@@ -87,10 +87,15 @@ class VisitorAnalyticsController extends Controller
             'range' => $range,
             'data' => $data,
             'filters' => $filters,
-            'activeFilterCount' => $this->visitorActiveFilterCount($request),
             'visitorSortOptions' => $section === 'visitors' ? $this->analytics->visitorSortOptions() : [],
             'currentSort' => $section === 'visitors' ? $sortBy : null,
-            'page' => EcomTrackerViewData::forVisitorDetail($request, $filters, $titles[$section]),
+            'page' => EcomTrackerViewData::forVisitorDetail(
+                $request,
+                $filters,
+                $titles[$section],
+                $section,
+                $this->visitorActiveFilterCount($request),
+            ),
         ]);
     }
 

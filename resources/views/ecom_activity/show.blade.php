@@ -30,9 +30,9 @@
                     <p class="text-[12px] font-mono text-slate-400 mt-0.5">{{ $activityUser->session_id }}</p>
                 </div>
             </div>
-            <a href="{{ route('admin.ecom-activity.index', $returnQuery) }}"
-               class="inline-flex items-center gap-1.5 px-3 h-9 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                ← Back to list
+            <a href="{{ $backUrl }}"
+               class="inline-flex items-center gap-1.5 px-3 h-9 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors no-underline">
+                ← Back
             </a>
         </div>
 
