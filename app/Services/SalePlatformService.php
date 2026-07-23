@@ -112,6 +112,7 @@ class SalePlatformService
                 'is_sales'               => (bool) $node->is_sales,
                 'allows_direct_entry'        => (bool) $node->allows_direct_entry,
                 'allows_return_direct_entry' => (bool) $node->allows_return_direct_entry,
+                'allows_budget_direct_entry' => (bool) $node->allows_budget_direct_entry,
                 'show_in_analytics'          => (bool) $node->show_in_analytics,
                 'show_in_sale_tracking'  => (bool) $node->show_in_sale_tracking,
                 'track_reach'            => (bool) $node->track_reach,

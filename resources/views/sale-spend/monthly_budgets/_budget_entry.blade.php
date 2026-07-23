@@ -94,7 +94,7 @@
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-0.5">
                         @if($entry['hasChildren'])
                             <span class="text-[12px] text-slate-500 dark:text-slate-400">
-                                Own: <strong>{{ number_format($budget->budget, 2) }} {{ $budget->currency }}</strong>
+                                Own: <strong>Req {{ number_format($budget->budget_requested, 2) }} / Appr {{ number_format($budget->budget_approved, 2) }} {{ $budget->currency }}</strong>
                             </span>
                             <span class="text-[12px] font-semibold text-accent-600 dark:text-accent-400">
                                 Children Sum: {{ number_format($entry['childSum'], 2) }} {{ $budget->currency }}
@@ -104,7 +104,7 @@
                             </span>
                         @else
                             <span class="text-[13px] font-semibold text-slate-700 dark:text-slate-200">
-                                {{ number_format($budget->budget, 2) }} {{ $budget->currency }}
+                                Req {{ number_format($budget->budget_requested, 2) }} / Appr {{ number_format($budget->budget_approved, 2) }} {{ $budget->currency }}
                             </span>
                         @endif
                         @if ($budget->notes)
@@ -116,7 +116,7 @@
                     <div class="flex flex-wrap items-center gap-x-2">
                         @if($entry['hasChildren'])
                             <span class="text-[12px] text-slate-500 dark:text-slate-400">
-                                Own: <strong>{{ number_format($budget->budget, 2) }} {{ $budget->currency }}</strong>
+                                Own: <strong>Req {{ number_format($budget->budget_requested, 2) }} / Appr {{ number_format($budget->budget_approved, 2) }} {{ $budget->currency }}</strong>
                             </span>
                             <span class="text-[12px] font-semibold text-accent-600 dark:text-accent-400">
                                 +{{ number_format($entry['childSum'], 2) }}
@@ -126,7 +126,7 @@
                             </span>
                         @else
                             <span class="text-[12px] font-semibold text-slate-600 dark:text-slate-300">
-                                {{ number_format($budget->budget, 2) }} {{ $budget->currency }}
+                                Req {{ number_format($budget->budget_requested, 2) }} / Appr {{ number_format($budget->budget_approved, 2) }} {{ $budget->currency }}
                             </span>
                         @endif
                         @if ($budget->notes)

@@ -181,7 +181,7 @@
 
                             @can('general.daily_sale.index')
                                 <a href="{{ route('admin.daily-sales.index') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/daily-sales*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/daily-sales*', 'admin/sales-spends/sales-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Daily Sales
                                 </a>
                             @endcan
@@ -197,13 +197,6 @@
                                 <a href="{{ route('admin.monthly-budgets.index') }}"
                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/monthly-budgets*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Monthly Budget
-                                </a>
-                            @endcan
-
-                            @can('general.dashboard.index')
-                                <a href="{{ route('admin.sales.analytics.report') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/sales-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
-                                    Sales Report
                                 </a>
                             @endcan
 

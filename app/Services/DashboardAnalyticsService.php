@@ -102,7 +102,7 @@ class DashboardAnalyticsService
 
         $budgetTotal = 0;
         if (!empty($months)) {
-            $budgetTotal = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))->sum('budget');
+            $budgetTotal = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))->sum('budget_approved');
         }
 
         $totalSales   = (float) ($sales->total_sales   ?? 0);
@@ -149,7 +149,7 @@ class DashboardAnalyticsService
             ->get()
             ->keyBy('ym');
 
-        $budgetsByMonth = MonthlyBudget::selectRaw("year, month, SUM(budget) AS total_budget")
+        $budgetsByMonth = MonthlyBudget::selectRaw("year, month, SUM(budget_approved) AS total_budget")
             ->groupBy('year', 'month')
             ->get()
             ->keyBy(fn ($r) => sprintf('%04d-%02d', $r->year, $r->month));
@@ -275,7 +275,7 @@ class DashboardAnalyticsService
         }
 
         $budgets = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))
-            ->selectRaw('year, month, SUM(budget) AS total_budget')
+            ->selectRaw('year, month, SUM(budget_approved) AS total_budget')
             ->groupBy('year', 'month')
             ->get()
             ->keyBy(fn ($r) => sprintf('%04d-%02d', $r->year, $r->month));
@@ -397,7 +397,7 @@ class DashboardAnalyticsService
         $budgets = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))
             ->join('sale_platforms', 'sale_platforms.id', '=', 'monthly_budgets.sale_platform_id')
             ->where('sale_platforms.show_in_analytics', true)
-            ->selectRaw('sale_platforms.id, sale_platforms.name, SUM(monthly_budgets.budget) AS total_budget')
+            ->selectRaw('sale_platforms.id, sale_platforms.name, SUM(monthly_budgets.budget_approved) AS total_budget')
             ->groupBy('sale_platforms.id', 'sale_platforms.name')
             ->get()
             ->keyBy('id');
@@ -473,14 +473,22 @@ class DashboardAnalyticsService
         $returnQtyByDate = $dailyReturnAgg->pluck('return_qty', 'dt')->map(fn ($v) => (int) $v)->toArray();
         unset($dailyReturnAgg);
 
-        // 7. Budget per platform
+        // 7. Budget per platform (approved; requested disabled until future release)
         $budgetMap = [];
+        // $budgetRequestedMap = [];
         if (!empty($months)) {
             $budgetMap = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))
-                ->selectRaw('sale_platform_id, SUM(budget) AS total_budget')
+                ->selectRaw('sale_platform_id, SUM(budget_approved) AS total_budget')
                 ->groupBy('sale_platform_id')
                 ->pluck('total_budget', 'sale_platform_id')
                 ->toArray();
+
+            // Future: budget requested row in sales report + Excel export
+            // $budgetRequestedMap = MonthlyBudget::whereRaw($this->buildMonthWhereClause($months))
+            //     ->selectRaw('sale_platform_id, SUM(budget_requested) AS total_budget_requested')
+            //     ->groupBy('sale_platform_id')
+            //     ->pluck('total_budget_requested', 'sale_platform_id')
+            //     ->toArray();
         }
 
         // 8. Ordered date list
@@ -754,6 +762,38 @@ class DashboardAnalyticsService
     // ── Export summary rows builder ───────────────────────────────
 
     /**
+     * Map budget totals to leaf platform cells and parent-platform rollup buckets.
+     * Parent-only budgets (e.g. Enorsia) are not leaf columns; they roll into summary columns in Excel.
+     */
+    private function buildBudgetPlatformBreakdown(array $budgetMap, array $columns): array
+    {
+        $leafCostIds = [];
+        foreach ($columns as $col) {
+            if (($col['type'] ?? '') === 'cost') {
+                $leafCostIds[(int) $col['platform_id']] = true;
+            }
+        }
+
+        $platform     = [];
+        $parentBudget = [];
+
+        foreach ($budgetMap as $platformId => $amount) {
+            $amount = (float) $amount;
+            if ($amount <= 0) {
+                continue;
+            }
+            $platformId = (int) $platformId;
+            if (isset($leafCostIds[$platformId])) {
+                $platform["{$platformId}_cost"] = $amount;
+            } else {
+                $parentBudget[$platformId] = $amount;
+            }
+        }
+
+        return ['platform' => $platform, 'parent_budget' => $parentBudget];
+    }
+
+    /**
      * Pre-compute all summary rows (average, totals, budget, ROI, forecast).
      * Each row: label, col_c, col_e, col_d, platform[], total_orders, root_orders,
      *           total_qty, root_qty, kids, female, male, col_e_format, platform_formats.
@@ -824,18 +864,23 @@ class DashboardAnalyticsService
             }
         }
 
-        // Total Budget
-        $totalBudget   = array_sum($budgetMap);
-        $budgetPlatRow = [];
-        foreach ($columns as $col) {
-            if ($col['type'] === 'cost') {
-                $b = $budgetMap[$col['platform_id']] ?? 0;
-                if ($b > 0) $budgetPlatRow["{$col['platform_id']}_cost"] = $b;
-            }
-        }
+        // Future: Budget Requested summary row (sales report + Excel export)
+        // $requestedBreakdown   = $this->buildBudgetPlatformBreakdown($budgetRequestedMap, $columns);
+        // $totalBudgetRequested = array_sum($budgetRequestedMap);
+        // $rows['total_budget_requested'] = [
+        //     'label' => 'Budget Requested', 'col_c' => null, 'col_e' => $totalBudgetRequested, 'col_d' => null,
+        //     'platform' => $requestedBreakdown['platform'], 'parent_budget' => $requestedBreakdown['parent_budget'],
+        //     'total_orders' => null, 'root_orders' => null,
+        //     'total_qty' => null, 'root_qty' => null, 'kids' => null, 'female' => null, 'male' => null,
+        // ];
+
+        // Budget (approved amounts; label kept as "Budget" for now)
+        $approvedBreakdown = $this->buildBudgetPlatformBreakdown($budgetMap, $columns);
+        $totalBudget       = array_sum($budgetMap);
         $rows['total_budget'] = [
-            'label' => 'Total Budget', 'col_c' => null, 'col_e' => $totalBudget, 'col_d' => null,
-            'platform' => $budgetPlatRow, 'total_orders' => null, 'root_orders' => null,
+            'label' => 'Budget', 'col_c' => null, 'col_e' => $totalBudget, 'col_d' => null,
+            'platform' => $approvedBreakdown['platform'], 'parent_budget' => $approvedBreakdown['parent_budget'],
+            'total_orders' => null, 'root_orders' => null,
             'total_qty' => null, 'root_qty' => null, 'kids' => null, 'female' => null, 'male' => null,
         ];
 

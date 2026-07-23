@@ -212,6 +212,25 @@
                                 </div>
                             </div>
 
+                            <!-- Monthly Budget Module -->
+                            <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
+                                <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Monthly Budget Module</p>
+
+                                <div>
+                                    <div class="flex items-center gap-3 cursor-pointer">
+                                        <div class="toggle-track {{ old('allows_budget_direct_entry', true) ? 'on' : '' }}" id="allowsBudgetDirectEntryToggle"
+                                             onclick="toggleSwitch('allowsBudgetDirectEntryToggle', event)">
+                                            <div class="toggle-thumb"></div>
+                                        </div>
+                                        <span class="text-sm text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                                              onclick="toggleSwitch('allowsBudgetDirectEntryToggle', event)">Allow direct entry</span>
+                                        <input type="checkbox" name="allows_budget_direct_entry" id="allowsBudgetDirectEntryCheckbox" class="hidden"
+                                                {{ old('allows_budget_direct_entry', true) ? 'checked' : '' }}>
+                                    </div>
+                                    <p class="f-hint mt-1 ml-11">If enabled, monthly budgets can be added directly to this platform. If disabled, entries can only be added to sub-platforms.</p>
+                                </div>
+                            </div>
+
                             <!-- Module Visibility -->
                             <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
                                 <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Module Visibility</p>

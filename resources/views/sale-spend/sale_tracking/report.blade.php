@@ -1,10 +1,10 @@
 @extends('layouts.app')
 
-@section('title', 'Sales Report Export')
+@section('title', 'Ads Performance Report')
 
 @section('content')
-<div id="sales-report-page-content"
-     x-data="salesReportPage()"
+<div id="ads-performance-report-content"
+     x-data="adsPerformanceReportPage()"
      @keydown.escape.window="exportOpen = false">
 
     {{-- Export modal --}}
@@ -14,7 +14,6 @@
              x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
              @click.stop>
 
-            {{-- Header --}}
             <div class="shrink-0 px-5 py-4 border-b border-slate-200 dark:border-slate-700">
                 <div class="flex items-start justify-between gap-3">
                     <div class="flex items-start gap-3 min-w-0">
@@ -23,7 +22,7 @@
                         </div>
                         <div class="min-w-0">
                             <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100">Export to Excel</h3>
-                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Choose which report tables and columns to include</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Choose which tables, columns, and charts to include</p>
                             <p class="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 mt-1.5" x-text="exportSummary()"></p>
                         </div>
                     </div>
@@ -34,20 +33,18 @@
                 </div>
             </div>
 
-            {{-- Body --}}
             <div class="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-slate-50/50 dark:bg-slate-900/20">
                 <template x-for="section in sections" :key="section.key">
                     <div class="rounded-xl border bg-white dark:bg-slate-800 shadow-sm transition-all duration-200"
-                         :class="tables[section.key]
+                         :class="isSectionActive(section.key)
                              ? 'border-slate-200 dark:border-slate-700'
                              : 'border-slate-200/60 dark:border-slate-700/60 opacity-60'">
 
-                        {{-- Section header --}}
                         <div class="flex items-center gap-3 px-3.5 py-3">
                             <label class="flex items-center shrink-0 cursor-pointer" @click.stop>
                                 <input type="checkbox"
                                        class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/30 cursor-pointer"
-                                       :checked="tables[section.key]"
+                                       :checked="isSectionActive(section.key)"
                                        @change="setTableIncluded(section.key, $event.target.checked)">
                             </label>
 
@@ -60,7 +57,7 @@
                                               :class="sectionSelectedCount(section.key) > 0
                                                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                                                   : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'"
-                                              x-text="sectionSelectedCount(section.key) + ' / ' + sectionTotalCount(section.key)"></span>
+                                              x-text="sectionCountLabel(section.key)"></span>
                                     </div>
                                     <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 line-clamp-1" x-text="section.desc"></p>
                                 </div>
@@ -81,10 +78,8 @@
                             </div>
                         </div>
 
-                        {{-- Column groups --}}
                         <div x-show="expanded[section.key]" x-collapse class="border-t border-slate-100 dark:border-slate-700/80">
                             <div class="p-3 space-y-2.5">
-                                {{-- Single-checkbox groups: 2 per row --}}
                                 <div x-show="singleColumnGroups(section).length > 0" class="grid grid-cols-2 gap-1.5">
                                     <template x-for="group in singleColumnGroups(section)" :key="group.header + '-single'">
                                         <template x-for="col in group.columns" :key="col.key">
@@ -102,19 +97,18 @@
                                                           :class="isColumnSelected(section.key, col.key)
                                                               ? 'text-emerald-800 dark:text-emerald-200'
                                                               : 'text-slate-700 dark:text-slate-300'"
-                                                          x-text="columnChipLabel(col)"></span>
+                                                          x-text="singleColumnChipLabel(group, col)"></span>
                                                 </span>
                                             </label>
                                         </template>
                                     </template>
                                 </div>
 
-                                {{-- Multi-checkbox groups --}}
                                 <template x-for="group in multiColumnGroups(section)" :key="group.header">
                                     <div class="rounded-lg border border-slate-100 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-900/30 p-2.5">
                                         <div class="flex items-center justify-between gap-2 mb-2">
                                             <div class="flex items-center gap-2 min-w-0">
-                                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate" x-text="group.header"></span>
+                                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate" x-text="groupHeaderLabel(group)"></span>
                                                 <span class="text-[10px] text-slate-400 dark:text-slate-500 shrink-0"
                                                       x-text="'(' + groupSelectedCount(section.key, group) + '/' + group.columns.length + ')'"></span>
                                             </div>
@@ -159,166 +153,135 @@
                 </template>
             </div>
 
-            {{-- Footer --}}
             <div class="shrink-0 px-4 py-3.5 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center gap-2">
                 <button type="button" @click="exportOpen = false"
                         class="flex-1 py-2.5 text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                     Cancel
                 </button>
-                <a :href="exportUrl()"
-                   :class="canExport() ? 'hover:bg-emerald-600 shadow-emerald-500/20' : 'opacity-40 pointer-events-none'"
-                   class="flex-[1.4] inline-flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-xl bg-emerald-500 text-white shadow-sm transition-all">
+                <button type="button"
+                        :disabled="!canExport()"
+                        @click="downloadExport()"
+                        :class="canExport() ? 'hover:bg-emerald-600 shadow-emerald-500/20' : 'opacity-40 cursor-not-allowed'"
+                        class="flex-[1.4] inline-flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-xl bg-emerald-500 text-white shadow-sm transition-all">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                     Download Excel
-                </a>
+                </button>
             </div>
         </div>
     </div>
 
     <div class="p-5 lg:p-6 space-y-5">
 
-        {{-- Header --}}
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-                <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                    <span class="w-8 h-8 bg-emerald-400/15 rounded-lg flex items-center justify-center shrink-0">
-                        <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                    </span>
-                    Sales Report
-                </h1>
-                <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5 ml-10">{{ $range['label'] }}</p>
-            </div>
-            <div class="flex items-center gap-2 flex-wrap sm:justify-end">
-                <a href="{{ route('admin.daily-sales.index') }}"
-                   class="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-                    Back
-                </a>
-                <button type="button" @click="exportOpen = true"
-                        class="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] border border-emerald-200 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 font-medium hover:bg-emerald-100 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                    Export Excel
-                </button>
-            </div>
+    {{-- Header --}}
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+            <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span class="w-8 h-8 bg-emerald-400/15 rounded-lg flex items-center justify-center shrink-0">
+                    <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </span>
+                {{ $title }}
+            </h1>
+            <p class="text-sm text-slate-400 dark:text-slate-500 mt-0.5 ml-10">{{ $period_label }}</p>
         </div>
-
-        {{-- Period filter --}}
-        <div class="an-card p-5">
-            <p class="sec-heading mb-4">Filter by Period</p>
-            <div class="flex flex-wrap items-end gap-3">
-                @include('sales.partials.report_period_fields', ['inForm' => false])
-                <button type="button" @click="submitPeriod()"
-                        class="px-5 py-2 bg-accent-400 hover:bg-accent-600 text-white text-sm font-semibold rounded-lg transition-colors">
-                    Apply Period
-                </button>
-                <a href="{{ $reset_period_url }}"
-                   class="px-5 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
-                    Reset
-                </a>
-            </div>
+        <div class="flex items-center gap-2 flex-wrap sm:justify-end">
+            <a href="{{ route('admin.ads-performance.index') }}"
+               class="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                Back to Ads Performance
+            </a>
+            <button type="button" @click="exportOpen = true"
+                    class="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] border border-emerald-200 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 font-medium hover:bg-emerald-100 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Export Excel
+            </button>
         </div>
+    </div>
 
-        {{-- KPI stats --}}
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            @foreach($stats as $stat)
-                <div class="sr-stat-card sr-stat-{{ $stat['tone'] }}">
-                    <p class="sr-stat-label">{{ $stat['label'] }}</p>
-                    <p class="sr-stat-value {{ $stat['value_class'] ?? '' }}">{{ $stat['value'] }}</p>
+    @include('sale-spend.sale_tracking.partials.report_filters')
+
+    {{-- KPI stats --}}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        @foreach($stats as $stat)
+            <div class="sr-stat-card sr-stat-{{ $stat['tone'] }}">
+                <p class="sr-stat-label">{{ $stat['label'] }}</p>
+                <p class="sr-stat-value">{{ $stat['value'] }}</p>
+            </div>
+        @endforeach
+    </div>
+
+    {{-- Active filter tags --}}
+    @if(count($active_filter_tags) > 0)
+        <div class="flex flex-wrap gap-2">
+            @foreach($active_filter_tags as $tag)
+                <div class="flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700">
+                    <span class="font-semibold">{{ $tag['label'] }}:</span> {{ $tag['value'] }}
+                    <a href="{{ $tag['url'] }}" class="ml-0.5 opacity-60 hover:opacity-100 text-[13px]">&times;</a>
                 </div>
             @endforeach
         </div>
+    @endif
 
-        {{-- Active filter tags --}}
-        @if(count($active_filter_tags) > 0)
-            <div class="flex flex-wrap gap-2">
-                @foreach($active_filter_tags as $tag)
-                    <div class="flex items-center gap-1.5 bg-accent-50 dark:bg-accent-800/40 text-accent-600 dark:text-accent-200 text-[11px] font-medium px-3 py-1 rounded-full border border-accent-100 dark:border-accent-700">
-                        <span class="font-semibold">{{ $tag['label'] }}:</span> {{ $tag['value'] }}
-                        <a href="{{ $tag['url'] }}" class="ml-0.5 opacity-60 hover:opacity-100 text-[13px]">&times;</a>
-                    </div>
-                @endforeach
-            </div>
-        @endif
-
-        {{-- How to use --}}
-        <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/40 rounded-xl p-4 flex items-start gap-3">
-            <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <div class="text-[12px] text-blue-700 dark:text-blue-400">
-                <span class="font-semibold">How to use:</span>
-                Select a period above, then switch view tabs for Totals, Weekly, All Data, and Return Breakdown.
+    {{-- Report data viewer --}}
+    <div class="an-card overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <p class="sec-heading mb-1">Report Data</p>
+                    <h2 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">Ad Performance Tracking</h2>
+                    <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                        Showing {{ $visible_count }} {{ $view === 'platforms' ? 'platforms' : ($view === 'charts' ? 'chart sections' : 'rows') }}
+                        @if(count($active_filter_tags) > 0)
+                            <span class="text-accent-600">· {{ count($active_filter_tags) }} filter{{ count($active_filter_tags) > 1 ? 's' : '' }} active</span>
+                        @endif
+                    </p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    @foreach($view_tabs as $tab)
+                        <a href="{{ $tab['url'] }}"
+                           class="sr-view-pill {{ $tab['active'] ? 'active' : '' }}">
+                            {{ $tab['label'] }}
+                            <span class="sr-view-count">{{ $row_counts[$tab['key']] ?? 0 }}</span>
+                        </a>
+                    @endforeach
+                </div>
             </div>
         </div>
 
-        {{-- Report data viewer --}}
-        <div class="an-card overflow-hidden">
-            <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                    <div>
-                        <p class="sec-heading mb-1">Report Data</p>
-                        <h2 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">{{ $range['label'] }}</h2>
-                        <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                            Showing {{ $visible_count }} rows
-                            @if($active_filter_count > 0)
-                                <span class="text-accent-600">· {{ $active_filter_count }} filter{{ $active_filter_count > 1 ? 's' : '' }} active</span>
-                            @endif
-                        </p>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2">
-                        @foreach($view_tabs as $tab)
-                            <a href="{{ $tab['url'] }}"
-                               class="sr-view-pill {{ $tab['active'] ? 'active' : '' }}">
-                                {{ $tab['label'] }}
-                                <span class="sr-view-count">{{ $row_counts[$tab['key']] ?? 0 }}</span>
-                            </a>
-                        @endforeach
-                    </div>
+        <div class="sr-table-wrap">
+            @if($is_empty)
+                <div class="px-4 py-16 text-center text-[13px] text-slate-400 dark:text-slate-500">
+                    No data found for the selected filters.
                 </div>
-            </div>
-
-            @if($show_daily_month_tabs)
-                <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20">
-                    <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2.5">Month</p>
-                    <div class="flex flex-wrap items-center gap-2">
-                        @foreach($daily_month_tabs as $tab)
-                            <a href="{{ $tab['url'] }}"
-                               class="sr-month-pill {{ $tab['active'] ? 'active' : '' }}">
-                                {{ $tab['label'] }}
-                                <span class="sr-view-count">{{ $tab['count'] }}</span>
-                            </a>
-                        @endforeach
-                    </div>
-                </div>
+            @elseif($view === 'summary')
+                @include('sale-spend.sale_tracking.partials.report_table_summary')
+            @elseif($view === 'platforms')
+                @include('sale-spend.sale_tracking.partials.report_table_platforms')
+            @elseif($view === 'charts')
+                @include('sale-spend.sale_tracking.partials.report_charts')
+            @else
+                @include('sale-spend.sale_tracking.partials.report_table_performance')
             @endif
-
-            <div class="sr-table-wrap">
-                @if($view === 'weekly')
-                    @include('sales.partials.report_table_weekly')
-                @elseif($view === 'daily')
-                    @include('sales.partials.report_table_daily')
-                @elseif($view === 'returns')
-                    @include('sales.partials.report_table_returns')
-                @else
-                    @include('sales.partials.report_table_summary')
-                @endif
-            </div>
         </div>
+    </div>
 
     </div>
 </div>
 
 @push('js')
 <script>
-window.salesReportExportConfig = {
-    period: @json($filters['period'] ?? 'this_month'),
-    fromYM: @json(($filters['period'] ?? 'this_month') === 'custom'
-        ? ($filters['from_year_month'] ?? $period_display['from_year_month'])
-        : $period_display['from_year_month']),
-    toYM: @json(($filters['period'] ?? 'this_month') === 'custom'
-        ? ($filters['to_year_month'] ?? $period_display['to_year_month'])
-        : $period_display['to_year_month']),
+window.adsPerformanceChartData = @json($chart_data);
+window.adsPerformanceChartView = @json($view);
+window.adsPerformanceDefaultEngagement = @json($selected_engagement_slug ?? 'all');
+window.adsPerformancePlatformData = {
+    all: @json($platform_sections_all),
+    sections: @json($platform_sections),
+};
+window.adsPerformanceExportConfig = {
     sections: @json($export_sections),
     columns: @json($export_column_defaults),
-    exportBaseUrl: @json(route('admin.sales.analytics.export')),
+    exportBaseUrl: @json(route('admin.ads-performance.export')),
+    filterParams: @json($filters),
+    hasData: @json(!$is_empty),
 };
 </script>
 @endpush

@@ -159,12 +159,19 @@
             </div>
             <div class="flex items-center gap-2 flex-wrap">
 
-                {{-- Export --}}
-                <a href="{{ route('admin.ads-performance.export') }}?{{ http_build_query(request()->except('page')) }}"
-                   class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-emerald-200 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-colors font-medium">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                    Export Excel
+                {{-- Report view --}}
+                <a href="{{ route('admin.ads-performance.report', request()->except('page')) }}"
+                   class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-accent-200 dark:border-accent-700 rounded-lg bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-300 hover:bg-accent-100 transition-colors font-medium">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    Ads Performance Report
                 </a>
+
+                {{-- Export --}}
+{{--                <a href="{{ route('admin.ads-performance.export') }}?{{ http_build_query(request()->except('page')) }}"--}}
+{{--                   class="flex items-center gap-2 px-3.5 py-2 text-[13px] border border-emerald-200 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-colors font-medium">--}}
+{{--                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>--}}
+{{--                    Export Excel--}}
+{{--                </a>--}}
 
                 {{-- Filters --}}
                 @php
@@ -262,7 +269,7 @@
                             Rev £{{ number_format($mg['totalRevenue'], 2) }}
                         </span>
                         <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded-full">
-                            Ads Tax £{{ number_format($mg['totalCost'], 2) }}
+                            Net £{{ number_format($mg['totalNetRev'], 2) }}
                         </span>
                         @if($mg['totalReturn'] > 0)
                             <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 px-2.5 py-1 rounded-full">
@@ -270,8 +277,8 @@
                             </span>
                         @endif
                         @if($mg['totalNetRev'] >= 0)
-                            <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-[#E6F3F0] dark:bg-accent-900/30 text-[#003D2B] dark:text-accent-300 px-2.5 py-1 rounded-full">
-                                Net £{{ number_format($mg['totalNetRev'], 2) }}
+                            <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-full">
+                                Ads Tax £{{ number_format($mg['totalCost'], 2) }}
                             </span>
                         @else
                             <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-2.5 py-1 rounded-full">
@@ -289,7 +296,7 @@
                         @can('general.sale_tracking.edit')
                             <a href="{{ route('admin.ads-performance.edit', $mg['entries']->first()->id) }}?return_url={{ $return_url }}"
                                data-preserve-scroll
-                               class="flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full bg-accent-400/10 text-accent-600 dark:text-accent-300 hover:bg-accent-400/20 transition-colors">
+                               class="flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full bg-accent-400/10 text-accent-600 dark:text-white hover:bg-accent-400/20 transition-colors">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
                                 Edit Month
                             </a>

@@ -96,6 +96,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
 
         Route::prefix('ads-performance')->name('ads-performance.')->controller(SaleTrackingController::class)->group(function () {
             Route::get('/', 'index')->name('index');
+            Route::get('/report', 'report')->name('report');
             Route::get('/create', 'create')->name('create');
             Route::post('/', 'store')->name('store');
             Route::get('/{saleTracking}/edit', 'edit')->name('edit');

@@ -42,7 +42,10 @@
                                 <select name="sale_platform_id" class="tom-select f-input @error('sale_platform_id') border-red-400 @enderror" required>
                                     <option value="">Select a platform</option>
                                     @foreach($salePlatforms as $platform)
-                                        <option value="{{ $platform['id'] }}" {{ old('sale_platform_id', $monthlyBudget->sale_platform_id) == $platform['id'] ? 'selected' : '' }}>
+                                        @php $selectedPlatformId = old('sale_platform_id', $monthlyBudget->sale_platform_id); @endphp
+                                        <option value="{{ $platform['id'] }}"
+                                                @if(!$platform['allows_budget_direct_entry'] && $selectedPlatformId != $platform['id']) disabled @endif
+                                                {{ $selectedPlatformId == $platform['id'] ? 'selected' : '' }}>
                                             {!! $platform['label'] !!}
                                         </option>
                                     @endforeach
@@ -86,13 +89,24 @@
                                 </div>
                             </div>
 
-                            <!-- Budget -->
+                            <!-- Budget Requested -->
                             <div>
-                                <label class="f-label">Budget <span class="f-required">*</span></label>
-                                <input type="number" name="budget" step="0.01" min="0"
-                                       class="f-input @error('budget') border-red-400 @enderror"
-                                       value="{{ old('budget', $monthlyBudget->budget) }}" required />
-                                @error('budget')
+                                <label class="f-label">Budget Requested <span class="f-required">*</span></label>
+                                <input type="number" name="budget_requested" step="0.01" min="0"
+                                       class="f-input @error('budget_requested') border-red-400 @enderror"
+                                       value="{{ old('budget_requested', $monthlyBudget->budget_requested) }}" required />
+                                @error('budget_requested')
+                                    <p class="f-error">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <!-- Budget Approved -->
+                            <div>
+                                <label class="f-label">Budget Approved <span class="f-required">*</span></label>
+                                <input type="number" name="budget_approved" step="0.01" min="0"
+                                       class="f-input @error('budget_approved') border-red-400 @enderror"
+                                       value="{{ old('budget_approved', $monthlyBudget->budget_approved) }}" required />
+                                @error('budget_approved')
                                     <p class="f-error">{{ $message }}</p>
                                 @enderror
                             </div>

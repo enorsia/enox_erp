@@ -95,7 +95,8 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
                 'level3'     => $l3,
                 'year'       => (int) ($record->year ?? 0),
                 'month'      => $this->months[$record->month] ?? $record->month,
-                'budget'     => (float) ($record->budget ?? 0),
+                'budget_requested' => (float) ($record->budget_requested ?? 0),
+                'budget_approved'  => (float) ($record->budget_approved ?? 0),
                 'currency'   => $record->currency,
                 'notes'      => $record->notes ?? '-',
                 'created_at' => $record->created_at?->format('d M Y'),
@@ -145,7 +146,7 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
 
     public static function allColumns(): array
     {
-        return ['id', 'level1', 'level2', 'level3', 'year', 'month', 'budget', 'currency', 'notes', 'created_at', 'updated_at'];
+        return ['id', 'level1', 'level2', 'level3', 'year', 'month', 'budget_requested', 'budget_approved', 'currency', 'notes', 'created_at', 'updated_at'];
     }
 
     public static function columnLabels(): array
@@ -157,7 +158,8 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
             'level3'     => 'Sub Sub Platform',
             'year'       => 'Year',
             'month'      => 'Month',
-            'budget'     => 'Budget',
+            'budget_requested' => 'Budget Requested',
+            'budget_approved'  => 'Budget Approved',
             'currency'   => 'Currency',
             'notes'      => 'Notes',
             'created_at' => 'Created At',
@@ -349,10 +351,13 @@ class MonthlyBudgetExport implements FromCollection, WithHeadings, WithEvents, S
             }
         }
 
-        // Apply money number format for budget column
+        // Apply money number format for budget columns
         $colMap = array_flip($activeCols);
-        if (isset($colMap['budget'])) {
-            $budgetCol = Coordinate::stringFromColumnIndex($colMap['budget'] + 1);
+        foreach (['budget_requested', 'budget_approved'] as $budgetColKey) {
+            if (!isset($colMap[$budgetColKey])) {
+                continue;
+            }
+            $budgetCol = Coordinate::stringFromColumnIndex($colMap[$budgetColKey] + 1);
             $sheet->getStyle("{$budgetCol}7:{$budgetCol}{$highestRow}")
                 ->getNumberFormat()->setFormatCode('#,##0.00');
         }

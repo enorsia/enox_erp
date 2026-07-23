@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Exports\SaleTrackingExport;
 use App\Models\DailyAdPerformance;
+use App\Services\AdsPerformanceExportColumns;
+use App\Services\AdsPerformanceReportService;
 use App\Services\SalePlatformService;
 use App\Services\SaleTrackingService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,6 +23,7 @@ class SaleTrackingController extends Controller
     public function __construct(
         private SaleTrackingService $service,
         private SalePlatformService $salePlatformService,
+        private AdsPerformanceReportService $reportService,
     ) {}
 
     public function index(Request $request): View
@@ -57,7 +61,7 @@ class SaleTrackingController extends Controller
 
             activity()->causedBy(Auth::user())
                 ->withProperties(['month' => $month, 'count' => count($created)])
-                ->log('Created ' . count($created) . ' sale tracking record(s) for ' . \Carbon\Carbon::parse($month)->format('M Y'));
+                ->log('Created ' . count($created) . ' sale tracking record(s) for ' . Carbon::parse($month)->format('M Y'));
 
             notify()->success(count($created) . ' sale tracking record(s) created.', 'Success');
             return redirect($return_url);
@@ -153,9 +157,31 @@ class SaleTrackingController extends Controller
         return redirect($return_url);
     }
 
-    public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function report(Request $request): View
     {
         Gate::authorize('general.sale_tracking.index');
-        return (new SaleTrackingExport($request->except(['page'])))->download($this->service);
+
+        return view('sale-spend.sale_tracking.report', array_merge(
+            $this->reportService->buildPageData($request),
+            ['salePlatforms' => $this->salePlatformService->getSaleTrackingPlatformOptions()],
+        ));
+    }
+
+    public function export(Request $request, AdsPerformanceExportColumns $exportColumns): \Symfony\Component\HttpFoundation\StreamedResponse|\Illuminate\Http\JsonResponse
+    {
+        Gate::authorize('general.sale_tracking.index');
+
+        if (!$this->reportService->hasExportData($request->all())) {
+            return response()->json([
+                'message' => 'No data found for the selected filters.',
+            ], 404);
+        }
+
+        $filters  = $this->reportService->normalizeExportFilters($request->all());
+        $sections = $this->reportService->buildExportSections($request->all());
+        $tables   = $exportColumns->parseTables($request->input('tables'), $request->input('export_columns'));
+        $columns  = $exportColumns->parseSelection($request->input('export_columns'), $sections, $tables);
+
+        return (new SaleTrackingExport($filters, $tables, $columns))->download($this->service);
     }
 }

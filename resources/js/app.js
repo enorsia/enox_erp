@@ -1,6 +1,9 @@
 // ── Alpine.js ──
 import Alpine from 'alpinejs';
 import collapse from '@alpinejs/collapse';
+import './pages/sales-analytics-report';
+import './pages/ads-performance-report-export';
+
 Alpine.plugin(collapse);
 window.Alpine = Alpine;
 Alpine.start();
@@ -39,3 +42,4 @@ if (has('#daily-returns-page-content'))       import('./pages/daily-returns');
 if (has('#monthly-budget-page-content'))      import('./pages/monthly-budgets');
 if (has('#analytics-dashboard-content'))      import('./pages/analytics-dashboard');
 if (has('#sale-tracking-page'))               import('./pages/sale-tracking');
+if (has('#ads-performance-report-content'))  import('./pages/ads-performance-report');

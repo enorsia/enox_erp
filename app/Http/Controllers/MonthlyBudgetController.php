@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\MonthlyBudgetExport;
 use App\Models\MonthlyBudget;
+use App\Models\SalePlatform;
 use App\Services\MonthlyBudgetService;
 use App\Services\SalePlatformService;
 use App\Support\DateOptions;
@@ -61,7 +62,8 @@ class MonthlyBudgetController extends Controller
             'sale_platform_id' => 'required|exists:sale_platforms,id',
             'year' => 'required|integer|min:1900|max:2100',
             'month' => 'required|integer|min:1|max:12',
-            'budget' => 'required|numeric|min:0',
+            'budget_requested' => 'required|numeric|min:0',
+            'budget_approved' => 'required|numeric|min:0',
             'currency' => 'required|string|size:3',
             'notes' => 'nullable|string',
         ]);
@@ -75,6 +77,12 @@ class MonthlyBudgetController extends Controller
         ], [
             'sale_platform_id.unique' => 'A monthly budget for this sale platform, year, and month already exists.',
         ]);
+
+        $platform = SalePlatform::find($validated['sale_platform_id']);
+        if ($platform && ! $platform->allows_budget_direct_entry) {
+            return redirect()->back()->withInput()
+                ->withErrors(['sale_platform_id' => 'Direct entry not allowed for: ' . $platform->name]);
+        }
 
         try {
             $monthlyBudget = MonthlyBudget::create($validated);
@@ -121,7 +129,8 @@ class MonthlyBudgetController extends Controller
             'sale_platform_id' => 'required|exists:sale_platforms,id',
             'year' => 'required|integer|min:1900|max:2100',
             'month' => 'required|integer|min:1|max:12',
-            'budget' => 'required|numeric|min:0',
+            'budget_requested' => 'required|numeric|min:0',
+            'budget_approved' => 'required|numeric|min:0',
             'currency' => 'required|string|size:3',
             'notes' => 'nullable|string',
         ]);
@@ -135,6 +144,12 @@ class MonthlyBudgetController extends Controller
         ], [
             'sale_platform_id.unique' => 'A monthly budget for this sale platform, year, and month already exists.',
         ]);
+
+        $platform = SalePlatform::find($validated['sale_platform_id']);
+        if ($platform && ! $platform->allows_budget_direct_entry) {
+            return redirect()->back()->withInput()
+                ->withErrors(['sale_platform_id' => 'Direct entry not allowed for: ' . $platform->name]);
+        }
 
         try {
             $oldValues = $monthlyBudget->toArray();
