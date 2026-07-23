@@ -224,6 +224,57 @@
                         </div>
                     </div>
                 </div>
+
+                @canany(Cache::get('permissions.available', [])['prefix']['ecom_tracker_'] ?? [])
+                <div x-data="{ open: {{ Request::is('admin/ecom-tracker*') || Request::is('admin/ecom-activity*') ? 'true' : 'false' }} }">
+                    <button @click="open = !open"
+                            class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/ecom-tracker*') || Request::is('admin/ecom-activity*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor"
+                             stroke-width="1.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                        </svg>
+                        <span class="flex-1 text-left">Ecom Tracker</span>
+                        <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
+                             :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
+                             viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+
+                    <div x-show="open" x-collapse>
+                        <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
+                            @can('ecom_tracker.dashboard.index')
+                                <a href="{{ route('admin.ecom-tracker.dashboard') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-tracker/dashboard*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    Dashboard
+                                </a>
+                            @endcan
+
+                            @can('ecom_tracker.visitors.index')
+                                <a href="{{ route('admin.ecom-tracker.visitors') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-tracker/visitors*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    Visitor analytics
+                                </a>
+                            @endcan
+
+                            @can('ecom_tracker.activity.index')
+                                <a href="{{ route('admin.ecom-activity.index') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-activity*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    User Activity
+                                </a>
+                            @endcan
+
+                            @can('ecom_tracker.bot_traffic.index')
+                                <a href="{{ route('admin.ecom-tracker.bot-traffic') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-tracker/bot-traffic*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    Bot traffic
+                                </a>
+                            @endcan
+                        </div>
+                    </div>
+                </div>
+                @endcanany
             </div>
         @endcanany
 

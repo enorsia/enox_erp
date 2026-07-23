@@ -23,6 +23,9 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
+        <env name="TRACKER_REDIS_USE_MEMORY_STORE" value="true"/>
+        <env name="TRACKER_QUEUE_ASYNC" value="false"/>
+        <env name="TRACKER_ANALYTICS_CACHE_ENABLED" value="true"/>
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="MAIL_MAILER" value="array"/>

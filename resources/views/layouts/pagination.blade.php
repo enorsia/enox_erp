@@ -2,11 +2,14 @@
     Reusable windowed paginator — always single line from 320 px upward.
     Usage: @include('master.pagination', ['paginator' => $variable])
 --}}
-@if ($paginator->hasPages())
+@if ($paginator->hasPages() || $paginator->total() > 0)
     @php
         $current = $paginator->currentPage();
         $last    = $paginator->lastPage();
-        $delta   = 1; // pages on each side of current
+        $delta   = 1;
+        $from = $paginator->firstItem() ?? 0;
+        $to = $paginator->lastItem() ?? 0;
+        $total = $paginator->total();
 
         // Build page set: first, window around current, last
         $range = collect();
@@ -30,7 +33,11 @@
         }
     @endphp
 
-    <div class="mt-5 flex justify-center">
+    <div class="mt-5 flex flex-col items-center gap-2">
+        <p class="etd-pagination-summary text-[12px] text-slate-500 dark:text-slate-400">
+            Showing {{ number_format($from) }}–{{ number_format($to) }} of {{ number_format($total) }}
+        </p>
+        @if ($paginator->hasPages())
         <nav aria-label="Pagination"
              class="flex flex-nowrap items-center justify-center gap-0.5">
 
@@ -76,5 +83,6 @@
             @endif
 
         </nav>
+        @endif
     </div>
 @endif

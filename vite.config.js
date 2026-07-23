@@ -11,6 +11,8 @@ export default defineConfig({
                 'resources/js/app.js',
                 'resources/js/pages/users.js',
                 'resources/js/pages/discounts.js',
+                'resources/js/pages/ecom-tracker-dashboard.js',
+                'resources/js/pages/visitor-analytics.js',
             ],
             refresh: true,
         }),

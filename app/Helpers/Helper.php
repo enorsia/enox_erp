@@ -93,6 +93,29 @@ if (!function_exists('zeroToString')) {
     }
 }
 
+if (! function_exists('format_duration')) {
+    function format_duration(int $seconds): string
+    {
+        if ($seconds <= 0) {
+            return '0s';
+        }
+
+        $hours = intdiv($seconds, 3600);
+        $minutes = intdiv($seconds % 3600, 60);
+        $remaining = $seconds % 60;
+
+        if ($hours > 0) {
+            return sprintf('%dh %dm', $hours, $minutes);
+        }
+
+        if ($minutes > 0) {
+            return sprintf('%dm %ds', $minutes, $remaining);
+        }
+
+        return $seconds.'s';
+    }
+}
+
 if (!function_exists('calculatePlatformProfit')) {
     function calculatePlatformProfit($price, $platform)
     {

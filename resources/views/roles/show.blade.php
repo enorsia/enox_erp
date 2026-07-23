@@ -40,7 +40,7 @@
                         <!-- Module header -->
                         <button type="button" onclick="toggleModule('{{ $colId }}')"
                                 class="w-full flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-slate-800/50 text-left">
-                            <span class="text-[13px] font-semibold text-slate-700 dark:text-slate-200 capitalize">{{ $moduleIndex }} Module</span>
+                            <span class="text-[13px] font-semibold text-slate-700 dark:text-slate-200">{{ $moduleIndex }}</span>
                             <svg id="{{ $colId }}-icon" class="w-4 h-4 text-slate-400 transition-transform duration-200"
                                  fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" d="M19 9l-7 7-7-7"/>
