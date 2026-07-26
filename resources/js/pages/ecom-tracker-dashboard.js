@@ -268,18 +268,10 @@ if (botTrendCtx && botTrend.labels) {
             labels: botTrend.labels,
             datasets: [
                 {
-                    label: 'Real visitors',
-                    data: botTrend.human || [],
-                    backgroundColor: '#3b82f68C',
-                    borderRadius: 3,
-                    stack: 'traffic',
-                },
-                {
                     label: 'Automated traffic',
                     data: botTrend.bot || [],
                     backgroundColor: '#f59e0b8C',
                     borderRadius: 3,
-                    stack: 'traffic',
                 },
             ],
         },
@@ -288,8 +280,8 @@ if (botTrendCtx && botTrend.labels) {
             maintainAspectRatio: false,
             plugins: { legend: { labels: { boxWidth: 10 } }, tooltip: tipStyle() },
             scales: {
-                x: { stacked: true, grid: { display: false } },
-                y: { stacked: true, grid: { color: gridClr() }, beginAtZero: true },
+                x: { grid: { display: false } },
+                y: { grid: { color: gridClr() }, beginAtZero: true },
             },
         },
     });

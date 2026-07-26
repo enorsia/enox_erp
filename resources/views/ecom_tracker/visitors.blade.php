@@ -136,7 +136,7 @@
                         <td class="etd-num">{{ $visitor['session_count'] }}</td>
                         <td class="etd-num">{{ number_format($visitor['order_qty'] ?? 0) }}</td>
                         <td class="etd-num">{{ $visitor['total_stay_label'] }}</td>
-                        <td>{{ TrackerTime::toLocal($visitor['last_active_at'])?->diffForHumans() ?? '—' }}</td>
+                        <td>{{ TrackerTime::diffForHumansFromStorage($visitor['last_active_at']) ?? '—' }}</td>
                     </tr>
                 @empty
                     <tr><td colspan="5" class="text-center text-slate-500 py-8">No visitors in this window.</td></tr>

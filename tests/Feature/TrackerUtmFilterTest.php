@@ -14,7 +14,8 @@ test('tracker utm filter exposes configured source and medium options', function
 
 test('tracker utm filter resolves only allowed dropdown values', function () {
     expect(TrackerUtmFilter::resolveSource('google'))->toBe('google');
-    expect(TrackerUtmFilter::resolveSource('unknown-source'))->toBeNull();
+    expect(TrackerUtmFilter::resolveSource('custom-network'))->toBe('custom-network');
+    expect(TrackerUtmFilter::resolveSource('bad value'))->toBeNull();
     expect(TrackerUtmFilter::resolveMedium('cpc'))->toBe('cpc');
     expect(TrackerUtmFilter::resolveMedium('random'))->toBeNull();
 });

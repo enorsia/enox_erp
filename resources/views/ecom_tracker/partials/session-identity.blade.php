@@ -5,6 +5,9 @@
     @if ($session->user_email)
         <div class="etd-subtle">{{ $session->user_email }}</div>
     @endif
+    @if ($session->user_phone)
+        <div class="etd-subtle">{{ $session->user_phone }}</div>
+    @endif
 @elseif ($session->isGuestCheckout())
     <div class="etd-session-identity__name-row">
         <span class="etd-session-identity__name">{{ $session->user_name ?: '—' }}</span>
@@ -12,6 +15,9 @@
     </div>
     @if ($session->user_email)
         <div class="etd-subtle">{{ $session->user_email }}</div>
+    @endif
+    @if ($session->user_phone)
+        <div class="etd-subtle">{{ $session->user_phone }}</div>
     @endif
 @elseif ($session->is_logged_in && $session->user_id)
     <span class="etd-badge mid">User #{{ $session->user_id }}</span>

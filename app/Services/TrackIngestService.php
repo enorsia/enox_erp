@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Support\EcomTrackerLogger;
+use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
@@ -93,6 +94,8 @@ class TrackIngestService
                 $row
             );
 
+            $this->backfillSessionAttribution($sessionId, $event['page_url'] ?? null);
+
             if (($event['action_type'] ?? '') === 'proceed_checkout') {
                 $this->syncSessionUserFromProceedCheckout($sessionId, $event);
             }
@@ -146,7 +149,7 @@ class TrackIngestService
             $attributes['country'] = $clientContext['ip_country'];
         }
 
-        foreach (['user_id', 'user_name', 'user_email'] as $field) {
+        foreach (['user_id', 'user_name', 'user_email', 'user_phone'] as $field) {
             if (array_key_exists($field, $sessionData)) {
                 $attributes[$field] = $sessionData[$field];
             }
@@ -172,7 +175,7 @@ class TrackIngestService
             $attributes['updated_at'] = $now;
             $attributes['session_duration_seconds'] = 0;
 
-            ActivityEcomUser::query()->create($attributes);
+            $session = ActivityEcomUser::query()->create($attributes);
 
             $this->logInfo('ingest.session_created', 'New visitor session created', [
                 'session_id' => $sessionId,
@@ -181,9 +184,12 @@ class TrackIngestService
             ]);
 
             $this->persistBotContextIfNeeded($sessionId, $clientContext);
+            $this->mergeAttributionIntoSession($session, $sessionData);
 
             return;
         }
+
+        $this->mergeAttributionIntoSession($existing, $sessionData);
 
         $attributes['session_duration_seconds'] = $this->sessionDurationSeconds($existing);
         $attributes['updated_at'] = $now;
@@ -196,6 +202,41 @@ class TrackIngestService
         ]);
 
         $this->persistBotContextIfNeeded($sessionId, $clientContext);
+    }
+
+    /**
+     * @param  array<string, mixed>  $sessionData
+     */
+    private function mergeAttributionIntoSession(ActivityEcomUser $session, array $sessionData): void
+    {
+        $updates = [];
+
+        foreach (['utm_source', 'utm_medium', 'utm_campaign', 'landing_page'] as $field) {
+            if (filled($session->{$field}) || empty($sessionData[$field])) {
+                continue;
+            }
+
+            $updates[$field] = $sessionData[$field];
+        }
+
+        if ($updates !== []) {
+            $session->update($updates);
+        }
+    }
+
+    private function backfillSessionAttribution(string $sessionId, ?string $pageUrl): void
+    {
+        if (! filled($pageUrl)) {
+            return;
+        }
+
+        $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
+
+        if ($session === null) {
+            return;
+        }
+
+        SessionTrafficAttribution::backfillSession($session, $pageUrl);
     }
 
     /**
@@ -348,6 +389,7 @@ class TrackIngestService
         $lastName = trim((string) ($customer['last_name'] ?? ''));
         $fullName = trim((string) ($customer['full_name'] ?? ''));
         $email = trim((string) ($customer['email'] ?? ''));
+        $phone = $this->extractCustomerPhone($customer);
         $name = trim($fullName !== '' ? $fullName : implode(' ', array_filter([$firstName, $lastName])));
 
         $updates = [];
@@ -358,6 +400,10 @@ class TrackIngestService
 
         if ($email !== '') {
             $updates['user_email'] = $email;
+        }
+
+        if ($phone !== null) {
+            $updates['user_phone'] = $phone;
         }
 
         if ($updates === []) {
@@ -384,8 +430,79 @@ class TrackIngestService
             'session_id' => $sessionId,
             'user_name' => $updates['user_name'] ?? $session->user_name,
             'user_email' => $updates['user_email'] ?? $session->user_email,
+            'user_phone' => $updates['user_phone'] ?? $session->user_phone,
             'is_logged_in' => $updates['is_logged_in'] ?? $session->is_logged_in,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $customer
+     */
+    private function extractCustomerPhone(array $customer): ?string
+    {
+        foreach (['phone', 'mobile', 'phone_number'] as $key) {
+            $value = trim((string) ($customer[$key] ?? ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    public function backfillSessionPhonesFromCheckoutActions(int $chunkSize = 100): int
+    {
+        $updated = 0;
+
+        ActivityEcomUser::query()
+            ->where(function ($query) {
+                $query->whereNull('user_phone')->orWhere('user_phone', '');
+            })
+            ->orderBy('id')
+            ->chunkById($chunkSize, function ($sessions) use (&$updated) {
+                foreach ($sessions as $session) {
+                    $phone = $this->phoneFromCheckoutActions($session->session_id);
+
+                    if ($phone === null) {
+                        continue;
+                    }
+
+                    $session->update(['user_phone' => $phone]);
+                    $updated++;
+                }
+            });
+
+        return $updated;
+    }
+
+    private function phoneFromCheckoutActions(string $sessionId): ?string
+    {
+        $actions = ActivityEcomUserAction::query()
+            ->where('session_id', $sessionId)
+            ->whereIn('action_type', ['proceed_checkout', 'payment_success'])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
+
+        foreach ($actions as $action) {
+            foreach ([
+                $action->proceed_to_checkout['customer'] ?? null,
+                $action->payment_success['checkout_info']['customer'] ?? null,
+            ] as $customer) {
+                if (! is_array($customer)) {
+                    continue;
+                }
+
+                $phone = $this->extractCustomerPhone($customer);
+
+                if ($phone !== null) {
+                    return $phone;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function sessionDurationSeconds(ActivityEcomUser $session): int

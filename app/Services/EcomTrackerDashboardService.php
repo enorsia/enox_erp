@@ -44,7 +44,7 @@ class EcomTrackerDashboardService
     {
         $cache = app(\App\Support\TrackerRedisCache::class);
         $ttl = (int) config('tracker.analytics_cache_ttl_seconds', 300);
-        $cacheKey = 'dashboard:v2:'.hash('sha256', json_encode($this->cacheableFilters($filters)));
+        $cacheKey = 'dashboard:v3:'.hash('sha256', json_encode($this->cacheableFilters($filters)));
 
         $cached = $cache->remember($cacheKey, $ttl, fn () => $this->buildDashboardData($filters));
         $data = $cache->payload($cached);
@@ -346,11 +346,8 @@ class EcomTrackerDashboardService
      */
     public function filteredSessionIds(Carbon $from, Carbon $to, array $filters = []): Collection
     {
-        $query = ActivityEcomUser::query()
-            ->where(function ($inner) use ($from, $to) {
-                $inner->whereBetween('created_at', [$from, $to])
-                    ->orWhereBetween('last_active_at', [$from, $to]);
-            });
+        $query = ActivityEcomUser::query();
+        TrackerTime::applySessionActivityWindow($query, $from, $to);
 
         if (! empty($filters['device_type'])) {
             $query->where('device_type', $filters['device_type']);
@@ -435,13 +432,10 @@ class EcomTrackerDashboardService
 
     private function sessionsInRange(Carbon $from, Carbon $to): Collection
     {
-        return ActivityEcomUser::query()
-            ->where(function ($query) use ($from, $to) {
-                $query->whereBetween('created_at', [$from, $to])
-                    ->orWhereBetween('last_active_at', [$from, $to]);
-            })
-            ->get()
-            ->keyBy('session_id');
+        $query = ActivityEcomUser::query();
+        TrackerTime::applySessionActivityWindow($query, $from, $to);
+
+        return $query->get()->keyBy('session_id');
     }
 
     /**
@@ -461,12 +455,12 @@ class EcomTrackerDashboardService
             ];
         }
 
-        $seconds = (int) TrackerTime::toUtc($lastAction->created_at)?->diffInSeconds(TrackerTime::nowUtc());
+        $seconds = TrackerTime::secondsSinceStorage($lastAction->created_at);
 
         return [
-            'last_event_at' => TrackerTime::toLocal($lastAction->created_at)?->toIso8601String(),
+            'last_event_at' => TrackerTime::fromStorage($lastAction->created_at)?->toIso8601String(),
             'seconds_ago' => $seconds,
-            'label' => $this->formatIdleLabel($seconds),
+            'label' => TrackerTime::formatIdleSeconds($seconds),
         ];
     }
 
@@ -479,7 +473,7 @@ class EcomTrackerDashboardService
         $totalSessions = $sessionIds->count();
 
         $actions = ActivityEcomUserAction::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->when($sessionIds->isNotEmpty(), fn ($q) => $q->whereIn('session_id', $sessionIds))
             ->get()
             ->groupBy('session_id');
@@ -589,7 +583,7 @@ class EcomTrackerDashboardService
 
         foreach (self::FUNNEL_STAGES as $stage) {
             $query = ActivityEcomUserAction::query()
-                ->whereBetween('created_at', [$from, $to])
+                ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
                 ->whereIn('action_type', $stage['types']);
 
             if ($sessionIds !== null) {
@@ -674,7 +668,7 @@ class EcomTrackerDashboardService
             $periodTo = $periodEnd->copy()->utc();
 
             $sessionQuery = ActivityEcomUser::query()
-                ->whereBetween('created_at', [$periodFrom, $periodTo]);
+                ->whereBetween('created_at', TrackerTime::storageRange($periodFrom, $periodTo));
 
             if ($sessionIds !== null) {
                 $sessionQuery->whereIn('session_id', $sessionIds);
@@ -693,7 +687,7 @@ class EcomTrackerDashboardService
             }
 
             $converted = ActivityEcomUserAction::query()
-                ->whereBetween('created_at', [$periodStart, $periodEnd])
+                ->whereBetween('created_at', TrackerTime::storageRange($periodStart, $periodEnd))
                 ->whereIn('session_id', $periodSessionIds)
                 ->where('action_type', 'payment_success')
                 ->distinct('session_id')
@@ -786,7 +780,7 @@ class EcomTrackerDashboardService
 
         $viewsQuery = ActivityEcomUserAction::query()
             ->select('category_name', DB::raw('COUNT(DISTINCT session_id) as views'))
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->where('action_type', 'category_view')
             ->whereNotNull('category_name')
             ->groupBy('category_name')
@@ -805,21 +799,21 @@ class EcomTrackerDashboardService
         return $views->map(function ($row) use ($from, $to) {
             $category = $row->category_name;
             $viewSessions = ActivityEcomUserAction::query()
-                ->whereBetween('created_at', [$from, $to])
+                ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
                 ->where('action_type', 'category_view')
                 ->where('category_name', $category)
                 ->distinct()
                 ->pluck('session_id');
 
             $addSessions = ActivityEcomUserAction::query()
-                ->whereBetween('created_at', [$from, $to])
+                ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
                 ->where('action_type', 'add_to_cart')
                 ->whereIn('session_id', $viewSessions)
                 ->distinct()
                 ->count('session_id');
 
             $converted = ActivityEcomUserAction::query()
-                ->whereBetween('created_at', [$from, $to])
+                ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
                 ->where('action_type', 'payment_success')
                 ->whereIn('session_id', $viewSessions)
                 ->distinct()
@@ -872,7 +866,7 @@ class EcomTrackerDashboardService
         $products = collect();
 
         $baseQuery = fn () => ActivityEcomUserAction::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->when($sessionIds !== null, fn ($q) => $q->whereIn('session_id', $sessionIds));
 
         $baseQuery()
@@ -1135,7 +1129,7 @@ class EcomTrackerDashboardService
         $variants = collect();
 
         $actionQuery = fn () => ActivityEcomUserAction::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->when($sessionIds !== null, fn ($q) => $q->whereIn('session_id', $sessionIds));
 
         $actionQuery()
@@ -1529,7 +1523,7 @@ class EcomTrackerDashboardService
         $catalog = collect();
 
         $actions = ActivityEcomUserAction::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->when($sessionIds !== null, fn ($q) => $q->whereIn('session_id', $sessionIds))
             ->whereIn('action_type', array_merge(self::PRODUCT_VIEW_TYPES, ['add_to_cart', 'payment_success']))
             ->get();
@@ -2268,7 +2262,7 @@ class EcomTrackerDashboardService
         $allowedSessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
 
         $candidatesQuery = ActivityEcomUserAction::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->where('action_type', $stage)
             ->orderByDesc('created_at');
 
@@ -2303,21 +2297,21 @@ class EcomTrackerDashboardService
                     default => '—',
                 },
                 'value' => (float) ($payload['cart_total'] ?? $payload['amount_paid'] ?? 0),
-                'idle' => $this->formatIdleLabel((int) (TrackerTime::toUtc($session?->last_active_at)?->diffInSeconds(TrackerTime::nowUtc()) ?? 0)),
+                'idle' => TrackerTime::formatIdleSince($session?->last_active_at),
                 'activity_url' => EcomTrackerViewData::activityShowUrl($sessionId),
-                'abandoned_at' => $latest->created_at,
+                'last_active_at' => TrackerTime::fromStorage($session?->last_active_at),
             ];
         }
 
         $rows = collect($rows)
-            ->sortByDesc(fn (array $row) => $row['abandoned_at']?->timestamp ?? 0)
+            ->sortByDesc(fn (array $row) => $row['last_active_at']?->timestamp ?? 0)
             ->values();
 
         $totalAtStake = round($rows->sum('value'), 2);
         $limited = $limit !== null ? $rows->take($limit) : $rows;
         $displayRows = $limited
             ->map(function (array $row) {
-                unset($row['abandoned_at']);
+                unset($row['last_active_at']);
 
                 return $row;
             })
@@ -2339,7 +2333,7 @@ class EcomTrackerDashboardService
 
         $devicesQuery = ActivityEcomUser::query()
             ->select('device_type', DB::raw('COUNT(*) as total'))
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->groupBy('device_type')
             ->orderByDesc('total');
 
@@ -2369,7 +2363,7 @@ class EcomTrackerDashboardService
 
         $loginQuery = ActivityEcomUser::query()
             ->select('is_logged_in', DB::raw('COUNT(*) as total'))
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->groupBy('is_logged_in');
 
         if ($sessionIds !== null) {
@@ -2395,7 +2389,7 @@ class EcomTrackerDashboardService
     private function deviceConversionRate(Carbon $from, Carbon $to, ?string $deviceType): float
     {
         $sessionIds = ActivityEcomUser::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->where('device_type', $deviceType)
             ->pluck('session_id');
 
@@ -2404,7 +2398,7 @@ class EcomTrackerDashboardService
         }
 
         $converted = ActivityEcomUserAction::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->whereIn('session_id', $sessionIds)
             ->where('action_type', 'payment_success')
             ->distinct('session_id')
@@ -2426,7 +2420,7 @@ class EcomTrackerDashboardService
                 DB::raw("COALESCE(NULLIF(utm_medium, ''), 'none') as medium"),
                 DB::raw('COUNT(*) as sessions')
             )
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->groupBy('source', 'medium')
             ->orderByDesc('sessions');
 
@@ -2441,7 +2435,7 @@ class EcomTrackerDashboardService
         $sources = $sourcesQuery->get();
 
         return $sources->map(function ($row) use ($from, $to) {
-            $sessionQuery = ActivityEcomUser::query()->whereBetween('created_at', [$from, $to]);
+            $sessionQuery = ActivityEcomUser::query()->whereBetween('created_at', TrackerTime::storageRange($from, $to));
 
             if ($row->source === '(direct)') {
                 $sessionQuery->where(function ($query) {
@@ -2462,7 +2456,7 @@ class EcomTrackerDashboardService
             $sessionIds = $sessionQuery->pluck('session_id');
 
             $converted = ActivityEcomUserAction::query()
-                ->whereBetween('created_at', [$from, $to])
+                ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
                 ->whereIn('session_id', $sessionIds)
                 ->where('action_type', 'payment_success')
                 ->distinct('session_id')
@@ -2493,7 +2487,7 @@ class EcomTrackerDashboardService
                 DB::raw("COALESCE(NULLIF(country, ''), 'Unknown') as country"),
                 DB::raw('COUNT(*) as sessions')
             )
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->groupBy('city', 'country')
             ->orderByDesc('sessions');
 
@@ -2509,7 +2503,7 @@ class EcomTrackerDashboardService
 
         return $locations->map(function ($row) use ($from, $to) {
             $sessionIds = ActivityEcomUser::query()
-                ->whereBetween('created_at', [$from, $to])
+                ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
                 ->where('city', $row->city === 'Unknown' ? null : $row->city)
                 ->where('country', $row->country === 'Unknown' ? null : $row->country)
                 ->pluck('session_id');
@@ -2530,7 +2524,7 @@ class EcomTrackerDashboardService
         $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
 
         $buyerQuery = ActivityEcomUserAction::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->where('action_type', 'payment_success')
             ->distinct();
 
@@ -2566,7 +2560,7 @@ class EcomTrackerDashboardService
         ?Collection $excludeSessions = null,
     ): int {
         $query = ActivityEcomUserAction::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->whereIn('action_type', $actionTypes)
             ->whereNotNull('start_time')
             ->whereNotNull('end_time');
@@ -2633,7 +2627,7 @@ class EcomTrackerDashboardService
         }
 
         return ActivityEcomUserAction::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->whereIn('session_id', $sessionIds)
             ->where('action_type', 'payment_success')
             ->get()
@@ -2672,22 +2666,5 @@ class EcomTrackerDashboardService
     private function sumProceedCheckoutAbandonValue(Carbon $from, Carbon $to, Collection $sessionIds): float
     {
         return $this->abandonedSessions($from, $to, 'proceed_checkout', 'proceed_to_checkout', excludeActionType: 'payment_success')['total_at_stake'];
-    }
-
-    private function formatIdleLabel(int $seconds): string
-    {
-        if ($seconds < 60) {
-            return $seconds.'s ago';
-        }
-
-        if ($seconds < 3600) {
-            return max(1, (int) round($seconds / 60)).'m ago';
-        }
-
-        if ($seconds < 86400) {
-            return max(1, (int) round($seconds / 3600)).'h ago';
-        }
-
-        return max(1, (int) round($seconds / 86400)).'d ago';
     }
 }

@@ -82,4 +82,102 @@ class TrackerTime
 
         return self::timezone().' (UTC'.$local->format('P').')';
     }
+
+    /**
+     * Bounds for naive visitor-local DATETIME columns in activity tables.
+     *
+     * @return array{0: string, 1: string}
+     */
+    public static function storageRange(Carbon $from, Carbon $to): array
+    {
+        $fromLocal = self::toLocal($from) ?? $from->copy()->timezone(self::timezone());
+        $toLocal = self::toLocal($to) ?? $to->copy()->timezone(self::timezone());
+
+        return [
+            $fromLocal->format('Y-m-d H:i:s'),
+            $toLocal->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     */
+    public static function applySessionActivityWindow($query, Carbon $from, Carbon $to, ?string $table = null): void
+    {
+        [$fromBound, $toBound] = self::storageRange($from, $to);
+        $createdAt = $table ? "{$table}.created_at" : 'created_at';
+        $lastActiveAt = $table ? "{$table}.last_active_at" : 'last_active_at';
+
+        $query->where(function ($inner) use ($fromBound, $toBound, $createdAt, $lastActiveAt) {
+            $inner->whereBetween($createdAt, [$fromBound, $toBound])
+                ->orWhereBetween($lastActiveAt, [$fromBound, $toBound]);
+        });
+    }
+
+    /**
+     * Parse a naive visitor-local DATETIME value from activity tables.
+     */
+    public static function fromStorage(mixed $value): ?Carbon
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if ($value instanceof Carbon) {
+            return Carbon::parse($value->format('Y-m-d H:i:s'), self::timezone());
+        }
+
+        return Carbon::parse($value, self::timezone());
+    }
+
+    public static function secondsSinceStorage(mixed $value, ?Carbon $reference = null): int
+    {
+        $stored = self::fromStorage($value);
+
+        if ($stored === null) {
+            return 0;
+        }
+
+        $reference ??= self::localNow();
+
+        if ($stored->greaterThan($reference)) {
+            return 0;
+        }
+
+        return (int) $stored->diffInSeconds($reference);
+    }
+
+    public static function diffForHumansFromStorage(mixed $value): ?string
+    {
+        return self::fromStorage($value)?->diffForHumans();
+    }
+
+    public static function formatFromStorage(mixed $value, string $format = 'd M Y, H:i'): ?string
+    {
+        return self::fromStorage($value)?->format($format);
+    }
+
+    public static function formatIdleSince(mixed $value): string
+    {
+        return self::formatIdleSeconds(self::secondsSinceStorage($value));
+    }
+
+    public static function formatIdleSeconds(int $seconds): string
+    {
+        $seconds = max(0, $seconds);
+
+        if ($seconds < 60) {
+            return $seconds.'s ago';
+        }
+
+        if ($seconds < 3600) {
+            return max(1, (int) round($seconds / 60)).'m ago';
+        }
+
+        if ($seconds < 86400) {
+            return max(1, (int) round($seconds / 3600)).'h ago';
+        }
+
+        return max(1, (int) round($seconds / 86400)).'d ago';
+    }
 }

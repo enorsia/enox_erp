@@ -102,7 +102,7 @@ class VisitorAnalyticsService
     private function applyLastActiveRange($query, Carbon $from, ?Carbon $until = null)
     {
         if ($until !== null) {
-            return $query->whereBetween('last_active_at', [$from, $until]);
+            return $query->whereBetween('last_active_at', TrackerTime::storageRange($from, $until));
         }
 
         return $query->where('last_active_at', '>=', $from);
@@ -111,7 +111,7 @@ class VisitorAnalyticsService
     private function applyCreatedRange($query, Carbon $from, ?Carbon $until = null)
     {
         if ($until !== null) {
-            return $query->whereBetween('created_at', [$from, $until]);
+            return $query->whereBetween('created_at', TrackerTime::storageRange($from, $until));
         }
 
         return $query->where('created_at', '>=', $from);
@@ -140,10 +140,7 @@ class VisitorAnalyticsService
         $query = DB::query()->fromSub($firstVisits, 'first_visits');
 
         if ($until !== null) {
-            $query->whereBetween('first_seen_at', [
-                $from->format('Y-m-d H:i:s'),
-                $until->format('Y-m-d H:i:s'),
-            ]);
+            $query->whereBetween('first_seen_at', TrackerTime::storageRange($from, $until));
         } else {
             $query->where('first_seen_at', '>=', $from->format('Y-m-d H:i:s'));
         }
@@ -184,7 +181,7 @@ class VisitorAnalyticsService
         $durationSql = $this->effectiveDurationSecondsSql();
 
         return (int) round((float) ActivityEcomUser::query()
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->whereNotNull('visitor_id')
             ->selectRaw('AVG('.$durationSql.') as aggregate')
             ->value('aggregate'));
@@ -654,8 +651,8 @@ class VisitorAnalyticsService
                     'orders' => $row['order_qty'],
                     'total_stay' => $row['total_stay_label'],
                     'avg_stay' => $row['avg_stay_label'],
-                    'first_seen' => TrackerTime::toLocal($row['first_seen_at'])?->format('d M Y, H:i') ?? '',
-                    'last_active' => TrackerTime::toLocal($row['last_active_at'])?->format('d M Y, H:i') ?? '',
+                    'first_seen' => TrackerTime::formatFromStorage($row['first_seen_at']) ?? '',
+                    'last_active' => TrackerTime::formatFromStorage($row['last_active_at']) ?? '',
                     'device' => $row['device_type'] ?? '',
                     'browser' => $row['browser'] ?? '',
                 ];
