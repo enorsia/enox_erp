@@ -1,8 +1,11 @@
 @php($includeDateRange = $includeDateRange ?? true)
+@php($filterOptionCounts = $filterOptionCounts ?? [])
+@php($utmFilterState = $utmFilterState ?? null)
+@php($includeVisitorTrust = $includeVisitorTrust ?? true)
 
 <div>
     <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">Search</label>
-    <input type="text" name="search" value="{{ request('search') }}" placeholder="Session ID, visitor ID, name, email or IP…"
+    <input type="text" name="search" value="{{ request('search') }}" placeholder="Session, visitor, UTM, URL, name, email or IP…"
            class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
 </div>
 
@@ -44,4 +47,8 @@
     <hr class="border-slate-100 dark:border-slate-700"/>
 @endif
 
-@include('ecom_tracker.partials.session-filters')
+@include('ecom_tracker.partials.session-filters', [
+    'filterOptionCounts' => $filterOptionCounts,
+    'utmFilterState' => $utmFilterState,
+    'includeVisitorTrust' => $includeVisitorTrust,
+])

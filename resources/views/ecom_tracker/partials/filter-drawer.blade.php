@@ -12,6 +12,7 @@
     'showVisitorFilters' => false,
     'showActivityFilters' => false,
     'activityFiltersIncludeDateRange' => true,
+    'includeVisitorTrust' => true,
     'showProductFilters' => false,
     'productFilterOptions' => ['categories' => [], 'colors' => [], 'sizes' => []],
     'eventScenarioOptions' => [],
@@ -122,6 +123,9 @@
             @elseif ($showActivityFilters)
                 @include('ecom_activity.partials.activity-filters', [
                     'includeDateRange' => $activityFiltersIncludeDateRange,
+                    'filterOptionCounts' => $filterOptionCounts ?? [],
+                    'utmFilterState' => $utmFilterState ?? null,
+                    'includeVisitorTrust' => $includeVisitorTrust ?? true,
                 ])
             @elseif ($preservePeriodParams)
                 {{-- Period/compare controlled in page header; hidden fields preserve them on apply --}}

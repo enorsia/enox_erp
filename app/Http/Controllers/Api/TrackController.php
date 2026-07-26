@@ -36,6 +36,7 @@ class TrackController extends Controller
                 'session.user_id' => ['nullable', 'integer'],
                 'session.user_name' => ['nullable', 'string', 'max:255'],
                 'session.user_email' => ['nullable', 'string', 'max:255'],
+                'session.user_phone' => ['nullable', 'string', 'max:50'],
                 'session.is_logged_in' => ['nullable', 'boolean'],
                 'session.utm_source' => ['nullable', 'string', 'max:100'],
                 'session.utm_medium' => ['nullable', 'string', 'max:100'],

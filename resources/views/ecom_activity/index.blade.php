@@ -4,6 +4,7 @@
 
 @section('content')
 @php
+    use App\Support\SessionTrafficAttribution;
     use App\Support\TrackerTime;
     use Carbon\Carbon;
 
@@ -56,7 +57,7 @@
         default => route('admin.ecom-activity.index', $baseQuery),
     };
 
-    $activeFilterCount = collect(['search', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type'])
+    $activeFilterCount = collect(['search', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium'])
         ->filter(fn (string $key) => filled(request($key)))
         ->count();
 @endphp
@@ -66,6 +67,8 @@
         'action' => route('admin.ecom-activity.index'),
         'resetUrl' => route('admin.ecom-activity.index'),
         'showActivityFilters' => true,
+        'filterOptionCounts' => $filterOptionCounts ?? [],
+        'utmFilterState' => $utmFilterState ?? null,
     ])
 
     <header class="etd-page-header">
@@ -185,7 +188,6 @@
                         </th>
                         <th>Device</th>
                         <th>IP</th>
-                        <th>Source</th>
                         <th class="etd-num">Order</th>
                         <th class="etd-num">Actions</th>
                         <th>Duration</th>
@@ -195,10 +197,16 @@
                 </thead>
                 <tbody>
                     @forelse ($sessions as $session)
+                        @php($traffic = SessionTrafficAttribution::listRowSummary($session))
                         <tr>
                             <td class="etd-col-session">
                                 @include('ecom_tracker.partials.session-id-chip', ['sessionId' => $session->session_id])
-                                <div class="etd-subtle mt-0.5">{{ \App\Support\TrackerTime::toLocal($session->created_at)?->format('d M Y, H:i') }}</div>
+                                <div class="etd-subtle mt-0.5">{{ TrackerTime::formatFromStorage($session->created_at) }}</div>
+                                @include('ecom_tracker.partials.session-traffic-lines', [
+                                    'source' => $traffic['source'],
+                                    'utm' => $traffic['utm'],
+                                    'referer' => $traffic['referer'],
+                                ])
                             </td>
                             <td class="etd-col-user">
                                 @include('ecom_tracker.partials.session-identity', ['session' => $session])
@@ -211,13 +219,6 @@
                                 <div class="etd-subtle">{{ $session->browser }} · {{ $session->os }}</div>
                             </td>
                             <td>{{ $session->botContext?->client_ip ?? $session->ip ?? '—' }}</td>
-                            <td class="etd-subtle">
-                                @if ($session->utm_source)
-                                    {{ $session->utm_source }}/{{ $session->utm_medium }}
-                                @else
-                                    —
-                                @endif
-                            </td>
                             <td class="etd-num">
                                 @if (($session->order_qty ?? 0) > 0)
                                     {{ number_format($session->order_qty) }}
@@ -227,7 +228,7 @@
                             </td>
                             <td class="etd-num">{{ $session->actions_count }}</td>
                             <td>{{ format_duration((int) ($session->session_duration_seconds ?? 0)) }}</td>
-                            <td>{{ \App\Support\TrackerTime::toLocal($session->last_active_at)?->diffForHumans() ?? '—' }}</td>
+                            <td>{{ TrackerTime::diffForHumansFromStorage($session->last_active_at) ?? '—' }}</td>
                             <td class="etd-col-action">
                                 @can('ecom_tracker.activity.show')
                                     <a href="{{ \App\Support\EcomTrackerViewData::activityShowUrl($session->session_id) }}" class="etd-link">View session</a>
@@ -236,7 +237,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="11" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
+                            <td colspan="10" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
                         </tr>
                     @endforelse
                 </tbody>

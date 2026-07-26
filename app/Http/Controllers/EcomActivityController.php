@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
+use App\Services\EcomActivityFilterCounts;
 use App\Services\EcomActivityTimelinePresenter;
 use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
+use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
@@ -43,6 +46,16 @@ class EcomActivityController extends Controller
             ->withQueryString();
 
         $visitorQualitySummary = $this->visitorQualityCounts($request);
+        $filterOptionCounts = app(EcomActivityFilterCounts::class)->counts(
+            $request,
+            fn (Request $filterRequest, array $except) => $this->buildIndexQuery($filterRequest, $except, forCounts: true),
+        );
+        $utmFilterState = TrackerUtmFilter::formState(
+            $request->input('utm_source'),
+            $request->input('utm_medium'),
+            $filterOptionCounts['utm_source'] ?? [],
+            $filterOptionCounts['utm_medium'] ?? [],
+        );
 
         EcomTrackerLogger::backend()->info('analytics.activity.index', 'Admin opened user activity list', [
             'session_count' => $sessions->total(),
@@ -53,6 +66,8 @@ class EcomActivityController extends Controller
             'sessions' => $sessions,
             'visitorQualitySummary' => $visitorQualitySummary,
             'filterChips' => $this->buildActivityFilterChips($request),
+            'filterOptionCounts' => $filterOptionCounts,
+            'utmFilterState' => $utmFilterState,
         ]);
     }
 
@@ -110,12 +125,26 @@ class EcomActivityController extends Controller
             'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
         ]);
 
+        $trafficAttribution = SessionTrafficAttribution::displayFields($activityUser, $actions);
+        $landingPage = filled($activityUser->landing_page)
+            ? $activityUser->landing_page
+            : $actions
+                ->filter(fn (ActivityEcomUserAction $action) => filled($action->page_url))
+                ->sortBy([
+                    ['created_at', 'asc'],
+                    ['id', 'asc'],
+                ])
+                ->first()
+                ?->page_url;
+
         return view('ecom_activity.show', [
             'activityUser' => $activityUser,
             'timeline' => $timeline,
             'funnelSteps' => self::FUNNEL_STEPS,
             'reachedSteps' => $reachedSteps,
             'backUrl' => $backUrl,
+            'trafficAttribution' => $trafficAttribution,
+            'landingPage' => $landingPage,
         ]);
     }
 
@@ -138,20 +167,23 @@ class EcomActivityController extends Controller
         }
 
         $from = TrackerTime::localNow()->subHours(24)->utc();
-        $to = TrackerTime::nowUtc();
+        $to = TrackerTime::localNow()->utc();
 
-        $query->where(function ($inner) use ($from, $to) {
-            $inner->whereBetween('created_at', [$from, $to])
-                ->orWhereBetween('last_active_at', [$from, $to]);
-        });
+        TrackerTime::applySessionActivityWindow($query, $from, $to);
     }
 
-    private function buildIndexQuery(Request $request): \Illuminate\Database\Eloquent\Builder
+    /**
+     * @param  array<int, string>  $except
+     */
+    private function buildIndexQuery(Request $request, array $except = [], bool $forCounts = false): Builder
     {
-        $query = ActivityEcomUser::query()
-            ->with('botContext')
-            ->withCount('actions')
-            ->withCount(['actions as order_qty' => fn ($q) => $q->where('action_type', 'payment_success')]);
+        $query = ActivityEcomUser::query();
+
+        if (! $forCounts) {
+            $query->with(['botContext', 'firstAction', 'firstRefererAction'])
+                ->withCount('actions')
+                ->withCount(['actions as order_qty' => fn ($q) => $q->where('action_type', 'payment_success')]);
+        }
 
         $this->applySessionDateFilter($query, $request);
 
@@ -163,40 +195,50 @@ class EcomActivityController extends Controller
                     ->orWhere('ip', 'like', "%{$search}%")
                     ->orWhere('user_name', 'like', "%{$search}%")
                     ->orWhere('user_email', 'like', "%{$search}%")
+                    ->orWhere('user_phone', 'like', "%{$search}%")
+                    ->orWhere('utm_source', 'like', "%{$search}%")
+                    ->orWhere('utm_medium', 'like', "%{$search}%")
+                    ->orWhere('utm_campaign', 'like', "%{$search}%")
+                    ->orWhere('landing_page', 'like', "%{$search}%")
                     ->orWhereHas('botContext', fn ($b) => $b
                         ->where('client_ip', 'like', "%{$search}%")
                         ->orWhere('ip_country', 'like', "%{$search}%")
                         ->orWhere('cf_ray', 'like', "%{$search}%")
-                        ->orWhere('bot_reason', 'like', "%{$search}%"));
+                        ->orWhere('bot_reason', 'like', "%{$search}%"))
+                    ->orWhereHas('actions', fn ($actions) => $actions
+                        ->where('page_url', 'like', "%{$search}%")
+                        ->orWhere('referer', 'like', "%{$search}%"));
             });
         }
 
-        if ($request->filled('country')) {
+        if (! in_array('country', $except, true) && $request->filled('country')) {
             $query->where(function ($q) use ($request) {
                 $q->where('country', $request->country)
                     ->orWhereHas('botContext', fn ($b) => $b->where('ip_country', $request->country));
             });
         }
 
-        $visitorType = $request->input('visitor_type');
+        if (! in_array('visitor_type', $except, true)) {
+            $visitorType = $request->input('visitor_type');
 
-        if ($visitorType === 'bot') {
-            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
-        } elseif ($visitorType === 'human') {
-            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', false));
-        } elseif ($visitorType === 'unclassified') {
-            $query->whereDoesntHave('botContext');
+            if ($visitorType === 'bot') {
+                $query->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
+            } elseif ($visitorType === 'human') {
+                $query->whereHas('botContext', fn ($b) => $b->where('is_bot', false));
+            } elseif ($visitorType === 'unclassified') {
+                $query->whereDoesntHave('botContext');
+            }
         }
 
-        if ($request->filled('device_type')) {
+        if (! in_array('device_type', $except, true) && $request->filled('device_type')) {
             $query->where('device_type', $request->device_type);
         }
 
-        if ($request->filled('logged_in')) {
+        if (! in_array('logged_in', $except, true) && $request->filled('logged_in')) {
             $query->where('is_logged_in', $request->logged_in === '1');
         }
 
-        if ($request->filled('has_order')) {
+        if (! in_array('has_order', $except, true) && $request->filled('has_order')) {
             if ($request->has_order === '1') {
                 $query->whereHas('actions', fn ($q) => $q->where('action_type', 'payment_success'));
             } elseif ($request->has_order === '0') {
@@ -204,8 +246,13 @@ class EcomActivityController extends Controller
             }
         }
 
-        TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
-        TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
+        if (! in_array('utm_source', $except, true)) {
+            TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
+        }
+
+        if (! in_array('utm_medium', $except, true)) {
+            TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
+        }
 
         return $query;
     }
@@ -215,7 +262,7 @@ class EcomActivityController extends Controller
      */
     private function visitorQualityCounts(Request $request): array
     {
-        $base = $this->buildIndexQuery($request);
+        $base = $this->buildIndexQuery($request, forCounts: true);
 
         return [
             'real_shoppers' => (clone $base)->whereHas('botContext', fn ($b) => $b->where('is_bot', false))->count(),
@@ -250,6 +297,22 @@ class EcomActivityController extends Controller
             $chips[] = [
                 'label' => '"'.$request->search.'"',
                 'remove_url' => $request->fullUrlWithQuery(['search' => null, 'page' => null]),
+            ];
+        }
+
+        if ($request->filled('utm_source')) {
+            $sourceLabel = TrackerUtmFilter::sources()[$request->utm_source] ?? $request->utm_source;
+            $chips[] = [
+                'label' => 'Source: '.$sourceLabel,
+                'remove_url' => $request->fullUrlWithQuery(['utm_source' => null, 'page' => null]),
+            ];
+        }
+
+        if ($request->filled('utm_medium')) {
+            $mediumLabel = TrackerUtmFilter::mediums()[$request->utm_medium] ?? $request->utm_medium;
+            $chips[] = [
+                'label' => 'Medium: '.$mediumLabel,
+                'remove_url' => $request->fullUrlWithQuery(['utm_medium' => null, 'page' => null]),
             ];
         }
 

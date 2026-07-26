@@ -24,8 +24,8 @@
                 <td class="etd-num">{{ number_format($visitor['order_qty'] ?? 0) }}</td>
                 <td class="etd-num">{{ $visitor['total_stay_label'] }}</td>
                 <td class="etd-num">{{ $visitor['avg_stay_label'] }}</td>
-                <td>{{ TrackerTime::toLocal($visitor['first_seen_at'])?->format('d M Y, H:i') ?? '—' }}</td>
-                <td>{{ TrackerTime::toLocal($visitor['last_active_at'])?->diffForHumans() ?? '—' }}</td>
+                <td>{{ TrackerTime::formatFromStorage($visitor['first_seen_at']) ?? '—' }}</td>
+                <td>{{ TrackerTime::diffForHumansFromStorage($visitor['last_active_at']) ?? '—' }}</td>
                 <td>
                     @if (! empty($visitor['latest_session']))
                         @include('ecom_tracker.partials.visitor-classification-badge', ['session' => $visitor['latest_session'], 'mode' => 'compact'])

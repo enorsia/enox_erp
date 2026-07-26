@@ -17,6 +17,7 @@ class ActivityEcomUser extends Model
         'user_id',
         'user_name',
         'user_email',
+        'user_phone',
         'ip',
         'user_agent',
         'device_type',
@@ -52,6 +53,20 @@ class ActivityEcomUser extends Model
     public function botContext(): HasOne
     {
         return $this->hasOne(ActivityEcomUserBotContext::class, 'session_id', 'session_id');
+    }
+
+    public function firstAction(): HasOne
+    {
+        return $this->hasOne(ActivityEcomUserAction::class, 'session_id', 'session_id')
+            ->oldestOfMany(['created_at', 'id']);
+    }
+
+    public function firstRefererAction(): HasOne
+    {
+        return $this->hasOne(ActivityEcomUserAction::class, 'session_id', 'session_id')
+            ->whereNotNull('referer')
+            ->where('referer', '!=', '')
+            ->oldestOfMany(['created_at', 'id']);
     }
 
     public function visitorClassification(): string

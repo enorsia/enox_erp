@@ -1477,10 +1477,67 @@
 
 .etd-table--activity th.etd-col-session,
 .etd-table--activity td.etd-col-session {
-    width: clamp(10.5rem, 15vw, 13.5rem);
-    min-width: 10.5rem;
-    max-width: 13.5rem;
+    width: clamp(11rem, 17vw, 15rem);
+    min-width: 11rem;
+    max-width: 15rem;
     overflow: visible;
+}
+
+.etd-session-traffic {
+    margin-top: 0.4rem;
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.etd-session-traffic__row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.2rem;
+    min-width: 0;
+    font-size: 10.5px;
+    line-height: 1.3;
+}
+
+.etd-session-traffic__label {
+    flex-shrink: 0;
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.dark .etd-session-traffic__label {
+    color: #64748b;
+}
+
+.etd-session-traffic__value {
+    min-width: 0;
+    flex: 1;
+    color: #475569;
+}
+
+.dark .etd-session-traffic__value {
+    color: #cbd5e1;
+}
+
+.etd-session-traffic__value--empty {
+    color: #94a3b8;
+}
+
+.etd-session-traffic__text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etd-session-traffic__value.etd-hover-tip {
+    cursor: help;
+}
+
+.etd-session-traffic__tip {
+    white-space: normal;
+    word-break: break-all;
+    max-width: 20rem;
 }
 
 .etd-chip--session {

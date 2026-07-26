@@ -4,9 +4,12 @@
 
 @section('content')
 @php
+    use App\Support\TrackerTime;
+
     $summary = $report['summary'];
     $trend = $report['trend'];
     $range = $report['range'];
+    $activityLink = $page['activityLink'];
 
     $period = $filters['period'] ?? '24h';
     $dateFrom = $filters['date_from'] ?? '';
@@ -33,6 +36,7 @@
         'resetUrl' => route('admin.ecom-tracker.bot-traffic'),
         'showActivityFilters' => true,
         'activityFiltersIncludeDateRange' => false,
+        'includeVisitorTrust' => false,
         'preservePeriodParams' => true,
         'period' => $period,
         'dateFrom' => $dateFrom,
@@ -129,19 +133,16 @@
         @endif
 
         <p class="text-[12px] text-slate-500 dark:text-slate-400 mt-2 mb-0 max-w-3xl">
-            Real visitors are people using your site. Automated traffic includes bots and scripts. Not classified means we could not check yet.
+            Automated sessions only — crawlers, scripts, and other non-human traffic detected on your store.
         </p>
 
         @include('ecom_tracker.partials.active-filter-chips', ['chips' => $chips])
     </header>
 
     <div class="etd-kpi-grid mb-5">
-        @php $metricLabels = \App\Support\VisitorClassificationLabels::summaryMetricLabels(); @endphp
         @foreach ([
-            ['key' => 'real_shoppers', 'label' => $metricLabels['real_shoppers']],
-            ['key' => 'automated_traffic', 'label' => $metricLabels['automated_traffic']],
-            ['key' => 'not_classified', 'label' => $metricLabels['not_classified']],
-            ['key' => 'uk_shoppers', 'label' => $metricLabels['uk_shoppers']],
+            ['key' => 'automated_traffic', 'label' => 'Automated sessions'],
+            ['key' => 'bot_countries', 'label' => 'Countries detected'],
         ] as $kpi)
             @php $m = $summary[$kpi['key']]; @endphp
             @include('ecom_tracker.partials.ga4-kpi-card', [
@@ -158,7 +159,10 @@
 
     <div class="etd-panel mb-5">
         <div class="etd-panel-head">
-            <h2 class="etd-panel-title">Real visitors vs automated traffic</h2>
+            <h2 class="etd-panel-title">Automated traffic trend</h2>
+            @can('ecom_tracker.activity.index')
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $activityLink, 'viewLabel' => 'View all'])
+            @endcan
         </div>
         <div class="etd-chart-wrap">
             <canvas id="botTrafficTrendChart"></canvas>
@@ -171,7 +175,7 @@
             'rows' => $report['reason_breakdown'],
         ])
         @include('ecom_tracker.partials.breakdown-table', [
-            'title' => 'Real visitors by country',
+            'title' => 'Automated traffic by country',
             'rows' => $report['country_breakdown'],
         ])
     </div>
@@ -179,13 +183,16 @@
     <div class="etd-panel">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Automated traffic sessions</h2>
+            @can('ecom_tracker.activity.index')
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $activityLink, 'viewLabel' => 'View all'])
+            @endcan
         </div>
         <div class="etd-table-scroll">
             <table class="etd-table w-full">
                 <thead>
                     <tr>
                         <th>Session</th>
-                        <th>Visitor trust</th>
+                        <th>Detection</th>
                         <th>Location</th>
                         <th>Device</th>
                         <th>Last active</th>
@@ -203,7 +210,7 @@
                             </td>
                             <td>{{ $session->marketer_country_label ?? '—' }}</td>
                             <td>{{ ucfirst($session->device_type ?? '—') }}</td>
-                            <td>{{ \App\Support\TrackerTime::toLocal($session->last_active_at)?->format('d M Y, H:i') }}</td>
+                            <td>{{ filled($session->last_active_at) ? TrackerTime::formatIdleSince($session->last_active_at) : '—' }}</td>
                             <td>
                                 @can('ecom_tracker.activity.show')
                                     <a href="{{ route('admin.ecom-activity.show', ['session' => $session->session_id, 'back' => urlencode(request()->fullUrl())]) }}"

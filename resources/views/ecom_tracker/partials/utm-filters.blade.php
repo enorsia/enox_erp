@@ -1,3 +1,11 @@
+@php
+    $utmFilterState = $utmFilterState ?? null;
+    $sources = $utmFilterState['sources'] ?? ($sources ?? []);
+    $mediums = $utmFilterState['mediums'] ?? ($mediums ?? []);
+    $selected_source = $utmFilterState['selected_source'] ?? ($selected_source ?? '');
+    $selected_medium = $utmFilterState['selected_medium'] ?? ($selected_medium ?? '');
+@endphp
+
 <div>
     <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Traffic source</p>
     <div class="grid grid-cols-1 gap-2">

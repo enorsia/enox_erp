@@ -353,6 +353,9 @@ test('track endpoint accepts proceed checkout with product line details', functi
     expect($action->proceed_to_checkout['cart_items'][0]['color_name'])->toBe('Brown');
     expect($action->proceed_to_checkout['customer']['email'])->toBe('jane@example.com');
     expect($action->proceed_to_checkout['customer']['shipping']['postcode'])->toBe('SW1A 1AA');
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+    expect($session->user_phone)->toBe('07123456789');
 });
 
 test('track endpoint accepts payment success with checkout info', function () {

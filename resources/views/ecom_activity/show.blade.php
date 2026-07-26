@@ -4,6 +4,8 @@
 
 @section('content')
     @php
+        use App\Support\TrackerTime;
+
         $badgeColors = [
             'category_view' => 'badge-blue',
             'product_view' => 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
@@ -38,7 +40,7 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
 
-            <div class="space-y-4">
+            <div class="space-y-4 min-w-0">
                 <div class="section-card">
                     <div class="section-title flex-wrap gap-2">
                         <div class="flex items-center gap-2">
@@ -71,11 +73,11 @@
                                 default => null,
                             };
                         @endphp
-                        <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-4 mb-3 last:mb-0">
+                        <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-4 mb-3 last:mb-0 min-w-0 overflow-hidden">
                             <div class="flex flex-wrap items-center gap-2 mb-2">
                                 <span class="badge-custom {{ $badgeClass }}">{{ str_replace('_', ' ', $item->action_type) }}</span>
                                 <span class="text-[12px] text-slate-400">
-                                    {{ \App\Support\TrackerTime::toLocal($item->created_at)?->format('d M Y, h:i:s A') }}
+                                    {{ TrackerTime::formatFromStorage($item->created_at, 'd M Y, h:i:s A') }}
                                 </span>
                                 @if ($item->dwell_seconds !== null)
                                     <span class="text-[11px] text-slate-500">
@@ -87,13 +89,22 @@
                                 @endif
                             </div>
 
-                            <div class="text-[12px] text-slate-500 dark:text-slate-400 mb-2">
-                                @if ($item->referer || $item->page_url)
-                                    <a href="{{ $item->referer }}" target="_blank" rel="noopener" class="text-accent-500 hover:underline">{{ $item->referer }}</a>
-                                    <span class="mx-1">→</span>
-                                    <a href="{{ $item->page_url }}" target="_blank" rel="noopener" class="text-accent-500 hover:underline">{{ $item->page_url }}</a>
-                                @endif
-                            </div>
+                            @if ($item->referer || $item->page_url)
+                                <div class="text-[12px] text-slate-500 dark:text-slate-400 mb-2 space-y-1.5 min-w-0">
+                                    @if ($item->referer)
+                                        <div class="min-w-0">
+                                            <span class="text-slate-400">From:</span>
+                                            <a href="{{ $item->referer }}" target="_blank" rel="noopener" class="text-accent-500 hover:underline break-all">{{ $item->referer }}</a>
+                                        </div>
+                                    @endif
+                                    @if ($item->page_url)
+                                        <div class="min-w-0">
+                                            <span class="text-slate-400">To:</span>
+                                            <a href="{{ $item->page_url }}" target="_blank" rel="noopener" class="text-accent-500 hover:underline break-all">{{ $item->page_url }}</a>
+                                        </div>
+                                    @endif
+                                </div>
+                            @endif
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
                                 @if ($item->category_name)
@@ -166,7 +177,7 @@
                                                 @if ($segmentSeconds !== null)
                                                     <span class="text-slate-400">· {{ $segmentSeconds }}s</span>
                                                 @endif
-                                                <span class="text-slate-400">· {{ \App\Support\TrackerTime::toLocal($segmentAction->created_at ?? $segmentAction->start_time)?->format('h:i:s A') }}</span>
+                                                <span class="text-slate-400">· {{ TrackerTime::formatFromStorage($segmentAction->created_at ?? $segmentAction->start_time, 'h:i:s A') }}</span>
                                             </div>
                                         @endforeach
                                     </div>
@@ -190,16 +201,36 @@
                         @foreach ([
                             'Device' => ucfirst($activityUser->device_type ?? '—') . ' · ' . ($activityUser->browser ?? '') . ' · ' . ($activityUser->os ?? ''),
                             'User' => $activityUser->identitySummary(),
-                            'First seen' => \App\Support\TrackerTime::toLocal($activityUser->created_at)?->format('d M Y, h:i A'),
-                            'Last active' => \App\Support\TrackerTime::toLocal($activityUser->last_active_at)?->format('d M Y, h:i A'),
-                            'Landing page' => $activityUser->landing_page,
-                            'UTM' => trim(($activityUser->utm_source ?? '') . ' / ' . ($activityUser->utm_medium ?? '') . ' / ' . ($activityUser->utm_campaign ?? ''), ' /'),
+                            'First seen' => TrackerTime::formatFromStorage($activityUser->created_at, 'd M Y, h:i A'),
+                            'Last active' => TrackerTime::formatFromStorage($activityUser->last_active_at, 'd M Y, h:i A'),
                         ] as $label => $value)
-                            <div class="py-2.5 first:pt-0 last:pb-0">
+                            <div class="py-2.5 first:pt-0 min-w-0">
                                 <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
-                                <div class="text-slate-700 dark:text-slate-200 break-all">{{ $value ?: '—' }}</div>
+                                <div class="text-slate-700 dark:text-slate-200 break-words text-[13px]">{{ $value ?: '—' }}</div>
                             </div>
                         @endforeach
+                        <div class="py-2.5 min-w-0">
+                            <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">Landing page</div>
+                            @if (filled($landingPage ?? null))
+                                <a href="{{ $landingPage }}" target="_blank" rel="noopener" class="text-accent-500 hover:underline break-all text-[13px]">{{ $landingPage }}</a>
+                            @else
+                                <div class="text-slate-700 dark:text-slate-200 break-words text-[13px]">—</div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <div class="section-title">Traffic Attribution</div>
+                    <div class="divide-y divide-slate-100 dark:divide-slate-700/60 text-[13px]">
+                        @forelse ($trafficAttribution ?? [] as $label => $value)
+                            <div class="py-2.5 first:pt-0 last:pb-0 min-w-0">
+                                <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
+                                <div class="text-slate-700 dark:text-slate-200 break-all text-[13px]">{{ $value }}</div>
+                            </div>
+                        @empty
+                            <p class="text-sm text-slate-400 dark:text-slate-500 py-1">No UTM or click tracking data for this session.</p>
+                        @endforelse
                     </div>
                 </div>
 

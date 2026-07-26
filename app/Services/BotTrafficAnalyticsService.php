@@ -42,11 +42,10 @@ class BotTrafficAnalyticsService
         $compareMode = $filters['compare'] ?? 'none';
         $comparisonRange = $this->resolveComparisonRange($currentRange, $compareMode);
 
-        $cacheKey = 'bot_traffic_report:' . md5(json_encode([
+        $cacheKey = 'bot_traffic_report:v2:' . md5(json_encode([
             'from' => $currentRange['from']->toIso8601String(),
             'to' => $currentRange['to']->toIso8601String(),
             'compare' => $compareMode,
-            'visitor_type' => $filters['visitor_type'] ?? '',
             'country' => $filters['country'] ?? '',
             'search' => $filters['search'] ?? '',
             'device_type' => $filters['device_type'] ?? '',
@@ -58,7 +57,7 @@ class BotTrafficAnalyticsService
 
         $aggregated = $this->remember($cacheKey, self::CACHE_TTL_HUB_SECONDS, function () use ($currentRange, $comparisonRange, $compareMode, $filters) {
             return [
-                'summary' => $this->buildSummary($currentRange, $comparisonRange, $compareMode, $filters),
+                'summary' => $this->buildBotPageSummary($currentRange, $comparisonRange, $compareMode, $filters),
                 'trend' => $this->buildTrend($currentRange, $filters),
                 'reason_breakdown' => $this->buildReasonBreakdown($currentRange, $filters),
                 'country_breakdown' => $this->buildCountryBreakdown($currentRange, $filters),
@@ -234,7 +233,40 @@ class BotTrafficAnalyticsService
             $compare = $compareMode === 'none'
                 ? 0
                 : $counter($comparisonRange['from'], $comparisonRange['to']);
-            $sparkline = $this->sparklineForMetric($key, $currentRange, $filters);
+            $sparkline = $this->sparklineForVisitorQualityMetric($key, $currentRange, $filters);
+
+            $summary[$key] = array_merge(
+                $this->computeMetricSummary($current, $compare, $sparkline, $compareMode),
+                ['comparison_label' => $comparisonLabel],
+            );
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @param  array<string, mixed>  $currentRange
+     * @param  array<string, mixed>  $comparisonRange
+     * @param  array<string, mixed>  $filters
+     * @return array<string, array<string, mixed>>
+     */
+    private function buildBotPageSummary(array $currentRange, array $comparisonRange, string $compareMode, array $filters): array
+    {
+        $comparisonLabel = $comparisonRange['label'] ?? '';
+
+        $metrics = [
+            'automated_traffic' => fn (Carbon $from, Carbon $to) => $this->countBotSessions($from, $to, $filters),
+            'bot_countries' => fn (Carbon $from, Carbon $to) => $this->countBotCountries($from, $to, $filters),
+        ];
+
+        $summary = [];
+
+        foreach ($metrics as $key => $counter) {
+            $current = $counter($currentRange['from'], $currentRange['to']);
+            $compare = $compareMode === 'none'
+                ? 0
+                : $counter($comparisonRange['from'], $comparisonRange['to']);
+            $sparkline = $this->sparklineForBotPageMetric($key, $currentRange, $filters);
 
             $summary[$key] = array_merge(
                 $this->computeMetricSummary($current, $compare, $sparkline, $compareMode),
@@ -248,9 +280,34 @@ class BotTrafficAnalyticsService
     /**
      * @param  array<string, mixed>  $filters
      */
+    private function countBotSessions(Carbon $from, Carbon $to, array $filters): int
+    {
+        return $this->botSessionQuery($from, $to, $filters)->count();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function countBotCountries(Carbon $from, Carbon $to, array $filters): int
+    {
+        $countryExpression = "UPPER(COALESCE(NULLIF(bc.ip_country, ''), NULLIF(s.country, '')))";
+
+        return (int) DB::table('activity_ecom_user as s')
+            ->join('activity_ecom_user_bot_context as bc', 's.session_id', '=', 'bc.session_id')
+            ->whereIn('s.session_id', $this->botSessionQuery($from, $to, $filters)->select('activity_ecom_user.session_id'))
+            ->where('bc.is_bot', true)
+            ->whereRaw("{$countryExpression} IS NOT NULL")
+            ->whereRaw("{$countryExpression} != ''")
+            ->distinct()
+            ->count(DB::raw($countryExpression));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
     private function countClassification(Carbon $from, Carbon $to, string $type, array $filters): int
     {
-        $query = $this->sessionQuery($from, $to, $filters);
+        $query = $this->allSessionQuery($from, $to, $filters);
 
         return match ($type) {
             'human' => (clone $query)->whereHas('botContext', fn ($b) => $b->where('is_bot', false))->count(),
@@ -264,7 +321,7 @@ class BotTrafficAnalyticsService
      */
     private function countUkShoppers(Carbon $from, Carbon $to, array $filters): int
     {
-        return $this->sessionQuery($from, $to, $filters)
+        return $this->allSessionQuery($from, $to, $filters)
             ->whereHas('botContext', fn ($b) => $b->where('is_bot', false)->where('ip_country', 'GB'))
             ->count();
     }
@@ -274,7 +331,7 @@ class BotTrafficAnalyticsService
      * @param  array<string, mixed>  $filters
      * @return array<int, int>
      */
-    private function sparklineForMetric(string $metricKey, array $currentRange, array $filters): array
+    private function sparklineForVisitorQualityMetric(string $metricKey, array $currentRange, array $filters): array
     {
         $from = $currentRange['from'];
         $to = $currentRange['to'];
@@ -306,7 +363,44 @@ class BotTrafficAnalyticsService
     /**
      * @param  array<string, mixed>  $currentRange
      * @param  array<string, mixed>  $filters
-     * @return array{labels: array<int, string>, human: array<int, int>, bot: array<int, int>}
+     * @return array<int, int>
+     */
+    private function sparklineForBotPageMetric(string $metricKey, array $currentRange, array $filters): array
+    {
+        $from = $currentRange['from'];
+        $to = $currentRange['to'];
+        $days = max(1, min(14, (int) $from->diffInDays($to) + 1));
+        $buckets = [];
+
+        for ($i = 0; $i < $days; $i++) {
+            $dayStart = $from->copy()->addDays($i)->startOfDay();
+            $dayEnd = $dayStart->copy()->endOfDay();
+            if ($dayEnd->gt($to)) {
+                $dayEnd = $to->copy();
+            }
+
+            $buckets[] = $metricKey === 'bot_countries'
+                ? $this->countBotCountries($dayStart, $dayEnd, $filters)
+                : $this->countBotSessions($dayStart, $dayEnd, $filters);
+        }
+
+        return $buckets;
+    }
+
+    /**
+     * @param  array<string, mixed>  $currentRange
+     * @param  array<string, mixed>  $filters
+     * @return array<int, int>
+     */
+    private function sparklineForMetric(string $metricKey, array $currentRange, array $filters): array
+    {
+        return $this->sparklineForVisitorQualityMetric($metricKey, $currentRange, $filters);
+    }
+
+    /**
+     * @param  array<string, mixed>  $currentRange
+     * @param  array<string, mixed>  $filters
+     * @return array{labels: array<int, string>, bot: array<int, int>}
      */
     private function buildTrend(array $currentRange, array $filters): array
     {
@@ -314,7 +408,6 @@ class BotTrafficAnalyticsService
         $to = $currentRange['to'];
         $days = max(1, min(30, (int) $from->diffInDays($to) + 1));
         $labels = [];
-        $human = [];
         $bot = [];
 
         for ($i = 0; $i < $days; $i++) {
@@ -325,11 +418,10 @@ class BotTrafficAnalyticsService
             }
 
             $labels[] = TrackerTime::toLocal($dayStart)?->format('d M') ?? $dayStart->format('d M');
-            $human[] = $this->countClassification($dayStart, $dayEnd, 'human', $filters);
-            $bot[] = $this->countClassification($dayStart, $dayEnd, 'bot', $filters);
+            $bot[] = $this->countBotSessions($dayStart, $dayEnd, $filters);
         }
 
-        return compact('labels', 'human', 'bot');
+        return compact('labels', 'bot');
     }
 
     /**
@@ -340,12 +432,13 @@ class BotTrafficAnalyticsService
     private function buildReasonBreakdown(array $currentRange, array $filters): array
     {
         $rows = ActivityEcomUserBotContext::query()
+            ->where('is_bot', true)
             ->whereHas('session', function ($q) use ($currentRange, $filters) {
                 $this->applySessionWindow($q, $currentRange['from'], $currentRange['to']);
                 $this->applySessionFilters($q, $filters);
             })
-            ->select('bot_reason', 'is_bot', DB::raw('COUNT(*) as total'))
-            ->groupBy('bot_reason', 'is_bot')
+            ->select('bot_reason', DB::raw('COUNT(*) as total'))
+            ->groupBy('bot_reason')
             ->orderByDesc('total')
             ->limit(10)
             ->get();
@@ -353,7 +446,7 @@ class BotTrafficAnalyticsService
         $total = (int) $rows->sum('total');
 
         return $rows->map(fn ($row) => [
-            'label' => VisitorClassificationLabels::breakdownLabel($row->bot_reason, (bool) $row->is_bot),
+            'label' => VisitorClassificationLabels::breakdownLabel($row->bot_reason, true),
             'count' => (int) $row->total,
             'pct' => $total > 0 ? round(((int) $row->total / $total) * 100, 1) : 0.0,
         ])->values()->all();
@@ -368,13 +461,13 @@ class BotTrafficAnalyticsService
     {
         $countryExpression = "UPPER(COALESCE(NULLIF(bc.ip_country, ''), NULLIF(s.country, '')))";
 
-        $filteredSessions = $this->sessionQuery($currentRange['from'], $currentRange['to'], $filters)
+        $filteredSessions = $this->botSessionQuery($currentRange['from'], $currentRange['to'], $filters)
             ->select('activity_ecom_user.session_id');
 
         $visitorCountries = DB::table('activity_ecom_user as s')
             ->join('activity_ecom_user_bot_context as bc', 's.session_id', '=', 'bc.session_id')
             ->whereIn('s.session_id', $filteredSessions)
-            ->where('bc.is_bot', false)
+            ->where('bc.is_bot', true)
             ->whereRaw("{$countryExpression} IS NOT NULL")
             ->whereRaw("{$countryExpression} != ''")
             ->selectRaw("{$countryExpression} as country_code");
@@ -404,18 +497,30 @@ class BotTrafficAnalyticsService
      */
     private function paginateSessions(array $currentRange, array $filters): LengthAwarePaginator
     {
-        $query = $this->sessionQuery($currentRange['from'], $currentRange['to'], $filters)
-            ->whereHas('botContext', fn ($b) => $b->where('is_bot', true))
+        return $this->botSessionQuery($currentRange['from'], $currentRange['to'], $filters)
             ->with('botContext')
-            ->orderByDesc('last_active_at');
-
-        return $query->paginate(25)->withQueryString();
+            ->orderByDesc('last_active_at')
+            ->paginate(25)
+            ->withQueryString();
     }
 
     /**
      * @param  array<string, mixed>  $filters
      */
-    private function sessionQuery(Carbon $from, Carbon $to, array $filters): Builder
+    private function botSessionQuery(Carbon $from, Carbon $to, array $filters): Builder
+    {
+        $query = ActivityEcomUser::query()
+            ->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
+        $this->applySessionWindow($query, $from, $to);
+        $this->applySessionFilters($query, $filters);
+
+        return $query;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function allSessionQuery(Carbon $from, Carbon $to, array $filters): Builder
     {
         $query = ActivityEcomUser::query();
         $this->applySessionWindow($query, $from, $to);
@@ -427,11 +532,7 @@ class BotTrafficAnalyticsService
     private function applySessionWindow(Builder $query, Carbon $from, Carbon $to): void
     {
         $table = $query->getModel()->getTable();
-
-        $query->where(function ($inner) use ($from, $to, $table) {
-            $inner->whereBetween("{$table}.created_at", [$from, $to])
-                ->orWhereBetween("{$table}.last_active_at", [$from, $to]);
-        });
+        TrackerTime::applySessionActivityWindow($query, $from, $to, $table);
     }
 
     /**
@@ -461,16 +562,6 @@ class BotTrafficAnalyticsService
                 $q->where('country', $country)
                     ->orWhereHas('botContext', fn ($b) => $b->where('ip_country', $country));
             });
-        }
-
-        $visitorType = $filters['visitor_type'] ?? '';
-
-        if ($visitorType === 'bot') {
-            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
-        } elseif ($visitorType === 'human') {
-            $query->whereHas('botContext', fn ($b) => $b->where('is_bot', false));
-        } elseif ($visitorType === 'unclassified') {
-            $query->whereDoesntHave('botContext');
         }
 
         if (! empty($filters['device_type'])) {

@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Services\BotTrafficAnalyticsService;
 use App\Support\EcomTrackerLogger;
+use App\Support\EcomTrackerViewData;
 use App\Support\TrackerRedisSupport;
-use App\Support\VisitorClassificationLabels;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -18,7 +18,6 @@ class EcomBotTrafficController extends Controller
         'logged_in',
         'has_order',
         'country',
-        'visitor_type',
         'utm_source',
         'utm_medium',
     ];
@@ -42,7 +41,6 @@ class EcomBotTrafficController extends Controller
             'logged_in' => $request->input('logged_in', ''),
             'has_order' => $request->input('has_order', ''),
             'country' => $request->input('country', ''),
-            'visitor_type' => $request->input('visitor_type', ''),
             'utm_source' => $request->input('utm_source', ''),
             'utm_medium' => $request->input('utm_medium', ''),
         ];
@@ -50,6 +48,9 @@ class EcomBotTrafficController extends Controller
         $report = $this->analytics->buildReport($filters);
 
         $chips = $this->buildFilterChips($request);
+        $page = EcomTrackerViewData::forBotTraffic($request, collect(self::FILTER_KEYS)
+            ->filter(fn (string $key) => filled($request->input($key)))
+            ->count());
 
         TrackerRedisSupport::logBackendHealth('bot_traffic_page');
 
@@ -66,6 +67,7 @@ class EcomBotTrafficController extends Controller
             'report' => $report,
             'filters' => $filters,
             'chips' => $chips,
+            'page' => $page,
             'activeFilterCount' => collect(self::FILTER_KEYS)
                 ->filter(fn (string $key) => filled($request->input($key)))
                 ->count(),
@@ -78,12 +80,39 @@ class EcomBotTrafficController extends Controller
     private function buildFilterChips(Request $request): array
     {
         $chips = [];
-        $labels = VisitorClassificationLabels::filterTypeLabels();
 
-        if ($request->filled('visitor_type')) {
+        if ($request->filled('device_type')) {
             $chips[] = [
-                'label' => $labels[$request->visitor_type] ?? $request->visitor_type,
-                'remove_url' => $request->fullUrlWithQuery(['visitor_type' => null, 'page' => null]),
+                'label' => 'Device: '.ucfirst((string) $request->device_type),
+                'remove_url' => $request->fullUrlWithQuery(['device_type' => null, 'page' => null]),
+            ];
+        }
+
+        if ($request->filled('logged_in')) {
+            $chips[] = [
+                'label' => $request->logged_in === '1' ? 'Logged in' : 'Guest',
+                'remove_url' => $request->fullUrlWithQuery(['logged_in' => null, 'page' => null]),
+            ];
+        }
+
+        if ($request->filled('has_order')) {
+            $chips[] = [
+                'label' => $request->has_order === '1' ? 'With order' : 'No order',
+                'remove_url' => $request->fullUrlWithQuery(['has_order' => null, 'page' => null]),
+            ];
+        }
+
+        if ($request->filled('utm_source')) {
+            $chips[] = [
+                'label' => 'Source: '.$request->utm_source,
+                'remove_url' => $request->fullUrlWithQuery(['utm_source' => null, 'page' => null]),
+            ];
+        }
+
+        if ($request->filled('utm_medium')) {
+            $chips[] = [
+                'label' => 'Medium: '.$request->utm_medium,
+                'remove_url' => $request->fullUrlWithQuery(['utm_medium' => null, 'page' => null]),
             ];
         }
 
