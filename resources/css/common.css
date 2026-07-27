@@ -563,22 +563,17 @@ button {
    DISCOUNT PAGE — full responsive + hover + visual hierarchy
    ═══════════════════════════════════════════════════════════════ */
 
-/* ── 1. Card header: 3-col grid (image | info | btn) ──
-   On phones ≤ 420 px the view button falls to its own full-width row. */
+/* ── 1. Card header: 3-col grid (image | info | toggle) ── */
 .discount-card-header {
     display: grid;
-    grid-template-columns: 3.5rem 1fr auto;
-    gap: 0.75rem;
-    align-items: start;
-    padding: 1rem;
+    grid-template-columns: 3rem 1fr auto;
+    gap: 0.625rem;
+    align-items: center;
+    padding: 0.75rem;
 }
 @media (max-width: 420px) {
     .discount-card-header {
-        grid-template-columns: 3rem 1fr;
-    }
-    .discount-view-btn {
-        grid-column: 1 / -1;
-        justify-content: center;
+        grid-template-columns: 2.75rem 1fr auto;
     }
 }
 
@@ -706,6 +701,209 @@ button {
 .dark .sc-stats { color: #94a3b8; }
 .sc-stats b     { font-weight: 600; font-size: inherit; }
 .sc-stats { margin-top: 4px; }
+
+/* ── 9. Discount summary strip — original card design, readable text ── */
+.discount-summary-strip {
+    padding: 0.625rem 0.75rem 0.75rem;
+    background: #f8fafc;
+}
+.dark .discount-summary-strip {
+    background: rgba(15, 23, 42, 0.35);
+}
+
+.discount-summary-color {
+    padding-bottom: 0.25rem;
+}
+.discount-summary-color-border {
+    margin-top: 0.625rem;
+    padding-top: 0.625rem;
+    border-top: 1px solid #e2e8f0;
+}
+.dark .discount-summary-color-border {
+    border-color: #334155;
+}
+
+.discount-summary-color-label {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+}
+.discount-summary-color-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-accent-400, #f59e0b);
+    flex-shrink: 0;
+}
+.discount-summary-color-text {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.dark .discount-summary-color-text { color: #94a3b8; }
+.discount-summary-color-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+}
+.dark .discount-summary-color-name { color: #f1f5f9; }
+.discount-summary-color-range {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #e2e8f0;
+    color: #475569;
+}
+.dark .discount-summary-color-range {
+    background: #334155;
+    color: #cbd5e1;
+}
+
+/* Platform price lines — inline Org / Dis format */
+.plat-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.45rem;
+    width: 100%;
+}
+@media (max-width: 1200px) {
+    .plat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+    .plat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 360px) {
+    .plat-grid { grid-template-columns: 1fr; }
+}
+
+.plat-card {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    padding: 0.45rem 0.5rem;
+    line-height: 1.35;
+}
+.dark .plat-card {
+    border-color: #475569;
+    background: #1e293b;
+}
+.plat-card-disc {
+    border-color: #93c5fd;
+    background: #f0f7ff;
+}
+.dark .plat-card-disc {
+    border-color: #3b82f6;
+    background: rgba(30, 58, 138, 0.22);
+}
+
+.plat-name {
+    margin: 0 0 0.3rem;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #334155;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dark .plat-name { color: #e2e8f0; }
+.plat-card-disc .plat-name { color: #1d4ed8; }
+.dark .plat-card-disc .plat-name { color: #60a5fa; }
+
+.plat-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 0.25rem;
+    font-size: 11px;
+    color: #1e293b;
+}
+.dark .plat-line { color: #f1f5f9; }
+.plat-line + .plat-line {
+    margin-top: 0.25rem;
+    padding-top: 0.25rem;
+    border-top: 1px dashed #cbd5e1;
+}
+.dark .plat-line + .plat-line {
+    border-color: #475569;
+}
+.plat-card-disc .plat-line-dis {
+    border-color: #93c5fd;
+}
+.dark .plat-card-disc .plat-line-dis {
+    border-color: rgba(96, 165, 250, 0.4);
+}
+
+.plat-type {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #e2e8f0;
+    color: #334155;
+    line-height: 1.5;
+}
+.dark .plat-type {
+    background: #334155;
+    color: #e2e8f0;
+}
+.plat-type-dis {
+    background: #dbeafe;
+    color: #1e40af;
+}
+.dark .plat-type-dis {
+    background: rgba(59, 130, 246, 0.3);
+    color: #bfdbfe;
+}
+
+.plat-val {
+    font-weight: 700;
+    white-space: nowrap;
+}
+.plat-line-dis .plat-val {
+    color: #1d4ed8;
+}
+.dark .plat-line-dis .plat-val {
+    color: #60a5fa;
+}
+
+.plat-key {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #64748b;
+    margin-right: 2px;
+}
+.dark .plat-key { color: #94a3b8; }
+.plat-line-dis .plat-key {
+    color: #3b82f6;
+}
+.dark .plat-line-dis .plat-key {
+    color: #93c5fd;
+}
+
+.plat-sep {
+    color: #94a3b8;
+    font-weight: 400;
+    user-select: none;
+}
+.dark .plat-sep { color: #64748b; }
+.discount-calc-table input.is-invalid {
+    border-color: #ef4444 !important;
+}
+.discount-edit-panel .pp-form:last-child {
+    margin-bottom: 0;
+}
 
 /* ── Sticky scrollable table (bulk-edit & index) ── */
 .sticky-table {

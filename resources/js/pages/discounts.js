@@ -1,34 +1,25 @@
 import $ from '$';
 
-// ── Read config from data attributes set in the blade ──
 const pageEl   = document.getElementById('discounts-page-content');
-const CALC_URL  = pageEl?.dataset.calculateUrl   ?? '';
-const VIEW_URL  = pageEl?.dataset.viewUrl        ?? '';
-const DEP_CATS  = pageEl?.dataset.depCatsUrl     ?? '';
-const CSRF      = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+const CALC_URL = pageEl?.dataset.calculateUrl ?? '';
+const SAVE_URL = pageEl?.dataset.saveUrl     ?? '';
+const DEP_CATS = pageEl?.dataset.depCatsUrl  ?? '';
+const CSRF     = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
 $(document).ready(function () {
 
-    /* ══════════════════════════════════════════════════════
-       Product Category — TomSelect
-       common.js already initialises ALL .tom-select elements
-       so we just grab the existing instance instead of
-       creating a new one (TomSelect throws if you double-init).
-    ══════════════════════════════════════════════════════ */
     let productCategoryTs = null;
 
     function initProductCategorySelect() {
         const el = document.querySelector('#product_category');
         if (!el) return;
-        if (productCategoryTs) return; // already have a reference
+        if (productCategoryTs) return;
 
-        // Reuse the instance that common.js already created
         if (el.tomselect) {
             productCategoryTs = el.tomselect;
             return;
         }
 
-        // Fallback: initialise ourselves if common.js missed it
         if (typeof TomSelect === 'undefined') { setTimeout(initProductCategorySelect, 100); return; }
         productCategoryTs = new TomSelect(el, {
             create: false,
@@ -38,13 +29,9 @@ $(document).ready(function () {
         });
     }
 
-    // Try immediately; if common.js DOMContentLoaded hasn't fired yet retry shortly
     initProductCategorySelect();
     if (!productCategoryTs) setTimeout(initProductCategorySelect, 200);
 
-    /* ══════════════════════════════════════════════════════
-       Department select — reload categories (unchanged logic)
-    ══════════════════════════════════════════════════════ */
     $('#department_select').change(function () {
         const id = $(this).val();
         $.ajax({
@@ -67,11 +54,7 @@ $(document).ready(function () {
         });
     });
 
-    /* ══════════════════════════════════════════════════════
-       CRITICAL — discount_price change / keyup handler
-       (logic unchanged — only Blade template vars replaced
-        with data-attribute-sourced constants)
-    ══════════════════════════════════════════════════════ */
+    /* ── Live profit calculation on discount input ── */
     $(document).on('change keyup', '.discount_price', function () {
         let input         = $(this);
         let form          = input.closest('form');
@@ -125,27 +108,14 @@ $(document).ready(function () {
         });
     });
 
-    /* ══════════════════════════════════════════════════════
-       CRITICAL — pp-form submit handler
-       (logic unchanged)
-    ══════════════════════════════════════════════════════ */
-    $(document).on('submit', '.pp-form', function (e) {
-        let $form     = $(this);
+    /* ── Validate form before AJAX save ── */
+    function validateDiscountForm($form) {
         let anyChecked = false;
-
-        if ($form.hasClass('confirmed')) return true;
-
-        e.preventDefault();
-        $form.find('.discount_price').removeClass('is-invalid');
-
-        let saveType      = $form.find('.save_type').val();
+        let saveType   = $form.find('.save_type').val();
         let invalidStatus = false;
-        let hasError      = false;
+        let hasError   = false;
 
-        $form.find('.discount_price')
-             .removeClass('is-invalid')
-             .next('.custom-error')
-             .remove();
+        $form.find('.discount_price').removeClass('is-invalid').next('.custom-error').remove();
 
         $form.find('input[name="sl_price_id[]"]:checked').each(function () {
             anyChecked = true;
@@ -160,22 +130,16 @@ $(document).ready(function () {
             if (!$discountInput.val().trim()) {
                 hasError = true;
                 $discountInput.addClass('is-invalid');
-                $('<div class="custom-error text-danger text-start mt-1" style="font-size:12px;">This field is required.</div>')
+                $('<div class="custom-error text-danger text-start mt-1" style="font-size:11px;">Required.</div>')
                     .insertAfter($discountInput);
             }
         });
 
         if (!anyChecked) {
-            Swal.fire({
-                title: 'No Option Selected',
-                text: 'Please select at least one price option before submitting.',
-                icon: 'warning'
-            });
+            Swal.fire({ title: 'No Option Selected', text: 'Please select at least one price option.', icon: 'warning' });
             return false;
         }
-
         if (hasError) return false;
-
         if (invalidStatus) {
             Swal.fire({
                 title: 'Invalid Status',
@@ -186,75 +150,67 @@ $(document).ready(function () {
             });
             return false;
         }
+        return true;
+    }
+
+    /* ── AJAX form submit ── */
+    $(document).on('submit', '.pp-form', function (e) {
+        e.preventDefault();
+
+        let $form = $(this);
+        if (!validateDiscountForm($form)) return false;
 
         Swal.fire({
             title: 'Are you sure?',
             text: 'Do you want to save this discount?',
             icon: 'question',
-            showCancelButton:    true,
-            confirmButtonText:   'Yes, Save it!',
-            cancelButtonText:    'Cancel',
-            confirmButtonColor:  '#3085d6',
-            cancelButtonColor:   '#d33'
+            showCancelButton:   true,
+            confirmButtonText:  'Yes, Save it!',
+            cancelButtonText:   'Cancel',
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor:  '#d33'
         }).then((result) => {
-            if (result.isConfirmed) {
-                $form.addClass('confirmed');
-                $form.find('.submit-btn').html(window.loader).prop('disabled', true);
-                $form.submit();
-            }
+            if (!result.isConfirmed) return;
+
+            let $btn = $form.find('.submit-btn');
+            let btnHtml = $btn.html();
+            $btn.html(window.loader || 'Saving...').prop('disabled', true);
+
+            $.ajax({
+                url:  SAVE_URL,
+                type: 'POST',
+                data: $form.serialize(),
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                success: function (response) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Saved',
+                        text: response.message || 'Discount prices updated successfully.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                },
+                error: function (xhr) {
+                    let msg = xhr.responseJSON?.message || 'Something went wrong. Please try again.';
+                    Swal.fire({ icon: 'error', title: 'Error', text: msg });
+                },
+                complete: function () {
+                    $btn.html(btnHtml).prop('disabled', false);
+                }
+            });
         });
     });
 
-    /* ══════════════════════════════════════════════════════
-       Toggle columns in view-item modal (unchanged)
-    ══════════════════════════════════════════════════════ */
+    /* ── Toggle columns — scoped to nearest edit panel ── */
     $(document).on('change', '.toggle-column', function () {
         const target = $(this).val();
-        $('.' + target).toggle(this.checked);
+        const panel  = $(this).closest('.discount-edit-panel');
+        panel.find('.toogle-item.' + target).toggle(this.checked);
     });
 
 });
 
-/* ══════════════════════════════════════════════════════
-   CRITICAL — viewChart (unchanged logic)
-   Exposed globally so onclick="viewChart(...)" works
-══════════════════════════════════════════════════════ */
-window.viewChart = function (id, page = 1) {
-    let url = VIEW_URL.replace(':id', id);
-    $.ajax({
-        type: 'GET',
-        url:  url,
-        data: { page: page },
-        success: function (response) {
-            if (response.status == true) {
-                $('#viewSellingChartItemModal').remove();
-                $('.setViewSellingChartItemModal').html(response.data);
-                if (typeof window.initTomSelectElements === 'function') {
-                    const modalRoot = document.querySelector('.setViewSellingChartItemModal');
-                    if (modalRoot) window.initTomSelectElements(modalRoot);
-                }
-                // Init Alpine.js on the freshly injected markup
-                if (window.Alpine) {
-                    window.Alpine.initTree(document.querySelector('.setViewSellingChartItemModal'));
-                }
-                // Lock body scroll while modal is open
-                document.body.style.overflow = 'hidden';
-            }
-        },
-        error: function (data) {
-            console.log('Something went wrong.' + data);
-        }
-    });
-};
-
-window.closeDiscountModal = function () {
-    $('#viewSellingChartItemModal').remove();
-    document.body.style.overflow = '';
-};
-
-/* ══════════════════════════════════════════════════════
-   approveData — unchanged, exposed globally
-══════════════════════════════════════════════════════ */
+/* ── approveData — kept for other pages ── */
 window.approveData = function (id, action = 'approve') {
     Swal.fire({
         title: 'Are you sure?',
@@ -276,4 +232,3 @@ window.approveData = function (id, action = 'approve') {
         }
     });
 };
-

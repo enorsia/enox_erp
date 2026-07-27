@@ -1196,14 +1196,29 @@ class SalesChartController extends Controller
                 ])
                 ->log('Selling chart discount updated: Last price Id: ' . $scd->selling_chart_price_id . ' Discount Price: ' . $scd->price . ' Platform: ' . $platform->name);
 
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'Discount prices updated successfully.',
+                ]);
+            }
+
             notify()->success("Discount prices updated Successfully.", "Success");
             return back();
         } catch (\Throwable $th) {
             DB::rollback();
-            notify()->error($th->getMessage(), "Error");
             Log::error('Discount prices update failed', [
                 'message'   => $th->getMessage()
             ]);
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => $th->getMessage(),
+                ], 422);
+            }
+
+            notify()->error($th->getMessage(), "Error");
             return back();
         }
     }

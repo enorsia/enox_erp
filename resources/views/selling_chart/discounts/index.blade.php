@@ -6,12 +6,14 @@
     {{-- Page identifier + data attributes for JS URLs --}}
     <div id="discounts-page-content"
          data-calculate-url="{{ route('admin.selling_chart.calculate.platform.profit') }}"
-         data-view-url="{{ route('admin.selling_chart.view.single.chart', ':id') }}"
+         data-save-url="{{ route('admin.selling_chart.save.platform.discount.price') }}"
          data-dep-cats-url="{{ url('admin/selling-chart/get-dep-wise-cats') }}"
     ></div>
 
     {{-- ── FILTER DRAWER (Alpine) ── --}}
-    <div x-data="{ drawerOpen: false, imagePopup: null }" @keydown.escape.window="drawerOpen = false; imagePopup = null">
+    <div x-data="{ drawerOpen: false, imagePopup: null }"
+         @keydown.escape.window="drawerOpen = false; imagePopup = null"
+         @discount-image-popup.window="imagePopup = $event.detail">
 
         {{-- ── Image Lightbox ── --}}
         <div x-show="imagePopup" x-cloak
@@ -261,96 +263,79 @@
                             $ecommerceProduct = $ecommerceMap[$chartInfo->design_no] ?? null;
                         @endphp
 
-                        <div class="order-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden transition-[border-color] duration-200 hover:border-accent-200 dark:hover:border-accent-600/60">
+                        <div class="order-card discount-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden transition-[border-color] duration-200 hover:border-accent-200 dark:hover:border-accent-600/60"
+                             x-data="{ expanded: false }"
+                             :class="expanded && 'ring-1 ring-accent-200 dark:ring-accent-600/40'">
 
-                            {{-- ── CARD HEADER ── --}}
-                            <div class="discount-card-header">
+                            {{-- ── CARD HEADER (click to expand) ── --}}
+                            <button type="button" @click="expanded = !expanded"
+                                    class="discount-card-header w-full text-left cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
 
-                                {{-- Design Image (fills the 3.5rem / 3rem grid column) --}}
+                                {{-- Design Image --}}
                                 @if ($chartInfo->design_image)
-                                    <img class="w-full aspect-square rounded-xl object-cover border border-slate-100 dark:border-slate-700 cursor-zoom-in hover:opacity-90 transition-opacity"
+                                    <img class="w-full aspect-square rounded-lg object-cover border border-slate-100 dark:border-slate-700 cursor-zoom-in hover:opacity-90 transition-opacity"
                                          src="{{ cloudflareImage($chartInfo->design_image, 112) }}"
-                                         @click="imagePopup = '{{ cloudflareImage($chartInfo->design_image, 1200) }}'"
+                                         @click.stop="$dispatch('discount-image-popup', '{{ cloudflareImage($chartInfo->design_image, 1200) }}')"
                                          alt="Design">
                                 @else
-                                    <div class="w-full aspect-square rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center border border-slate-200 dark:border-slate-600">
+                                    <div class="w-full aspect-square rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center border border-slate-200 dark:border-slate-600">
                                         <svg class="w-5 h-5 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                         </svg>
                                     </div>
                                 @endif
 
-                                {{-- Info col (min-w-0 critical so truncation works) --}}
+                                {{-- Info col --}}
                                 <div class="min-w-0">
-
-                                    {{-- Serial # + Design No (truncated) --}}
                                     <div class="flex items-baseline gap-1.5 min-w-0 mb-0.5">
                                         <span class="text-[10px] text-slate-400 dark:text-slate-500 font-mono shrink-0">#{{ $start + $loop->index }}</span>
-                                        @can('general.discounts.show')
-                                            <button type="button" onclick="viewChart({{ $chartInfo->id }}, 3)"
-                                                    class="discount-design-no text-accent-400 hover:text-accent-600">{{ $chartInfo->design_no }}</button>
-                                        @else
-                                            <span class="discount-design-no text-slate-800 dark:text-slate-100">{{ $chartInfo->design_no }}</span>
-                                        @endcan
+                                        <span class="discount-design-no text-slate-800 dark:text-slate-100">{{ $chartInfo->design_no }}</span>
                                     </div>
 
-                                    {{-- SKU badge (own line so it never fights the design no) --}}
                                     @if ($ecommerceProduct && ($ecommerceProduct['sku'] ?? ''))
-                                        <div class="mb-1">
-                                            <span class="inline-block max-w-full truncate text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium">
-                                                SKU: {{ $ecommerceProduct['sku'] }}
+                                        <div class="mb-0.5">
+                                            <span class="inline-block max-w-full truncate text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium">
+                                                {{ $ecommerceProduct['sku'] }}
                                             </span>
                                         </div>
                                     @endif
 
-                                    {{-- Dept / Cat / Mini --}}
-                                    <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                                        <span class="text-[11px] text-slate-400 dark:text-slate-500">
-                                            <span class="text-slate-300 dark:text-slate-600">Dept</span>
-                                            <span class="text-slate-600 dark:text-slate-300 font-medium ml-1">{{ $chartInfo->department_name }}</span>
-                                        </span>
-                                        <span class="text-[11px] text-slate-400 dark:text-slate-500">
-                                            <span class="text-slate-300 dark:text-slate-600">Cat</span>
-                                            <span class="text-slate-600 dark:text-slate-300 font-medium ml-1">{{ $chartInfo->category_name }}</span>
-                                        </span>
-                                        <span class="text-[11px] text-slate-400 dark:text-slate-500">
-                                            <span class="text-slate-300 dark:text-slate-600">Mini</span>
-                                            <span class="text-slate-600 dark:text-slate-300 font-medium ml-1">{{ $chartInfo->mini_category_name }}</span>
-                                        </span>
+                                    <div class="flex flex-wrap gap-x-2.5 gap-y-0.5">
+                                        <span class="text-[10px] text-slate-500 dark:text-slate-400">{{ $chartInfo->department_name }}</span>
+                                        <span class="text-[10px] text-slate-300 dark:text-slate-600">·</span>
+                                        <span class="text-[10px] text-slate-500 dark:text-slate-400 truncate">{{ $chartInfo->category_name }}</span>
+                                        <span class="text-[10px] text-slate-300 dark:text-slate-600">·</span>
+                                        <span class="text-[10px] text-slate-500 dark:text-slate-400 truncate">{{ $chartInfo->mini_category_name }}</span>
                                     </div>
                                 </div>
 
-                                {{-- View button --}}
-                                @can('general.discounts.show')
-                                    <button type="button" onclick="viewChart({{ $chartInfo->id }}, 3)"
-                                            class="discount-view-btn flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border border-accent-200 dark:border-accent-700 bg-accent-50 dark:bg-accent-800/30 text-accent-500 dark:text-accent-300 hover:bg-accent-400 hover:text-white hover:border-accent-400 transition-colors font-semibold whitespace-nowrap">
-                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                            <path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                {{-- Expand toggle --}}
+                                <div class="flex items-center gap-1.5 shrink-0">
+                                    <span class="hidden sm:inline text-[10px] text-slate-400 dark:text-slate-500 font-medium" x-text="expanded ? 'Collapse' : 'Manage'"></span>
+                                    <div class="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center transition-transform duration-200"
+                                         :class="expanded && 'rotate-180 bg-accent-50 dark:bg-accent-800/30 border-accent-200 dark:border-accent-700'">
+                                        <svg class="w-3.5 h-3.5 text-slate-400" :class="expanded && 'text-accent-500'" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" d="M19 9l-7 7-7-7"/>
                                         </svg>
-                                        View
-                                    </button>
-                                @endcan
-                            </div>
+                                    </div>
+                                </div>
+                            </button>
 
-                            {{-- ── PLATFORM PRICES ── --}}
+                            {{-- ── PLATFORM PRICE SUMMARY ── --}}
                             @if ($chartInfo->selling_chart_prices_count)
-                                <div class="border-t border-slate-100 dark:border-slate-700 p-4 pt-3">
-                                    {{-- Each color/range row --}}
+                                <div class="discount-summary-strip border-t border-slate-100 dark:border-slate-700">
                                     @foreach ($chartInfo->sellingChartPrices as $ch_price)
-                                        <div class="{{ !$loop->first ? 'mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/60' : '' }}">
-                                            {{-- Color/Range label --}}
-                                            <div class="flex items-center flex-wrap gap-1.5 mb-2.5">
-                                                <div class="w-1.5 h-1.5 rounded-full bg-accent-400 shrink-0"></div>
-                                                <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Color / Range : </span>
-                                                <span class="text-[12px] font-bold text-slate-800 dark:text-slate-100">{{ $ch_price->color_name }}</span>
+                                        <div class="discount-summary-color {{ !$loop->first ? 'discount-summary-color-border' : '' }}">
+                                            <div class="discount-summary-color-label">
+                                                <span class="discount-summary-color-dot"></span>
+                                                <span class="discount-summary-color-text">Color / Range :</span>
+                                                <span class="discount-summary-color-name">{{ $ch_price->color_name }}</span>
                                                 @if ($ch_price->range)
-                                                    <span class="inline-block text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-500 dark:text-slate-400 font-medium">{{ $ch_price->range }}</span>
+                                                    <span class="discount-summary-color-range">{{ $ch_price->range }}</span>
                                                 @endif
                                             </div>
 
-                                            {{-- Platform price cards --}}
-                                            <div class="selling-chart-grid">
+                                            <div class="plat-grid">
                                                 @foreach ($platform_ncs as $p_code => $p_name)
                                                     @php
                                                         $platform  = $platforms->get($p_code);
@@ -365,34 +350,26 @@
                                                             $dis_val   = calculatePlatformProfit($dch_price, $platform);
                                                         }
                                                     @endphp
-                                                    <div class="sc-platform-card {{ $d_price ? 'has-discount' : '' }} rounded-lg border {{ $d_price ? 'border-blue-200 dark:border-blue-800/60 bg-blue-50/60 dark:bg-blue-900/10' : 'border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-700/30' }} p-2.5">
+                                                    <div class="plat-card {{ $d_price ? 'plat-card-disc' : '' }}">
+                                                        <p class="plat-name">{{ $p_name }}</p>
 
-                                                        {{-- Platform name --}}
-                                                        <p class="sc-platform-badge {{ $d_price ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500' }}">{{ $p_name }}</p>
-
-                                                        {{-- ── Original Price block ── --}}
-                                                        <div>
-                                                            <span class="sc-section-pill sc-orig-pill">Original Price</span>
-                                                            <b class="sc-csp-value text-slate-800 dark:text-slate-100"><span class="font-normal opacity-70"><b>CSP : </b> </span> @price($ch_price->confirm_selling_price)</b>
-                                                            <p class="sc-stats">
-                                                                <span><b>PM:</b> @pricews($cal_val['profit_margin'])%</span>
-                                                                <span class="opacity-30">·</span>
-                                                                <span><b>NP:</b> @price($cal_val['net_profit'])</span>
-                                                            </p>
+                                                        <div class="plat-line plat-line-org">
+                                                            <span class="plat-type">Org</span>
+                                                            <span class="plat-val"><span class="plat-key">CSP</span> @price($ch_price->confirm_selling_price)</span>
+                                                            <span class="plat-sep">·</span>
+                                                            <span class="plat-val"><span class="plat-key">PM</span> @pricews($cal_val['profit_margin'])%</span>
+                                                            <span class="plat-sep">·</span>
+                                                            <span class="plat-val"><span class="plat-key">NP</span> @price($cal_val['net_profit'])</span>
                                                         </div>
 
                                                         @if ($d_price)
-                                                            {{-- Divider --}}
-                                                            <div class="my-2 border-t border-blue-200 dark:border-blue-800/50"></div>
-                                                            {{-- ── Discount Price block ── --}}
-                                                            <div>
-                                                                <span class="sc-section-pill sc-disc-pill">Discount Price</span>
-                                                                <b class="sc-csp-value text-blue-600 dark:text-blue-400"><span class="font-normal opacity-70"><b>CSP : </b></span> @price($d_price->price)</b>
-                                                                <p class="sc-stats">
-                                                                    <span><b>PM:</b> @pricews($dis_val['profit_margin'])%</span>
-                                                                    <span class="opacity-30">·</span>
-                                                                    <span><b>NP:</b> @price($dis_val['net_profit'])</span>
-                                                                </p>
+                                                            <div class="plat-line plat-line-dis">
+                                                                <span class="plat-type plat-type-dis">Dis</span>
+                                                                <span class="plat-val"><span class="plat-key">CSP</span> @price($d_price->price)</span>
+                                                                <span class="plat-sep">·</span>
+                                                                <span class="plat-val"><span class="plat-key">PM</span> @pricews($dis_val['profit_margin'])%</span>
+                                                                <span class="plat-sep">·</span>
+                                                                <span class="plat-val"><span class="plat-key">NP</span> @price($dis_val['net_profit'])</span>
                                                             </div>
                                                         @endif
                                                     </div>
@@ -402,10 +379,20 @@
                                     @endforeach
                                 </div>
                             @else
-                                <div class="border-t border-slate-100 dark:border-slate-700 px-4 py-3">
-                                    <p class="text-[12px] text-slate-400 dark:text-slate-500">No price data available.</p>
+                                <div class="border-t border-slate-100 dark:border-slate-700 px-3 py-2">
+                                    <p class="text-[11px] text-slate-400 dark:text-slate-500">No price data available.</p>
                                 </div>
                             @endif
+
+                            {{-- ── EXPANDABLE EDIT PANEL ── --}}
+                            <div x-show="expanded" x-collapse>
+                                @include('selling_chart.discounts.partials.card-edit-panel', [
+                                    'chartInfo' => $chartInfo,
+                                    'ecommerceProduct' => $ecommerceProduct,
+                                    'platform_ncs' => $platform_ncs,
+                                    'platforms' => $platforms,
+                                ])
+                            </div>
 
                         </div>{{-- /card --}}
                     @endforeach
@@ -428,8 +415,5 @@
 
         </div>{{-- /page content --}}
     </div>{{-- /alpine root --}}
-
-    {{-- Modal container — viewChart() injects here --}}
-    <div class="setViewSellingChartItemModal"></div>
 
 @endsection
