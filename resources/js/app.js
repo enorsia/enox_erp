@@ -48,3 +48,6 @@ if (has('.etd-filter-drawer') || has('.etd-flatpickr-date') || has('.etd-flatpic
 }
 if (has('#sale-tracking-page'))               import('./pages/sale-tracking');
 if (has('#ads-performance-report-content'))  import('./pages/ads-performance-report');
+
+
+if (has('#enox_style_stock_report'))  import('./pages/style-stock-report');

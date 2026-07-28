@@ -20,6 +20,7 @@
     },
     "dependencies": {
         "@alpinejs/collapse": "^3.15.11",
+        "@fancyapps/ui": "^5.0.36",
         "alpinejs": "^3.15.11",
         "chart.js": "^4.5.1",
         "flatpickr": "^4.6.13",
