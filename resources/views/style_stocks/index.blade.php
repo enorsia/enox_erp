@@ -27,7 +27,7 @@
             
         </div>
 
-        @can('admin.style_alert_stocks.excel_export')
+        @can('ecommerce.wh_stock_in_out.export')
             <form method="get" action="{{ route('admin.style.stock.index') }}">
                 <button type="submit" name="action" value="export_stock_analysis"
                         class="flex items-center gap-2 px-3.5 py-2 text-[13px] font-semibold rounded-xl bg-accent-400 hover:bg-accent-600 text-white transition-colors shadow-sm">

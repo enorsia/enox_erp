@@ -9,10 +9,14 @@ return [
         'modules' => [
             'authentication' => 'Authentication',
             'general' => 'General',
+            'ecommerce' => 'Ecommerce',
             'ecom_tracker' => 'Ecom Tracker',
             'settings' => 'Settings',
         ],
         'resources' => [
+            'ecommerce' => [
+                'wh_stock_in_out' => 'WH Stock In/Out',
+            ],
             'ecom_tracker' => [
                 'dashboard' => 'Store Performance',
                 'visitors' => 'Visitor Analytics',
@@ -90,6 +94,14 @@ return [
             'sale_tracking' => [
                 'guard' => 'web',
                 'actions' => ['index', 'create', 'edit', 'delete'],
+            ],
+        ],
+
+        // ECOMMERCE MODULE
+        'ecommerce' => [
+            'wh_stock_in_out' => [
+                'guard' => 'web',
+                'actions' => ['index', 'export'],
             ],
         ],
 

@@ -153,7 +153,10 @@
         @endcanany
 
         {{-- Reports --}}
-        @canany(Cache::get('permissions.available', [])['prefix']['general_'] ?? [])
+        @canany(array_merge(
+            Cache::get('permissions.available', [])['prefix']['general_'] ?? [],
+            Cache::get('permissions.available', [])['prefix']['ecommerce_'] ?? []
+        ))
             <div class="pb-1">
                 <div x-data="{ open: {{ Request::is('admin/sales-spends/*') ? 'true' : 'false' }} }">
                     <button @click="open = !open"
@@ -269,6 +272,35 @@
                                 <a href="{{ route('admin.ecom-tracker.bot-traffic') }}"
                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-tracker/bot-traffic*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Bot traffic
+                                </a>
+                            @endcan
+                        </div>
+                    </div>
+                </div>
+                @endcanany
+
+                @canany(Cache::get('permissions.available', [])['prefix']['ecommerce_'] ?? [])
+                <div x-data="{ open: {{ Request::is('admin/style/stock*') ? 'true' : 'false' }} }">
+                    <button @click="open = !open"
+                            class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/style/stock*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor"
+                             stroke-width="1.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25h9.75M5.106 5.106l-.383-1.437A1.125 1.125 0 003.636 3H2.25m0 0v16.5A2.25 2.25 0 004.5 21h15a2.25 2.25 0 002.25-2.25V3M9 10.5h6M9 14.25h3"/>
+                        </svg>
+                        <span class="flex-1 text-left">Ecommerce</span>
+                        <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
+                             :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
+                             viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+
+                    <div x-show="open" x-collapse>
+                        <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
+                            @can('ecommerce.wh_stock_in_out.index')
+                                <a href="{{ route('admin.style.stock.index') }}"
+                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/style/stock*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    WH Stock In/Out
                                 </a>
                             @endcan
                         </div>

@@ -17,6 +17,8 @@ class StyleStockReportController extends Controller
 
     public function index(Request $request): View|RedirectResponse|StreamedResponse
     {
+        Gate::authorize('ecommerce.wh_stock_in_out.index');
+
         if ($request->input('action') === 'export_stock_analysis') {
             return $this->export($request);
         }
@@ -35,7 +37,7 @@ class StyleStockReportController extends Controller
 
     protected function export(Request $request): RedirectResponse|StreamedResponse
     {
-        Gate::authorize('admin.style_alert_stocks.excel_export');
+        Gate::authorize('ecommerce.wh_stock_in_out.export');
 
         $result = $this->service->exportReport($request->except(['_token']));
 
