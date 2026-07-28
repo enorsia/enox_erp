@@ -1858,4 +1858,113 @@ body > .ts-dropdown .ts-dropdown-content {
     font-size: 12px;
 }
 
+/* ── Style Stock — discount summary panel ── */
+.ssr-discount-summary {
+    width: 100%;
+}
+
+.ssr-discount-dept {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.625rem;
+    overflow: hidden;
+    background: #fff;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.dark .ssr-discount-dept {
+    border-color: #334155;
+    background: rgba(15, 23, 42, 0.35);
+}
+
+.ssr-discount-dept-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+    padding: 0.625rem 0.75rem;
+    background: #f8fafc;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.3;
+}
+
+.dark .ssr-discount-dept-header {
+    background: rgba(30, 41, 59, 0.6);
+    color: #f1f5f9;
+}
+
+.ssr-discount-dept-name {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ssr-discount-dept-count {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    padding: 0.125rem 0.45rem;
+    border-radius: 9999px;
+    background: #fef3c7;
+    color: #92400e;
+    white-space: nowrap;
+}
+
+.dark .ssr-discount-dept-count {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+}
+
+.ssr-discount-cat-list {
+    padding: 0.35rem 0.625rem 0.5rem;
+    flex: 1;
+    overflow-y: auto;
+    max-height: 10rem;
+}
+
+.ssr-discount-cat-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.3rem 0 0.3rem 0.5rem;
+    border-left: 2px solid #e2e8f0;
+    font-size: 0.6875rem;
+    color: #475569;
+}
+
+.ssr-discount-cat-row span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.dark .ssr-discount-cat-row {
+    border-left-color: #475569;
+    color: #cbd5e1;
+}
+
+.ssr-discount-cat-count {
+    font-weight: 600;
+    color: #b45309;
+    flex-shrink: 0;
+}
+
+.dark .ssr-discount-cat-count {
+    color: #fbbf24;
+}
+
+.ssr-discount-empty {
+    grid-column: 1 / -1;
+    font-size: 0.8125rem;
+    color: #94a3b8;
+    text-align: center;
+    padding: 1rem 0;
+}
+
 

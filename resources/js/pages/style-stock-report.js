@@ -19,11 +19,128 @@ import { prepareFancyboxPublicLinks } from './fancybox-public-url';
         }
     }
 
+    function productHasDiscount(product) {
+        const maxDiscount = product?.itemPrice?.maxDiscountPrice;
+        return Number(maxDiscount) > 0;
+    }
+
+    function iterateProducts(products, callback) {
+        if (!products) return;
+        if (Array.isArray(products)) {
+            products.forEach(callback);
+            return;
+        }
+        Object.values(products).forEach(callback);
+    }
+
+    function buildDiscountSummary(data) {
+        const departments = [];
+
+        Object.entries(data || {}).forEach(([deptKey, department]) => {
+            let deptDiscountCount = 0;
+            const categories = [];
+
+            Object.entries(department?.categories || {}).forEach(([catKey, category]) => {
+                let catDiscountCount = 0;
+
+                iterateProducts(category?.products, (product) => {
+                    if (productHasDiscount(product)) {
+                        catDiscountCount++;
+                    }
+                });
+
+                deptDiscountCount += catDiscountCount;
+
+                categories.push({
+                    key: catKey,
+                    name: category?.category_name || "—",
+                    count: catDiscountCount,
+                });
+            });
+
+            departments.push({
+                key: deptKey,
+                name: department?.department_name || "—",
+                count: deptDiscountCount,
+                categories,
+            });
+        });
+
+        return departments;
+    }
+
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+    function renderDiscountSummary(data) {
+        const $container = $("#ssr_discount_summary");
+        const $badge = $("#ssr_discount_total_badge");
+
+        if (!$container.length) return;
+
+        const departments = buildDiscountSummary(data);
+        const grandTotal = departments.reduce((sum, dept) => sum + dept.count, 0);
+
+        if ($badge.length) {
+            $badge.text(grandTotal + " item" + (grandTotal === 1 ? "" : "s"));
+        }
+
+        if (!departments.length) {
+            $container.html(
+                '<p class="ssr-discount-empty">No department data available.</p>',
+            );
+            return;
+        }
+
+        const html = departments
+            .map((dept) => {
+                const categoryRows = dept.categories
+                    .map(
+                        (cat) =>
+                            '<div class="ssr-discount-cat-row">' +
+                            '<span>' +
+                            escapeHtml(cat.name) +
+                            "</span>" +
+                            '<span class="ssr-discount-cat-count">' +
+                            cat.count +
+                            "</span>" +
+                            "</div>",
+                    )
+                    .join("");
+
+                return (
+                    '<div class="ssr-discount-dept">' +
+                    '<div class="ssr-discount-dept-header">' +
+                    '<span class="ssr-discount-dept-name">' +
+                    escapeHtml(dept.name) +
+                    "</span>" +
+                    '<span class="ssr-discount-dept-count">' +
+                    dept.count +
+                    " discount</span>" +
+                    "</div>" +
+                    '<div class="ssr-discount-cat-list">' +
+                    categoryRows +
+                    "</div>" +
+                    "</div>"
+                );
+            })
+            .join("");
+
+        $container.html(html);
+    }
+
     function init() {
         const $ = window.$;
         if (!$ || !document.getElementById("enox_style_stock_report")) return;
 
         const styleStockData = getStyleStockData();
+
+        renderDiscountSummary(styleStockData);
 
         function resetToggleIcons() {
             $(".ssr-chevron").removeClass("ssr-chevron--open");

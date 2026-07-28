@@ -91,6 +91,34 @@
         </div>
     </div>
 
+    @if (!$style_stocks->isEmpty())
+    {{-- ─── Discount Items Summary (collapsible, JS-rendered) ─── --}}
+    <div class="an-card overflow-hidden" x-data="{ open: false }">
+        <button type="button"
+                @click="open = !open"
+                class="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+            <div class="flex items-center gap-2 min-w-0">
+                <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" d="M9 14.25l6-6m4.5-3.493V21.75a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18.75V5.25a2.25 2.25 0 012.25-2.25h7.5"/>
+                </svg>
+                <span class="text-[14px] font-semibold text-slate-800 dark:text-slate-100">Discount Items Summary</span>
+                <span id="ssr_discount_total_badge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"></span>
+            </div>
+            <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200"
+                 :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+
+        <div x-show="open" x-collapse x-cloak>
+            <div class="border-t border-slate-200 dark:border-slate-700 px-4 py-4">
+                <p class="text-[12px] text-slate-400 dark:text-slate-500 mb-3">Count of products with discount price, grouped by department and category.</p>
+                <div id="ssr_discount_summary" class="ssr-discount-summary grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"></div>
+            </div>
+        </div>
+    </div>
+    @endif
+
     {{-- ─── Report Table ─── --}}
     @if (!$style_stocks->isEmpty())
         @php
