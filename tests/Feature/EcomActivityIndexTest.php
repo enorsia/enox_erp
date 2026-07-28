@@ -150,7 +150,7 @@ test('ecom activity index shows order count for sessions with payment success', 
         ->assertSee($guestSession);
 });
 
-test('ecom activity index defaults to last 24 hours', function () {
+test('ecom activity index defaults to today preset', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.activity.index');
 
@@ -175,7 +175,7 @@ test('ecom activity index defaults to last 24 hours', function () {
 
     $this->get(route('admin.ecom-activity.index'))
         ->assertOk()
-        ->assertSee('Last 24 hours')
+        ->assertSee(\App\Support\TrackerTime::todayPresetLabel())
         ->assertSee($recentSession)
         ->assertDontSee($oldSession);
 

@@ -250,13 +250,12 @@ class EcomTrackerDashboardService
         }
 
         if ($period === '24h') {
-            $toLocal = TrackerTime::localNow();
-            $fromLocal = $toLocal->copy()->subHours(24);
+            $today = TrackerTime::todayRangeUtc();
 
             return [
-                'from' => $fromLocal->copy()->utc(),
-                'to' => $toLocal->copy()->utc(),
-                'label' => 'Last 24 hours',
+                'from' => $today['from'],
+                'to' => $today['to'],
+                'label' => TrackerTime::todayPresetLabel(),
                 'days' => 1,
                 'period' => '24h',
             ];
@@ -764,7 +763,7 @@ class EcomTrackerDashboardService
     private function trendRangeLabel(int $totalDays, string $bucket): string
     {
         return match ($bucket) {
-            'hour' => 'Last 24 hours · hourly',
+            'hour' => TrackerTime::todayPresetLabel().' · hourly',
             'week' => "{$totalDays} days · weekly buckets",
             'month' => "{$totalDays} days · monthly buckets",
             default => "{$totalDays} days · daily",

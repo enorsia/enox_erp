@@ -166,10 +166,9 @@ class EcomActivityController extends Controller
             return;
         }
 
-        $from = TrackerTime::localNow()->subHours(24)->utc();
-        $to = TrackerTime::localNow()->utc();
+        $today = TrackerTime::todayRangeUtc();
 
-        TrackerTime::applySessionActivityWindow($query, $from, $to);
+        TrackerTime::applySessionActivityWindow($query, $today['from'], $today['to']);
     }
 
     /**

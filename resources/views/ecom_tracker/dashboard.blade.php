@@ -78,7 +78,7 @@
 
             <div class="etd-page-header-right">
                 <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
-                    <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="Last 24 hours">24h</a>
+                    <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="{{ \App\Support\TrackerTime::todayPresetLabel() }}">{{ \App\Support\TrackerTime::todayPresetButtonLabel() }}</a>
                     <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
                     <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
                     <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
@@ -165,38 +165,6 @@
             @endforeach
         </div>
     </div>
-
-    @php $vq = $d['visitor_quality'] ?? null; @endphp
-    @if ($vq)
-        <div class="mb-5">
-            <div class="flex items-center justify-between mb-2">
-                <p class="etd-kpi-section-label m-0">Session quality</p>
-                @can('ecom_tracker.bot_traffic.index')
-                    <a href="{{ route('admin.ecom-tracker.bot-traffic') }}" class="text-[12px] text-accent-500 no-underline hover:underline">View bot traffic details →</a>
-                @endcan
-            </div>
-            <div class="etd-kpi-grid">
-                @php $metricLabels = \App\Support\VisitorClassificationLabels::summaryMetricLabels(); @endphp
-                @foreach ([
-                    ['key' => 'real_shoppers', 'label' => $metricLabels['real_shoppers']],
-                    ['key' => 'automated_traffic', 'label' => $metricLabels['automated_traffic']],
-                    ['key' => 'not_classified', 'label' => $metricLabels['not_classified']],
-                    ['key' => 'uk_shoppers', 'label' => $metricLabels['uk_shoppers']],
-                ] as $kpi)
-                    @php $m = $vq[$kpi['key']]; @endphp
-                    @include('ecom_tracker.partials.ga4-kpi-card', [
-                        'label' => $kpi['label'],
-                        'value' => $m['current'],
-                        'delta_pct' => null,
-                        'delta_direction' => null,
-                        'delta_label' => null,
-                        'sparkline' => [],
-                        'compact' => true,
-                    ])
-                @endforeach
-            </div>
-        </div>
-    @endif
 
     <div class="etd-grid-2 mb-3">
         <div class="etd-panel" id="funnel">

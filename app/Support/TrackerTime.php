@@ -83,6 +83,30 @@ class TrackerTime
         return self::timezone().' (UTC'.$local->format('P').')';
     }
 
+    public static function todayPresetLabel(): string
+    {
+        return 'Today (00:00:01 to 23:59:59)';
+    }
+
+    public static function todayPresetButtonLabel(): string
+    {
+        return 'Today';
+    }
+
+    /**
+     * @return array{from: Carbon, to: Carbon}
+     */
+    public static function todayRangeUtc(): array
+    {
+        $fromLocal = self::localNow()->startOfDay()->addSecond();
+        $toLocal = self::localNow()->endOfDay();
+
+        return [
+            'from' => $fromLocal->copy()->utc(),
+            'to' => $toLocal->copy()->utc(),
+        ];
+    }
+
     /**
      * Bounds for naive visitor-local DATETIME columns in activity tables.
      *

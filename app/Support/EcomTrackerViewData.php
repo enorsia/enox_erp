@@ -77,11 +77,11 @@ final class EcomTrackerViewData
             'datetimeFromValue' => $datetimeFromValue,
             'datetimeToValue' => $datetimeToValue,
             'activeFilterCount' => $activeFilterCount,
-            'rangeLabel' => $filters['window_label'] ?? 'Last 24 hours',
+            'rangeLabel' => $filters['window_label'] ?? TrackerTime::todayPresetLabel(),
             'resetUrl' => route('admin.ecom-tracker.visitors'),
             'resetActive' => count($request->query()) > 0,
             'presetWindows' => [
-                '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours',
+                '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => TrackerTime::todayPresetButtonLabel(),
                 '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year',
             ],
             'exportUrl' => route('admin.ecom-tracker.visitors.export', $exportQuery),
@@ -122,12 +122,12 @@ final class EcomTrackerViewData
             'datetimeFromValue' => $datetimeFromValue,
             'datetimeToValue' => $datetimeToValue,
             'activeFilterCount' => $activeFilterCount,
-            'rangeLabel' => $filters['window_label'] ?? 'Last 24 hours',
+            'rangeLabel' => $filters['window_label'] ?? TrackerTime::todayPresetLabel(),
             'exportUrl' => route('admin.ecom-tracker.visitors.export', $exportQuery),
             'resetUrl' => route('admin.ecom-tracker.visitors.details', $resetQuery),
             'resetActive' => count($request->query()) > 0,
             'presetWindows' => [
-                '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours',
+                '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => TrackerTime::todayPresetButtonLabel(),
                 '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year',
             ],
             'breadcrumbs' => [

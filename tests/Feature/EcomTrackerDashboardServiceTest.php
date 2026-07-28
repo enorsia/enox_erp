@@ -7,17 +7,18 @@ use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
-test('ecom tracker dashboard resolves 24h rolling range', function () {
+test('ecom tracker dashboard resolves today preset range', function () {
     $service = app(EcomTrackerDashboardService::class);
 
     Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
 
     $range = $service->resolveDateRange(['period' => '24h']);
 
-    expect($range['label'])->toBe('Last 24 hours');
+    expect($range['label'])->toBe(TrackerTime::todayPresetLabel());
     expect($range['period'])->toBe('24h');
     expect($range['days'])->toBe(1);
-    expect((int) TrackerTime::toLocal($range['from'])?->diffInHours(TrackerTime::toLocal($range['to'])))->toBe(24);
+    expect(TrackerTime::toLocal($range['from'])?->format('Y-m-d H:i:s'))->toBe('2026-07-20 00:00:01');
+    expect(TrackerTime::toLocal($range['to'])?->format('Y-m-d H:i:s'))->toBe('2026-07-20 23:59:59');
 
     Carbon::setTestNow();
 });
@@ -721,7 +722,7 @@ test('product catalog funnel and activity filters only show purchased products w
     expect(collect($viewedNotPurchased['products'])->pluck('name')->all())->toBe(['Only Viewed Dress']);
 });
 
-test('product catalog empty period defaults to last 24 hours', function () {
+test('product catalog empty period defaults to today preset', function () {
     $service = app(EcomTrackerDashboardService::class);
 
     Carbon::setTestNow(Carbon::parse('2026-07-15 16:00:00', TrackerTime::timezone()));
@@ -729,12 +730,12 @@ test('product catalog empty period defaults to last 24 hours', function () {
     $range = $service->resolveDateRange(['period' => '']);
 
     expect($range['period'])->toBe('24h');
-    expect($range['label'])->toBe('Last 24 hours');
+    expect($range['label'])->toBe(TrackerTime::todayPresetLabel());
 
     Carbon::setTestNow();
 });
 
-test('dashboard product table defaults to last 24 hours and applies session filters', function () {
+test('dashboard product table defaults to today preset and applies session filters', function () {
     $service = app(EcomTrackerDashboardService::class);
     $now = Carbon::parse('2026-07-15 16:00:00', TrackerTime::timezone());
 
