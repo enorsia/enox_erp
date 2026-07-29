@@ -22,6 +22,10 @@ final class SessionTrafficAttribution
         'media_type',
         'fbclid',
         'gclid',
+        'gbraid',
+        'wbraid',
+        'gad_source',
+        'gad_campaignid',
         'msclkid',
         'awc',
     ];
@@ -67,7 +71,118 @@ final class SessionTrafficAttribution
             $parsed[$key] = (string) $value;
         }
 
-        return self::applyTrafficAliases($params, $parsed);
+        return self::applyGoogleTrafficAliases($params, self::applyTrafficAliases($params, $parsed));
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @param  array<string, string>  $parsed
+     * @return array<string, string>
+     */
+    private static function applyGoogleTrafficAliases(array $params, array $parsed): array
+    {
+        $gadCampaignId = $parsed['gad_campaignid']
+            ?? (is_scalar($params['gad_campaignid'] ?? null) && $params['gad_campaignid'] !== ''
+                ? (string) $params['gad_campaignid']
+                : null);
+
+        if ($gadCampaignId !== null) {
+            $parsed['gad_campaignid'] = $gadCampaignId;
+
+            if (! isset($parsed['utm_campaign'])) {
+                $parsed['utm_campaign'] = $gadCampaignId;
+            }
+        }
+
+        $hasGooglePaidClick = isset($parsed['gclid'])
+            || isset($parsed['gbraid'])
+            || isset($parsed['wbraid'])
+            || $gadCampaignId !== null
+            || (isset($parsed['gad_source']) && $parsed['gad_source'] !== '');
+
+        if (! isset($parsed['utm_source']) && $hasGooglePaidClick) {
+            $parsed['utm_source'] = 'google';
+        }
+
+        if (! isset($parsed['utm_medium']) && $hasGooglePaidClick) {
+            $parsed['utm_medium'] = 'paid';
+        }
+
+        return $parsed;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function inferFromReferer(?string $referer): array
+    {
+        if (! filled($referer)) {
+            return [];
+        }
+
+        $host = parse_url($referer, PHP_URL_HOST);
+
+        if (! is_string($host) || $host === '') {
+            return [];
+        }
+
+        $host = strtolower($host);
+
+        if (str_contains($host, 'google.')) {
+            return [
+                'utm_source' => 'google',
+                'utm_medium' => 'organic',
+            ];
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<string, string>  $parsed
+     * @return array<string, string>
+     */
+    private static function mergeRefererAttribution(array $parsed, ?string $referer): array
+    {
+        foreach (self::inferFromReferer($referer) as $key => $value) {
+            if (! isset($parsed[$key])) {
+                $parsed[$key] = $value;
+            }
+        }
+
+        return $parsed;
+    }
+
+    private static function refererFromActions(ActivityEcomUser $session, ?Collection $actions = null): ?string
+    {
+        if ($session->relationLoaded('firstRefererAction') && filled($session->firstRefererAction?->referer)) {
+            return (string) $session->firstRefererAction->referer;
+        }
+
+        $referer = self::firstActionReferer($session, $actions);
+
+        return filled($referer) ? $referer : null;
+    }
+
+    /**
+     * @param  array<string, string>|null  $parsed
+     */
+    private static function resolveReferer(ActivityEcomUser $session, ?Collection $actions = null, ?array $parsed = null): ?string
+    {
+        $referer = self::refererFromActions($session, $actions);
+
+        if (filled($referer)) {
+            return $referer;
+        }
+
+        $parsed ??= self::parseFromUrl($session->landing_page)
+            + self::parseFromUrl(self::firstActionPageUrl($session, $actions));
+
+        if (($parsed['utm_source'] ?? null) === 'google') {
+            return 'https://www.google.com/';
+        }
+
+        return null;
     }
 
     /**
@@ -107,6 +222,8 @@ final class SessionTrafficAttribution
             $parsed = self::parseFromUrl($session->landing_page)
                 + self::parseFromUrl($firstAction?->page_url);
         }
+
+        $parsed = self::mergeRefererAttribution($parsed, self::refererFromActions($session));
 
         return [
             'source' => filled($session->utm_source) ? (string) $session->utm_source : ($parsed['utm_source'] ?? null),
@@ -152,7 +269,7 @@ final class SessionTrafficAttribution
             }
         }
 
-        return $merged;
+        return self::mergeRefererAttribution($merged, self::refererFromActions($session, $actions));
     }
 
     /**
@@ -171,7 +288,7 @@ final class SessionTrafficAttribution
             $fields[self::label($key)] = $attribution[$key];
         }
 
-        $referer = self::firstActionReferer($session, $actions);
+        $referer = self::resolveReferer($session, $actions);
 
         if (filled($referer)) {
             $fields['Referer'] = $referer;
@@ -188,15 +305,14 @@ final class SessionTrafficAttribution
         $firstAction = $session->relationLoaded('firstAction') ? $session->firstAction : null;
         $parsed = self::parseFromUrl($session->landing_page)
             + self::parseFromUrl($firstAction?->page_url);
+        $parsed = self::mergeRefererAttribution($parsed, self::refererFromActions($session));
         $utm = self::resolvedUtmFields($session, $parsed);
         $utmParts = array_values(array_filter([$utm['medium'], $utm['campaign']], fn ($value) => filled($value)));
 
         return [
             'source' => self::displaySourceLabel($utm['source']),
             'utm' => $utmParts !== [] ? implode(' / ', $utmParts) : null,
-            'referer' => filled($session->firstRefererAction?->referer)
-                ? (string) $session->firstRefererAction->referer
-                : null,
+            'referer' => self::resolveReferer($session, null, $parsed),
         ];
     }
 
@@ -348,6 +464,10 @@ final class SessionTrafficAttribution
             'media_type' => 'Media type',
             'fbclid' => 'Facebook click ID',
             'gclid' => 'Google click ID',
+            'gbraid' => 'Google iOS click ID',
+            'wbraid' => 'Google web click ID',
+            'gad_source' => 'Google ad source',
+            'gad_campaignid' => 'Google ad campaign ID',
             'msclkid' => 'Microsoft click ID',
             'awc' => 'Awin click ID',
             default => str_replace('_', ' ', ucfirst($key)),

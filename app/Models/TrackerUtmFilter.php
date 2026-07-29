@@ -155,7 +155,37 @@ final class TrackerUtmFilter
             return;
         }
 
+        if ($source === 'google') {
+            $query->where(function (Builder $inner) {
+                $inner->where('utm_source', 'google');
+                self::applyGoogleUrlMatches($inner, 'or');
+            });
+
+            return;
+        }
+
         $query->where('utm_source', $source);
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function applyGoogleUrlMatches(Builder $query, string $boolean = 'and'): void
+    {
+        $method = $boolean === 'or' ? 'orWhere' : 'where';
+
+        $query->{$method}(function (Builder $inner) {
+            foreach (['gclid=', 'gbraid=', 'wbraid=', 'gad_campaignid=', 'gad_source=', 'utm_source=google'] as $needle) {
+                $inner->orWhere('landing_page', 'like', '%'.$needle.'%');
+            }
+
+            $inner->orWhereHas('actions', fn (Builder $actions) => $actions
+                ->where(function (Builder $urls) {
+                    foreach (['gclid=', 'gbraid=', 'wbraid=', 'gad_campaignid=', 'gad_source=', 'utm_source=google'] as $needle) {
+                        $urls->orWhere('page_url', 'like', '%'.$needle.'%');
+                    }
+                }));
+        });
     }
 
     /**
