@@ -13,12 +13,24 @@
     $detailLink = $page['detailLink'];
     $hasActiveFilters = $page['hasActiveFilters'];
 
+    $kpiByLabel = collect($d['kpis'])->keyBy('label');
+    $kpiGroups = [
+        [
+            'title' => 'Audience & engagement',
+            'labels' => ['Unique visitors', 'Sessions', 'Total stay time', 'Avg stay time'],
+            'cols' => 4,
+        ],
+    ];
+
+    $saleConversion = $d['sale_conversion'] ?? [];
+    $funnelDropoff = $d['funnel_dropoff'] ?? [];
+
     $activePreset = match ($period) {
-        '7d', '30d', '90d', 'custom' => $period,
+        'yesterday', '7d', '30d', '90d', 'custom' => $period,
         default => '24h',
     };
 
-    $basePreset = in_array($period, ['24h', '7d', '30d', '90d'], true) ? $period : '24h';
+    $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d', '90d'], true) ? $period : '24h';
     $baseQuery = request()->except([
         'date_from', 'date_to', 'period',
         'search', 'category', 'color', 'size', 'sort_by', 'activity',
@@ -79,6 +91,7 @@
             <div class="etd-page-header-right">
                 <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
                     <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="{{ \App\Support\TrackerTime::todayPresetLabel() }}">{{ \App\Support\TrackerTime::todayPresetButtonLabel() }}</a>
+                    <a href="{{ $presetUrl('yesterday') }}" class="etd-segmented-btn {{ $activePreset === 'yesterday' ? 'active' : '' }} no-underline" aria-label="{{ \App\Support\TrackerTime::yesterdayPresetLabel() }}">{{ \App\Support\TrackerTime::yesterdayPresetButtonLabel() }}</a>
                     <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
                     <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
                     <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
@@ -146,52 +159,64 @@
 
     <div class="etd-kpi-panel mb-5">
         <div class="etd-kpi-groups">
-            @foreach ([
-                ['title' => 'Audience & engagement', 'items' => array_slice($d['kpis'], 0, 4), 'cols' => 4],
-                ['title' => 'Sale & conversion', 'items' => array_slice($d['kpis'], 4, 2), 'cols' => 2],
-                ['title' => 'Funnel drop-off', 'items' => array_slice($d['kpis'], 6, 3), 'cols' => 3],
-            ] as $group)
-                <div class="etd-kpi-group etd-kpi-group--{{ $group['cols'] }}">
+            @foreach ($kpiGroups as $group)
+                <div class="etd-kpi-group etd-kpi-group--{{ $group['cols'] }}{{ ($group['cols'] ?? null) === 4 ? ' etd-kpi-group--audience' : '' }}">
                     <p class="etd-kpi-section-label">{{ $group['title'] }}</p>
                     <div class="etd-kpi-group-grid">
-                        @foreach ($group['items'] as $kpi)
-                            <div class="etd-kpi etd-kpi--compact">
-                                <div class="etd-kpi-label">{{ $kpi['label'] }}</div>
-                                <div class="etd-kpi-value">{{ $kpi['formatted'] }}</div>
-                            </div>
+                        @foreach ($group['labels'] as $label)
+                            @if ($kpiByLabel->has($label))
+                                @php $kpi = $kpiByLabel->get($label); @endphp
+                                <div class="etd-kpi etd-kpi--compact">
+                                    @include('ecom_tracker.partials.kpi-label-with-tip', [
+                                        'label' => $kpi['label'],
+                                        'tip' => $kpi['tip'] ?? null,
+                                    ])
+                                    @include('ecom_tracker.partials.kpi-value-with-comparison', [
+                                        'formatted' => $kpi['formatted'],
+                                        'comparison' => $kpi['comparison'] ?? null,
+                                        'valueClass' => $kpi['value_class'] ?? '',
+                                    ])
+                                </div>
+                            @endif
                         @endforeach
                     </div>
                 </div>
             @endforeach
+
+            @if ($saleConversion !== [])
+                @include('ecom_tracker.partials.kpi-metric-group', [
+                    'title' => 'Sale & conversion',
+                    'modifier' => 'etd-kpi-group--sale',
+                    'cols' => 2,
+                    'metrics' => [
+                        $saleConversion['item_qty'] ?? null,
+                        $saleConversion['revenue'] ?? null,
+                    ],
+                ])
+            @endif
+
+            @if ($funnelDropoff !== [])
+                @include('ecom_tracker.partials.kpi-metric-group', [
+                    'title' => 'Funnel drop-off',
+                    'modifier' => 'etd-kpi-group--funnel',
+                    'cols' => 4,
+                    'metrics' => [
+                        $funnelDropoff['cart_drop'] ?? null,
+                        $funnelDropoff['checkout_drop'] ?? null,
+                        $funnelDropoff['proceed_drop'] ?? null,
+                        $funnelDropoff['payments'] ?? null,
+                    ],
+                ])
+            @endif
         </div>
     </div>
 
-    <div class="etd-grid-2 mb-3">
-        <div class="etd-panel" id="funnel">
+    <div class="mb-3">
+        <div class="etd-panel" id="trend">
             <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Conversion funnel</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('funnel')])
+                <h2 class="etd-panel-title">Shopper journey over time</h2>
             </div>
-            <div class="etd-funnel">
-                @foreach ($d['funnel'] as $row)
-                    <div class="etd-funnel-row">
-                        <div class="etd-funnel-stage">{{ $row['stage'] }}</div>
-                        <div class="etd-funnel-track">
-                            <div class="etd-funnel-fill" style="width: {{ max(8, $row['percent_of_top']) }}%">
-                                {{ number_format($row['count']) }}
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        </div>
-
-        <div class="etd-panel">
-            <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Sessions &amp; conversion trend</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('trend')])
-            </div>
-            <div class="etd-chart-wrap">
+            <div class="etd-chart-wrap xl">
                 <canvas id="etdTrendChart"></canvas>
             </div>
         </div>

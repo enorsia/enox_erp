@@ -187,6 +187,17 @@ class VisitorAnalyticsService
             ->value('aggregate'));
     }
 
+    public function totalStaySecondsInRange(Carbon $from, Carbon $to): int
+    {
+        $durationSql = $this->effectiveDurationSecondsSql();
+
+        return (int) ActivityEcomUser::query()
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+            ->whereNotNull('visitor_id')
+            ->selectRaw('SUM('.$durationSql.') as aggregate')
+            ->value('aggregate');
+    }
+
     public function avgVisitorStay(Carbon $from, ?Carbon $until = null): int
     {
         $durationSql = $this->effectiveDurationSecondsSql();

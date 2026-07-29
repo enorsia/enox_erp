@@ -43,6 +43,15 @@ const accent = () => getComputedStyle(document.querySelector('.etd-page') || doc
 const gold = () => '#f59e0b';
 const purchaseGreen = () => '#22c55e';
 
+const trendSeriesColors = [
+    accent(),
+    '#3b82f6',
+    gold(),
+    '#8b5cf6',
+    '#ec4899',
+    purchaseGreen(),
+];
+
 const tipStyle = () => ({
     backgroundColor: isDark() ? '#1e293b' : '#fff',
     titleColor: isDark() ? '#f1f5f9' : '#1e293b',
@@ -60,6 +69,10 @@ function ctx(id) {
 }
 
 function trendTickLimit(labelCount) {
+    if (labelCount <= 24) {
+        return 24;
+    }
+
     if (isNarrow()) {
         return Math.min(6, labelCount);
     }
@@ -85,57 +98,67 @@ function sessionsForLogScale(values) {
 
 const devicePalette = () => [accent(), gold(), '#64748b', '#3b82f6', '#8b5cf6'];
 
+const TREND_SERIES_ORDER = [
+    'unique_visitors',
+    'sessions',
+    'category_views',
+    'product_views',
+    'add_to_cart',
+    'begin_checkout',
+    'proceed_checkout',
+    'purchases',
+    'conversion_rate',
+];
+
+function sortTrendSeries(series) {
+    return [...series].sort((a, b) => {
+        const aIndex = TREND_SERIES_ORDER.indexOf(a.key);
+        const bIndex = TREND_SERIES_ORDER.indexOf(b.key);
+
+        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+    });
+}
+
 const trendCtx = ctx('etdTrendChart');
 if (trendCtx && D.trend) {
     const {
         labels = [],
-        sessions = [],
-        purchases = [],
-        conversion_rates: conversionRates = [],
+        series = [],
         use_log_scale: useLogScale = false,
     } = D.trend;
 
-    const sessionData = useLogScale ? sessionsForLogScale(sessions) : sessions;
-    const purchaseData = useLogScale ? sessionsForLogScale(purchases) : purchases;
+    const orderedSeries = sortTrendSeries(series);
+
+    const datasets = orderedSeries.map((entry, index) => {
+        const color = trendSeriesColors[index % trendSeriesColors.length];
+        const isConversion = entry.key === 'conversion_rate';
+        const isBar = entry.chart_type === 'bar';
+        const rawData = entry.data || [];
+        const data = useLogScale && !isConversion
+            ? sessionsForLogScale(rawData)
+            : rawData;
+
+        return {
+            type: isBar ? 'bar' : 'line',
+            label: entry.label,
+            data,
+            borderColor: isBar ? `${color}CC` : color,
+            backgroundColor: isBar ? `${color}99` : color,
+            pointRadius: isBar ? 0 : (labels.length > 24 ? 0 : 2.5),
+            pointHoverRadius: isBar ? 0 : 4,
+            tension: isBar ? 0 : 0.3,
+            fill: false,
+            yAxisID: entry.y_axis_id || 'y',
+            order: index,
+            barThickness: isBar ? (isNarrow() ? 6 : (labels.length > 30 ? 8 : 12)) : undefined,
+        };
+    });
 
     new Chart(trendCtx, {
         type: 'bar',
         data: {
             labels,
-            datasets: [
-                {
-                    type: 'bar',
-                    label: 'Sessions',
-                    data: sessionData,
-                    backgroundColor: `${accent()}8C`,
-                    borderRadius: 3,
-                    yAxisID: 'y',
-                    order: 3,
-                    barThickness: isNarrow() ? 8 : (labels.length > 30 ? 10 : 14),
-                },
-                {
-                    type: 'line',
-                    label: 'Purchases',
-                    data: purchaseData,
-                    borderColor: purchaseGreen(),
-                    backgroundColor: purchaseGreen(),
-                    pointRadius: 2.5,
-                    tension: 0.3,
-                    yAxisID: 'y',
-                    order: 2,
-                },
-                {
-                    type: 'line',
-                    label: 'Conv. rate %',
-                    data: conversionRates,
-                    borderColor: gold(),
-                    backgroundColor: gold(),
-                    pointRadius: 2.5,
-                    tension: 0.35,
-                    yAxisID: 'y1',
-                    order: 1,
-                },
-            ],
+            datasets,
         },
         options: {
             responsive: true,
@@ -144,19 +167,25 @@ if (trendCtx && D.trend) {
             plugins: {
                 legend: {
                     display: true,
+                    position: isNarrow() ? 'bottom' : 'top',
                     labels: {
                         boxWidth: 10,
                         padding: isNarrow() ? 8 : 14,
                         font: { size: isNarrow() ? 9 : 11 },
+                        sort: (a, b) => a.datasetIndex - b.datasetIndex,
                     },
                 },
                 tooltip: {
                     ...tipStyle(),
+                    titleFont: { size: 14, weight: '600' },
+                    bodyFont: { size: 13 },
+                    padding: 12,
+                    itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
                     callbacks: {
                         label(context) {
-                            const value = context.parsed.y ?? context.parsed ?? 0;
+                            const value = context.parsed.y ?? 0;
 
-                            if (context.dataset.label === 'Conv. rate %') {
+                            if (context.dataset.yAxisID === 'y1') {
                                 return `${context.dataset.label}: ${value}%`;
                             }
 
@@ -170,7 +199,7 @@ if (trendCtx && D.trend) {
                     grid: { display: false },
                     ticks: {
                         maxRotation: labels.length > 20 ? 45 : 0,
-                        autoSkip: true,
+                        autoSkip: labels.length > 24,
                         maxTicksLimit: trendTickLimit(labels.length),
                         font: { size: isNarrow() ? 9 : 11 },
                     },
@@ -187,12 +216,17 @@ if (trendCtx && D.trend) {
                         color: isDark() ? '#94a3b8' : '#64748b',
                         font: { size: 10 },
                     },
+                    ticks: {
+                        precision: 0,
+                    },
                 },
                 y1: {
                     position: 'right',
                     grid: { display: false },
                     min: 0,
-                    ticks: { callback: (value) => `${value}%` },
+                    ticks: {
+                        callback: (value) => `${value}%`,
+                    },
                 },
             },
         },

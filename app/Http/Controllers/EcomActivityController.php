@@ -168,7 +168,7 @@ class EcomActivityController extends Controller
 
         $today = TrackerTime::todayRangeUtc();
 
-        TrackerTime::applySessionActivityWindow($query, $today['from'], $today['to']);
+        TrackerTime::applyEcomActivitySessionScope($query, $today['from'], $today['to'], '24h');
     }
 
     /**

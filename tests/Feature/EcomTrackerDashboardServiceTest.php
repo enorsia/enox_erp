@@ -7,6 +7,22 @@ use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
+test('ecom tracker dashboard resolves yesterday preset range', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    $range = $service->resolveDateRange(['period' => 'yesterday']);
+    $compare = $service->resolvePreviousPeriodRange($range);
+
+    expect($range['label'])->toBe(TrackerTime::yesterdayPresetLabel());
+    expect($range['period'])->toBe('yesterday');
+    expect(TrackerTime::toLocal($compare['from'])?->toDateString())->toBe('2026-07-18');
+    expect(TrackerTime::toLocal($compare['to'])?->toDateString())->toBe('2026-07-18');
+
+    Carbon::setTestNow();
+});
+
 test('ecom tracker dashboard resolves today preset range', function () {
     $service = app(EcomTrackerDashboardService::class);
 
@@ -23,7 +39,7 @@ test('ecom tracker dashboard resolves today preset range', function () {
     Carbon::setTestNow();
 });
 
-test('ecom tracker dashboard sale excludes incomplete payment events and sums checkout line items', function () {
+test('ecom tracker dashboard sale amount sums payment_success amount_paid', function () {
     $service = app(EcomTrackerDashboardService::class);
     $from = Carbon::parse('2026-07-20 00:00:00');
     $to = Carbon::parse('2026-07-20 23:59:59');
@@ -91,8 +107,59 @@ test('ecom tracker dashboard sale excludes incomplete payment events and sums ch
         'date_to' => '2026-07-20',
     ]);
 
-    expect(collect($data['kpis'])->firstWhere('label', 'Sale')['value'])->toBe(80.0);
-    expect(collect($data['kpis'])->firstWhere('label', 'Average sale')['value'])->toBe(40.0);
+    expect($data['sale_conversion']['revenue']['value'])->toBe(179.99);
+    expect($data['sale_conversion']['item_qty']['value'])->toBeGreaterThan(0);
+
+    Carbon::setTestNow();
+});
+
+test('ecom tracker dashboard sale amount uses amount_paid not checkout line totals', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $from = Carbon::parse('2026-07-21 00:00:00');
+    $to = Carbon::parse('2026-07-21 23:59:59');
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'currency' => 'GBP',
+            'order_id' => '2721890745',
+            'amount_paid' => 13.98,
+            'checkout_info' => [
+                'items' => [[
+                    'product_code' => 'SKU-1',
+                    'product_name' => 'Dress',
+                    'qty' => 1,
+                    'price' => 19.99,
+                    'line_total' => 19.99,
+                ]],
+                'totals' => ['grand_total' => 19.99],
+            ],
+        ],
+        'created_at' => $from->copy()->addHours(2),
+        'start_time' => $from->copy()->addHours(2),
+        'end_time' => $from->copy()->addHours(2)->addSeconds(10),
+    ]);
+
+    Carbon::setTestNow($to);
+
+    $data = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-21',
+        'date_to' => '2026-07-21',
+    ]);
+
+    expect($data['sale_conversion']['revenue']['value'])->toBe(13.98);
 
     Carbon::setTestNow();
 });
@@ -241,6 +308,7 @@ test('ecom tracker dashboard trend uses full filtered range with purchase qty', 
 
         ActivityEcomUser::query()->create([
             'session_id' => $sessionId,
+            'visitor_id' => 'visitor-'.$day,
             'device_type' => 'desktop',
             'updated_at' => $createdAt,
             'last_active_at' => $createdAt,
@@ -268,10 +336,74 @@ test('ecom tracker dashboard trend uses full filtered range with purchase qty', 
     expect($data['trend']['total_days'])->toBe(5);
     expect($data['trend']['bucket'])->toBe('day');
     expect($data['trend']['labels'])->toHaveCount(5);
+    expect($data['trend']['series'])->toHaveCount(9);
+    expect(collect($data['trend']['series'])->pluck('key')->all())->toBe([
+        'unique_visitors',
+        'sessions',
+        'category_views',
+        'product_views',
+        'add_to_cart',
+        'begin_checkout',
+        'proceed_checkout',
+        'purchases',
+        'conversion_rate',
+    ]);
+    expect($data['trend']['unique_visitors'])->toBe([1, 1, 1, 1, 1]);
     expect($data['trend']['sessions'])->toBe([1, 1, 1, 1, 1]);
-    expect($data['trend']['purchases'])->toBe([1, 1, 1, 1, 1]);
     expect($data['trend']['conversion_rates'])->toBe([100.0, 100.0, 100.0, 100.0, 100.0]);
+    expect(collect($data['trend']['series'])->firstWhere('key', 'purchases')['data'])->toBe([1, 1, 1, 1, 1]);
     expect($data['trend']['use_log_scale'])->toBeFalse();
+
+    Carbon::setTestNow();
+});
+
+test('ecom tracker dashboard trend uses twenty four hourly buckets for today', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'visitor_id' => 'visitor-hourly',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-20 10:00:00',
+        'updated_at' => '2026-07-20 10:00:00',
+        'last_active_at' => '2026-07-20 10:00:00',
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Women',
+        'created_at' => '2026-07-20 10:15:00',
+        'start_time' => '2026-07-20 10:15:00',
+        'end_time' => '2026-07-20 10:15:00',
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => ['amount_paid' => 50],
+        'created_at' => '2026-07-20 10:30:00',
+        'start_time' => '2026-07-20 10:30:00',
+        'end_time' => '2026-07-20 10:30:00',
+    ]);
+
+    $data = $service->getDashboardData(['period' => '24h']);
+
+    expect($data['trend']['bucket'])->toBe('hour');
+    expect($data['trend']['labels'])->toHaveCount(24);
+    expect($data['trend']['labels'][0])->toBe('00:00');
+    expect($data['trend']['labels'][23])->toBe('23:00');
+    expect(collect($data['trend']['series'])->firstWhere('key', 'unique_visitors')['data'][10])->toBe(1);
+    expect(collect($data['trend']['series'])->firstWhere('key', 'sessions')['data'][10])->toBe(1);
+    expect(collect($data['trend']['series'])->firstWhere('key', 'category_views')['data'][10])->toBe(1);
+    expect(collect($data['trend']['series'])->firstWhere('key', 'purchases')['data'][10])->toBe(1);
+    expect(collect($data['trend']['series'])->firstWhere('key', 'conversion_rate')['data'][10])->toBe(100.0);
 
     Carbon::setTestNow();
 });
@@ -807,4 +939,193 @@ test('ecom tracker dashboard includes visitor quality summary', function () {
 
     expect($data)->toHaveKey('visitor_quality');
     expect($data['visitor_quality'])->toHaveKeys(['real_shoppers', 'automated_traffic', 'not_classified', 'uk_shoppers']);
+});
+
+test('ecom tracker dashboard audience kpis align with user activity session scope', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    $activeOldSession = Str::uuid()->toString();
+    $startedToday = Str::uuid()->toString();
+    $startedYesterday = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $activeOldSession,
+        'visitor_id' => 'visitor-old-active',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-10 10:00:00',
+        'updated_at' => '2026-07-20 14:00:00',
+        'last_active_at' => '2026-07-20 14:00:00',
+        'session_duration_seconds' => 600,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $startedToday,
+        'visitor_id' => 'visitor-today',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-20 09:00:00',
+        'updated_at' => '2026-07-20 10:00:00',
+        'last_active_at' => '2026-07-20 10:00:00',
+        'session_duration_seconds' => 300,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $startedYesterday,
+        'visitor_id' => 'visitor-yesterday',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-19 09:00:00',
+        'updated_at' => '2026-07-20 08:00:00',
+        'last_active_at' => '2026-07-20 08:00:00',
+        'session_duration_seconds' => 400,
+    ]);
+
+    $kpiValue = fn (array $data, string $label) => collect($data['kpis'])->firstWhere('label', $label)['value'] ?? null;
+
+    $today = $service->getDashboardData(['period' => '24h']);
+
+    expect($kpiValue($today, 'Sessions'))->toBe(3);
+    expect($kpiValue($today, 'Unique visitors'))->toBe(3);
+    expect($kpiValue($today, 'Total stay time'))->toBe(1300);
+
+    $yesterday = $service->getDashboardData(['period' => 'yesterday']);
+
+    expect($kpiValue($yesterday, 'Sessions'))->toBe(1);
+    expect($kpiValue($yesterday, 'Unique visitors'))->toBe(1);
+    expect($kpiValue($yesterday, 'Total stay time'))->toBe(400);
+
+    Carbon::setTestNow();
+});
+
+test('ecom tracker dashboard payments count sessions with payment success', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    $singleOrderSession = Str::uuid()->toString();
+    $doubleOrderSession = Str::uuid()->toString();
+    $noOrderSession = Str::uuid()->toString();
+
+    foreach ([$singleOrderSession, $doubleOrderSession, $noOrderSession] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => '2026-07-18 10:00:00',
+            'updated_at' => '2026-07-20 10:00:00',
+            'last_active_at' => '2026-07-20 10:00:00',
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $singleOrderSession,
+        'action_type' => 'payment_success',
+        'payment_success' => ['amount_paid' => 25],
+        'created_at' => '2026-07-10 12:00:00',
+        'start_time' => '2026-07-10 12:00:00',
+        'end_time' => '2026-07-10 12:00:00',
+    ]);
+
+    foreach ([1, 2] as $index) {
+        ActivityEcomUserAction::query()->create([
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $doubleOrderSession,
+            'action_type' => 'payment_success',
+            'payment_success' => ['amount_paid' => 40 * $index],
+            'created_at' => '2026-07-19 1'.$index.':00:00',
+            'start_time' => '2026-07-19 1'.$index.':00:00',
+            'end_time' => '2026-07-19 1'.$index.':00:00',
+        ]);
+    }
+
+    $data = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-18',
+        'date_to' => '2026-07-20',
+    ]);
+
+    expect($data['funnel_dropoff']['payments']['formatted'])->toBe('66.7% / 2');
+    expect($data['sale_conversion']['item_qty']['value'])->toBe(3);
+
+    Carbon::setTestNow();
+});
+
+test('ecom tracker items sold sums product line quantities per payment', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-28 16:00:00', TrackerTime::timezone()));
+
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-27 10:00:00',
+        'updated_at' => '2026-07-27 11:00:00',
+        'last_active_at' => '2026-07-27 11:00:00',
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'order_id' => 'ORDER-1',
+            'amount_paid' => 90,
+            'checkout_info' => [
+                'items' => [
+                    ['product_code' => 'SKU-1', 'qty' => 2, 'price' => 30],
+                    ['product_code' => 'SKU-2', 'qty' => 1, 'price' => 30],
+                ],
+            ],
+        ],
+        'created_at' => '2026-07-27 10:30:00',
+        'start_time' => '2026-07-27 10:30:00',
+        'end_time' => '2026-07-27 10:30:00',
+    ]);
+
+    $data = $service->getDashboardData(['period' => 'yesterday']);
+
+    expect($data['sale_conversion']['item_qty']['value'])->toBe(3);
+    expect($data['funnel_dropoff']['payments']['formatted'])->toBe('100.0% / 1');
+
+    Carbon::setTestNow();
+});
+
+test('ecom tracker funnel stages count session actions regardless of action date', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-18 10:00:00',
+        'updated_at' => '2026-07-20 10:00:00',
+        'last_active_at' => '2026-07-20 10:00:00',
+        'session_duration_seconds' => 120,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'add_to_cart',
+        'add_to_cart' => ['product_code' => 'SKU-1'],
+        'created_at' => '2026-06-01 12:00:00',
+        'start_time' => '2026-06-01 12:00:00',
+        'end_time' => '2026-06-01 12:00:00',
+    ]);
+
+    $data = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-18',
+        'date_to' => '2026-07-20',
+    ]);
+
+    expect($data['funnel_dropoff']['cart_drop']['formatted'])->toBe('100.0% / 1');
+    expect(collect($data['kpis'])->firstWhere('label', 'Total stay time')['value'])->toBe(120);
+
+    Carbon::setTestNow();
 });

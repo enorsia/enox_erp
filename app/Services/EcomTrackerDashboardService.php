@@ -26,6 +26,15 @@ class EcomTrackerDashboardService
 
     private const TABLE_DISPLAY_LIMIT = 20;
 
+    private const TREND_FUNNEL_SERIES = [
+        ['key' => 'category_views', 'label' => 'Category view', 'types' => ['category_view']],
+        ['key' => 'product_views', 'label' => 'Product view', 'types' => self::PRODUCT_VIEW_TYPES],
+        ['key' => 'add_to_cart', 'label' => 'Add to cart', 'types' => ['add_to_cart']],
+        ['key' => 'begin_checkout', 'label' => 'Begin checkout', 'types' => ['begin_checkout']],
+        ['key' => 'proceed_checkout', 'label' => 'Proceed checkout', 'types' => ['proceed_checkout']],
+        ['key' => 'purchases', 'label' => 'Purchase', 'types' => ['payment_success']],
+    ];
+
     private const TREND_LOG_SCALE_DAYS = 31;
 
     private const TREND_WEEKLY_THRESHOLD_DAYS = 32;
@@ -42,17 +51,12 @@ class EcomTrackerDashboardService
      */
     public function getDashboardData(array $filters): array
     {
-        $cache = app(\App\Support\TrackerRedisCache::class);
-        $ttl = (int) config('tracker.analytics_cache_ttl_seconds', 300);
-        $cacheKey = 'dashboard:v3:'.hash('sha256', json_encode($this->cacheableFilters($filters)));
-
-        $cached = $cache->remember($cacheKey, $ttl, fn () => $this->buildDashboardData($filters));
-        $data = $cache->payload($cached);
+        $data = $this->buildDashboardData($filters);
         $data['live'] = $this->buildLiveStatus();
         $data['analytics_cache'] = [
-            'enabled' => (bool) config('tracker.analytics_cache_enabled', true),
-            'cached_at' => $cache->cachedAt($cached),
-            'ttl_seconds' => $ttl,
+            'enabled' => false,
+            'cached_at' => null,
+            'ttl_seconds' => 0,
         ];
 
         return $data;
@@ -68,10 +72,11 @@ class EcomTrackerDashboardService
         $extraFilters = $this->extractSessionFilters($filters);
         $productCatalogOptions = $this->extractProductCatalogOptions($filters);
 
-        $currentSessions = $this->sessionsInRange($range['from'], $range['to']);
+        $period = $range['period'] ?? null;
+        $currentSessions = $this->sessionsInRange($range['from'], $range['to'], $period);
 
         if ($extraFilters !== []) {
-            $currentIds = $this->filteredSessionIds($range['from'], $range['to'], $extraFilters);
+            $currentIds = $this->filteredSessionIds($range['from'], $range['to'], $extraFilters, $period);
             $currentSessions = $currentSessions->only($currentIds->all());
         }
 
@@ -87,8 +92,22 @@ class EcomTrackerDashboardService
         return [
             'filters' => $this->normalizeFilters($filters, $range),
             'range' => $range,
-            'kpis' => $this->buildKpiCards($currentKpis),
-            'funnel' => $this->buildFunnel($range['from'], $range['to'], $extraFilters),
+            'kpis' => $this->buildKpiCards($currentKpis, $range, $extraFilters),
+            'sale_conversion' => $this->buildSaleConversionMetrics(
+                $range['from'],
+                $range['to'],
+                $currentSessions,
+                $range,
+                $extraFilters,
+            ),
+            'funnel_dropoff' => $this->buildFunnelDropoffMetrics(
+                $range['from'],
+                $range['to'],
+                $currentSessions,
+                $range,
+                $extraFilters,
+            ),
+            'funnel' => $this->buildFunnel($range['from'], $range['to'], $extraFilters, $period),
             'trend' => $this->buildTrend($range['from'], $range['to'], $extraFilters, $range['period'] ?? null),
             'categories' => $this->buildCategoryPerformance($range['from'], $range['to'], filters: $extraFilters),
             'products' => $productCatalog['products'],
@@ -104,17 +123,6 @@ class EcomTrackerDashboardService
             'has_session_filters' => $extraFilters !== [],
             'visitor_quality' => app(BotTrafficAnalyticsService::class)->summaryOnly($filters),
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $filters
-     * @return array<string, mixed>
-     */
-    private function cacheableFilters(array $filters): array
-    {
-        ksort($filters);
-
-        return array_filter($filters, static fn ($value) => $value !== null && $value !== '');
     }
 
     /**
@@ -147,6 +155,15 @@ class EcomTrackerDashboardService
                 'value' => $kpi['value'],
                 'formatted' => $kpi['formatted'],
             ])->values()->all(),
+            'sale_conversion' => [
+                ['metric' => 'Items sold', 'value' => $data['sale_conversion']['item_qty']['value'] ?? 0, 'formatted' => $data['sale_conversion']['item_qty']['formatted'] ?? '0'],
+                ['metric' => 'Sale amount', 'value' => $data['sale_conversion']['revenue']['value'] ?? 0, 'formatted' => $data['sale_conversion']['revenue']['formatted'] ?? '£0.00'],
+            ],
+            'funnel_dropoff' => collect($data['funnel_dropoff'] ?? [])->map(fn (array $metric) => [
+                'metric' => $metric['label'],
+                'value' => $metric['value'],
+                'formatted' => $metric['formatted'],
+            ])->values()->all(),
             'funnel' => collect($data['funnel'])->map(fn (array $row) => [
                 'stage' => $row['stage'],
                 'sessions' => $row['count'],
@@ -154,12 +171,22 @@ class EcomTrackerDashboardService
                 'drop_off_percent' => $row['drop_off_percent'],
             ])->values()->all(),
             'trend' => collect($data['trend']['labels'])->map(function (string $label, int $index) use ($data) {
-                return [
+                $row = [
                     'date' => $label,
+                    'unique_visitors' => $data['trend']['unique_visitors'][$index] ?? 0,
                     'sessions' => $data['trend']['sessions'][$index] ?? 0,
-                    'purchases' => $data['trend']['purchases'][$index] ?? 0,
                     'conversion_rate' => $data['trend']['conversion_rates'][$index] ?? 0,
                 ];
+
+                foreach ($data['trend']['series'] ?? [] as $series) {
+                    if (in_array($series['key'], ['unique_visitors', 'sessions', 'conversion_rate'], true)) {
+                        continue;
+                    }
+
+                    $row[$series['key']] = $series['data'][$index] ?? 0;
+                }
+
+                return $row;
             })->values()->all(),
             'categories' => collect($data['categories'])->map(fn (array $row) => [
                 'category' => $row['name'],
@@ -261,6 +288,18 @@ class EcomTrackerDashboardService
             ];
         }
 
+        if ($period === 'yesterday') {
+            $yesterday = TrackerTime::yesterdayRangeUtc();
+
+            return [
+                'from' => $yesterday['from'],
+                'to' => $yesterday['to'],
+                'label' => TrackerTime::yesterdayPresetLabel(),
+                'days' => 1,
+                'period' => 'yesterday',
+            ];
+        }
+
         $days = match ($period) {
             '7d' => 7,
             '90d' => 90,
@@ -343,10 +382,10 @@ class EcomTrackerDashboardService
     /**
      * @param  array<string, mixed>  $filters
      */
-    public function filteredSessionIds(Carbon $from, Carbon $to, array $filters = []): Collection
+    public function filteredSessionIds(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): Collection
     {
         $query = ActivityEcomUser::query();
-        TrackerTime::applySessionActivityWindow($query, $from, $to);
+        TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period);
 
         if (! empty($filters['device_type'])) {
             $query->where('device_type', $filters['device_type']);
@@ -404,7 +443,6 @@ class EcomTrackerDashboardService
         $effectiveLimit = $limit;
 
         return match ($section) {
-            'funnel' => ['section' => $section, 'range' => $range, 'data' => $this->buildFunnel($from, $to, $extraFilters)],
             'trend' => ['section' => $section, 'range' => $range, 'data' => $this->buildTrend($from, $to, $extraFilters)],
             'categories' => ['section' => $section, 'range' => $range, 'data' => $this->buildCategoryPerformance($from, $to, $effectiveLimit, $extraFilters)],
             'products', 'colors' => [
@@ -429,10 +467,10 @@ class EcomTrackerDashboardService
         };
     }
 
-    private function sessionsInRange(Carbon $from, Carbon $to): Collection
+    private function sessionsInRange(Carbon $from, Carbon $to, ?string $period = null): Collection
     {
         $query = ActivityEcomUser::query();
-        TrackerTime::applySessionActivityWindow($query, $from, $to);
+        TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period);
 
         return $query->get()->keyBy('session_id');
     }
@@ -469,19 +507,9 @@ class EcomTrackerDashboardService
     private function buildKpis(Carbon $from, Carbon $to, Collection $sessions): array
     {
         $sessionIds = $sessions->keys();
-        $totalSessions = $sessionIds->count();
+        $funnel = $this->computeFunnelKpis($from, $to, $sessions);
 
-        $actions = ActivityEcomUserAction::query()
-            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-            ->when($sessionIds->isNotEmpty(), fn ($q) => $q->whereIn('session_id', $sessionIds))
-            ->get()
-            ->groupBy('session_id');
-
-        $convertedSessions = $actions->filter(
-            fn (Collection $rows) => $rows
-                ->where('action_type', 'payment_success')
-                ->contains(fn (ActivityEcomUserAction $action) => $this->paymentSaleAmount($action->payment_success ?? []) > 0)
-        )->count();
+        $actions = $this->actionsGroupedBySession($sessionIds);
 
         $cartSessions = $actions->filter(
             fn (Collection $rows) => $rows->contains('action_type', 'add_to_cart')
@@ -504,24 +532,22 @@ class EcomTrackerDashboardService
         )->count();
 
         $revenue = $this->sumRevenue($from, $to, $sessionIds);
-        $purchases = $this->countPurchases($from, $to, $sessionIds);
-
-        $conversionRate = $totalSessions > 0 ? ($convertedSessions / $totalSessions) * 100 : 0;
+        $purchases = $funnel['payment_success_count'];
+        $totalSessions = $sessionIds->count();
         $aov = $purchases > 0 ? $revenue / $purchases : 0;
-        $cartAbandonRate = $cartSessions->count() > 0 ? ($cartAbandoned / $cartSessions->count()) * 100 : 0;
-        $beginCheckoutAbandonRate = $beginCheckoutSessions->count() > 0 ? ($beginCheckoutAbandoned / $beginCheckoutSessions->count()) * 100 : 0;
-        $proceedCheckoutAbandonRate = $proceedCheckoutSessions->count() > 0 ? ($proceedCheckoutAbandoned / $proceedCheckoutSessions->count()) * 100 : 0;
 
         return [
-            'unique_visitors' => $this->visitorAnalytics->countNewVisitorsInRange($from, $to),
-            'avg_stay_seconds' => $this->visitorAnalytics->avgSessionDurationInRange($from, $to),
+            'unique_visitors' => $this->countUniqueVisitorsFromSessions($sessions),
             'sessions' => $totalSessions,
-            'conversion_rate' => round($conversionRate, 2),
+            'total_stay_seconds' => $this->totalStaySecondsFromSessions($sessions),
+            'avg_stay_seconds' => $this->avgStaySecondsFromSessions($sessions),
+            'conversion_rate' => $funnel['conversion_rate'],
             'revenue' => round($revenue, 2),
             'aov' => round($aov, 2),
-            'cart_abandonment_rate' => round($cartAbandonRate, 1),
-            'begin_checkout_abandonment_rate' => round($beginCheckoutAbandonRate, 1),
-            'proceed_checkout_abandonment_rate' => round($proceedCheckoutAbandonRate, 1),
+            'cart_abandonment_rate' => $funnel['cart_abandonment_rate'],
+            'begin_checkout_abandonment_rate' => $funnel['begin_checkout_abandonment_rate'],
+            'proceed_checkout_abandonment_rate' => $funnel['proceed_checkout_abandonment_rate'],
+            'payment_success_count' => $funnel['payment_success_count'],
             'cart_abandoned_sessions' => $cartAbandoned,
             'begin_checkout_abandoned_sessions' => $beginCheckoutAbandoned,
             'proceed_checkout_abandoned_sessions' => $proceedCheckoutAbandoned,
@@ -532,33 +558,291 @@ class EcomTrackerDashboardService
     }
 
     /**
+     * @return array<string, float|int>
+     */
+    private function computeFunnelKpis(Carbon $from, Carbon $to, Collection $sessions): array
+    {
+        $sessionIds = $sessions->keys();
+        $totalSessions = $sessionIds->count();
+
+        $actions = $this->actionsGroupedBySession($sessionIds);
+
+        $convertedSessions = $actions->filter(
+            fn (Collection $rows) => $rows->contains('action_type', 'payment_success')
+        )->count();
+
+        $cartSessions = $actions->filter(
+            fn (Collection $rows) => $rows->contains('action_type', 'add_to_cart')
+        );
+        $beginCheckoutSessions = $actions->filter(
+            fn (Collection $rows) => $rows->contains('action_type', 'begin_checkout')
+        );
+        $proceedCheckoutSessions = $actions->filter(
+            fn (Collection $rows) => $rows->contains('action_type', 'proceed_checkout')
+        );
+
+        $cartAbandoned = $cartSessions->filter(
+            fn (Collection $rows) => ! $rows->contains('action_type', 'begin_checkout')
+        )->count();
+        $beginCheckoutAbandoned = $beginCheckoutSessions->filter(
+            fn (Collection $rows) => ! $rows->contains('action_type', 'proceed_checkout')
+        )->count();
+        $proceedCheckoutAbandoned = $proceedCheckoutSessions->filter(
+            fn (Collection $rows) => ! $rows->contains('action_type', 'payment_success')
+        )->count();
+
+        $paymentSuccessCount = $convertedSessions;
+        $conversionRate = $totalSessions > 0 ? ($convertedSessions / $totalSessions) * 100 : 0;
+        $cartAbandonRate = $cartSessions->count() > 0 ? ($cartAbandoned / $cartSessions->count()) * 100 : 0;
+        $beginCheckoutAbandonRate = $beginCheckoutSessions->count() > 0 ? ($beginCheckoutAbandoned / $beginCheckoutSessions->count()) * 100 : 0;
+        $proceedCheckoutAbandonRate = $proceedCheckoutSessions->count() > 0 ? ($proceedCheckoutAbandoned / $proceedCheckoutSessions->count()) * 100 : 0;
+
+        $cartStageCount = $cartSessions->count();
+        $beginCheckoutStageCount = $beginCheckoutSessions->count();
+        $proceedCheckoutStageCount = $proceedCheckoutSessions->count();
+        $stageRate = static fn (int $count): float => $totalSessions > 0 ? ($count / $totalSessions) * 100 : 0.0;
+
+        return [
+            'conversion_rate' => round($conversionRate, 2),
+            'cart_abandonment_rate' => round($cartAbandonRate, 1),
+            'begin_checkout_abandonment_rate' => round($beginCheckoutAbandonRate, 1),
+            'proceed_checkout_abandonment_rate' => round($proceedCheckoutAbandonRate, 1),
+            'payment_success_count' => $paymentSuccessCount,
+            'cart_abandoned_count' => $cartAbandoned,
+            'begin_checkout_abandoned_count' => $beginCheckoutAbandoned,
+            'proceed_checkout_abandoned_count' => $proceedCheckoutAbandoned,
+            'total_sessions' => $totalSessions,
+            'cart_stage_count' => $cartStageCount,
+            'begin_checkout_stage_count' => $beginCheckoutStageCount,
+            'proceed_checkout_stage_count' => $proceedCheckoutStageCount,
+            'cart_stage_rate' => round($stageRate($cartStageCount), 1),
+            'begin_checkout_stage_rate' => round($stageRate($beginCheckoutStageCount), 1),
+            'proceed_checkout_stage_rate' => round($stageRate($proceedCheckoutStageCount), 1),
+            'payment_stage_rate' => round($stageRate($paymentSuccessCount), 1),
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $current
+     * @param  array{from: Carbon, to: Carbon, label: string, days: int, period?: string}  $range
+     * @param  array<string, mixed>  $extraFilters
      * @return array<int, array<string, mixed>>
      */
-    private function buildKpiCards(array $current): array
+    private function buildKpiCards(array $current, array $range, array $extraFilters = []): array
     {
+        $period = $range['period'] ?? null;
+        $prevRange = $this->resolvePreviousPeriodRange($range);
+        $prevPeriod = $prevRange['period'] ?? null;
+        $prevSessions = $this->filteredSessionsForRange($prevRange['from'], $prevRange['to'], $extraFilters, $prevPeriod);
+        $comparisonLabel = $prevRange['label'];
+
         return [
-            $this->kpiCard('Unique visitors', $current['unique_visitors'], 'number'),
-            $this->kpiCard('Avg stay time', $current['avg_stay_seconds'], 'duration'),
-            $this->kpiCard('Sessions', $current['sessions'], 'number'),
-            $this->kpiCard('Conversion rate', $current['conversion_rate'], 'percent'),
-            $this->kpiCard('Sale', $current['revenue'], 'currency'),
-            $this->kpiCard('Average sale', $current['aov'], 'currency'),
-            $this->kpiCard('Cart abandonment', $current['cart_abandonment_rate'], 'percent'),
-            $this->kpiCard('Begin checkout abandonment', $current['begin_checkout_abandonment_rate'], 'percent'),
-            $this->kpiCard('Proceed checkout abandonment', $current['proceed_checkout_abandonment_rate'], 'percent'),
+            $this->kpiCardWithComparison(
+                'Unique visitors',
+                $current['unique_visitors'],
+                $this->countUniqueVisitorsFromSessions($prevSessions),
+                'number',
+                'Distinct visitor IDs among sessions in the selected period (same session rules as User activity).',
+                $comparisonLabel,
+            ),
+            $this->kpiCardWithComparison(
+                'Sessions',
+                $current['sessions'],
+                $prevSessions->count(),
+                'number',
+                'Sessions in the selected period using the same date rules as User activity. Respects active dashboard filters.',
+                $comparisonLabel,
+            ),
+            $this->kpiCardWithComparison(
+                'Total stay time',
+                $current['total_stay_seconds'],
+                $this->totalStaySecondsFromSessions($prevSessions),
+                'duration',
+                'Sum of session Duration values for sessions in the period (same as User activity Duration column).',
+                $comparisonLabel,
+            ),
+            $this->kpiCardWithComparison(
+                'Avg stay time',
+                $current['avg_stay_seconds'],
+                $this->avgStaySecondsFromSessions($prevSessions),
+                'duration',
+                'Average Duration per session in the period (total stay time divided by session count).',
+                $comparisonLabel,
+            ),
+        ];
+    }
+
+    /**
+     * @param  array{from: Carbon, to: Carbon, label: string, days: int, period?: string}  $range
+     * @param  array<string, mixed>  $extraFilters
+     * @return array<string, array<string, mixed>>
+     */
+    private function buildFunnelDropoffMetrics(
+        Carbon $from,
+        Carbon $to,
+        Collection $currentSessions,
+        array $range,
+        array $extraFilters = [],
+    ): array {
+        $current = $this->computeFunnelKpis($from, $to, $currentSessions);
+        $prevRange = $this->resolvePreviousPeriodRange($range);
+        $prevSessions = $this->filteredSessionsForRange(
+            $prevRange['from'],
+            $prevRange['to'],
+            $extraFilters,
+            $prevRange['period'] ?? null,
+        );
+        $previous = $this->computeFunnelKpis($prevRange['from'], $prevRange['to'], $prevSessions);
+        $comparisonLabel = $prevRange['label'];
+
+        return [
+            'cart_drop' => $this->funnelDropCard(
+                'Cart drop',
+                (float) $current['cart_stage_rate'],
+                (int) $current['cart_stage_count'],
+                (float) $previous['cart_stage_rate'],
+                (int) $previous['cart_stage_count'],
+                'Share of all sessions that added to cart (from session actions in User activity scope).',
+                $comparisonLabel,
+            ),
+            'checkout_drop' => $this->funnelDropCard(
+                'Checkout drop',
+                (float) $current['begin_checkout_stage_rate'],
+                (int) $current['begin_checkout_stage_count'],
+                (float) $previous['begin_checkout_stage_rate'],
+                (int) $previous['begin_checkout_stage_count'],
+                'Share of all sessions that began checkout (from session actions in User activity scope).',
+                $comparisonLabel,
+            ),
+            'proceed_drop' => $this->funnelDropCard(
+                'Proceed drop',
+                (float) $current['proceed_checkout_stage_rate'],
+                (int) $current['proceed_checkout_stage_count'],
+                (float) $previous['proceed_checkout_stage_rate'],
+                (int) $previous['proceed_checkout_stage_count'],
+                'Share of all sessions that proceeded to checkout (from session actions in User activity scope).',
+                $comparisonLabel,
+            ),
+            'payments' => $this->paymentSuccessCard(
+                (float) $current['payment_stage_rate'],
+                (int) $current['payment_success_count'],
+                (float) $previous['payment_stage_rate'],
+                (int) $previous['payment_success_count'],
+                $comparisonLabel,
+            ),
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function kpiCard(string $label, float|int $value, string $format): array
+    private function funnelDropCard(
+        string $label,
+        float $currentRate,
+        int $currentCount,
+        float $previousRate,
+        int $previousCount,
+        string $tip,
+        string $comparisonLabel,
+    ): array {
+        $card = $this->kpiCardWithComparison($label, $currentRate, $previousRate, 'percent', $tip, $comparisonLabel);
+        $card['formatted'] = $this->formatFunnelDropValue($currentRate, $currentCount);
+        $card['comparison']['previous_formatted'] = $this->formatFunnelDropValue($previousRate, $previousCount);
+
+        return $card;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function paymentSuccessCard(
+        float $currentRate,
+        int $currentCount,
+        float $previousRate,
+        int $previousCount,
+        string $comparisonLabel,
+    ): array {
+        $card = $this->kpiCardWithComparison(
+            'Payments',
+            $currentRate,
+            $previousRate,
+            'percent',
+            'Share of all sessions that completed a payment (one count per session with payment_success).',
+            $comparisonLabel,
+        );
+        $card['formatted'] = $this->formatFunnelDropValue($currentRate, $currentCount);
+        $card['comparison']['previous_formatted'] = $this->formatFunnelDropValue($previousRate, $previousCount);
+        $card['value_class'] = 'etd-kpi-value--success';
+
+        return $card;
+    }
+
+    private function formatFunnelDropValue(float $rate, int $count): string
+    {
+        return number_format($rate, 1).'% / '.number_format($count);
+    }
+
+    /**
+     * @param  array<string, mixed>  $extraFilters
+     */
+    private function filteredSessionsForRange(Carbon $from, Carbon $to, array $extraFilters = [], ?string $period = null): Collection
+    {
+        $sessions = $this->sessionsInRange($from, $to, $period);
+
+        if ($extraFilters !== []) {
+            $sessionIds = $this->filteredSessionIds($from, $to, $extraFilters, $period);
+            $sessions = $sessions->only($sessionIds->all());
+        }
+
+        return $sessions;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function kpiCardWithComparison(
+        string $label,
+        float|int $current,
+        float|int $previous,
+        string $format,
+        ?string $tip,
+        string $comparisonLabel,
+    ): array {
+        return array_merge(
+            $this->kpiCard($label, $current, $format, $tip),
+            ['comparison' => $this->buildMetricComparison($current, $previous, $format, $comparisonLabel)],
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildMetricComparison(
+        float|int $current,
+        float|int $previous,
+        string $format,
+        string $comparisonLabel,
+    ): array {
+        return array_merge(
+            $this->computePeriodDelta((float) $current, (float) $previous),
+            [
+                'previous' => $previous,
+                'previous_formatted' => $this->formatKpiValue($previous, $format),
+                'comparison_label' => $comparisonLabel,
+            ],
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function kpiCard(string $label, float|int $value, string $format, ?string $tip = null): array
     {
         return [
             'label' => $label,
             'value' => $value,
             'formatted' => $this->formatKpiValue($value, $format),
+            'tip' => $tip,
         ];
     }
 
@@ -573,23 +857,218 @@ class EcomTrackerDashboardService
     }
 
     /**
+     * @param  array{from: Carbon, to: Carbon, label: string, days: int, period?: string}  $range
+     * @return array{from: Carbon, to: Carbon, label: string, days: int}
+     */
+    public function resolvePreviousPeriodRange(array $range): array
+    {
+        $period = $range['period'] ?? 'custom';
+
+        if ($period === '24h') {
+            $yesterday = TrackerTime::yesterdayRangeUtc();
+
+            return [
+                'from' => $yesterday['from'],
+                'to' => $yesterday['to'],
+                'label' => 'yesterday',
+                'days' => 1,
+                'period' => 'yesterday',
+            ];
+        }
+
+        if ($period === 'yesterday') {
+            $dayBefore = TrackerTime::dayBeforeYesterdayRangeUtc();
+            $dayBeforeLocal = TrackerTime::toLocal($dayBefore['from']);
+
+            return [
+                'from' => $dayBefore['from'],
+                'to' => $dayBefore['to'],
+                'label' => $dayBeforeLocal?->format('d M Y') ?? 'day before yesterday',
+                'days' => 1,
+                'period' => 'yesterday',
+            ];
+        }
+
+        $from = $range['from'];
+        $to = $range['to'];
+        $seconds = (int) $from->diffInSeconds($to);
+        $prevTo = $from->copy()->subSecond();
+        $prevFrom = $prevTo->copy()->subSeconds($seconds);
+
+        $label = match ($period) {
+            '7d' => 'previous 7 days',
+            '30d' => 'previous 30 days',
+            '90d' => 'previous 90 days',
+            default => $this->formatPreviousPeriodLabel($prevFrom, $prevTo),
+        };
+
+        return [
+            'from' => $prevFrom,
+            'to' => $prevTo,
+            'label' => $label,
+            'days' => $range['days'] ?? ((int) $from->diffInDays($to) + 1),
+            'period' => $period,
+        ];
+    }
+
+    private function countUniqueVisitorsFromSessions(Collection $sessions): int
+    {
+        return $sessions->pluck('visitor_id')->filter()->unique()->count();
+    }
+
+    private function effectiveSessionDurationSeconds(ActivityEcomUser $session): int
+    {
+        return max(0, (int) ($session->session_duration_seconds ?? 0));
+    }
+
+    /**
+     * @return Collection<string, Collection<int, ActivityEcomUserAction>>
+     */
+    private function actionsGroupedBySession(Collection $sessionIds): Collection
+    {
+        if ($sessionIds->isEmpty()) {
+            return collect();
+        }
+
+        return ActivityEcomUserAction::query()
+            ->whereIn('session_id', $sessionIds)
+            ->get()
+            ->groupBy('session_id');
+    }
+
+    private function totalStaySecondsFromSessions(Collection $sessions): int
+    {
+        return (int) $sessions->sum(fn (ActivityEcomUser $session) => $this->effectiveSessionDurationSeconds($session));
+    }
+
+    private function avgStaySecondsFromSessions(Collection $sessions): int
+    {
+        if ($sessions->isEmpty()) {
+            return 0;
+        }
+
+        return (int) round($this->totalStaySecondsFromSessions($sessions) / $sessions->count());
+    }
+
+    private function formatPreviousPeriodLabel(Carbon $from, Carbon $to): string
+    {
+        $fromLocal = TrackerTime::toLocal($from);
+        $toLocal = TrackerTime::toLocal($to);
+
+        if ($fromLocal === null || $toLocal === null) {
+            return 'previous period';
+        }
+
+        if ($fromLocal->isSameDay($toLocal)) {
+            return $fromLocal->format('d M Y');
+        }
+
+        return $fromLocal->format('d M').' – '.$toLocal->format('d M Y');
+    }
+
+    /**
+     * @param  array{from: Carbon, to: Carbon, label: string, days: int, period?: string}  $range
+     * @param  array<string, mixed>  $extraFilters
+     * @return array<string, mixed>
+     */
+    private function buildSaleConversionMetrics(
+        Carbon $from,
+        Carbon $to,
+        Collection $currentSessions,
+        array $range,
+        array $extraFilters = [],
+    ): array {
+        $sessionIds = $currentSessions->keys();
+        $itemQty = $this->sumSaleItemQty($from, $to, $sessionIds);
+        $revenue = round($this->sumRevenue($from, $to, $sessionIds), 2);
+
+        $prevRange = $this->resolvePreviousPeriodRange($range);
+        $prevSessions = $this->filteredSessionsForRange(
+            $prevRange['from'],
+            $prevRange['to'],
+            $extraFilters,
+            $prevRange['period'] ?? null,
+        );
+
+        $prevSessionIds = $prevSessions->keys();
+        $prevItemQty = $this->sumSaleItemQty($prevRange['from'], $prevRange['to'], $prevSessionIds);
+        $prevRevenue = round($this->sumRevenue($prevRange['from'], $prevRange['to'], $prevSessionIds), 2);
+        $comparisonLabel = $prevRange['label'];
+
+        return [
+            'item_qty' => array_merge([
+                'label' => 'Items sold',
+                'value' => $itemQty,
+                'formatted' => number_format($itemQty),
+                'tip' => 'Total product units sold from completed orders on sessions in the period (sums line-item quantities).',
+            ], [
+                'comparison' => $this->buildMetricComparison($itemQty, $prevItemQty, 'number', $comparisonLabel),
+            ]),
+            'revenue' => array_merge([
+                'label' => 'Sale amount',
+                'value' => $revenue,
+                'formatted' => '£'.number_format($revenue, 2),
+                'tip' => 'Total sale amount from completed orders (sum of payment_success amount_paid on sessions in the period).',
+            ], [
+                'comparison' => $this->buildMetricComparison($revenue, $prevRevenue, 'currency', $comparisonLabel),
+            ]),
+            'comparison_label' => $comparisonLabel,
+        ];
+    }
+
+    /**
+     * @return array{delta_pct: ?float, delta_direction: ?string, delta_label: ?string}
+     */
+    private function computePeriodDelta(float $current, float $compare): array
+    {
+        if ($compare == 0.0) {
+            if ($current > 0) {
+                return ['delta_pct' => null, 'delta_direction' => null, 'delta_label' => 'new'];
+            }
+
+            return ['delta_pct' => null, 'delta_direction' => null, 'delta_label' => 'no_prior_data'];
+        }
+
+        if ($current == 0.0) {
+            return ['delta_pct' => -100.0, 'delta_direction' => 'down', 'delta_label' => null];
+        }
+
+        $deltaPct = (($current - $compare) / $compare) * 100;
+
+        return [
+            'delta_pct' => round($deltaPct, 1),
+            'delta_direction' => $deltaPct > 0 ? 'up' : ($deltaPct < 0 ? 'down' : 'flat'),
+            'delta_label' => null,
+        ];
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
-    private function buildFunnel(Carbon $from, Carbon $to, array $filters = []): array
+    private function buildFunnel(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): array
     {
-        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
+        $sessions = $this->sessionsInRange($from, $to, $period);
+
+        if ($filters !== []) {
+            $filteredIds = $this->filteredSessionIds($from, $to, $filters, $period);
+            $sessions = $sessions->only($filteredIds->all());
+        }
+
+        $sessionIds = $sessions->keys();
         $counts = [];
 
         foreach (self::FUNNEL_STAGES as $stage) {
-            $query = ActivityEcomUserAction::query()
-                ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-                ->whereIn('action_type', $stage['types']);
+            if ($sessionIds->isEmpty()) {
+                $counts[$stage['key']] = 0;
 
-            if ($sessionIds !== null) {
-                $query->whereIn('session_id', $sessionIds);
+                continue;
             }
 
-            $counts[$stage['key']] = (int) $query->distinct('session_id')->count('session_id');
+            $counts[$stage['key']] = (int) ActivityEcomUserAction::query()
+                ->whereIn('session_id', $sessionIds)
+                ->whereIn('action_type', $stage['types'])
+                ->distinct('session_id')
+                ->count('session_id');
         }
 
         $top = max(1, $counts['category_view'] ?: ($counts[array_key_first($counts)] ?? 1));
@@ -621,19 +1100,20 @@ class EcomTrackerDashboardService
      */
     private function buildTrend(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): array
     {
-        if ($period === '24h') {
-            $fromLocal = TrackerTime::toLocal($from)?->copy();
-            $toLocal = TrackerTime::toLocal($to)?->copy();
+        $isHourly = in_array($period, ['24h', 'yesterday'], true);
+
+        if ($isHourly) {
+            $fromLocal = TrackerTime::toLocal($from)?->copy()->startOfDay();
+            $toLocal = TrackerTime::toLocal($to)?->copy()->startOfDay();
 
             if ($fromLocal === null || $toLocal === null) {
-                $fromLocal = $from->copy();
-                $toLocal = $to->copy();
+                $fromLocal = TrackerTime::toLocal($from) ?? $from->copy();
+                $toLocal = $fromLocal->copy();
             }
 
-            $from = $fromLocal->copy()->utc();
-            $to = $toLocal->copy()->utc();
             $bucket = 'hour';
             $totalDays = 1;
+            $periodBuckets = $this->trendHourlyPeriodsForCalendarDay($fromLocal);
         } else {
             $fromLocal = TrackerTime::toLocal($from)?->copy()->startOfDay();
             $toLocal = TrackerTime::toLocal($to)?->copy()->endOfDay();
@@ -643,69 +1123,208 @@ class EcomTrackerDashboardService
                 $toLocal = $to->copy();
             }
 
-            $from = $fromLocal->copy()->utc();
-            $to = $toLocal->copy()->utc();
             $totalDays = (int) $fromLocal->diffInDays($toLocal) + 1;
             $bucket = match (true) {
                 $totalDays >= self::TREND_MONTHLY_THRESHOLD_DAYS => 'month',
                 $totalDays >= self::TREND_WEEKLY_THRESHOLD_DAYS => 'week',
                 default => 'day',
             };
+            $periodBuckets = $this->trendPeriods($fromLocal, $toLocal, $bucket);
         }
 
-        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
+        $sessions = $this->sessionsInRange($from, $to, $period);
 
-        $labels = [];
-        $sessions = [];
-        $purchases = [];
+        if ($filters !== []) {
+            $filteredIds = $this->filteredSessionIds($from, $to, $filters, $period);
+            $sessions = $sessions->only($filteredIds->all());
+        }
+
+        $scopedSessionIds = $sessions->keys();
+        $restrictToScopedSessions = $filters !== [];
+
+        $sessionCounts = [];
+        $uniqueVisitorCounts = [];
         $conversionRates = [];
+        $seriesData = collect(self::TREND_FUNNEL_SERIES)
+            ->mapWithKeys(fn (array $series) => [$series['key'] => []])
+            ->all();
+        $labels = [];
 
-        foreach ($this->trendPeriods($fromLocal, $toLocal, $bucket) as [$periodStart, $periodEnd, $label]) {
+        foreach ($periodBuckets as [$periodStart, $periodEnd, $label]) {
             $labels[] = $label;
 
-            $periodFrom = $periodStart->copy()->utc();
-            $periodTo = $periodEnd->copy()->utc();
+            $sessionCount = $this->countTrendSessionsInPeriod(
+                $periodStart,
+                $periodEnd,
+                $scopedSessionIds,
+                $restrictToScopedSessions,
+            );
+            $sessionCounts[] = $sessionCount;
 
-            $sessionQuery = ActivityEcomUser::query()
-                ->whereBetween('created_at', TrackerTime::storageRange($periodFrom, $periodTo));
+            $uniqueVisitorCounts[] = $this->countTrendUniqueVisitorsInPeriod(
+                $periodStart,
+                $periodEnd,
+                $scopedSessionIds,
+                $restrictToScopedSessions,
+            );
 
-            if ($sessionIds !== null) {
-                $sessionQuery->whereIn('session_id', $sessionIds);
+            $purchaseCount = 0;
+
+            foreach (self::TREND_FUNNEL_SERIES as $series) {
+                $stageCount = $this->countTrendStageSessions(
+                    $periodStart,
+                    $periodEnd,
+                    $series['types'],
+                    $scopedSessionIds,
+                    $restrictToScopedSessions,
+                );
+                $seriesData[$series['key']][] = $stageCount;
+
+                if ($series['key'] === 'purchases') {
+                    $purchaseCount = $stageCount;
+                }
             }
 
-            $periodSessionIds = $sessionQuery->pluck('session_id');
-
-            $sessionCount = $periodSessionIds->count();
-            $sessions[] = $sessionCount;
-
-            if ($periodSessionIds->isEmpty()) {
-                $purchases[] = 0;
-                $conversionRates[] = 0;
-
-                continue;
-            }
-
-            $converted = ActivityEcomUserAction::query()
-                ->whereBetween('created_at', TrackerTime::storageRange($periodStart, $periodEnd))
-                ->whereIn('session_id', $periodSessionIds)
-                ->where('action_type', 'payment_success')
-                ->distinct('session_id')
-                ->count('session_id');
-
-            $purchases[] = $converted;
-            $conversionRates[] = round(($converted / max(1, $sessionCount)) * 100, 1);
+            $conversionRates[] = $sessionCount > 0
+                ? round(($purchaseCount / $sessionCount) * 100, 1)
+                : 0.0;
         }
+
+        $series = collect([
+            [
+                'key' => 'unique_visitors',
+                'label' => 'Unique visitors',
+                'data' => $uniqueVisitorCounts,
+                'chart_type' => 'bar',
+                'y_axis_id' => 'y',
+            ],
+            [
+                'key' => 'sessions',
+                'label' => 'Sessions',
+                'data' => $sessionCounts,
+                'chart_type' => 'bar',
+                'y_axis_id' => 'y',
+            ],
+            ...collect(self::TREND_FUNNEL_SERIES)->map(fn (array $definition) => [
+                'key' => $definition['key'],
+                'label' => $definition['label'],
+                'data' => $seriesData[$definition['key']],
+                'chart_type' => 'line',
+                'y_axis_id' => 'y',
+            ]),
+            [
+                'key' => 'conversion_rate',
+                'label' => 'Conv. rate %',
+                'data' => $conversionRates,
+                'chart_type' => 'line',
+                'y_axis_id' => 'y1',
+            ],
+        ])->values()->all();
 
         return [
             'labels' => $labels,
-            'sessions' => $sessions,
-            'purchases' => $purchases,
+            'series' => $series,
+            'unique_visitors' => $uniqueVisitorCounts,
+            'sessions' => $sessionCounts,
             'conversion_rates' => $conversionRates,
             'bucket' => $bucket,
             'total_days' => $totalDays,
-            'use_log_scale' => $totalDays > self::TREND_LOG_SCALE_DAYS,
-            'range_label' => $this->trendRangeLabel($totalDays, $bucket),
+            'use_log_scale' => ! $isHourly && $totalDays > self::TREND_LOG_SCALE_DAYS,
+            'range_label' => $this->trendRangeLabel($totalDays, $bucket, $period),
         ];
+    }
+
+    /**
+     * @return array<int, array{0: Carbon, 1: Carbon, 2: string}>
+     */
+    private function trendHourlyPeriodsForCalendarDay(Carbon $dayLocal): array
+    {
+        $periods = [];
+        $dayStart = $dayLocal->copy()->startOfDay();
+
+        for ($hour = 0; $hour < 24; $hour++) {
+            $periodStart = $dayStart->copy()->addHours($hour);
+            $periodEnd = $periodStart->copy()->endOfHour();
+            $periods[] = [$periodStart, $periodEnd, $periodStart->format('H:i')];
+        }
+
+        return $periods;
+    }
+
+    /**
+     * @param  array<int, string>  $actionTypes
+     */
+    private function countTrendStageSessions(
+        Carbon $periodStart,
+        Carbon $periodEnd,
+        array $actionTypes,
+        Collection $scopedSessionIds,
+        bool $restrictToScopedSessions,
+    ): int {
+        $query = ActivityEcomUserAction::query()
+            ->whereBetween('created_at', TrackerTime::storageRange(
+                $periodStart->copy()->utc(),
+                $periodEnd->copy()->utc(),
+            ))
+            ->whereIn('action_type', $actionTypes);
+
+        if ($restrictToScopedSessions) {
+            if ($scopedSessionIds->isEmpty()) {
+                return 0;
+            }
+
+            $query->whereIn('session_id', $scopedSessionIds);
+        }
+
+        return (int) $query->distinct('session_id')->count('session_id');
+    }
+
+    private function countTrendSessionsInPeriod(
+        Carbon $periodStart,
+        Carbon $periodEnd,
+        Collection $scopedSessionIds,
+        bool $restrictToScopedSessions,
+    ): int {
+        $query = ActivityEcomUser::query()
+            ->whereBetween('created_at', TrackerTime::storageRange(
+                $periodStart->copy()->utc(),
+                $periodEnd->copy()->utc(),
+            ));
+
+        if ($restrictToScopedSessions) {
+            if ($scopedSessionIds->isEmpty()) {
+                return 0;
+            }
+
+            $query->whereIn('session_id', $scopedSessionIds);
+        }
+
+        return (int) $query->count();
+    }
+
+    private function countTrendUniqueVisitorsInPeriod(
+        Carbon $periodStart,
+        Carbon $periodEnd,
+        Collection $scopedSessionIds,
+        bool $restrictToScopedSessions,
+    ): int {
+        $query = ActivityEcomUser::query()
+            ->whereBetween('created_at', TrackerTime::storageRange(
+                $periodStart->copy()->utc(),
+                $periodEnd->copy()->utc(),
+            ))
+            ->whereNotNull('visitor_id')
+            ->where('visitor_id', '!=', '');
+
+        if ($restrictToScopedSessions) {
+            if ($scopedSessionIds->isEmpty()) {
+                return 0;
+            }
+
+            $query->whereIn('session_id', $scopedSessionIds);
+        }
+
+        return (int) $query->distinct('visitor_id')->count('visitor_id');
     }
 
     /**
@@ -760,10 +1379,13 @@ class EcomTrackerDashboardService
         return $periods;
     }
 
-    private function trendRangeLabel(int $totalDays, string $bucket): string
+    private function trendRangeLabel(int $totalDays, string $bucket, ?string $period = null): string
     {
         return match ($bucket) {
-            'hour' => TrackerTime::todayPresetLabel().' · hourly',
+            'hour' => match ($period) {
+                'yesterday' => TrackerTime::yesterdayPresetLabel().' · hourly',
+                default => TrackerTime::todayPresetLabel().' · hourly',
+            },
             'week' => "{$totalDays} days · weekly buckets",
             'month' => "{$totalDays} days · monthly buckets",
             default => "{$totalDays} days · daily",
@@ -2595,25 +3217,40 @@ class EcomTrackerDashboardService
     {
         $checkoutInfo = $payload['checkout_info'] ?? null;
 
-        if (! is_array($checkoutInfo)) {
-            return 0.0;
-        }
+        if (is_array($checkoutInfo)) {
+            $items = $checkoutInfo['items'] ?? [];
 
-        $items = $checkoutInfo['items'] ?? [];
+            if (is_array($items) && $items !== []) {
+                return collect($items)
+                    ->filter(fn ($item) => is_array($item))
+                    ->sum(fn (array $item) => $this->resolvePurchaseLineRevenue($item));
+            }
 
-        if (is_array($items) && $items !== []) {
-            return collect($items)
-                ->filter(fn ($item) => is_array($item))
-                ->sum(fn (array $item) => $this->resolvePurchaseLineRevenue($item));
-        }
+            $grandTotal = (float) ($checkoutInfo['totals']['grand_total'] ?? 0);
 
-        $grandTotal = (float) ($checkoutInfo['totals']['grand_total'] ?? 0);
-
-        if ($grandTotal > 0) {
-            return $grandTotal;
+            if ($grandTotal > 0) {
+                return $grandTotal;
+            }
         }
 
         return (float) ($payload['amount_paid'] ?? 0);
+    }
+
+    /**
+     * All payment_success actions on scoped sessions (matches User activity order_qty sum).
+     *
+     * @return \Illuminate\Support\Collection<int, ActivityEcomUserAction>
+     */
+    private function paymentSuccessActionsForSessions(Collection $sessionIds): Collection
+    {
+        if ($sessionIds->isEmpty()) {
+            return collect();
+        }
+
+        return ActivityEcomUserAction::query()
+            ->whereIn('session_id', $sessionIds)
+            ->where('action_type', 'payment_success')
+            ->get();
     }
 
     /**
@@ -2621,35 +3258,55 @@ class EcomTrackerDashboardService
      */
     private function qualifyingPaymentActions(Carbon $from, Carbon $to, Collection $sessionIds): Collection
     {
-        if ($sessionIds->isEmpty()) {
-            return collect();
-        }
+        unset($from, $to);
 
-        return ActivityEcomUserAction::query()
-            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-            ->whereIn('session_id', $sessionIds)
-            ->where('action_type', 'payment_success')
-            ->get()
-            ->unique(function (ActivityEcomUserAction $action) {
-                $orderId = $action->payment_success['order_id'] ?? null;
-
-                return filled($orderId) ? (string) $orderId : $action->event_id;
-            })
-            ->filter(function (ActivityEcomUserAction $action) {
-                return $this->paymentSaleAmount($action->payment_success ?? []) > 0;
-            })
-            ->values();
+        return $this->paymentSuccessActionsForSessions($sessionIds);
     }
 
     private function sumRevenueForSessions(Carbon $from, Carbon $to, Collection $sessionIds): float
     {
         return $this->qualifyingPaymentActions($from, $to, $sessionIds)
-            ->sum(fn (ActivityEcomUserAction $action) => $this->paymentSaleAmount($action->payment_success ?? []));
+            ->sum(fn (ActivityEcomUserAction $action) => $this->paymentAmountPaid($action->payment_success ?? []));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function paymentAmountPaid(array $payload): float
+    {
+        return round((float) ($payload['amount_paid'] ?? 0), 2);
     }
 
     private function countPurchases(Carbon $from, Carbon $to, Collection $sessionIds): int
     {
-        return $this->qualifyingPaymentActions($from, $to, $sessionIds)->count();
+        unset($from, $to);
+
+        if ($sessionIds->isEmpty()) {
+            return 0;
+        }
+
+        return (int) ActivityEcomUserAction::query()
+            ->whereIn('session_id', $sessionIds)
+            ->where('action_type', 'payment_success')
+            ->distinct('session_id')
+            ->count('session_id');
+    }
+
+    private function sumSaleItemQty(Carbon $from, Carbon $to, Collection $sessionIds): int
+    {
+        return (int) $this->qualifyingPaymentActions($from, $to, $sessionIds)
+            ->sum(function (ActivityEcomUserAction $action) {
+                $checkoutInfo = $action->payment_success['checkout_info'] ?? [];
+                $items = is_array($checkoutInfo) ? ($checkoutInfo['items'] ?? []) : [];
+
+                if (! is_array($items) || $items === []) {
+                    return 1;
+                }
+
+                return collect($items)
+                    ->filter(fn ($item) => is_array($item))
+                    ->sum(fn (array $item) => $this->resolvePurchaseLineQty($item));
+            });
     }
 
     private function sumCartAbandonValue(Carbon $from, Carbon $to, Collection $sessionIds): float

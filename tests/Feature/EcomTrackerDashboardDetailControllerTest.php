@@ -62,9 +62,7 @@ test('dashboard detail pages are accessible for authorized users', function () {
 
     $this->actingAs($user)
         ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'funnel', 'period' => '7d']))
-        ->assertOk()
-        ->assertSee('Conversion funnel')
-        ->assertDontSee('product-catalog-search', false);
+        ->assertNotFound();
 
     $this->actingAs($user)
         ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d']))

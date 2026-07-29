@@ -93,6 +93,44 @@ class TrackerTime
         return 'Today';
     }
 
+    public static function yesterdayPresetLabel(): string
+    {
+        return 'Yesterday (00:00:01 to 23:59:59)';
+    }
+
+    public static function yesterdayPresetButtonLabel(): string
+    {
+        return 'Yesterday';
+    }
+
+    /**
+     * @return array{from: Carbon, to: Carbon}
+     */
+    public static function yesterdayRangeUtc(): array
+    {
+        $fromLocal = self::localNow()->subDay()->startOfDay()->addSecond();
+        $toLocal = self::localNow()->subDay()->endOfDay();
+
+        return [
+            'from' => $fromLocal->copy()->utc(),
+            'to' => $toLocal->copy()->utc(),
+        ];
+    }
+
+    /**
+     * @return array{from: Carbon, to: Carbon}
+     */
+    public static function dayBeforeYesterdayRangeUtc(): array
+    {
+        $fromLocal = self::localNow()->subDays(2)->startOfDay()->addSecond();
+        $toLocal = self::localNow()->subDays(2)->endOfDay();
+
+        return [
+            'from' => $fromLocal->copy()->utc(),
+            'to' => $toLocal->copy()->utc(),
+        ];
+    }
+
     /**
      * @return array{from: Carbon, to: Carbon}
      */
@@ -136,6 +174,34 @@ class TrackerTime
             $inner->whereBetween($createdAt, [$fromBound, $toBound])
                 ->orWhereBetween($lastActiveAt, [$fromBound, $toBound]);
         });
+    }
+
+    /**
+     * Match /admin/ecom-activity session date rules:
+     * - Today (24h): session started OR was last active in range.
+     * - All other presets/ranges: session started on a calendar date within the range.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     */
+    public static function applyEcomActivitySessionScope($query, Carbon $from, Carbon $to, ?string $period = null): void
+    {
+        if ($period === '24h') {
+            self::applySessionActivityWindow($query, $from, $to);
+
+            return;
+        }
+
+        $fromLocal = self::toLocal($from);
+        $toLocal = self::toLocal($to);
+
+        if ($fromLocal !== null && $toLocal !== null) {
+            $query->whereDate('created_at', '>=', $fromLocal->toDateString());
+            $query->whereDate('created_at', '<=', $toLocal->toDateString());
+
+            return;
+        }
+
+        $query->whereBetween('created_at', self::storageRange($from, $to));
     }
 
     /**
