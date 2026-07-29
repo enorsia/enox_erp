@@ -216,8 +216,14 @@
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Shopper journey over time</h2>
             </div>
-            <div class="etd-chart-wrap xl">
-                <canvas id="etdTrendChart"></canvas>
+            <div class="etd-trend-chart">
+                <div class="etd-trend-legend" id="etdTrendLegend" hidden></div>
+                <div class="etd-trend-chart-scroll" id="etdTrendChartScroll">
+                    <div class="etd-chart-wrap xl etd-chart-wrap--trend" id="etdTrendChartWrap">
+                        <canvas id="etdTrendChart"></canvas>
+                    </div>
+                </div>
+                <p class="etd-trend-chart-scroll-hint" id="etdTrendChartScrollHint" hidden>Swipe horizontally to see all dates</p>
             </div>
         </div>
     </div>

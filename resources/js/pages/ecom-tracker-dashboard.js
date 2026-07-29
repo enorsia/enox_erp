@@ -36,6 +36,7 @@ Chart.defaults.font.size = 11;
 
 const isDark = () => document.documentElement.classList.contains('dark');
 const isNarrow = () => window.matchMedia('(max-width: 639px)').matches;
+const isCompactChart = () => window.matchMedia('(max-width: 1023px)').matches;
 const gridClr = () => (isDark() ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)');
 const accent = () => getComputedStyle(document.querySelector('.etd-page') || document.body)
     .getPropertyValue('--etd-accent')
@@ -77,13 +78,13 @@ function ctx(id) {
     return el ? el.getContext('2d') : null;
 }
 
-function trendTickLimit(labelCount) {
-    if (labelCount <= 24) {
-        return 24;
+function trendTickLimit(labelCount, useHorizontalScroll = false) {
+    if (useHorizontalScroll || labelCount <= 24) {
+        return labelCount;
     }
 
     if (isNarrow()) {
-        return Math.min(6, labelCount);
+        return Math.min(8, labelCount);
     }
 
     if (labelCount > 60) {
@@ -95,6 +96,63 @@ function trendTickLimit(labelCount) {
     }
 
     return Math.min(14, labelCount);
+}
+
+function trendUsesHorizontalScroll(labelCount) {
+    if (labelCount <= 12) {
+        return false;
+    }
+
+    return isCompactChart();
+}
+
+function trendMinWidth(labelCount) {
+    if (!trendUsesHorizontalScroll(labelCount)) {
+        return null;
+    }
+
+    const pixelsPerLabel = isNarrow() ? 34 : 30;
+
+    return Math.max(labelCount * pixelsPerLabel, 320);
+}
+
+function applyTrendChartLayout(labelCount) {
+    const wrap = document.getElementById('etdTrendChartWrap');
+    const hint = document.getElementById('etdTrendChartScrollHint');
+    const useHorizontalScroll = trendUsesHorizontalScroll(labelCount);
+    const minWidth = trendMinWidth(labelCount);
+
+    if (wrap) {
+        wrap.style.minWidth = minWidth ? `${minWidth}px` : '';
+    }
+
+    if (hint) {
+        hint.hidden = !useHorizontalScroll;
+    }
+}
+
+function renderTrendLegend(series) {
+    const legend = document.getElementById('etdTrendLegend');
+
+    if (!legend) {
+        return;
+    }
+
+    if (!isCompactChart()) {
+        legend.hidden = true;
+        legend.innerHTML = '';
+        legend.classList.remove('etd-trend-legend--active');
+
+        return;
+    }
+
+    legend.classList.add('etd-trend-legend--active');
+    legend.hidden = false;
+    legend.innerHTML = series.map((entry) => {
+        const color = trendSeriesColor(entry.key);
+
+        return `<span class="etd-trend-legend-item"><span class="etd-trend-legend-swatch" style="background:${color}"></span>${entry.label}</span>`;
+    }).join('');
 }
 
 function sessionsForLogScale(values) {
@@ -138,6 +196,10 @@ if (trendCtx && D.trend) {
     } = D.trend;
 
     const orderedSeries = sortTrendSeries(series);
+    const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
+
+    applyTrendChartLayout(labels.length);
+    renderTrendLegend(orderedSeries);
 
     const datasets = orderedSeries.map((entry, index) => {
         const color = trendSeriesColor(entry.key);
@@ -147,6 +209,9 @@ if (trendCtx && D.trend) {
         const data = useLogScale && !isConversion
             ? sessionsForLogScale(rawData)
             : rawData;
+        const barThickness = isBar
+            ? (useHorizontalScroll ? 10 : (isNarrow() ? 6 : (labels.length > 30 ? 8 : 12)))
+            : undefined;
 
         return {
             type: isBar ? 'bar' : 'line',
@@ -154,17 +219,18 @@ if (trendCtx && D.trend) {
             data,
             borderColor: isBar ? `${color}CC` : color,
             backgroundColor: isBar ? `${color}99` : color,
-            pointRadius: isBar ? 0 : (labels.length > 24 ? 0 : 2.5),
+            pointRadius: isBar ? 0 : (labels.length > 24 && !useHorizontalScroll ? 0 : 2.5),
             pointHoverRadius: isBar ? 0 : 4,
             tension: isBar ? 0 : 0.3,
             fill: false,
             yAxisID: entry.y_axis_id || 'y',
             order: index,
-            barThickness: isBar ? (isNarrow() ? 6 : (labels.length > 30 ? 8 : 12)) : undefined,
+            barThickness,
+            maxBarThickness: isBar ? 14 : undefined,
         };
     });
 
-    new Chart(trendCtx, {
+    const trendChart = new Chart(trendCtx, {
         type: 'bar',
         data: {
             labels,
@@ -174,22 +240,27 @@ if (trendCtx && D.trend) {
             responsive: true,
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
+            layout: {
+                padding: {
+                    right: useHorizontalScroll ? 8 : 0,
+                },
+            },
             plugins: {
                 legend: {
-                    display: true,
-                    position: isNarrow() ? 'bottom' : 'top',
+                    display: !isCompactChart(),
+                    position: 'top',
                     labels: {
                         boxWidth: 10,
-                        padding: isNarrow() ? 8 : 14,
-                        font: { size: isNarrow() ? 9 : 11 },
+                        padding: 14,
+                        font: { size: 11 },
                         sort: (a, b) => a.datasetIndex - b.datasetIndex,
                     },
                 },
                 tooltip: {
                     ...tipStyle(),
-                    titleFont: { size: 14, weight: '600' },
-                    bodyFont: { size: 13 },
-                    padding: 12,
+                    titleFont: { size: isNarrow() ? 13 : 14, weight: '600' },
+                    bodyFont: { size: isNarrow() ? 12 : 13 },
+                    padding: isNarrow() ? 10 : 12,
                     itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
                     callbacks: {
                         label(context) {
@@ -208,9 +279,10 @@ if (trendCtx && D.trend) {
                 x: {
                     grid: { display: false },
                     ticks: {
-                        maxRotation: labels.length > 20 ? 45 : 0,
-                        autoSkip: labels.length > 24,
-                        maxTicksLimit: trendTickLimit(labels.length),
+                        maxRotation: useHorizontalScroll || labels.length > 20 ? 45 : 0,
+                        minRotation: useHorizontalScroll ? 35 : 0,
+                        autoSkip: !useHorizontalScroll && labels.length > 24,
+                        maxTicksLimit: trendTickLimit(labels.length, useHorizontalScroll),
                         font: { size: isNarrow() ? 9 : 11 },
                     },
                 },
@@ -228,6 +300,7 @@ if (trendCtx && D.trend) {
                     },
                     ticks: {
                         precision: 0,
+                        font: { size: isNarrow() ? 9 : 11 },
                     },
                 },
                 y1: {
@@ -236,10 +309,31 @@ if (trendCtx && D.trend) {
                     min: 0,
                     ticks: {
                         callback: (value) => `${value}%`,
+                        font: { size: isNarrow() ? 9 : 11 },
                     },
                 },
             },
         },
+    });
+
+    let resizeFrame = null;
+
+    window.addEventListener('resize', () => {
+        if (resizeFrame) {
+            cancelAnimationFrame(resizeFrame);
+        }
+
+        resizeFrame = requestAnimationFrame(() => {
+            applyTrendChartLayout(labels.length);
+            renderTrendLegend(orderedSeries);
+            trendChart.options.plugins.legend.display = !isCompactChart();
+            trendChart.options.scales.x.ticks.autoSkip = !trendUsesHorizontalScroll(labels.length) && labels.length > 24;
+            trendChart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(
+                labels.length,
+                trendUsesHorizontalScroll(labels.length),
+            );
+            trendChart.resize();
+        });
     });
 }
 
