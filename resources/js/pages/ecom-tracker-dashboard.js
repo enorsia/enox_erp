@@ -43,14 +43,23 @@ const accent = () => getComputedStyle(document.querySelector('.etd-page') || doc
 const gold = () => '#f59e0b';
 const purchaseGreen = () => '#22c55e';
 
-const trendSeriesColors = [
-    accent(),
-    '#3b82f6',
-    gold(),
-    '#8b5cf6',
-    '#ec4899',
-    purchaseGreen(),
-];
+/** Semantic colors per trend metric — each series gets a unique, meaningful color. */
+const TREND_SERIES_COLORS = {
+    unique_visitors: '#7c3aed',   // violet — distinct people
+    sessions: '#2563eb',          // blue — visits
+    category_views: '#0d9488',    // teal — category browsing
+    product_views: '#0284c7',     // sky — product pages
+    add_to_cart: '#d97706',       // amber — cart action
+    begin_checkout: '#ea580c',    // orange — checkout started
+    proceed_checkout: '#e11d48',  // rose — checkout in progress
+    purchases: '#16a34a',         // green — completed orders
+    items_sold_qty: '#65a30d',    // lime — units sold
+    conversion_rate: '#a21caf',   // fuchsia — conversion %
+};
+
+function trendSeriesColor(key) {
+    return TREND_SERIES_COLORS[key] || accent();
+}
 
 const tipStyle = () => ({
     backgroundColor: isDark() ? '#1e293b' : '#fff',
@@ -131,7 +140,7 @@ if (trendCtx && D.trend) {
     const orderedSeries = sortTrendSeries(series);
 
     const datasets = orderedSeries.map((entry, index) => {
-        const color = trendSeriesColors[index % trendSeriesColors.length];
+        const color = trendSeriesColor(entry.key);
         const isConversion = entry.key === 'conversion_rate';
         const isBar = entry.chart_type === 'bar';
         const rawData = entry.data || [];
