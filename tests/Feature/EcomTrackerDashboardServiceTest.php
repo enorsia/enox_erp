@@ -336,7 +336,7 @@ test('ecom tracker dashboard trend uses full filtered range with purchase qty', 
     expect($data['trend']['total_days'])->toBe(5);
     expect($data['trend']['bucket'])->toBe('day');
     expect($data['trend']['labels'])->toHaveCount(5);
-    expect($data['trend']['series'])->toHaveCount(9);
+    expect($data['trend']['series'])->toHaveCount(10);
     expect(collect($data['trend']['series'])->pluck('key')->all())->toBe([
         'unique_visitors',
         'sessions',
@@ -346,10 +346,12 @@ test('ecom tracker dashboard trend uses full filtered range with purchase qty', 
         'begin_checkout',
         'proceed_checkout',
         'purchases',
+        'items_sold_qty',
         'conversion_rate',
     ]);
     expect($data['trend']['unique_visitors'])->toBe([1, 1, 1, 1, 1]);
     expect($data['trend']['sessions'])->toBe([1, 1, 1, 1, 1]);
+    expect($data['trend']['items_sold_qty'])->toBe([1, 1, 1, 1, 1]);
     expect($data['trend']['conversion_rates'])->toBe([100.0, 100.0, 100.0, 100.0, 100.0]);
     expect(collect($data['trend']['series'])->firstWhere('key', 'purchases')['data'])->toBe([1, 1, 1, 1, 1]);
     expect($data['trend']['use_log_scale'])->toBeFalse();
@@ -403,6 +405,7 @@ test('ecom tracker dashboard trend uses twenty four hourly buckets for today', f
     expect(collect($data['trend']['series'])->firstWhere('key', 'sessions')['data'][10])->toBe(1);
     expect(collect($data['trend']['series'])->firstWhere('key', 'category_views')['data'][10])->toBe(1);
     expect(collect($data['trend']['series'])->firstWhere('key', 'purchases')['data'][10])->toBe(1);
+    expect(collect($data['trend']['series'])->firstWhere('key', 'items_sold_qty')['data'][10])->toBe(1);
     expect(collect($data['trend']['series'])->firstWhere('key', 'conversion_rate')['data'][10])->toBe(100.0);
 
     Carbon::setTestNow();

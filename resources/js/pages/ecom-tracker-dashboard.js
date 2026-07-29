@@ -107,6 +107,7 @@ const TREND_SERIES_ORDER = [
     'begin_checkout',
     'proceed_checkout',
     'purchases',
+    'items_sold_qty',
     'conversion_rate',
 ];
 

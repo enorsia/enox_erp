@@ -1144,6 +1144,7 @@ class EcomTrackerDashboardService
 
         $sessionCounts = [];
         $uniqueVisitorCounts = [];
+        $itemsSoldCounts = [];
         $conversionRates = [];
         $seriesData = collect(self::TREND_FUNNEL_SERIES)
             ->mapWithKeys(fn (array $series) => [$series['key'] => []])
@@ -1185,6 +1186,13 @@ class EcomTrackerDashboardService
                 }
             }
 
+            $itemsSoldCounts[] = $this->countTrendItemsSoldInPeriod(
+                $periodStart,
+                $periodEnd,
+                $scopedSessionIds,
+                $restrictToScopedSessions,
+            );
+
             $conversionRates[] = $sessionCount > 0
                 ? round(($purchaseCount / $sessionCount) * 100, 1)
                 : 0.0;
@@ -1213,6 +1221,13 @@ class EcomTrackerDashboardService
                 'y_axis_id' => 'y',
             ]),
             [
+                'key' => 'items_sold_qty',
+                'label' => 'Items sold qty',
+                'data' => $itemsSoldCounts,
+                'chart_type' => 'line',
+                'y_axis_id' => 'y',
+            ],
+            [
                 'key' => 'conversion_rate',
                 'label' => 'Conv. rate %',
                 'data' => $conversionRates,
@@ -1226,6 +1241,7 @@ class EcomTrackerDashboardService
             'series' => $series,
             'unique_visitors' => $uniqueVisitorCounts,
             'sessions' => $sessionCounts,
+            'items_sold_qty' => $itemsSoldCounts,
             'conversion_rates' => $conversionRates,
             'bucket' => $bucket,
             'total_days' => $totalDays,
@@ -1325,6 +1341,30 @@ class EcomTrackerDashboardService
         }
 
         return (int) $query->distinct('visitor_id')->count('visitor_id');
+    }
+
+    private function countTrendItemsSoldInPeriod(
+        Carbon $periodStart,
+        Carbon $periodEnd,
+        Collection $scopedSessionIds,
+        bool $restrictToScopedSessions,
+    ): int {
+        $query = ActivityEcomUserAction::query()
+            ->whereBetween('created_at', TrackerTime::storageRange(
+                $periodStart->copy()->utc(),
+                $periodEnd->copy()->utc(),
+            ))
+            ->where('action_type', 'payment_success');
+
+        if ($restrictToScopedSessions) {
+            if ($scopedSessionIds->isEmpty()) {
+                return 0;
+            }
+
+            $query->whereIn('session_id', $scopedSessionIds);
+        }
+
+        return (int) $query->get()->sum(fn (ActivityEcomUserAction $action) => $this->paymentActionItemQty($action));
     }
 
     /**
@@ -3295,18 +3335,21 @@ class EcomTrackerDashboardService
     private function sumSaleItemQty(Carbon $from, Carbon $to, Collection $sessionIds): int
     {
         return (int) $this->qualifyingPaymentActions($from, $to, $sessionIds)
-            ->sum(function (ActivityEcomUserAction $action) {
-                $checkoutInfo = $action->payment_success['checkout_info'] ?? [];
-                $items = is_array($checkoutInfo) ? ($checkoutInfo['items'] ?? []) : [];
+            ->sum(fn (ActivityEcomUserAction $action) => $this->paymentActionItemQty($action));
+    }
 
-                if (! is_array($items) || $items === []) {
-                    return 1;
-                }
+    private function paymentActionItemQty(ActivityEcomUserAction $action): int
+    {
+        $checkoutInfo = $action->payment_success['checkout_info'] ?? [];
+        $items = is_array($checkoutInfo) ? ($checkoutInfo['items'] ?? []) : [];
 
-                return collect($items)
-                    ->filter(fn ($item) => is_array($item))
-                    ->sum(fn (array $item) => $this->resolvePurchaseLineQty($item));
-            });
+        if (! is_array($items) || $items === []) {
+            return 1;
+        }
+
+        return (int) collect($items)
+            ->filter(fn ($item) => is_array($item))
+            ->sum(fn (array $item) => $this->resolvePurchaseLineQty($item));
     }
 
     private function sumCartAbandonValue(Carbon $from, Carbon $to, Collection $sessionIds): float
