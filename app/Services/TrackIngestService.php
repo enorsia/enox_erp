@@ -94,7 +94,11 @@ class TrackIngestService
                 $row
             );
 
-            $this->backfillSessionAttribution($sessionId, $event['page_url'] ?? null);
+            $this->backfillSessionAttribution(
+                $sessionId,
+                $event['page_url'] ?? null,
+                $event['referer'] ?? null,
+            );
 
             if (($event['action_type'] ?? '') === 'proceed_checkout') {
                 $this->syncSessionUserFromProceedCheckout($sessionId, $event);
@@ -166,11 +170,13 @@ class TrackIngestService
         }
 
         if (! $existing) {
+            $ingestAttribution = SessionTrafficAttribution::sessionAttributesFromIngest($sessionData);
+
             $attributes['session_id'] = $sessionId;
-            $attributes['utm_source'] = $sessionData['utm_source'] ?? null;
-            $attributes['utm_medium'] = $sessionData['utm_medium'] ?? null;
-            $attributes['utm_campaign'] = $sessionData['utm_campaign'] ?? null;
-            $attributes['landing_page'] = $sessionData['landing_page'] ?? null;
+            $attributes['utm_source'] = $ingestAttribution['utm_source'] ?? $sessionData['utm_source'] ?? null;
+            $attributes['utm_medium'] = $ingestAttribution['utm_medium'] ?? $sessionData['utm_medium'] ?? null;
+            $attributes['utm_campaign'] = $ingestAttribution['utm_campaign'] ?? $sessionData['utm_campaign'] ?? null;
+            $attributes['landing_page'] = $ingestAttribution['landing_page'] ?? $sessionData['landing_page'] ?? null;
             $attributes['created_at'] = $now;
             $attributes['updated_at'] = $now;
             $attributes['session_duration_seconds'] = 0;
@@ -207,16 +213,22 @@ class TrackIngestService
     /**
      * @param  array<string, mixed>  $sessionData
      */
-    private function mergeAttributionIntoSession(ActivityEcomUser $session, array $sessionData): void
-    {
+    private function mergeAttributionIntoSession(
+        ActivityEcomUser $session,
+        array $sessionData,
+        ?string $pageUrl = null,
+        ?string $referer = null,
+    ): void {
+        $attribution = SessionTrafficAttribution::sessionAttributesFromIngest($sessionData, $pageUrl, $referer);
+
         $updates = [];
 
         foreach (['utm_source', 'utm_medium', 'utm_campaign', 'landing_page'] as $field) {
-            if (filled($session->{$field}) || empty($sessionData[$field])) {
+            if (filled($session->{$field}) || empty($attribution[$field] ?? null)) {
                 continue;
             }
 
-            $updates[$field] = $sessionData[$field];
+            $updates[$field] = $attribution[$field];
         }
 
         if ($updates !== []) {
@@ -224,9 +236,9 @@ class TrackIngestService
         }
     }
 
-    private function backfillSessionAttribution(string $sessionId, ?string $pageUrl): void
+    private function backfillSessionAttribution(string $sessionId, ?string $pageUrl, ?string $referer = null): void
     {
-        if (! filled($pageUrl)) {
+        if (! filled($pageUrl) && ! filled($referer)) {
             return;
         }
 
@@ -236,7 +248,7 @@ class TrackIngestService
             return;
         }
 
-        SessionTrafficAttribution::backfillSession($session, $pageUrl);
+        SessionTrafficAttribution::backfillSession($session, $pageUrl, $referer);
     }
 
     /**

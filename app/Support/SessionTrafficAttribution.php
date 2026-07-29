@@ -28,6 +28,11 @@ final class SessionTrafficAttribution
         'gad_campaignid',
         'msclkid',
         'awc',
+        'ttclid',
+        'twclid',
+        'li_fat_id',
+        'epik',
+        'sc_cid',
     ];
 
     /** @var list<string> */
@@ -71,7 +76,87 @@ final class SessionTrafficAttribution
             $parsed[$key] = (string) $value;
         }
 
-        return self::applyGoogleTrafficAliases($params, self::applyTrafficAliases($params, $parsed));
+        return self::finalizeParsedAttribution(
+            $params,
+            self::applyGoogleTrafficAliases($params, self::applyClickIdAliases($params, self::applyTrafficAliases($params, $parsed))),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @param  array<string, string>  $parsed
+     * @return array<string, string>
+     */
+    private static function finalizeParsedAttribution(array $params, array $parsed): array
+    {
+        if (isset($parsed['utm_source'])) {
+            $parsed['utm_source'] = self::normalizeSource($parsed['utm_source']) ?? $parsed['utm_source'];
+        }
+
+        return $parsed;
+    }
+
+    public static function normalizeSource(?string $source): ?string
+    {
+        if (! filled($source)) {
+            return null;
+        }
+
+        $source = strtolower(trim($source));
+        $aliases = config('tracker.utm_source_aliases', []);
+
+        if (isset($aliases[$source])) {
+            return $aliases[$source];
+        }
+
+        if (array_key_exists($source, config('tracker.utm_sources', []))) {
+            return $source;
+        }
+
+        return $source;
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @param  array<string, string>  $parsed
+     * @return array<string, string>
+     */
+    private static function applyClickIdAliases(array $params, array $parsed): array
+    {
+        $clickIds = [
+            'fbclid' => ['utm_source' => 'facebook', 'utm_medium' => 'paid'],
+            'msclkid' => ['utm_source' => 'bing', 'utm_medium' => 'cpc'],
+            'ttclid' => ['utm_source' => 'tiktok', 'utm_medium' => 'paid'],
+            'twclid' => ['utm_source' => 'twitter', 'utm_medium' => 'paid'],
+            'li_fat_id' => ['utm_source' => 'linkedin', 'utm_medium' => 'paid'],
+            'epik' => ['utm_source' => 'pinterest', 'utm_medium' => 'paid'],
+            'sc_cid' => ['utm_source' => 'snapchat', 'utm_medium' => 'paid'],
+        ];
+
+        foreach ($clickIds as $param => $attribution) {
+            $hasClickId = isset($parsed[$param])
+                || (is_scalar($params[$param] ?? null) && $params[$param] !== '');
+
+            if (! $hasClickId) {
+                continue;
+            }
+
+            foreach ($attribution as $field => $value) {
+                if (! isset($parsed[$field])) {
+                    $parsed[$field] = $value;
+                }
+            }
+        }
+
+        if (! isset($parsed['utm_source']) && isset($parsed['awc'])) {
+            $parsed['utm_source'] = 'awin';
+        }
+
+        if (! isset($parsed['utm_medium']) && isset($parsed['awc'])) {
+            $parsed['utm_medium'] = 'affiliate';
+        }
+
+        return $parsed;
     }
 
     /**
@@ -128,14 +213,78 @@ final class SessionTrafficAttribution
 
         $host = strtolower($host);
 
-        if (str_contains($host, 'google.')) {
-            return [
-                'utm_source' => 'google',
-                'utm_medium' => 'organic',
-            ];
+        foreach (self::refererHostAttribution() as $pattern => $attribution) {
+            if (str_contains($host, $pattern)) {
+                return $attribution;
+            }
         }
 
         return [];
+    }
+
+    /**
+     * @return array<string, array<string, string>>
+     */
+    private static function refererHostAttribution(): array
+    {
+        return [
+            'google.' => [
+                'utm_source' => 'google',
+                'utm_medium' => 'organic',
+            ],
+            'facebook.' => [
+                'utm_source' => 'facebook',
+                'utm_medium' => 'social',
+            ],
+            'fb.com' => [
+                'utm_source' => 'facebook',
+                'utm_medium' => 'social',
+            ],
+            'instagram.' => [
+                'utm_source' => 'instagram',
+                'utm_medium' => 'social',
+            ],
+            'tiktok.' => [
+                'utm_source' => 'tiktok',
+                'utm_medium' => 'social',
+            ],
+            'youtube.' => [
+                'utm_source' => 'youtube',
+                'utm_medium' => 'social',
+            ],
+            'youtu.be' => [
+                'utm_source' => 'youtube',
+                'utm_medium' => 'social',
+            ],
+            'bing.' => [
+                'utm_source' => 'bing',
+                'utm_medium' => 'organic',
+            ],
+            'pinterest.' => [
+                'utm_source' => 'pinterest',
+                'utm_medium' => 'social',
+            ],
+            'linkedin.' => [
+                'utm_source' => 'linkedin',
+                'utm_medium' => 'social',
+            ],
+            'twitter.' => [
+                'utm_source' => 'twitter',
+                'utm_medium' => 'social',
+            ],
+            'x.com' => [
+                'utm_source' => 'twitter',
+                'utm_medium' => 'social',
+            ],
+            't.co' => [
+                'utm_source' => 'twitter',
+                'utm_medium' => 'social',
+            ],
+            'snapchat.' => [
+                'utm_source' => 'snapchat',
+                'utm_medium' => 'social',
+            ],
+        ];
     }
 
     /**
@@ -178,11 +327,32 @@ final class SessionTrafficAttribution
         $parsed ??= self::parseFromUrl($session->landing_page)
             + self::parseFromUrl(self::firstActionPageUrl($session, $actions));
 
-        if (($parsed['utm_source'] ?? null) === 'google') {
-            return 'https://www.google.com/';
+        $source = self::normalizeSource($parsed['utm_source'] ?? null);
+
+        if ($source !== null && isset(self::canonicalRefererBySource()[$source])) {
+            return self::canonicalRefererBySource()[$source];
         }
 
         return null;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function canonicalRefererBySource(): array
+    {
+        return [
+            'google' => 'https://www.google.com/',
+            'facebook' => 'https://www.facebook.com/',
+            'instagram' => 'https://www.instagram.com/',
+            'tiktok' => 'https://www.tiktok.com/',
+            'youtube' => 'https://www.youtube.com/',
+            'bing' => 'https://www.bing.com/',
+            'pinterest' => 'https://www.pinterest.com/',
+            'linkedin' => 'https://www.linkedin.com/',
+            'twitter' => 'https://twitter.com/',
+            'snapchat' => 'https://www.snapchat.com/',
+        ];
     }
 
     /**
@@ -195,8 +365,8 @@ final class SessionTrafficAttribution
         if (! isset($parsed['utm_source'])) {
             $source = $params['source'] ?? null;
 
-            if ($source === 'aw') {
-                $parsed['utm_source'] = 'awin';
+            if (is_scalar($source) && $source !== '') {
+                $parsed['utm_source'] = self::normalizeSource((string) $source) ?? (string) $source;
             }
         }
 
@@ -225,8 +395,15 @@ final class SessionTrafficAttribution
 
         $parsed = self::mergeRefererAttribution($parsed, self::refererFromActions($session));
 
+        $sessionSource = filled($session->utm_source)
+            ? self::normalizeSource((string) $session->utm_source)
+            : null;
+        $parsedSource = isset($parsed['utm_source'])
+            ? self::normalizeSource($parsed['utm_source'])
+            : null;
+
         return [
-            'source' => filled($session->utm_source) ? (string) $session->utm_source : ($parsed['utm_source'] ?? null),
+            'source' => $sessionSource ?? $parsedSource,
             'medium' => filled($session->utm_medium) ? (string) $session->utm_medium : ($parsed['utm_medium'] ?? null),
             'campaign' => filled($session->utm_campaign) ? (string) $session->utm_campaign : ($parsed['utm_campaign'] ?? null),
         ];
@@ -239,6 +416,7 @@ final class SessionTrafficAttribution
         }
 
         $labels = config('tracker.utm_sources', []);
+        $source = self::normalizeSource($source) ?? $source;
 
         return $labels[$source] ?? ucfirst((string) $source);
     }
@@ -256,7 +434,9 @@ final class SessionTrafficAttribution
                 $columnValue = $session->{$key} ?? null;
 
                 if (filled($columnValue)) {
-                    $merged[$key] = (string) $columnValue;
+                    $merged[$key] = $key === 'utm_source'
+                        ? (self::normalizeSource((string) $columnValue) ?? (string) $columnValue)
+                        : (string) $columnValue;
                 }
             }
         }
@@ -316,7 +496,54 @@ final class SessionTrafficAttribution
         ];
     }
 
-    public static function backfillSession(ActivityEcomUser $session, ?string $pageUrl = null): bool
+    /**
+     * Resolve session column values to persist during ingest.
+     *
+     * @param  array<string, mixed>  $sessionData
+     * @return array<string, string>
+     */
+    public static function sessionAttributesFromIngest(
+        array $sessionData,
+        ?string $pageUrl = null,
+        ?string $referer = null,
+    ): array {
+        $parsed = [];
+
+        foreach ([$sessionData['landing_page'] ?? null, $pageUrl] as $url) {
+            if (! filled($url)) {
+                continue;
+            }
+
+            $parsed = array_merge($parsed, self::parseFromUrl($url));
+        }
+
+        $parsed = self::mergeRefererAttribution($parsed, $referer);
+
+        $attributes = [];
+
+        foreach (['utm_source', 'utm_medium', 'utm_campaign'] as $field) {
+            if (filled($sessionData[$field] ?? null)) {
+                $value = (string) $sessionData[$field];
+                $attributes[$field] = $field === 'utm_source'
+                    ? (self::normalizeSource($value) ?? $value)
+                    : $value;
+            } elseif (isset($parsed[$field])) {
+                $attributes[$field] = $parsed[$field];
+            }
+        }
+
+        $landing = filled($pageUrl)
+            ? $pageUrl
+            : ($sessionData['landing_page'] ?? null);
+
+        if (filled($landing)) {
+            $attributes['landing_page'] = (string) $landing;
+        }
+
+        return $attributes;
+    }
+
+    public static function backfillSession(ActivityEcomUser $session, ?string $pageUrl = null, ?string $referer = null): bool
     {
         $urls = array_filter([
             $pageUrl,
@@ -329,6 +556,11 @@ final class SessionTrafficAttribution
         foreach ($urls as $url) {
             $parsed = array_merge($parsed, self::parseFromUrl($url));
         }
+
+        $parsed = self::mergeRefererAttribution(
+            $parsed,
+            $referer ?? self::refererFromActions($session),
+        );
 
         if ($parsed === [] && $urls === []) {
             return false;
@@ -470,6 +702,11 @@ final class SessionTrafficAttribution
             'gad_campaignid' => 'Google ad campaign ID',
             'msclkid' => 'Microsoft click ID',
             'awc' => 'Awin click ID',
+            'ttclid' => 'TikTok click ID',
+            'twclid' => 'Twitter / X click ID',
+            'li_fat_id' => 'LinkedIn click ID',
+            'epik' => 'Pinterest click ID',
+            'sc_cid' => 'Snapchat click ID',
             default => str_replace('_', ' ', ucfirst($key)),
         };
     }

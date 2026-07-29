@@ -110,6 +110,26 @@ return [
         '(direct)' => 'Direct',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | UTM source aliases (stored as canonical keys above)
+    |--------------------------------------------------------------------------
+    */
+    'utm_source_aliases' => [
+        'fb' => 'facebook',
+        'meta' => 'facebook',
+        'ig' => 'instagram',
+        'insta' => 'instagram',
+        'yt' => 'youtube',
+        'tt' => 'tiktok',
+        'x' => 'twitter',
+        'pin' => 'pinterest',
+        'li' => 'linkedin',
+        'snap' => 'snapchat',
+        'ms' => 'bing',
+        'aw' => 'awin',
+    ],
+
     'utm_mediums' => [
         'organic' => 'Organic',
         'cpc' => 'CPC (paid search)',
