@@ -261,6 +261,7 @@
                     @foreach ($chartInfos as $chartInfo)
                         @php
                             $ecommerceProduct = $ecommerceMap[$chartInfo->design_no] ?? null;
+                            $chartExpense = $expenseMapBySeason[$chartInfo->season_name] ?? $expenseConfig;
                         @endphp
 
                         <div class="order-card discount-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden transition-[border-color] duration-200 hover:border-accent-200 dark:hover:border-accent-600/60"
@@ -343,11 +344,24 @@
                                                                         ->where('status', 1)
                                                                         ->where('platform_id', $platform->id)
                                                                         ->first();
-                                                        $cal_val   = calculatePlatformProfit($ch_price, $platform);
+
+                                                        $originalShipping = (float) ($ch_price->product_shipping_cost ?: ($chartExpense['shipping_cost'] ?? 0));
+                                                        $rowCostBasis = $d_price?->cost_basis ?? 'unit';
+                                                        $rowShippingCost = $d_price?->shipping_cost ?? ($chartExpense['shipping_cost'] ?? 0);
+
+                                                        $profitOptions = [
+                                                            'cost_basis' => $rowCostBasis,
+                                                            'shipping_cost' => $rowShippingCost,
+                                                            'original_shipping' => $originalShipping,
+                                                            'conversion_rate' => $chartExpense['conversion_rate'] ?? 0,
+                                                            'default_shipping' => $chartExpense['shipping_cost'] ?? 0,
+                                                        ];
+
+                                                        $cal_val   = calculatePlatformProfit($ch_price, $platform, $profitOptions);
                                                         if ($d_price) {
                                                             $dch_price = clone $ch_price;
                                                             $dch_price->confirm_selling_price = $d_price->price;
-                                                            $dis_val   = calculatePlatformProfit($dch_price, $platform);
+                                                            $dis_val   = calculatePlatformProfit($dch_price, $platform, $profitOptions);
                                                         }
                                                     @endphp
                                                     <div class="plat-card {{ $d_price ? 'plat-card-disc' : '' }}">
@@ -391,6 +405,7 @@
                                     'ecommerceProduct' => $ecommerceProduct,
                                     'platform_ncs' => $platform_ncs,
                                     'platforms' => $platforms,
+                                    'expenseConfig' => $chartExpense,
                                 ])
                             </div>
 

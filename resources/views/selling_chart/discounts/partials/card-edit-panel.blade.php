@@ -1,6 +1,8 @@
 {{-- Expandable edit panel — general info + per-platform calculation forms --}}
 @php
     $ecommerceSku = ($ecommerceProduct['sku'] ?? '') ?: '—';
+    $conversionRate = (float) ($expenseConfig['conversion_rate'] ?? 0);
+    $defaultShippingCost = (float) ($expenseConfig['shipping_cost'] ?? 0);
     $badge = match(true) {
         $chartInfo->status == 1 => ['label' => 'Approved',     'cls' => 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'],
         $chartInfo->status == 2 => ['label' => 'Rejected',     'cls' => 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'],
@@ -123,144 +125,19 @@
                 <form class="pp-form p-3"
                       action="{{ route('admin.selling_chart.save.platform.discount.price') }}"
                       method="POST"
-                      data-chart-id="{{ $chartInfo->id }}">
+                      data-chart-id="{{ $chartInfo->id }}"
+                      data-conversion-rate="{{ $conversionRate }}"
+                      data-default-shipping="{{ $defaultShippingCost }}">
                     @csrf
                     <input type="hidden" name="platform_id"   class="platform_id"   value="{{ $platform->id }}" />
                     <input type="hidden" name="department_id" class="department_id" value="{{ $chartInfo->department_id }}" />
 
-                    <div class="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 mb-3">
-                        <table class="w-full text-[11px] border-collapse discount-calc-table" style="min-width: max-content;">
-                            <thead>
-                                <tr class="bg-slate-50 dark:bg-slate-800/60">
-                                    <th class="px-2 py-2 text-center text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-200 dark:border-slate-700 w-8">✓</th>
-                                    <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Color</th>
-                                    @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
-                                        <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Range</th>
-                                    @endif
-                                    <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700 w-24">Discount</th>
-                                    <th class="px-2 py-2 text-center text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700 w-14">Status</th>
-                                    <th class="toogle-item commission px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">FOB</th>
-                                    <th class="toogle-item commission px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Unit</th>
-                                    <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">CSP</th>
-                                    <th class="toogle-item commission px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Com.</th>
-                                    <th class="toogle-item commission px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Com VAT</th>
-                                    <th class="toogle-item commission px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Sell</th>
-                                    <th class="toogle-item vat px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">VAT</th>
-                                    <th class="toogle-item vat px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">VAT £</th>
-                                    <th class="toogle-item vat px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">SP+VAT</th>
-                                    <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">PM%</th>
-                                    <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">NP</th>
-                                    <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700 w-36">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100 dark:divide-slate-700/40">
-                                @foreach ($chartInfo->sellingChartPrices as $ch_price)
-                                    @php
-                                        $d_price    = $ch_price?->discounts->where('platform_id', $platform->id)->first();
-                                        $h_ch_price = clone $ch_price;
-                                        if ($d_price) { $h_ch_price->confirm_selling_price = $d_price->price; }
-                                        $profit_cal = calculatePlatformProfit($h_ch_price, $platform);
-                                    @endphp
-                                    <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-700/20">
-                                        <input type="hidden" name="ch_price_id[{{ $ch_price->id }}]" class="ch_price_id" value="{{ $ch_price->id }}" />
-
-                                        @if ($chartInfo->department_id == 1928 || $chartInfo->department_id == 1929)
-                                            <td class="px-2 py-1.5 text-center">
-                                                <input type="checkbox" name="sl_price_id[]" value="{{ $ch_price->id }}"
-                                                       class="w-3.5 h-3.5 rounded accent-accent-400 cursor-pointer">
-                                            </td>
-                                            <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                                                {{ $ch_price->color_name }}<span class="text-slate-400 font-normal"> ({{ $ch_price->color_code }})</span>
-                                            </td>
-                                            <td class="px-2 py-1.5 text-slate-500 whitespace-nowrap">{{ $ch_price->range }}</td>
-                                            <td class="px-2 py-1.5">
-                                                <input type="text" name="discount_price[{{ $ch_price->id }}]"
-                                                       data-price-id="{{ $ch_price->id }}" data-csp="{{ $ch_price->confirm_selling_price }}"
-                                                       class="w-full px-1.5 py-0.5 text-center text-[11px] border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-red-500 placeholder-slate-300 focus:outline-none focus:border-accent-400 discount_price discount_price{{ $ch_price->id }}"
-                                                       placeholder="0.00" value="{{ $d_price?->price ?? '' }}">
-                                            </td>
-                                            <td class="px-2 py-1.5 text-center">
-                                                @can('general.discounts.approve')
-                                                    @if ($d_price)
-                                                        <input type="checkbox" role="switch" name="statuses[{{ $ch_price->id }}]"
-                                                               class="status{{ $ch_price->id }} w-3.5 h-3.5 rounded accent-accent-400 cursor-pointer"
-                                                               {{ $d_price?->status ? 'checked' : '' }}>
-                                                    @endif
-                                                @else
-                                                    @if ($d_price)
-                                                        @if ($d_price->status == 1)
-                                                            <span class="inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">OK</span>
-                                                        @else
-                                                            <span class="inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Pend</span>
-                                                        @endif
-                                                    @endif
-                                                @endcan
-                                            </td>
-                                        @else
-                                            @if ($loop->index == 0)
-                                                <td class="px-2 py-1.5 text-center" rowspan="{{ count($chartInfo->sellingChartPrices) }}">
-                                                    <input type="checkbox" name="sl_price_id[]" value="{{ $ch_price->id }}"
-                                                           class="w-3.5 h-3.5 rounded accent-accent-400 cursor-pointer">
-                                                </td>
-                                            @endif
-                                            <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                                                {{ $ch_price->color_name }}<span class="text-slate-400 font-normal"> ({{ $ch_price->color_code }})</span>
-                                            </td>
-                                            @if ($loop->index == 0)
-                                                <td class="px-2 py-1.5" rowspan="{{ count($chartInfo->sellingChartPrices) }}">
-                                                    <input type="text" name="discount_price[{{ $ch_price->id }}]"
-                                                           data-price-id="{{ $ch_price->id }}" data-csp="{{ $ch_price->confirm_selling_price }}"
-                                                           class="w-full px-1.5 py-0.5 text-center text-[11px] border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-red-500 placeholder-slate-300 focus:outline-none focus:border-accent-400 discount_price discount_price{{ $ch_price->id }}"
-                                                           placeholder="0.00" value="{{ $d_price?->price ?? '' }}">
-                                                </td>
-                                                <td class="px-2 py-1.5 text-center" rowspan="{{ count($chartInfo->sellingChartPrices) }}">
-                                                    @can('general.discounts.approve')
-                                                        @if ($d_price)
-                                                            <input type="checkbox" role="switch" name="statuses[{{ $ch_price->id }}]"
-                                                                   class="status{{ $ch_price->id }} w-3.5 h-3.5 rounded accent-accent-400 cursor-pointer"
-                                                                   {{ $d_price?->status ? 'checked' : '' }}>
-                                                        @endif
-                                                    @else
-                                                        @if ($d_price)
-                                                            @if ($d_price->status == 1)
-                                                                <span class="inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">OK</span>
-                                                            @else
-                                                                <span class="inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Pend</span>
-                                                            @endif
-                                                        @endif
-                                                    @endcan
-                                                </td>
-                                            @endif
-                                        @endif
-
-                                        <td class="toogle-item commission px-2 py-1.5 text-slate-600 whitespace-nowrap" style="display:none">$@pricews($ch_price->price_fob)</td>
-                                        <td class="toogle-item commission px-2 py-1.5 text-slate-600 whitespace-nowrap" style="display:none">@price($ch_price->unit_price)</td>
-                                        <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">@price($ch_price->confirm_selling_price)</td>
-                                        <td class="toogle-item commission px-2 py-1.5 text-slate-600 whitespace-nowrap com" style="display:none">@price($profit_cal['commission'])</td>
-                                        <td class="toogle-item commission px-2 py-1.5 text-slate-600 whitespace-nowrap com-vat" style="display:none">@price($profit_cal['commission_vat'])</td>
-                                        <td class="toogle-item commission px-2 py-1.5 text-slate-600 whitespace-nowrap sp" style="display:none">@price($profit_cal['selling_price'])</td>
-                                        <td class="toogle-item vat px-2 py-1.5 text-slate-600 whitespace-nowrap sl-vat" style="display:none">@price($profit_cal['selling_vat'])</td>
-                                        <td class="toogle-item vat px-2 py-1.5 text-slate-600 whitespace-nowrap vat-val" style="display:none">@price($profit_cal['vat_value'])</td>
-                                        <td class="toogle-item vat px-2 py-1.5 text-slate-600 whitespace-nowrap sp-vat" style="display:none">@price($profit_cal['selling_price_and_vat'])</td>
-                                        <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap pm">@pricews($profit_cal['profit_margin'])%</td>
-                                        <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap np">@price($profit_cal['net_profit'])</td>
-
-                                        @if ($loop->index == 0)
-                                            <td class="px-2 py-1.5" rowspan="{{ count($chartInfo->sellingChartPrices) }}">
-                                                <select name="save_type" class="save_type w-full px-1.5 py-1 text-[11px] border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400">
-                                                    <option value="1">Save</option>
-                                                    @can('general.discounts.sent_mail')
-                                                        <option value="2">Save &amp; Approval</option>
-                                                        <option value="3">Save &amp; Executor</option>
-                                                    @endcan
-                                                </select>
-                                            </td>
-                                        @endif
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
+                    @include('selling_chart.discounts.partials.calc-table', [
+                        'chartInfo' => $chartInfo,
+                        'platform' => $platform,
+                        'conversionRate' => $conversionRate,
+                        'defaultShippingCost' => $defaultShippingCost,
+                    ])
 
                     @can('general.discounts.update')
                         <div class="flex justify-end">

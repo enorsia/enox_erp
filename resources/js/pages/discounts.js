@@ -6,6 +6,147 @@ const SAVE_URL = pageEl?.dataset.saveUrl     ?? '';
 const DEP_CATS = pageEl?.dataset.depCatsUrl  ?? '';
 const CSRF     = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
+function isGroupedDept(department_id) {
+    return department_id == 1926 || department_id == 1927;
+}
+
+function isGirlsBoysDept(department_id) {
+    return department_id == 1928 || department_id == 1929;
+}
+
+function getRowPriceId($row) {
+    return $row.data('price-id')
+        || $row.find('.cost-basis-radio').first().data('price-id')
+        || $row.find('.shipping-cost-input').first().data('price-id')
+        || $row.find('.discount_price').data('price-id');
+}
+
+function getDiscountInputForRow(form, ch_price_id) {
+    const $specific = form.find('.discount_price' + ch_price_id);
+    return $specific.length ? $specific : form.find('.discount_price').first();
+}
+
+function getCostBasis(form, ch_price_id) {
+    const $checked = form.find('input[name="cost_basis[' + ch_price_id + ']"]:checked');
+    if ($checked.length) return $checked.val();
+    return form.find('.cost-basis-radio:checked').first().val() || 'unit';
+}
+
+function getShippingValue(form, ch_price_id) {
+    const $input = form.find('.shipping-cost-input[data-price-id="' + ch_price_id + '"]');
+    if ($input.length) return $input.val();
+    return form.find('.shipping-cost-input').first().val() ?? form.data('default-shipping');
+}
+
+function applyProfitResponse($row, response) {
+    $row.find('.com').text('£' + response.commission.toFixed(2));
+    $row.find('.com-vat').text('£' + response.commission_vat.toFixed(2));
+    $row.find('.sp').text('£' + response.selling_price.toFixed(2));
+    $row.find('.sl-vat').text('£' + response.selling_vat.toFixed(2));
+    $row.find('.vat-val').text('£' + response.vat_value.toFixed(2));
+    $row.find('.sp-vat').text('£' + response.selling_price_and_vat.toFixed(2));
+    $row.find('.pm').text(response.profit_margin.toFixed(2) + '%');
+    $row.find('.np').text('£' + response.net_profit.toFixed(2));
+
+    const $adjusted = $row.find('.adjusted-unit-price');
+    if (response.adjusted_unit_price != null && response.cost_basis !== 'fob') {
+        $adjusted.text('£' + parseFloat(response.adjusted_unit_price).toFixed(2)).removeClass('hidden');
+    } else {
+        $adjusted.text('').addClass('hidden');
+    }
+}
+
+function applyOriginalProfit($row) {
+    const original = $row.data('original-profit');
+    if (original) {
+        applyProfitResponse($row, original);
+    }
+    $row.find('.adjusted-unit-price').text('').addClass('hidden');
+}
+
+function shouldUseOriginalCalc($row, form, ch_price_id) {
+    const shipping = parseFloat(getShippingValue(form, ch_price_id)) || 0;
+    const originalShipping = parseFloat($row.data('original-shipping')) || 0;
+    const cost_basis = getCostBasis(form, ch_price_id);
+    return cost_basis === 'unit' && Math.abs(shipping - originalShipping) < 0.005;
+}
+
+function calculateProfitForRow(form, $row, ch_price_id) {
+    if (shouldUseOriginalCalc($row, form, ch_price_id)) {
+        applyOriginalProfit($row);
+        return $.Deferred().resolve().promise();
+    }
+
+    console.log('Calculating profit for ' + ch_price_id);
+    const platform_id = form.find('.platform_id').val();
+    const $discountInput = getDiscountInputForRow(form, ch_price_id);
+    const discount_price = parseFloat($discountInput.val()) || 0;
+    const cost_basis = getCostBasis(form, ch_price_id);
+    const shipping_cost = getShippingValue(form, ch_price_id);
+
+    return $.ajax({
+        url: CALC_URL,
+        type: 'POST',
+        data: {
+            platform_id,
+            discount_price,
+            ch_price_id,
+            cost_basis,
+            shipping_cost,
+            _token: CSRF,
+        },
+    }).done(function (response) {
+        console.log("response", response);
+        applyProfitResponse($row, response);
+    });
+}
+
+function recalculateAllRows(form) {
+    const department_id = form.find('.department_id').val();
+    const requests = [];
+
+    if (isGroupedDept(department_id)) {
+        const $row = form.find('tbody tr.discount-calc-row').first();
+        const ch_price_id = getRowPriceId($row);
+        if (ch_price_id) requests.push(calculateProfitForRow(form, $row, ch_price_id));
+    } else {
+        form.find('tbody tr.discount-calc-row').each(function () {
+            const $row = $(this);
+            const ch_price_id = getRowPriceId($row);
+            if (ch_price_id) requests.push(calculateProfitForRow(form, $row, ch_price_id));
+        });
+    }
+
+    return requests.length ? $.when.apply($, requests) : $.Deferred().resolve().promise();
+}
+
+function recalculateDiscountRow($context) {
+    const form = $context.closest('form');
+    const department_id = form.find('.department_id').val();
+
+    if (isGirlsBoysDept(department_id) && $context.hasClass('cost-basis-radio')) {
+        return recalculateAllRows(form);
+    }
+
+    if (isGroupedDept(department_id)) {
+        return recalculateAllRows(form);
+    }
+
+    const $row = $context.closest('tr.discount-calc-row');
+    const ch_price_id = getRowPriceId($row.length ? $row : $context);
+    if (!ch_price_id) return;
+
+    return calculateProfitForRow(form, $row.length ? $row : form, ch_price_id);
+}
+
+function syncCostBasisRadios($radio) {
+    const form = $radio.closest('form');
+    const basis = $radio.val();
+    form.find('.cost-basis-radio').each(function () {
+        $(this).prop('checked', $(this).val() === basis);
+    });
+}
+
 $(document).ready(function () {
 
     let productCategoryTs = null;
@@ -54,17 +195,10 @@ $(document).ready(function () {
         });
     });
 
-    /* ── Live profit calculation on discount input ── */
     $(document).on('change keyup', '.discount_price', function () {
-        let input         = $(this);
-        let form          = input.closest('form');
-        let platform_id   = form.find('.platform_id').val();
-        let department_id = form.find('.department_id').val();
-        let ch_price_id   = input.data('price-id');
-        let csp           = parseFloat(input.data('csp')) || 0;
-        let tr            = (department_id == 1928 || department_id == 1929)
-                                ? input.parents('tr')
-                                : form;
+        let input = $(this);
+        let form  = input.closest('form');
+        let csp   = parseFloat(input.data('csp')) || 0;
 
         let rawValue = input.val().trim();
         if (rawValue !== '' && isNaN(rawValue)) {
@@ -86,74 +220,97 @@ $(document).ready(function () {
             input.focus();
         }
 
-        $.ajax({
-            url: CALC_URL,
-            type: 'POST',
-            data: {
-                platform_id:    platform_id,
-                discount_price: discount_price,
-                ch_price_id:    ch_price_id,
-                _token:         CSRF
-            },
-            success: function (response) {
-                tr.find('.com').text('£'     + response.commission.toFixed(2));
-                tr.find('.com-vat').text('£' + response.commission_vat.toFixed(2));
-                tr.find('.sp').text('£'      + response.selling_price.toFixed(2));
-                tr.find('.sl-vat').text('£'  + response.selling_vat.toFixed(2));
-                tr.find('.vat-val').text('£' + response.vat_value.toFixed(2));
-                tr.find('.sp-vat').text('£'  + response.selling_price_and_vat.toFixed(2));
-                tr.find('.pm').text(response.profit_margin.toFixed(2) + '%');
-                tr.find('.np').text('£'      + response.net_profit.toFixed(2));
-            }
-        });
+        recalculateDiscountRow(input);
     });
 
-    /* ── Validate form before AJAX save ── */
+    $(document).on('change', '.cost-basis-radio', function () {
+        syncCostBasisRadios($(this));
+        recalculateAllRows($(this).closest('form'));
+    });
+
+    $(document).on('change keyup', '.shipping-cost-input', function () {
+        recalculateDiscountRow($(this));
+    });
+
     function validateDiscountForm($form) {
-        let anyChecked = false;
         let saveType   = $form.find('.save_type').val();
-        let invalidStatus = false;
         let hasError   = false;
+        let hasDiscount = false;
+        const department_id = $form.find('.department_id').val();
+        const isGrouped = isGroupedDept(department_id) || isGirlsBoysDept(department_id);
+        const groupStatus = $form.find('.group-status-toggle').prop('checked');
 
         $form.find('.discount_price').removeClass('is-invalid').next('.custom-error').remove();
 
-        $form.find('input[name="sl_price_id[]"]:checked').each(function () {
-            anyChecked = true;
-
-            let chVal     = $(this).val();
-            let isChecked = $form.find('.status' + chVal).prop('checked');
-
-            if (saveType == 2 && isChecked)  invalidStatus = true;
-            if (saveType == 3 && !isChecked) invalidStatus = true;
-
-            let $discountInput = $form.find('.discount_price' + chVal);
-            if (!$discountInput.val().trim()) {
-                hasError = true;
-                $discountInput.addClass('is-invalid');
-                $('<div class="custom-error text-danger text-start mt-1" style="font-size:11px;">Required.</div>')
-                    .insertAfter($discountInput);
+        $form.find('.discount_price').each(function () {
+            const val = $(this).val().trim();
+            if (val) {
+                hasDiscount = true;
             }
         });
 
-        if (!anyChecked) {
-            Swal.fire({ title: 'No Option Selected', text: 'Please select at least one price option.', icon: 'warning' });
+        if (!hasDiscount) {
+            Swal.fire({ title: 'No Discount', text: 'Enter at least one discount price to save.', icon: 'warning' });
             return false;
         }
+
+        $form.find('.discount_price').each(function () {
+            const val = $(this).val().trim();
+            if (val !== '' && isNaN(val)) {
+                hasError = true;
+                $(this).addClass('is-invalid');
+            }
+        });
+
         if (hasError) return false;
-        if (invalidStatus) {
+
+        if (isGrouped && saveType == 2 && groupStatus) {
             Swal.fire({
                 title: 'Invalid Status',
-                text: saveType == 2
-                    ? 'All selected items must have Status OFF for Approval.'
-                    : 'All selected items must have Status ON for Executor.',
+                text: 'All items must have Status OFF for Approval.',
                 icon: 'error'
             });
             return false;
         }
+
+        if (isGrouped && saveType == 3 && !groupStatus) {
+            Swal.fire({
+                title: 'Invalid Status',
+                text: 'All items must have Status ON for Executor.',
+                icon: 'error'
+            });
+            return false;
+        }
+
+        if (!isGrouped) {
+            let invalidStatus = false;
+            $form.find('input[name^="statuses"]:checked').each(function () {
+                if (saveType == 2) invalidStatus = true;
+            });
+            $form.find('input[name^="statuses"]').each(function () {
+                const id = $(this).attr('name').match(/\[(\d+)\]/);
+                if (!id) return;
+                const chVal = id[1];
+                const $discount = $form.find('.discount_price' + chVal);
+                if ($discount.length && $discount.val().trim() && !$(this).prop('checked') && saveType == 3) {
+                    invalidStatus = true;
+                }
+            });
+            if (invalidStatus) {
+                Swal.fire({
+                    title: 'Invalid Status',
+                    text: saveType == 2
+                        ? 'Selected items must have Status OFF for Approval.'
+                        : 'Selected items must have Status ON for Executor.',
+                    icon: 'error'
+                });
+                return false;
+            }
+        }
+
         return true;
     }
 
-    /* ── AJAX form submit ── */
     $(document).on('submit', '.pp-form', function (e) {
         e.preventDefault();
 
@@ -201,7 +358,6 @@ $(document).ready(function () {
         });
     });
 
-    /* ── Toggle columns — scoped to nearest edit panel ── */
     $(document).on('change', '.toggle-column', function () {
         const target = $(this).val();
         const panel  = $(this).closest('.discount-edit-panel');
@@ -210,7 +366,6 @@ $(document).ready(function () {
 
 });
 
-/* ── approveData — kept for other pages ── */
 window.approveData = function (id, action = 'approve') {
     Swal.fire({
         title: 'Are you sure?',

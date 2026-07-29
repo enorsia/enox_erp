@@ -2,6 +2,7 @@
 
 use App\Models\Platform;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 if (! function_exists('avaiablePermissions')) {
     function avaiablePermissions(bool $flat = false)
@@ -116,27 +117,77 @@ if (! function_exists('format_duration')) {
     }
 }
 
+if (!function_exists('convertFobUsdToPound')) {
+    /**
+     * Convert FOB from USD ($) to GBP (£) using the expense module conversion rate.
+     * Formula: FOB ($) × conversion_rate = FOB (£)
+     */
+    function convertFobUsdToPound(?float $fobUsd, ?float $conversionRate): float
+    {
+        $fobUsd = (float) ($fobUsd ?? 0);
+
+        if ($fobUsd <= 0) {
+            return 0;
+        }
+
+        if (!$conversionRate || $conversionRate <= 0) {
+            return 0;
+        }
+
+        return $fobUsd * $conversionRate;
+    }
+}
+
 if (!function_exists('calculatePlatformProfit')) {
-    function calculatePlatformProfit($price, $platform)
+    function calculatePlatformProfit($price, $platform, array $options = [])
     {
         $data = [];
 
-        $unit_price_sh_charge = $price->unit_price + $platform->shipping_charge;
+        $costBasis = $options['cost_basis'] ?? 'unit';
+        $conversionRate = (float) ($options['conversion_rate'] ?? 0);
+        $defaultShipping = (float) ($options['default_shipping'] ?? 0);
+        $originalShipping = (float) ($options['original_shipping'] ?? $defaultShipping);
+        $shippingCost = array_key_exists('shipping_cost', $options) && $options['shipping_cost'] !== null && $options['shipping_cost'] !== ''
+            ? (float) $options['shipping_cost']
+            : $originalShipping;
 
-        $data["shipping_charge"] = $platform->shipping_charge;
-        $data["unit_price_sh_charge"] = $unit_price_sh_charge;
+        $fobPound = convertFobUsdToPound((float) $price->price_fob, $conversionRate);
+        $dbUnitPrice = (float) $price->unit_price;
+        $shippingChanged = abs($shippingCost - $originalShipping) >= 0.005;
 
-        $data["commission"] = $price->confirm_selling_price * $platform->commission;
-        $data["commission_vat"] = $data["commission"] + ($data["commission"] * 0.20);
-        $data["selling_price"] = $price->confirm_selling_price - $data["commission_vat"];
-        $data["selling_vat"] = ($data["selling_price"] / 120) * 100;
-        $data["vat_value"] = $data["selling_price"] - $data["selling_vat"];
-        $data["selling_price_and_vat"] = $data["selling_vat"] + ($data["commission_vat"] - $data["commission"]);
-        $data["net_profit"] = $data["selling_price_and_vat"] - $unit_price_sh_charge;
-        $data["profit_margin"] = $data["selling_price_and_vat"] > 0
-            ? ($data["net_profit"] / $data["selling_price_and_vat"]) * 100
+        if ($costBasis === 'fob') {
+            $baseCost = $fobPound + $shippingCost;
+            $data['adjusted_unit_price'] = null;
+        } else {
+            if ($shippingChanged) {
+                $adjustedUnitPrice = $dbUnitPrice - $originalShipping + $shippingCost;
+                $baseCost = $adjustedUnitPrice;
+                $data['adjusted_unit_price'] = round($adjustedUnitPrice, 2);
+            } else {
+                $baseCost = $dbUnitPrice;
+                $data['adjusted_unit_price'] = null;
+            }
+        }
+
+        $data['fob_pound'] = $fobPound;
+        $data['db_unit_price'] = $dbUnitPrice;
+        $data['cost_basis'] = $costBasis;
+        $data['original_shipping'] = $originalShipping;
+        $data['shipping_charge'] = $shippingCost;
+        $data['unit_price_sh_charge'] = $baseCost;
+
+        $data['commission'] = $price->confirm_selling_price * $platform->commission;
+        $data['commission_vat'] = $data['commission'] + ($data['commission'] * 0.20);
+        $data['selling_price'] = $price->confirm_selling_price - $data['commission_vat'];
+
+        $data['selling_vat'] = ($data['selling_price'] / 120) * 100;
+        $data['vat_value'] = $data['selling_price'] - $data['selling_vat'];
+        $data['selling_price_and_vat'] = $data['selling_vat'] + ($data['commission_vat'] - $data['commission']);
+        $data['net_profit'] = $data['selling_price_and_vat'] - $baseCost;
+        $data['profit_margin'] = $data['selling_price_and_vat'] > 0
+            ? ($data['net_profit'] / $data['selling_price_and_vat']) * 100
             : 0;
-        $data["can_sell"] =  $data["net_profit"] >= $platform->min_profit ? "Yes" : "No";
+        $data['can_sell'] = $data['net_profit'] >= $platform->min_profit ? 'Yes' : 'No';
 
         return $data;
     }

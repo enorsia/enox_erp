@@ -707,14 +707,15 @@ $(document).ready(function () {
     function createPriceCal($row) {
         const selectedVal = $('#season_select').val();
         const expInput = $('.season-exp' + selectedVal);
+        console.log(expInput);
         const conversionRate = parseFloat(expInput.data('conversion-rate')) || 0;
         const commercialExpense = parseFloat(expInput.data('commercial-expense')) || 0;
         const enorsiaBDExpense = parseFloat(expInput.data('enorsia-bd-expense')) || 0;
         const enorsiaUKExpense = parseFloat(expInput.data('enorsia-uk-expense')) || 0;
+        const expShippingCost = parseFloat(expInput.data('shipping-cost')) || 0;
         const priceFOB = parseFloat($row.find('.x_price_fob').val()) || 0;
-
         const unitPrice = priceFOB
-            ? (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense)
+            ? (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + expShippingCost)
             : 0;
         $row.find('.x_unit_price').val(unitPrice.toFixed(2));
     }
@@ -758,6 +759,9 @@ $(document).ready(function () {
 
             const priceFOB = parseFloat($row.find('.price_fob').val()) || 0;
             const shippingCost = parseFloat($row.find('.shipping_cost').val()) || 0;
+
+            console.log((priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + (shippingCost || expShippingCost)));
+
             const unitPrice = (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + (shippingCost || expShippingCost));
             $row.find('.unit_price').val(unitPrice.toFixed(2));
 
