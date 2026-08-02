@@ -31,6 +31,7 @@ return [
     'scalar_field_limits' => [
         'category_name' => 255,
         'category_code' => 100,
+        'department_name' => 255,
         'product_name' => 255,
         'product_code' => 100,
         'product_color_id' => 50,

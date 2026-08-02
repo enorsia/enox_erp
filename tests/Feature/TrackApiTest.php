@@ -50,6 +50,31 @@ test('track endpoint accepts valid batch and returns accepted ids', function () 
     expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
 });
 
+test('track endpoint stores department name on category view', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Jumpers',
+        'category_code' => '221',
+        'department_name' => 'Men',
+        'department_id' => '1927',
+        'category_id' => '54',
+        'page_url' => 'https://enorsia.com/c/men/jumpers',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $action = ActivityEcomUserAction::where('event_id', $eventId)->first();
+
+    expect($action)->not->toBeNull();
+    expect($action->category_name)->toBe('Jumpers');
+    expect($action->department_name)->toBe('Men');
+});
+
 test('track endpoint rejects invalid api key', function () {
     $response = $this->postJson('/api/track', trackPayload(Str::uuid()->toString(), [[
         'id' => Str::uuid()->toString(),

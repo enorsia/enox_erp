@@ -9,6 +9,14 @@ class EcomActivityTimelinePresenter
 {
     /**
      * @param  Collection<int, ActivityEcomUserAction>  $actions
+     */
+    public function countEvents(Collection $actions): int
+    {
+        return $this->present($actions)->count();
+    }
+
+    /**
+     * @param  Collection<int, ActivityEcomUserAction>  $actions
      * @return Collection<int, object>
      */
     public function present(Collection $actions): Collection

@@ -224,12 +224,175 @@ test('ecom tracker dashboard builds funnel and kpis from tracked actions', funct
 
     expect($data['funnel'])->not->toBeEmpty();
     expect(collect($data['funnel'])->firstWhere('stage', 'Purchase')['count'])->toBe(1);
-    expect($data['categories'][0]['name'] ?? null)->toBe('Women');
+    expect($data['categories'][0]['label'] ?? null)->toBe('Women');
+    expect($data['categories'][0]['views'] ?? null)->toBe(1);
+    expect($data['categories'][0]['adds'] ?? null)->toBe(1);
+    expect($data['categories'][0]['purchases'] ?? null)->toBe(1);
+    expect($data['categories'][0]['sale_items'] ?? null)->toBe(1);
+    expect($data['categories'][0]['sale_amount'] ?? null)->toBe(80.0);
+    expect($data['categories'][0]['conversion_rate'] ?? null)->toBe(100.0);
     expect($data['products'][0]['code'] ?? null)->toBe('SKU-1');
     expect($data['products'][0]['variants'][0]['color'] ?? null)->toBe('Navy');
     expect($data['products'][0]['variants'][0]['purchases'] ?? null)->toBe(1);
 
     Carbon::setTestNow();
+});
+
+test('ecom tracker dashboard category performance uses department and category label', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $sessionId = Str::uuid()->toString();
+    $from = Carbon::parse('2026-07-11 00:00:00');
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'department_name' => 'Women',
+        'category_name' => 'Dresses',
+        'category_code' => 'DRS',
+        'created_at' => $from,
+        'start_time' => $from,
+        'end_time' => $from->copy()->addSeconds(20),
+    ]);
+
+    $data = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-11',
+        'date_to' => '2026-07-11',
+    ]);
+
+    expect($data['categories'][0]['label'] ?? null)->toBe('Women -> Dresses');
+    expect($data['categories'][0]['category_code'] ?? null)->toBe('DRS');
+});
+
+test('ecom tracker dashboard category performance attributes purchases across visitor sessions', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $visitorId = Str::uuid()->toString();
+    $browseSessionId = Str::uuid()->toString();
+    $purchaseSessionId = Str::uuid()->toString();
+    $from = Carbon::parse('2026-07-12 10:00:00');
+
+    foreach ([$browseSessionId, $purchaseSessionId] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'visitor_id' => $visitorId,
+            'device_type' => 'desktop',
+            'created_at' => $from,
+            'updated_at' => $from,
+            'last_active_at' => $from,
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $browseSessionId,
+        'action_type' => 'category_view',
+        'department_name' => 'Women',
+        'category_name' => 'Dresses',
+        'category_code' => 'DRS',
+        'created_at' => $from,
+        'start_time' => $from,
+        'end_time' => $from->copy()->addSeconds(20),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $purchaseSessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'amount_paid' => 120,
+            'checkout_info' => [
+                'items' => [[
+                    'product_code' => 'SKU-1',
+                    'product_name' => 'Dress',
+                    'qty' => 2,
+                    'price' => 60,
+                ]],
+            ],
+        ],
+        'created_at' => $from->copy()->addHours(2),
+        'start_time' => $from->copy()->addHours(2),
+        'end_time' => $from->copy()->addHours(2)->addSeconds(10),
+    ]);
+
+    $data = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-12',
+        'date_to' => '2026-07-12',
+    ]);
+
+    expect($data['categories'][0]['label'] ?? null)->toBe('Women -> Dresses')
+        ->and($data['categories'][0]['purchases'] ?? null)->toBe(1)
+        ->and($data['categories'][0]['sale_items'] ?? null)->toBe(2)
+        ->and($data['categories'][0]['sale_amount'] ?? null)->toBe(120.0);
+});
+
+test('ecom tracker dashboard category performance attributes add to cart from line item category fields', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $sessionId = Str::uuid()->toString();
+    $from = Carbon::parse('2026-07-12 10:00:00');
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'department_name' => 'Women',
+        'category_name' => 'Dresses',
+        'category_code' => 'DRS',
+        'created_at' => $from,
+        'start_time' => $from,
+        'end_time' => $from->copy()->addSeconds(20),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'add_to_cart',
+        'add_to_cart' => [
+            'product_id' => '1183',
+            'qty' => 2,
+            'items' => [[
+                'product_id' => '1183',
+                'product_code' => 'WJKDNL000003',
+                'product_name' => 'Dress',
+                'qty' => 2,
+                'price' => 28,
+                'category_id' => '55',
+                'category_code' => 'DRS',
+                'category_name' => 'Dresses',
+                'department_id' => '12',
+                'department_name' => 'Women',
+            ]],
+        ],
+        'created_at' => $from->copy()->addMinutes(5),
+        'start_time' => $from->copy()->addMinutes(5),
+        'end_time' => $from->copy()->addMinutes(5)->addSeconds(10),
+    ]);
+
+    $data = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-12',
+        'date_to' => '2026-07-12',
+    ]);
+
+    expect($data['categories'][0]['label'] ?? null)->toBe('Women -> Dresses')
+        ->and($data['categories'][0]['adds'] ?? null)->toBe(2);
 });
 
 test('ecom tracker dashboard matches product views and purchases by product name', function () {

@@ -235,7 +235,6 @@
         <div class="etd-panel" id="categories">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Category performance</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('categories')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table">
@@ -244,23 +243,25 @@
                         <th>Category</th>
                         <th class="etd-num">Views</th>
                         <th class="etd-num">Adds</th>
-                        <th class="etd-num">Conversion</th>
-                        <th>
-                            @include('ecom_tracker.partials.signal-header')
-                        </th>
+                        <th class="etd-num">Purchase</th>
+                        <th class="etd-num">Sale item</th>
+                        <th class="etd-num">Sale</th>
+                        <th class="etd-num">Conv. rate</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($d['categories'] as $category)
                         <tr>
-                            <td>{{ $category['name'] }}</td>
+                            <td>{{ $category['label'] }}</td>
                             <td class="etd-num">{{ number_format($category['views']) }}</td>
-                            <td class="etd-num">{{ $category['add_rate'] }}%</td>
+                            <td class="etd-num">{{ number_format($category['adds']) }}</td>
+                            <td class="etd-num">{{ number_format($category['purchases']) }}</td>
+                            <td class="etd-num">{{ number_format($category['sale_items']) }}</td>
+                            <td class="etd-num">£{{ number_format($category['sale_amount'], 2) }}</td>
                             <td class="etd-num">{{ $category['conversion_rate'] }}%</td>
-                            <td><span class="etd-badge {{ $category['signal'] }}">{{ $category['signal_label'] }}</span></td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="text-slate-400">No category views in this period.</td></tr>
+                        <tr><td colspan="7" class="text-slate-400">No category views in this period.</td></tr>
                     @endforelse
                 </tbody>
             </table>

@@ -115,8 +115,12 @@ class TrackIngestService
                 'event_id' => $eventId,
                 'action_type' => $event['action_type'] ?? null,
                 'page_url' => $event['page_url'] ?? null,
+                'category_name' => $event['category_name'] ?? null,
+                'department_name' => $event['department_name'] ?? null,
             ]);
         }
+
+        $this->syncSessionLastActiveFromEvents($sessionId, $events);
 
         $this->logInfo('ingest.complete', 'All actions saved', [
             'session_id' => $sessionId,
@@ -146,7 +150,6 @@ class TrackIngestService
             'device_type' => $parsed['device_type'],
             'browser' => $parsed['browser'],
             'os' => $parsed['os'],
-            'last_active_at' => $now,
         ];
 
         if ($clientContext !== null && ! empty($clientContext['ip_country'])) {
@@ -303,6 +306,7 @@ class TrackIngestService
         $scalarFields = [
             'category_name',
             'category_code',
+            'department_name',
             'product_name',
             'product_code',
             'product_color_id',
@@ -331,6 +335,7 @@ class TrackIngestService
 
         if ($actionType === 'add_to_cart' && isset($event['add_to_cart'])) {
             $row['add_to_cart'] = json_encode($event['add_to_cart']);
+            $row = $this->enrichAddToCartScalars($row, $event['add_to_cart']);
         }
 
         if ($actionType === 'begin_checkout' && isset($event['begin_checkout'])) {
@@ -343,6 +348,32 @@ class TrackIngestService
 
         if ($actionType === 'payment_success' && isset($event['payment_success'])) {
             $row['payment_success'] = json_encode($event['payment_success']);
+        }
+
+        return $row;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>  $cart
+     * @return array<string, mixed>
+     */
+    private function enrichAddToCartScalars(array $row, array $cart): array
+    {
+        $items = $cart['items'] ?? [];
+        $line = is_array($items[0] ?? null) ? $items[0] : [];
+
+        foreach (['category_name', 'category_code', 'department_name', 'product_name', 'product_code'] as $field) {
+            if (! empty($row[$field])) {
+                continue;
+            }
+
+            $value = $cart[$field] ?? $line[$field] ?? null;
+            $normalized = $this->normalizeScalarField($field, $value);
+
+            if ($normalized !== null && $normalized !== '') {
+                $row[$field] = $normalized;
+            }
         }
 
         return $row;
@@ -525,7 +556,56 @@ class TrackIngestService
             return 0;
         }
 
-        return (int) $createdAt->diffInSeconds(TrackerTime::nowUtc());
+        $lastActiveAt = TrackerTime::toUtc($session->getRawOriginal('last_active_at')) ?? TrackerTime::nowUtc();
+
+        return (int) $createdAt->diffInSeconds($lastActiveAt);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $events
+     */
+    private function syncSessionLastActiveFromEvents(string $sessionId, array $events): void
+    {
+        $latest = null;
+
+        foreach ($events as $event) {
+            $at = TrackerTime::toUtc($event['created_at'] ?? null);
+
+            if ($at === null) {
+                continue;
+            }
+
+            if ($latest === null || $at->greaterThan($latest)) {
+                $latest = $at;
+            }
+        }
+
+        if ($latest === null) {
+            return;
+        }
+
+        $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
+
+        if ($session === null) {
+            return;
+        }
+
+        $current = TrackerTime::toUtc($session->last_active_at);
+        $updates = [
+            'updated_at' => TrackerTime::formatUtc(TrackerTime::nowUtc()),
+        ];
+
+        if ($current === null || $latest->greaterThan($current)) {
+            $updates['last_active_at'] = TrackerTime::formatUtc($latest);
+        }
+
+        $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
+        $effectiveLastActive = TrackerTime::toUtc($updates['last_active_at'] ?? $session->last_active_at) ?? $latest;
+        $updates['session_duration_seconds'] = $createdAt
+            ? (int) $createdAt->diffInSeconds($effectiveLastActive)
+            : 0;
+
+        $session->update($updates);
     }
 
     private function formatDateTime(mixed $value): ?string
