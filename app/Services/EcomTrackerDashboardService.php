@@ -1712,7 +1712,10 @@ class EcomTrackerDashboardService
     private function categoryPerformanceMeta(ActivityEcomUserAction $action): array
     {
         return TrackerCategoryIdentity::meta(
-            (string) ($action->department_name ?? ''),
+            TrackerCategoryIdentity::resolveDepartmentName([
+                'department_name' => (string) ($action->department_name ?? ''),
+                'page_url' => (string) ($action->page_url ?? ''),
+            ]),
             (string) ($action->category_code ?? ''),
             (string) ($action->category_name ?? ''),
         );

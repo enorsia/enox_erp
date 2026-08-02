@@ -15,6 +15,53 @@ class TrackerCategoryIdentity
         'Jumpsuits and Playsuits' => 'Jumpsuits',
     ];
 
+    /**
+     * URL department slugs under /c/{slug}/...
+     *
+     * @var array<string, string>
+     */
+    public const URL_DEPARTMENT_SLUG_MAP = [
+        'men' => 'Men',
+        'women' => 'Women',
+        'boys' => 'Boys',
+        'girls' => 'Girls',
+    ];
+
+    public static function departmentNameFromPageUrl(?string $pageUrl): string
+    {
+        $pageUrl = trim((string) $pageUrl);
+
+        if ($pageUrl === '') {
+            return '';
+        }
+
+        $path = parse_url($pageUrl, PHP_URL_PATH);
+
+        if (! is_string($path) || $path === '') {
+            return '';
+        }
+
+        if (! preg_match('#/c/(men|women|boys|girls)(?:/|$)#i', $path, $matches)) {
+            return '';
+        }
+
+        return self::URL_DEPARTMENT_SLUG_MAP[strtolower($matches[1])] ?? '';
+    }
+
+    /**
+     * @param  array{department_name?: string, category_name?: string, category_code?: string, category_id?: string, page_url?: string}  $context
+     */
+    public static function resolveDepartmentName(array $context): string
+    {
+        $departmentName = trim((string) ($context['department_name'] ?? ''));
+
+        if ($departmentName !== '') {
+            return $departmentName;
+        }
+
+        return self::departmentNameFromPageUrl((string) ($context['page_url'] ?? ''));
+    }
+
     public static function displayName(?string $categoryName): string
     {
         $name = trim((string) $categoryName);
@@ -110,6 +157,16 @@ class TrackerCategoryIdentity
         }
 
         if ($rowName !== '' && $lineName !== '' && strcasecmp($rowName, $lineName) === 0) {
+            if ($lineDepartment !== '' && $rowDepartment !== '' && strcasecmp($lineDepartment, $rowDepartment) !== 0) {
+                return false;
+            }
+
+            // Name-only match: do not merge rows when only one side has a department
+            // (e.g. Men Jumpers cart line vs legacy Women+Men mixed "Jumpers" row).
+            if ($lineDepartment !== '' xor $rowDepartment !== '') {
+                return false;
+            }
+
             return true;
         }
 
