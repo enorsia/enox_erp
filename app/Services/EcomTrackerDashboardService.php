@@ -89,6 +89,7 @@ class EcomTrackerDashboardService
             $extraFilters,
             $productCatalogOptions,
         );
+        $categories = $this->buildCategoryPerformance($range['from'], $range['to'], filters: $extraFilters);
 
         return [
             'filters' => $this->normalizeFilters($filters, $range),
@@ -110,7 +111,8 @@ class EcomTrackerDashboardService
             ),
             'funnel' => $this->buildFunnel($range['from'], $range['to'], $extraFilters, $period),
             'trend' => $this->buildTrend($range['from'], $range['to'], $extraFilters, $range['period'] ?? null),
-            'categories' => $this->buildCategoryPerformance($range['from'], $range['to'], filters: $extraFilters),
+            'categories' => $categories,
+            'category_departments' => $this->groupCategoryPerformanceByDepartment($categories),
             'products' => $productCatalog['products'],
             'product_filter_options' => $productCatalog['filter_options'],
             'product_sort_by' => $productCatalog['sort_by'],
@@ -446,7 +448,9 @@ class EcomTrackerDashboardService
 
         return match ($section) {
             'trend' => ['section' => $section, 'range' => $range, 'data' => $this->buildTrend($from, $to, $extraFilters)],
-            'categories' => ['section' => $section, 'range' => $range, 'data' => $this->buildCategoryPerformance($from, $to, $effectiveLimit, $extraFilters)],
+            'categories' => ['section' => $section, 'range' => $range, 'data' => $this->groupCategoryPerformanceByDepartment(
+                $this->buildCategoryPerformance($from, $to, $effectiveLimit, $extraFilters),
+            )],
             'products', 'colors' => [
                 'section' => 'products',
                 'range' => $range,
@@ -1555,6 +1559,107 @@ class EcomTrackerDashboardService
             ->when($limit !== null, fn ($collection) => $collection->take($limit))
             ->values()
             ->all();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $categories
+     * @return array<int, array<string, mixed>>
+     */
+    public function groupCategoryPerformanceByDepartment(array $categories): array
+    {
+        /** @var array<string, array<string, mixed>> $departments */
+        $departments = [];
+
+        foreach (TrackerCategoryIdentity::DEPARTMENTS as $departmentName) {
+            $departments[$departmentName] = $this->emptyCategoryDepartmentRow($departmentName);
+        }
+
+        foreach ($categories as $row) {
+            $normalized = TrackerCategoryIdentity::normalizeDepartmentName((string) ($row['department_name'] ?? ''));
+            $target = in_array($normalized, TrackerCategoryIdentity::DEPARTMENTS, true) ? $normalized : 'Other';
+
+            if ($target === 'Other' && ! isset($departments['Other'])) {
+                $departments['Other'] = $this->emptyCategoryDepartmentRow('Other');
+            }
+
+            foreach (['views', 'adds', 'sale_items', 'purchases'] as $metric) {
+                $departments[$target][$metric] = (int) ($departments[$target][$metric] ?? 0) + (int) ($row[$metric] ?? 0);
+            }
+
+            $departments[$target]['sale_amount'] = round(
+                (float) ($departments[$target]['sale_amount'] ?? 0) + (float) ($row['sale_amount'] ?? 0),
+                2,
+            );
+
+            $categoryName = TrackerCategoryIdentity::displayName((string) ($row['category_name'] ?? ''));
+
+            if ($categoryName !== '' && strcasecmp($categoryName, $departments[$target]['name']) !== 0) {
+                $departments[$target]['categories'][] = [
+                    'category_name' => $categoryName,
+                    'category_code' => (string) ($row['category_code'] ?? ''),
+                    'views' => (int) ($row['views'] ?? 0),
+                    'adds' => (int) ($row['adds'] ?? 0),
+                    'sale_items' => (int) ($row['sale_items'] ?? 0),
+                    'sale_amount' => round((float) ($row['sale_amount'] ?? 0), 2),
+                ];
+            }
+        }
+
+        $result = collect(TrackerCategoryIdentity::DEPARTMENTS)
+            ->map(function (string $departmentName) use ($departments) {
+                $department = $departments[$departmentName];
+                $department['categories'] = $this->sortCategoryPerformanceRows(collect($department['categories'] ?? []))->values()->all();
+                $department['category_count'] = count($department['categories']);
+
+                return $department;
+            });
+
+        if (isset($departments['Other'])) {
+            $other = $departments['Other'];
+            $other['categories'] = $this->sortCategoryPerformanceRows(collect($other['categories'] ?? []))->values()->all();
+            $other['category_count'] = count($other['categories']);
+            $result->push($other);
+        }
+
+        return $result->values()->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyCategoryDepartmentRow(string $name): array
+    {
+        return [
+            'name' => $name,
+            'key' => strtolower($name),
+            'views' => 0,
+            'adds' => 0,
+            'sale_items' => 0,
+            'sale_amount' => 0.0,
+            'purchases' => 0,
+            'categories' => [],
+            'category_count' => 0,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sortCategoryPerformanceRows(Collection $rows): Collection
+    {
+        return $rows->sort(function (array $left, array $right) {
+            foreach (['sale_items', 'adds', 'views', 'sale_amount'] as $field) {
+                $leftValue = (float) ($left[$field] ?? 0);
+                $rightValue = (float) ($right[$field] ?? 0);
+
+                if ($leftValue !== $rightValue) {
+                    return $rightValue <=> $leftValue;
+                }
+            }
+
+            return strcmp((string) ($left['category_name'] ?? ''), (string) ($right['category_name'] ?? ''));
+        });
     }
 
     /**

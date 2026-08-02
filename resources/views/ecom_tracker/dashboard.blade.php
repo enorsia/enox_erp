@@ -231,36 +231,10 @@
                 <h2 class="etd-panel-title">Category performance</h2>
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
-            <table class="etd-table etd-table--categories">
-                <thead>
-                    <tr>
-                        <th class="etd-col-category">Category</th>
-                        <th class="etd-num">Views</th>
-                        <th class="etd-num">
-                            @include('ecom_tracker.partials.column-header-with-tip', [
-                                'label' => 'Adds',
-                                'tip' => 'Add to cart',
-                                'align' => 'right',
-                            ])
-                        </th>
-                        <th class="etd-num">Sale item</th>
-                        <th class="etd-num">Sale</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($d['categories'] as $category)
-                        <tr>
-                            <td class="etd-col-category">{{ $category['label'] }}</td>
-                            <td class="etd-num">{{ number_format($category['views']) }}</td>
-                            <td class="etd-num">{{ number_format($category['adds']) }}</td>
-                            <td class="etd-num">{{ number_format($category['sale_items']) }}</td>
-                            <td class="etd-num">£{{ number_format($category['sale_amount'], 2) }}</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="5" class="text-slate-400">No category views in this period.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
+                @include('ecom_tracker.partials.category-performance-table', [
+                    'departments' => $d['category_departments'] ?? [],
+                    'showCurrency' => true,
+                ])
             </div>
         </div>
 

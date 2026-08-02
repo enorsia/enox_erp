@@ -2091,6 +2091,34 @@
     border-top-color: #334155;
 }
 
+.etd-category-departments .etd-category-dept-row {
+    background: #fff;
+}
+
+.etd-category-departments .etd-category-dept-row.is-expanded {
+    background: #f8fafc;
+}
+
+.etd-category-dept-trigger {
+    text-align: left;
+}
+
+.etd-category-dept-metric {
+    font-weight: 600;
+}
+
+.etd-category-variant-panel {
+    padding-left: 2.35rem;
+}
+
+.dark .etd-category-departments .etd-category-dept-row.is-expanded {
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.dark .etd-category-variant-panel {
+    background: rgba(15, 23, 42, 0.55);
+}
+
 .etd-table--variant-nested thead th {
     font-size: 11px;
     text-transform: uppercase;

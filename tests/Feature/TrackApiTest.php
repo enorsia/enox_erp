@@ -855,6 +855,38 @@ test('bot persist failure does not block event storage', function () {
     expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
 });
 
+test('track endpoint accepts events when event timestamp predates session creation', function () {
+    Carbon::setTestNow(Carbon::parse('2026-08-02 07:20:33', 'Europe/London'));
+    config(['tracker.visitor_timezone' => 'Europe/London']);
+
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Dress',
+        'product_code' => 'GS123',
+        'created_at' => '2026-08-02T07:20:27.000Z',
+        'start_time' => '2026-08-02T07:20:27.000Z',
+        'end_time' => '2026-08-02T07:20:30.000Z',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk()
+        ->assertJson(['accepted_ids' => [$eventId]]);
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
+    expect($session)->not->toBeNull();
+    expect($session->session_duration_seconds)->toBe(0);
+
+    Carbon::setTestNow();
+});
+
 test('concurrent bot context persist creates exactly one row', function () {
     $sessionId = Str::uuid()->toString();
 

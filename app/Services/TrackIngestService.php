@@ -10,8 +10,8 @@ use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -567,7 +567,16 @@ class TrackIngestService
 
         $lastActiveAt = TrackerTime::toUtc($session->getRawOriginal('last_active_at')) ?? TrackerTime::nowUtc();
 
-        return (int) $createdAt->diffInSeconds($lastActiveAt);
+        return $this->durationSecondsBetween($createdAt, $lastActiveAt);
+    }
+
+    private function durationSecondsBetween(Carbon $from, Carbon $to): int
+    {
+        if ($to->lessThan($from)) {
+            return 0;
+        }
+
+        return max(0, (int) $from->diffInSeconds($to, absolute: true));
     }
 
     /**
@@ -604,14 +613,20 @@ class TrackIngestService
             'updated_at' => TrackerTime::formatUtc(TrackerTime::nowUtc()),
         ];
 
+        $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
+
+        if ($createdAt !== null && $latest->lessThan($createdAt)) {
+            $latest = $createdAt->copy();
+        }
+
         if ($current === null || $latest->greaterThan($current)) {
             $updates['last_active_at'] = TrackerTime::formatUtc($latest);
         }
 
-        $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
         $effectiveLastActive = TrackerTime::toUtc($updates['last_active_at'] ?? $session->last_active_at) ?? $latest;
+
         $updates['session_duration_seconds'] = $createdAt
-            ? (int) $createdAt->diffInSeconds($effectiveLastActive)
+            ? $this->durationSecondsBetween($createdAt, $effectiveLastActive)
             : 0;
 
         $session->update($updates);
