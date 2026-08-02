@@ -30,6 +30,29 @@ test('tracker time stores utc and displays london', function () {
 
     expect($utc)->toBe('2026-07-16 13:30:00');
     expect(TrackerTime::toLocal($utc)?->format('Y-m-d H:i'))->toBe('2026-07-16 14:30');
+    expect(TrackerTime::fromStorage($utc)?->format('Y-m-d H:i'))->toBe('2026-07-16 14:30');
+});
+
+test('tracker time parses naive db datetimes as utc storage', function () {
+    $utc = TrackerTime::toUtc('2026-07-16 13:30:00');
+
+    expect($utc?->format('Y-m-d H:i:s'))->toBe('2026-07-16 13:30:00');
+    expect(TrackerTime::fromStorage('2026-07-16 13:30:00')?->format('Y-m-d H:i'))->toBe('2026-07-16 14:30');
+});
+
+test('tracker time parses iso frontend timestamps with timezone', function () {
+    $utc = TrackerTime::toUtc('2026-07-16T13:30:00.000Z');
+
+    expect($utc?->format('Y-m-d H:i:s'))->toBe('2026-07-16 13:30:00');
+    expect(TrackerTime::fromStorage('2026-07-16T13:30:00.000Z')?->format('Y-m-d H:i'))->toBe('2026-07-16 14:30');
+});
+
+test('storage range uses utc bounds for activity table filters', function () {
+    $range = TrackerTime::todayRangeUtc();
+    [$from, $to] = TrackerTime::storageRange($range['from'], $range['to']);
+
+    expect($from)->toBe('2026-07-15 23:00:01');
+    expect($to)->toBe('2026-07-16 22:59:59');
 });
 
 test('visitor analytics counts visitors in last 3 hours with utc storage', function () {
@@ -189,7 +212,7 @@ test('unique visitors only count first ever visit not each calendar day', functi
 test('dashboard detail sections return uncapped data', function () {
     $service = app(EcomTrackerDashboardService::class);
 
-    foreach (['funnel', 'trend', 'categories', 'products', 'colors', 'cart-abandonment', 'begin-checkout-abandonment', 'proceed-checkout-abandonment', 'devices', 'traffic-sources', 'geography', 'engagement'] as $section) {
+    foreach (['trend', 'categories', 'products', 'colors', 'cart-abandonment', 'begin-checkout-abandonment', 'proceed-checkout-abandonment', 'devices', 'traffic-sources', 'geography', 'engagement'] as $section) {
         $detail = $service->getSectionDetail($section, ['period' => '30d'], [], null);
 
         expect($detail['section'])->toBe($section === 'colors' ? 'products' : $section);

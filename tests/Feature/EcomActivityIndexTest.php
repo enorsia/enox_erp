@@ -4,6 +4,8 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\ActivityEcomUserBotContext;
 use App\Models\User;
+use App\Support\TrackerTime;
+use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 
@@ -11,6 +13,11 @@ beforeEach(function () {
     Permission::findOrCreate('ecom_tracker.activity.index', 'web');
     Permission::findOrCreate('ecom_tracker.activity.show', 'web');
 });
+
+function activityUtcAt(string $london): string
+{
+    return TrackerTime::formatUtc(Carbon::parse($london, TrackerTime::timezone()));
+}
 
 test('ecom activity index searches by user name and email', function () {
     $user = User::factory()->create();
@@ -150,7 +157,7 @@ test('ecom activity index shows order count for sessions with payment success', 
         ->assertSee($guestSession);
 });
 
-test('ecom activity index defaults to last 24 hours', function () {
+test('ecom activity index defaults to today preset', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.activity.index');
 
@@ -175,7 +182,7 @@ test('ecom activity index defaults to last 24 hours', function () {
 
     $this->get(route('admin.ecom-activity.index'))
         ->assertOk()
-        ->assertSee('Last 24 hours')
+        ->assertSee(\App\Support\TrackerTime::todayPresetLabel())
         ->assertSee($recentSession)
         ->assertDontSee($oldSession);
 
@@ -253,6 +260,57 @@ test('ecom activity index filters by visitor type bot human and unclassified', f
         ->assertSee($unclassifiedSession)
         ->assertDontSee($humanSession)
         ->assertDontSee($botSession);
+});
+
+test('ecom activity index orders sessions by latest activity newest first', function () {
+    Carbon::setTestNow(Carbon::parse('2026-07-16 15:00:00', TrackerTime::timezone()));
+
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    $newestSession = Str::uuid()->toString();
+    $middleSession = Str::uuid()->toString();
+    $staleSession = Str::uuid()->toString();
+    $missingLastActiveSession = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $staleSession,
+        'device_type' => 'desktop',
+        'last_active_at' => activityUtcAt('2026-07-16 10:00:00'),
+        'created_at' => activityUtcAt('2026-07-16 09:00:00'),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $newestSession,
+        'device_type' => 'desktop',
+        'last_active_at' => activityUtcAt('2026-07-16 14:58:00'),
+        'created_at' => activityUtcAt('2026-07-16 13:00:00'),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $middleSession,
+        'device_type' => 'desktop',
+        'last_active_at' => activityUtcAt('2026-07-16 14:00:00'),
+        'created_at' => activityUtcAt('2026-07-16 12:00:00'),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $missingLastActiveSession,
+        'device_type' => 'desktop',
+        'last_active_at' => null,
+        'created_at' => activityUtcAt('2026-07-16 13:30:00'),
+    ]);
+
+    $this->get(route('admin.ecom-activity.index', ['period' => 'all']))
+        ->assertOk()
+        ->assertSeeInOrder([
+            $newestSession,
+            $middleSession,
+            $missingLastActiveSession,
+            $staleSession,
+        ]);
 });
 
 test('ecom activity index shows visitor quality summary strip', function () {

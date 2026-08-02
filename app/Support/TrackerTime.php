@@ -34,7 +34,19 @@ class TrackerTime
             return $value->copy()->utc();
         }
 
-        return Carbon::parse($value)->utc();
+        $string = trim((string) $value);
+
+        if ($string === '') {
+            return null;
+        }
+
+        // ISO-8601 from the storefront tracker — honour Z / explicit offsets.
+        if (preg_match('/[TZ]|(?:[+-]\d{2}:?\d{2})$/', $string)) {
+            return Carbon::parse($string)->utc();
+        }
+
+        // Naive DATETIME strings in activity tables are stored as UTC.
+        return Carbon::parse($string, 'UTC')->utc();
     }
 
     /**
@@ -83,19 +95,81 @@ class TrackerTime
         return self::timezone().' (UTC'.$local->format('P').')';
     }
 
+    public static function todayPresetLabel(): string
+    {
+        return 'Today (00:00:01 to 23:59:59)';
+    }
+
+    public static function todayPresetButtonLabel(): string
+    {
+        return 'Today';
+    }
+
+    public static function yesterdayPresetLabel(): string
+    {
+        return 'Yesterday (00:00:01 to 23:59:59)';
+    }
+
+    public static function yesterdayPresetButtonLabel(): string
+    {
+        return 'Yesterday';
+    }
+
     /**
-     * Bounds for naive visitor-local DATETIME columns in activity tables.
+     * @return array{from: Carbon, to: Carbon}
+     */
+    public static function yesterdayRangeUtc(): array
+    {
+        $fromLocal = self::localNow()->subDay()->startOfDay()->addSecond();
+        $toLocal = self::localNow()->subDay()->endOfDay();
+
+        return [
+            'from' => $fromLocal->copy()->utc(),
+            'to' => $toLocal->copy()->utc(),
+        ];
+    }
+
+    /**
+     * @return array{from: Carbon, to: Carbon}
+     */
+    public static function dayBeforeYesterdayRangeUtc(): array
+    {
+        $fromLocal = self::localNow()->subDays(2)->startOfDay()->addSecond();
+        $toLocal = self::localNow()->subDays(2)->endOfDay();
+
+        return [
+            'from' => $fromLocal->copy()->utc(),
+            'to' => $toLocal->copy()->utc(),
+        ];
+    }
+
+    /**
+     * @return array{from: Carbon, to: Carbon}
+     */
+    public static function todayRangeUtc(): array
+    {
+        $fromLocal = self::localNow()->startOfDay()->addSecond();
+        $toLocal = self::localNow()->endOfDay();
+
+        return [
+            'from' => $fromLocal->copy()->utc(),
+            'to' => $toLocal->copy()->utc(),
+        ];
+    }
+
+    /**
+     * Inclusive UTC datetime bounds for activity table columns (stored as UTC).
      *
      * @return array{0: string, 1: string}
      */
     public static function storageRange(Carbon $from, Carbon $to): array
     {
-        $fromLocal = self::toLocal($from) ?? $from->copy()->timezone(self::timezone());
-        $toLocal = self::toLocal($to) ?? $to->copy()->timezone(self::timezone());
+        $fromUtc = self::toUtc($from) ?? $from->copy()->utc();
+        $toUtc = self::toUtc($to) ?? $to->copy()->utc();
 
         return [
-            $fromLocal->format('Y-m-d H:i:s'),
-            $toLocal->format('Y-m-d H:i:s'),
+            $fromUtc->format('Y-m-d H:i:s'),
+            $toUtc->format('Y-m-d H:i:s'),
         ];
     }
 
@@ -115,7 +189,37 @@ class TrackerTime
     }
 
     /**
-     * Parse a naive visitor-local DATETIME value from activity tables.
+     * Match /admin/ecom-activity session date rules:
+     * - Today (24h): session started OR was last active in range.
+     * - All other presets/ranges: session started on a calendar date within the range.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     */
+    public static function applyEcomActivitySessionScope($query, Carbon $from, Carbon $to, ?string $period = null): void
+    {
+        if ($period === '24h') {
+            self::applySessionActivityWindow($query, $from, $to);
+
+            return;
+        }
+
+        $fromLocal = self::toLocal($from);
+        $toLocal = self::toLocal($to);
+
+        if ($fromLocal !== null && $toLocal !== null) {
+            $query->whereBetween('created_at', self::storageRange(
+                $fromLocal->copy()->startOfDay()->utc(),
+                $toLocal->copy()->endOfDay()->utc(),
+            ));
+
+            return;
+        }
+
+        $query->whereBetween('created_at', self::storageRange($from, $to));
+    }
+
+    /**
+     * Parse a UTC DATETIME value from activity tables into visitor-local time.
      */
     public static function fromStorage(mixed $value): ?Carbon
     {
@@ -123,11 +227,7 @@ class TrackerTime
             return null;
         }
 
-        if ($value instanceof Carbon) {
-            return Carbon::parse($value->format('Y-m-d H:i:s'), self::timezone());
-        }
-
-        return Carbon::parse($value, self::timezone());
+        return self::toLocal($value);
     }
 
     public static function secondsSinceStorage(mixed $value, ?Carbon $reference = null): int

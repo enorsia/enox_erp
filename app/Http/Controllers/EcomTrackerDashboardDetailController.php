@@ -16,11 +16,9 @@ class EcomTrackerDashboardDetailController extends Controller
     use CountsTrackerFilters;
 
     private const SECTIONS = [
-        'funnel' => 'Conversion funnel',
-        'trend' => 'Sessions & conversion trend',
         'categories' => 'Category performance',
-        'products' => 'Product & variant performance',
-        'colors' => 'Product & variant performance',
+        'products' => 'Product performance',
+        'colors' => 'Product performance',
         'cart-abandonment' => 'Cart abandonment',
         'begin-checkout-abandonment' => 'Begin checkout abandonment',
         'checkout-abandonment' => 'Begin checkout abandonment',
@@ -41,7 +39,6 @@ class EcomTrackerDashboardDetailController extends Controller
         'proceed-checkout-abandonment',
         'traffic-sources',
         'geography',
-        'trend',
     ];
 
     public function __construct(
@@ -114,12 +111,6 @@ class EcomTrackerDashboardDetailController extends Controller
         $items = match ($section) {
             'products', 'colors' => $data['products'] ?? [],
             'cart-abandonment', 'begin-checkout-abandonment', 'checkout-abandonment', 'proceed-checkout-abandonment' => $data['rows'] ?? [],
-            'trend' => collect($data['labels'] ?? [])->map(fn (string $label, int $index) => [
-                'date' => $label,
-                'sessions' => $data['sessions'][$index] ?? 0,
-                'purchases' => $data['purchases'][$index] ?? 0,
-                'conversion_rate' => $data['conversion_rates'][$index] ?? 0,
-            ])->values()->all(),
             default => $data,
         };
 
@@ -128,7 +119,6 @@ class EcomTrackerDashboardDetailController extends Controller
         $data = match ($section) {
             'products', 'colors' => array_merge($data, ['products' => $paginator->items()]),
             'cart-abandonment', 'begin-checkout-abandonment', 'checkout-abandonment', 'proceed-checkout-abandonment' => array_merge($data, ['rows' => $paginator->items()]),
-            'trend' => array_merge($data, ['table_rows' => $paginator->items()]),
             default => $paginator->items(),
         };
 

@@ -13,18 +13,31 @@
     $detailLink = $page['detailLink'];
     $hasActiveFilters = $page['hasActiveFilters'];
 
+    $kpiByLabel = collect($d['kpis'])->keyBy('label');
+    $kpiGroups = [
+        [
+            'title' => 'Audience & engagement',
+            'labels' => ['Unique visitors', 'Sessions', 'Total stay time', 'Avg stay time'],
+            'cols' => 4,
+        ],
+    ];
+
+    $saleConversion = $d['sale_conversion'] ?? [];
+    $funnelDropoff = $d['funnel_dropoff'] ?? [];
+
+    $period = $period === '90d' ? '30d' : $period;
+
     $activePreset = match ($period) {
-        '7d', '30d', '90d', 'custom' => $period,
+        'yesterday', '7d', '30d', 'custom' => $period,
         default => '24h',
     };
 
-    $basePreset = in_array($period, ['24h', '7d', '30d', '90d'], true) ? $period : '24h';
+    $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d'], true) ? $period : '24h';
     $baseQuery = request()->except([
         'date_from', 'date_to', 'period',
         'search', 'category', 'color', 'size', 'sort_by', 'activity',
         'has_purchases', 'has_views', 'has_adds', 'event_scenario',
     ]);
-    $presetUrl = fn (string $preset) => route('admin.ecom-tracker.dashboard', array_merge($baseQuery, ['period' => $preset]));
 @endphp
 
 <div id="ecom-tracker-dashboard-content" class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
@@ -77,17 +90,11 @@
             </div>
 
             <div class="etd-page-header-right">
-                <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
-                    <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="Last 24 hours">24h</a>
-                    <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
-                    <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
-                    <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
-                    <button type="button"
-                            class="etd-segmented-btn"
-                            :class="{ 'active': presetKey === 'custom' }"
-                            aria-label="Custom date range"
-                            @click="toggleCustom()">Custom</button>
-                </div>
+                @include('ecom_tracker.partials.dashboard-period-controls', [
+                    'baseQuery' => $baseQuery,
+                    'range' => $d['range'],
+                    'period' => $period,
+                ])
 
                 <div class="etd-header-actions">
                     @include('ecom_tracker.partials.header-reset-button', [
@@ -146,85 +153,71 @@
 
     <div class="etd-kpi-panel mb-5">
         <div class="etd-kpi-groups">
-            @foreach ([
-                ['title' => 'Audience & engagement', 'items' => array_slice($d['kpis'], 0, 4), 'cols' => 4],
-                ['title' => 'Sale & conversion', 'items' => array_slice($d['kpis'], 4, 2), 'cols' => 2],
-                ['title' => 'Funnel drop-off', 'items' => array_slice($d['kpis'], 6, 3), 'cols' => 3],
-            ] as $group)
-                <div class="etd-kpi-group etd-kpi-group--{{ $group['cols'] }}">
+            @foreach ($kpiGroups as $group)
+                <div class="etd-kpi-group etd-kpi-group--{{ $group['cols'] }}{{ ($group['cols'] ?? null) === 4 ? ' etd-kpi-group--audience' : '' }}">
                     <p class="etd-kpi-section-label">{{ $group['title'] }}</p>
                     <div class="etd-kpi-group-grid">
-                        @foreach ($group['items'] as $kpi)
-                            <div class="etd-kpi etd-kpi--compact">
-                                <div class="etd-kpi-label">{{ $kpi['label'] }}</div>
-                                <div class="etd-kpi-value">{{ $kpi['formatted'] }}</div>
-                            </div>
+                        @foreach ($group['labels'] as $label)
+                            @if ($kpiByLabel->has($label))
+                                @php $kpi = $kpiByLabel->get($label); @endphp
+                                <div class="etd-kpi etd-kpi--compact">
+                                    @include('ecom_tracker.partials.kpi-label-with-tip', [
+                                        'label' => $kpi['label'],
+                                        'tip' => $kpi['tip'] ?? null,
+                                    ])
+                                    @include('ecom_tracker.partials.kpi-value-with-comparison', [
+                                        'formatted' => $kpi['formatted'],
+                                        'comparison' => $kpi['comparison'] ?? null,
+                                        'valueClass' => $kpi['value_class'] ?? '',
+                                    ])
+                                </div>
+                            @endif
                         @endforeach
                     </div>
                 </div>
             @endforeach
+
+            @if ($saleConversion !== [])
+                @include('ecom_tracker.partials.kpi-metric-group', [
+                    'title' => 'Sale & conversion',
+                    'modifier' => 'etd-kpi-group--sale',
+                    'cols' => 2,
+                    'metrics' => [
+                        $saleConversion['item_qty'] ?? null,
+                        $saleConversion['revenue'] ?? null,
+                    ],
+                ])
+            @endif
+
+            @if ($funnelDropoff !== [])
+                @include('ecom_tracker.partials.kpi-metric-group', [
+                    'title' => 'Funnel drop-off',
+                    'modifier' => 'etd-kpi-group--funnel',
+                    'cols' => 4,
+                    'metrics' => [
+                        $funnelDropoff['cart_drop'] ?? null,
+                        $funnelDropoff['checkout_drop'] ?? null,
+                        $funnelDropoff['proceed_drop'] ?? null,
+                        $funnelDropoff['payments'] ?? null,
+                    ],
+                ])
+            @endif
         </div>
     </div>
 
-    @php $vq = $d['visitor_quality'] ?? null; @endphp
-    @if ($vq)
-        <div class="mb-5">
-            <div class="flex items-center justify-between mb-2">
-                <p class="etd-kpi-section-label m-0">Session quality</p>
-                @can('ecom_tracker.bot_traffic.index')
-                    <a href="{{ route('admin.ecom-tracker.bot-traffic') }}" class="text-[12px] text-accent-500 no-underline hover:underline">View bot traffic details →</a>
-                @endcan
-            </div>
-            <div class="etd-kpi-grid">
-                @php $metricLabels = \App\Support\VisitorClassificationLabels::summaryMetricLabels(); @endphp
-                @foreach ([
-                    ['key' => 'real_shoppers', 'label' => $metricLabels['real_shoppers']],
-                    ['key' => 'automated_traffic', 'label' => $metricLabels['automated_traffic']],
-                    ['key' => 'not_classified', 'label' => $metricLabels['not_classified']],
-                    ['key' => 'uk_shoppers', 'label' => $metricLabels['uk_shoppers']],
-                ] as $kpi)
-                    @php $m = $vq[$kpi['key']]; @endphp
-                    @include('ecom_tracker.partials.ga4-kpi-card', [
-                        'label' => $kpi['label'],
-                        'value' => $m['current'],
-                        'delta_pct' => null,
-                        'delta_direction' => null,
-                        'delta_label' => null,
-                        'sparkline' => [],
-                        'compact' => true,
-                    ])
-                @endforeach
-            </div>
-        </div>
-    @endif
-
-    <div class="etd-grid-2 mb-3">
-        <div class="etd-panel" id="funnel">
+    <div class="mb-3">
+        <div class="etd-panel" id="trend">
             <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Conversion funnel</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('funnel')])
+                <h2 class="etd-panel-title">Shopper journey over time</h2>
             </div>
-            <div class="etd-funnel">
-                @foreach ($d['funnel'] as $row)
-                    <div class="etd-funnel-row">
-                        <div class="etd-funnel-stage">{{ $row['stage'] }}</div>
-                        <div class="etd-funnel-track">
-                            <div class="etd-funnel-fill" style="width: {{ max(8, $row['percent_of_top']) }}%">
-                                {{ number_format($row['count']) }}
-                            </div>
-                        </div>
+            <div class="etd-trend-chart">
+                <div class="etd-trend-legend" id="etdTrendLegend" hidden></div>
+                <div class="etd-trend-chart-scroll" id="etdTrendChartScroll">
+                    <div class="etd-chart-wrap xl etd-chart-wrap--trend" id="etdTrendChartWrap">
+                        <canvas id="etdTrendChart"></canvas>
                     </div>
-                @endforeach
-            </div>
-        </div>
-
-        <div class="etd-panel">
-            <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Sessions &amp; conversion trend</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('trend')])
-            </div>
-            <div class="etd-chart-wrap">
-                <canvas id="etdTrendChart"></canvas>
+                </div>
+                <p class="etd-trend-chart-scroll-hint" id="etdTrendChartScrollHint" hidden>Swipe horizontally to see all dates</p>
             </div>
         </div>
     </div>
@@ -236,29 +229,32 @@
         <div class="etd-panel" id="categories">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Category performance</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('categories')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
-            <table class="etd-table">
+            <table class="etd-table etd-table--categories">
                 <thead>
                     <tr>
-                        <th>Category</th>
+                        <th class="etd-col-category">Category</th>
                         <th class="etd-num">Views</th>
-                        <th class="etd-num">Adds</th>
-                        <th class="etd-num">Conversion</th>
-                        <th>
-                            @include('ecom_tracker.partials.signal-header')
+                        <th class="etd-num">
+                            @include('ecom_tracker.partials.column-header-with-tip', [
+                                'label' => 'Adds',
+                                'tip' => 'Add to cart',
+                                'align' => 'right',
+                            ])
                         </th>
+                        <th class="etd-num">Sale item</th>
+                        <th class="etd-num">Sale</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($d['categories'] as $category)
                         <tr>
-                            <td>{{ $category['name'] }}</td>
+                            <td class="etd-col-category">{{ $category['label'] }}</td>
                             <td class="etd-num">{{ number_format($category['views']) }}</td>
-                            <td class="etd-num">{{ $category['add_rate'] }}%</td>
-                            <td class="etd-num">{{ $category['conversion_rate'] }}%</td>
-                            <td><span class="etd-badge {{ $category['signal'] }}">{{ $category['signal_label'] }}</span></td>
+                            <td class="etd-num">{{ number_format($category['adds']) }}</td>
+                            <td class="etd-num">{{ number_format($category['sale_items']) }}</td>
+                            <td class="etd-num">£{{ number_format($category['sale_amount'], 2) }}</td>
                         </tr>
                     @empty
                         <tr><td colspan="5" class="text-slate-400">No category views in this period.</td></tr>
@@ -270,7 +266,7 @@
 
         <div class="etd-panel" id="products">
             <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Product & variant performance</h2>
+                <h2 class="etd-panel-title">Product performance</h2>
                 @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('products')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
@@ -286,10 +282,8 @@
                                 'align' => 'right',
                             ])
                         </th>
-                        <th class="etd-num">Purchases</th>
-                        <th class="etd-num">Qty</th>
+                        <th class="etd-num">Sale item</th>
                         <th class="etd-num">Sale</th>
-                        <th class="etd-num">Variants</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -301,16 +295,14 @@
                             </td>
                             <td class="etd-num">{{ number_format($product['views']) }}</td>
                             <td class="etd-num">{{ number_format($product['adds']) }}</td>
-                            <td class="etd-num">{{ number_format($product['purchases']) }}</td>
                             <td class="etd-num">{{ number_format($product['qty'] ?? 0) }}</td>
                             <td class="etd-num">
                                 £{{ number_format($product['revenue'], 2) }}
                                 <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] }}%"></div></div>
                             </td>
-                            <td class="etd-num">{{ number_format($product['variant_count'] ?? count($product['variants'] ?? [])) }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-slate-400">No product activity in this period.</td></tr>
+                        <tr><td colspan="5" class="text-slate-400">No product activity in this period.</td></tr>
                     @endforelse
                 </tbody>
             </table>

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\VisitorClassificationLabels;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -43,6 +44,27 @@ class ActivityEcomUser extends Model
             'last_active_at' => 'datetime',
             'session_duration_seconds' => 'integer',
         ];
+    }
+
+    /**
+     * Newest activity first. NULL last_active_at rows must not float to the top on MySQL.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeOrderByLatestActivity(Builder $query): Builder
+    {
+        $driver = $query->getConnection()->getDriverName();
+
+        if ($driver === 'sqlite') {
+            return $query
+                ->orderByRaw('COALESCE(strftime("%s", last_active_at), strftime("%s", created_at)) DESC')
+                ->orderByDesc('id');
+        }
+
+        return $query
+            ->orderByRaw('COALESCE(UNIX_TIMESTAMP(last_active_at), UNIX_TIMESTAMP(created_at)) DESC')
+            ->orderByDesc('id');
     }
 
     public function actions(): HasMany

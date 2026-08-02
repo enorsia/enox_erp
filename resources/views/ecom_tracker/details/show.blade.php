@@ -10,7 +10,6 @@
     $resetQuery = array_filter(['back' => request('back')]);
     $queryParams = request()->only(['period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'sort_by', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario']);
     $chartPayload = match ($section) {
-        'trend' => ['trend' => $data],
         'devices' => ['devices' => $data],
         'engagement' => ['engagement' => $data],
         default => [],
@@ -60,7 +59,7 @@
 
 @endsection
 
-@if (in_array($section, ['trend', 'devices', 'engagement'], true))
+@if (in_array($section, ['devices', 'engagement'], true))
     @push('js')
         <script>window.ecomTrackerDashboardData = @json($chartPayload);</script>
         @vite('resources/js/pages/ecom-tracker-dashboard.js')

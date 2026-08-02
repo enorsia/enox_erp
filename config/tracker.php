@@ -31,6 +31,7 @@ return [
     'scalar_field_limits' => [
         'category_name' => 255,
         'category_code' => 100,
+        'department_name' => 255,
         'product_name' => 255,
         'product_code' => 100,
         'product_color_id' => 50,
@@ -108,6 +109,26 @@ return [
         'snapchat' => 'Snapchat',
         'email' => 'Email',
         '(direct)' => 'Direct',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | UTM source aliases (stored as canonical keys above)
+    |--------------------------------------------------------------------------
+    */
+    'utm_source_aliases' => [
+        'fb' => 'facebook',
+        'meta' => 'facebook',
+        'ig' => 'instagram',
+        'insta' => 'instagram',
+        'yt' => 'youtube',
+        'tt' => 'tiktok',
+        'x' => 'twitter',
+        'pin' => 'pinterest',
+        'li' => 'linkedin',
+        'snap' => 'snapchat',
+        'ms' => 'bing',
+        'aw' => 'awin',
     ],
 
     'utm_mediums' => [

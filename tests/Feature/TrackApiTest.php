@@ -50,6 +50,31 @@ test('track endpoint accepts valid batch and returns accepted ids', function () 
     expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
 });
 
+test('track endpoint stores department name on category view', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Jumpers',
+        'category_code' => '221',
+        'department_name' => 'Men',
+        'department_id' => '1927',
+        'category_id' => '54',
+        'page_url' => 'https://enorsia.com/c/men/jumpers',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $action = ActivityEcomUserAction::where('event_id', $eventId)->first();
+
+    expect($action)->not->toBeNull();
+    expect($action->category_name)->toBe('Jumpers');
+    expect($action->department_name)->toBe('Men');
+});
+
 test('track endpoint rejects invalid api key', function () {
     $response = $this->postJson('/api/track', trackPayload(Str::uuid()->toString(), [[
         'id' => Str::uuid()->toString(),
@@ -560,6 +585,145 @@ test('payment success rejects disallowed fields', function () {
     ]);
 
     $response->assertUnprocessable();
+});
+
+test('track endpoint stores google ads attribution on session from event page url', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+    $pageUrl = 'https://enorsia.com/style/test?gad_source=1&gad_campaignid=23588680250&gclid=abc123';
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Leggings',
+        'product_code' => 'GS123',
+        'page_url' => $pageUrl,
+        'referer' => 'https://www.google.com/',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session->utm_source)->toBe('google')
+        ->and($session->utm_medium)->toBe('paid')
+        ->and($session->utm_campaign)->toBe('23588680250')
+        ->and($session->landing_page)->toBe($pageUrl);
+});
+
+test('track endpoint stores google ads attribution on session from landing page in session payload', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+    $landingPage = 'https://enorsia.com/style/test?gad_source=1&gad_campaignid=23588680250&gclid=abc123';
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Leggings',
+        'product_code' => 'GS123',
+        'page_url' => 'https://enorsia.com/style/test',
+        'referer' => 'https://www.google.com/',
+    ]], [
+        'landing_page' => $landingPage,
+    ]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session->utm_source)->toBe('google')
+        ->and($session->utm_medium)->toBe('paid')
+        ->and($session->utm_campaign)->toBe('23588680250')
+        ->and($session->landing_page)->toBe($landingPage);
+});
+
+test('track endpoint stores google organic attribution from referer when no click ids', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Women',
+        'category_code' => 'WOM',
+        'page_url' => 'https://enorsia.com/c/women',
+        'referer' => 'https://www.google.com/',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session->utm_source)->toBe('google')
+        ->and($session->utm_medium)->toBe('organic');
+});
+
+test('track endpoint stores facebook attribution from fbclid and normalizes fb alias', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Dress',
+        'product_code' => 'GS123',
+        'page_url' => 'https://enorsia.com/style/test?fbclid=abc123',
+        'referer' => 'https://www.facebook.com/',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session->utm_source)->toBe('facebook')
+        ->and($session->utm_medium)->toBe('paid');
+
+    $aliasSessionId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($aliasSessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $aliasSessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Women',
+        'category_code' => 'WOM',
+        'page_url' => 'https://enorsia.com/c/women?utm_source=fb&utm_medium=paid',
+    ]], [
+        'utm_source' => 'fb',
+        'utm_medium' => 'paid',
+    ]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $aliasSession = ActivityEcomUser::where('session_id', $aliasSessionId)->first();
+
+    expect($aliasSession->utm_source)->toBe('facebook')
+        ->and($aliasSession->utm_medium)->toBe('paid');
+});
+
+test('track endpoint stores facebook social attribution from referer', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => 'Women',
+        'category_code' => 'WOM',
+        'page_url' => 'https://enorsia.com/c/women',
+        'referer' => 'https://www.facebook.com/',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session->utm_source)->toBe('facebook')
+        ->and($session->utm_medium)->toBe('social');
 });
 
 function validClientContext(array $overrides = []): array

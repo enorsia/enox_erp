@@ -77,11 +77,11 @@ final class EcomTrackerViewData
             'datetimeFromValue' => $datetimeFromValue,
             'datetimeToValue' => $datetimeToValue,
             'activeFilterCount' => $activeFilterCount,
-            'rangeLabel' => $filters['window_label'] ?? 'Last 24 hours',
+            'rangeLabel' => $filters['window_label'] ?? TrackerTime::todayPresetLabel(),
             'resetUrl' => route('admin.ecom-tracker.visitors'),
             'resetActive' => count($request->query()) > 0,
             'presetWindows' => [
-                '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours',
+                '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => TrackerTime::todayPresetButtonLabel(),
                 '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year',
             ],
             'exportUrl' => route('admin.ecom-tracker.visitors.export', $exportQuery),
@@ -122,12 +122,12 @@ final class EcomTrackerViewData
             'datetimeFromValue' => $datetimeFromValue,
             'datetimeToValue' => $datetimeToValue,
             'activeFilterCount' => $activeFilterCount,
-            'rangeLabel' => $filters['window_label'] ?? 'Last 24 hours',
+            'rangeLabel' => $filters['window_label'] ?? TrackerTime::todayPresetLabel(),
             'exportUrl' => route('admin.ecom-tracker.visitors.export', $exportQuery),
             'resetUrl' => route('admin.ecom-tracker.visitors.details', $resetQuery),
             'resetActive' => count($request->query()) > 0,
             'presetWindows' => [
-                '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => '24 hours',
+                '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => TrackerTime::todayPresetButtonLabel(),
                 '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year',
             ],
             'breadcrumbs' => [
@@ -160,6 +160,71 @@ final class EcomTrackerViewData
     public static function activityShowUrl(string $sessionId, ?string $back = null): string
     {
         return route('admin.ecom-activity.show', self::activityShowParams($sessionId, $back));
+    }
+
+    /**
+     * @param  array<string, mixed>  $baseQuery
+     * @param  array{from: \Carbon\Carbon, to: \Carbon\Carbon}  $range
+     * @return array{previous_url: string, next_url: ?string, can_go_next: bool}
+     */
+    public static function dashboardDayNavigation(array $baseQuery, array $range, string $routeName = 'admin.ecom-tracker.dashboard'): array
+    {
+        $fromLocal = TrackerTime::toLocal($range['from']);
+        $toLocal = TrackerTime::toLocal($range['to']);
+
+        if ($fromLocal === null || $toLocal === null) {
+            return [
+                'previous_url' => route($routeName, array_merge($baseQuery, ['period' => '24h'])),
+                'next_url' => null,
+                'can_go_next' => false,
+            ];
+        }
+
+        $today = TrackerTime::localNow()->startOfDay();
+        $canGoNext = $toLocal->copy()->startOfDay()->lt($today);
+
+        return [
+            'previous_url' => self::dashboardPeriodUrl(
+                $baseQuery,
+                $fromLocal->copy()->subDay(),
+                $toLocal->copy()->subDay(),
+                $routeName,
+            ),
+            'next_url' => $canGoNext
+                ? self::dashboardPeriodUrl(
+                    $baseQuery,
+                    $fromLocal->copy()->addDay(),
+                    $toLocal->copy()->addDay(),
+                    $routeName,
+                )
+                : null,
+            'can_go_next' => $canGoNext,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $baseQuery
+     */
+    private static function dashboardPeriodUrl(array $baseQuery, \Carbon\Carbon $fromLocal, \Carbon\Carbon $toLocal, string $routeName): string
+    {
+        $today = TrackerTime::localNow()->startOfDay();
+        $yesterday = $today->copy()->subDay();
+
+        if ($fromLocal->isSameDay($toLocal)) {
+            if ($fromLocal->isSameDay($today)) {
+                return route($routeName, array_merge($baseQuery, ['period' => '24h']));
+            }
+
+            if ($fromLocal->isSameDay($yesterday)) {
+                return route($routeName, array_merge($baseQuery, ['period' => 'yesterday']));
+            }
+        }
+
+        return route($routeName, array_merge($baseQuery, [
+            'period' => 'custom',
+            'date_from' => $fromLocal->toDateString(),
+            'date_to' => $toLocal->toDateString(),
+        ]));
     }
 
     /**
