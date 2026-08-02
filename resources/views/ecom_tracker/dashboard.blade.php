@@ -244,38 +244,44 @@
                 @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('products')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
-            <table class="etd-table etd-table--product-catalog">
+            <table class="etd-table etd-table--product-catalog etd-table--performance-metrics">
                 <thead>
                     <tr>
                         <th class="etd-col-product">Product</th>
-                        <th>Product code</th>
-                        <th class="etd-num">Views</th>
-                        <th class="etd-num">
+                        <th class="etd-num etd-col-metric">Views</th>
+                        <th class="etd-num etd-col-metric">
                             @include('ecom_tracker.partials.column-header-with-tip', [
                                 'label' => 'Adds',
                                 'tip' => 'Add to cart',
-                                'align' => 'right',
+                                'align' => 'center',
                             ])
                         </th>
-                        <th class="etd-num">Sale item</th>
-                        <th class="etd-num">Sale</th>
+                        <th class="etd-num etd-col-metric">
+                            @include('ecom_tracker.partials.column-header-with-tip', [
+                                'label' => 'Proceed',
+                                'tip' => 'Proceed to checkout',
+                                'align' => 'center',
+                            ])
+                        </th>
+                        <th class="etd-num etd-col-metric">
+                            @include('ecom_tracker.partials.column-header-with-tip', [
+                                'label' => 'Sold',
+                                'tip' => 'Sale item',
+                                'align' => 'center',
+                            ])
+                        </th>
+                        <th class="etd-num etd-col-metric">Sale</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($d['products'] as $product)
                         <tr>
                             <td class="etd-col-product">{{ $product['name'] }}</td>
-                            <td>
-                                @if (! empty($product['product_code'] ?? $product['code'] ?? ''))
-                                    <span class="etd-chip">{{ $product['product_code'] ?? $product['code'] }}</span>
-                                @else
-                                    <span class="text-slate-400">—</span>
-                                @endif
-                            </td>
-                            <td class="etd-num">{{ number_format($product['views']) }}</td>
-                            <td class="etd-num">{{ number_format($product['adds']) }}</td>
-                            <td class="etd-num">{{ number_format($product['qty'] ?? 0) }}</td>
-                            <td class="etd-num">
+                            <td class="etd-num etd-col-metric">{{ number_format($product['views']) }}</td>
+                            <td class="etd-num etd-col-metric">{{ number_format($product['adds']) }}</td>
+                            <td class="etd-num etd-col-metric">{{ number_format($product['proceed_checkouts'] ?? 0) }}</td>
+                            <td class="etd-num etd-col-metric">{{ number_format($product['qty'] ?? 0) }}</td>
+                            <td class="etd-num etd-col-metric">
                                 £{{ number_format($product['revenue'], 2) }}
                                 <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] }}%"></div></div>
                             </td>
@@ -290,19 +296,18 @@
     </div>
 
     <h2 class="etd-section-title"><span class="etd-section-num">02</span> Recoverable sale</h2>
-    <p class="etd-section-note">Sessions that dropped off at each funnel step — review for retargeting.</p>
+    <p class="etd-section-note">Sessions at each funnel step plus completed payments — click a session to review activity.</p>
 
-    <div class="etd-grid-3 etd-grid-3--abandonment mb-3">
+    <div class="etd-recoverable-section mb-3">
+        <div class="etd-grid-4 etd-grid-4--recoverable">
         @include('ecom_tracker.partials.abandonment-panel', [
             'd' => $d,
             'detailLink' => $detailLink,
             'panelId' => 'cart-abandon',
             'title' => 'Cart abandoned',
-            'subtitle' => 'Added to cart but didn\'t begin checkout.',
             'dataKey' => 'cart_abandonment',
             'detailSection' => 'cart-abandonment',
-            'detailLabel' => 'Last item',
-            'valueLabel' => 'Cart value',
+            'panelTone' => 'cart',
             'emptyMessage' => 'No cart abandonment in this period.',
         ])
 
@@ -311,11 +316,9 @@
             'detailLink' => $detailLink,
             'panelId' => 'begin-checkout-abandon',
             'title' => 'Begin checkout abandoned',
-            'subtitle' => 'Began checkout but didn\'t proceed.',
             'dataKey' => 'begin_checkout_abandonment',
             'detailSection' => 'begin-checkout-abandonment',
-            'detailLabel' => 'Coupon',
-            'valueLabel' => 'Total',
+            'panelTone' => 'begin',
             'emptyMessage' => 'No begin checkout abandonment in this period.',
         ])
 
@@ -324,13 +327,23 @@
             'detailLink' => $detailLink,
             'panelId' => 'proceed-checkout-abandon',
             'title' => 'Proceed checkout abandoned',
-            'subtitle' => 'Proceeded to checkout but didn\'t complete payment.',
             'dataKey' => 'proceed_checkout_abandonment',
             'detailSection' => 'proceed-checkout-abandonment',
-            'detailLabel' => 'Coupon',
-            'valueLabel' => 'Total',
+            'panelTone' => 'proceed',
             'emptyMessage' => 'No proceed checkout abandonment in this period.',
         ])
+
+        @include('ecom_tracker.partials.abandonment-panel', [
+            'd' => $d,
+            'detailLink' => $detailLink,
+            'panelId' => 'payment-success-events',
+            'title' => 'Payment success',
+            'dataKey' => 'payment_success_events',
+            'detailSection' => 'payment-success-events',
+            'panelTone' => 'success',
+            'emptyMessage' => 'No payment success events in this period.',
+        ])
+        </div>
     </div>
 
     <h2 class="etd-section-title"><span class="etd-section-num">03</span> Acquisition &amp; audience</h2>

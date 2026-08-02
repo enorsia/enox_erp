@@ -23,6 +23,7 @@ class EcomTrackerDashboardDetailController extends Controller
         'begin-checkout-abandonment' => 'Begin checkout abandonment',
         'checkout-abandonment' => 'Begin checkout abandonment',
         'proceed-checkout-abandonment' => 'Proceed checkout abandonment',
+        'payment-success-events' => 'Payment success events',
         'devices' => 'Device breakdown',
         'traffic-sources' => 'Traffic sources',
         'geography' => 'Geography',
@@ -37,6 +38,7 @@ class EcomTrackerDashboardDetailController extends Controller
         'begin-checkout-abandonment',
         'checkout-abandonment',
         'proceed-checkout-abandonment',
+        'payment-success-events',
         'traffic-sources',
         'geography',
     ];
@@ -110,7 +112,7 @@ class EcomTrackerDashboardDetailController extends Controller
 
         $items = match ($section) {
             'products', 'colors' => $data['products'] ?? [],
-            'cart-abandonment', 'begin-checkout-abandonment', 'checkout-abandonment', 'proceed-checkout-abandonment' => $data['rows'] ?? [],
+            'cart-abandonment', 'begin-checkout-abandonment', 'checkout-abandonment', 'proceed-checkout-abandonment', 'payment-success-events' => $data['rows'] ?? [],
             default => $data,
         };
 
@@ -118,7 +120,7 @@ class EcomTrackerDashboardDetailController extends Controller
 
         $data = match ($section) {
             'products', 'colors' => array_merge($data, ['products' => $paginator->items()]),
-            'cart-abandonment', 'begin-checkout-abandonment', 'checkout-abandonment', 'proceed-checkout-abandonment' => array_merge($data, ['rows' => $paginator->items()]),
+            'cart-abandonment', 'begin-checkout-abandonment', 'checkout-abandonment', 'proceed-checkout-abandonment', 'payment-success-events' => array_merge($data, ['rows' => $paginator->items()]),
             default => $paginator->items(),
         };
 

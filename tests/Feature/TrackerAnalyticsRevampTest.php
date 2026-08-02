@@ -212,7 +212,7 @@ test('unique visitors only count first ever visit not each calendar day', functi
 test('dashboard detail sections return uncapped data', function () {
     $service = app(EcomTrackerDashboardService::class);
 
-    foreach (['trend', 'categories', 'products', 'colors', 'cart-abandonment', 'begin-checkout-abandonment', 'proceed-checkout-abandonment', 'devices', 'traffic-sources', 'geography', 'engagement'] as $section) {
+    foreach (['trend', 'categories', 'products', 'colors', 'cart-abandonment', 'begin-checkout-abandonment', 'proceed-checkout-abandonment', 'payment-success-events', 'devices', 'traffic-sources', 'geography', 'engagement'] as $section) {
         $detail = $service->getSectionDetail($section, ['period' => '30d'], [], null);
 
         expect($detail['section'])->toBe($section === 'colors' ? 'products' : $section);
