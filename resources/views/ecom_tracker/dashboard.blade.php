@@ -248,6 +248,7 @@
                 <thead>
                     <tr>
                         <th class="etd-col-product">Product</th>
+                        <th>Product code</th>
                         <th class="etd-num">Views</th>
                         <th class="etd-num">
                             @include('ecom_tracker.partials.column-header-with-tip', [
@@ -263,9 +264,13 @@
                 <tbody>
                     @forelse ($d['products'] as $product)
                         <tr>
-                            <td class="etd-col-product">
-                                {{ $product['name'] }}
-                                <div class="etd-subtle">{{ $product['code'] }}</div>
+                            <td class="etd-col-product">{{ $product['name'] }}</td>
+                            <td>
+                                @if (! empty($product['product_code'] ?? $product['code'] ?? ''))
+                                    <span class="etd-chip">{{ $product['product_code'] ?? $product['code'] }}</span>
+                                @else
+                                    <span class="text-slate-400">—</span>
+                                @endif
                             </td>
                             <td class="etd-num">{{ number_format($product['views']) }}</td>
                             <td class="etd-num">{{ number_format($product['adds']) }}</td>
@@ -276,7 +281,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="text-slate-400">No product activity in this period.</td></tr>
+                        <tr><td colspan="6" class="text-slate-400">No product activity in this period.</td></tr>
                     @endforelse
                 </tbody>
             </table>

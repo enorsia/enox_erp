@@ -20,7 +20,7 @@
                id="product-catalog-search"
                name="search"
                value="{{ request('search') }}"
-               placeholder="Product name or SKU"
+               placeholder="Product name, code or SKU"
                class="etd-filter-input etd-filter-input--sm">
     </label>
 

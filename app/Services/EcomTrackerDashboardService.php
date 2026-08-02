@@ -201,7 +201,7 @@ class EcomTrackerDashboardService
             ])->values()->all(),
             'products' => collect($data['products'])->map(fn (array $row) => [
                 'product' => $row['name'],
-                'code' => $row['code'],
+                'product_code' => $row['product_code'] ?? $row['code'],
                 'category' => $row['category'] ?? '',
                 'views' => $row['views'],
                 'add_to_cart' => $row['adds'],
@@ -216,7 +216,7 @@ class EcomTrackerDashboardService
                     foreach ($product['variants'] ?? [] as $variant) {
                         $rows[] = [
                             'product' => $product['name'],
-                            'code' => $product['code'],
+                            'product_code' => $product['product_code'] ?? $product['code'],
                             'category' => $variant['category'] ?: ($product['category'] ?? ''),
                             'color' => $variant['color'] ?: '—',
                             'size' => $variant['size'] ?: '—',
@@ -2805,8 +2805,8 @@ class EcomTrackerDashboardService
                 'options' => [
                     'product_asc' => ['label' => 'Product A–Z', 'hint' => 'Sort products alphabetically'],
                     'product_desc' => ['label' => 'Product Z–A', 'hint' => 'Reverse alphabetical order'],
-                    'code_asc' => ['label' => 'SKU A–Z', 'hint' => 'Sort by SKU ascending'],
-                    'code_desc' => ['label' => 'SKU Z–A', 'hint' => 'Sort by SKU descending'],
+                    'code_asc' => ['label' => 'Product code A–Z', 'hint' => 'Sort by parent product code ascending'],
+                    'code_desc' => ['label' => 'Product code Z–A', 'hint' => 'Sort by parent product code descending'],
                     'color_asc' => ['label' => 'Color A–Z', 'hint' => 'Primary color ascending'],
                     'color_desc' => ['label' => 'Color Z–A', 'hint' => 'Primary color descending'],
                     'size_asc' => ['label' => 'Size A–Z', 'hint' => 'Primary size ascending'],
@@ -3320,6 +3320,7 @@ class EcomTrackerDashboardService
                 'key' => $product['key'],
                 'name' => $product['name'],
                 'code' => $product['code'],
+                'product_code' => $product['code'],
                 'category' => $category,
                 'views' => (int) $variants->sum('views'),
                 'adds' => (int) $variants->sum('adds'),
@@ -3333,8 +3334,18 @@ class EcomTrackerDashboardService
 
         if ($search !== '') {
             $products = $products->filter(function (array $product) use ($search) {
-                return str_contains(strtolower($product['name']), $search)
-                    || str_contains(strtolower($product['code']), $search);
+                if (str_contains(strtolower($product['name']), $search)
+                    || str_contains(strtolower($product['code']), $search)) {
+                    return true;
+                }
+
+                foreach ($product['variants'] as $variant) {
+                    if (str_contains(strtolower((string) ($variant['sku'] ?? '')), $search)) {
+                        return true;
+                    }
+                }
+
+                return false;
             });
         }
 
