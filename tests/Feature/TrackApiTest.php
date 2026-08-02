@@ -456,6 +456,42 @@ test('track endpoint accepts payment success with checkout info', function () {
     expect($action->payment_success['checkout_info']['items'][0]['size_name'])->toBe('M');
 });
 
+test('duplicate payment success for the same order id is accepted but not stored twice', function () {
+    $firstSessionId = Str::uuid()->toString();
+    $secondSessionId = Str::uuid()->toString();
+    $firstEventId = Str::uuid()->toString();
+    $secondEventId = Str::uuid()->toString();
+    $headers = ['Authorization' => 'Bearer ' . $this->apiKey];
+
+    $paymentEvent = fn (string $sessionId, string $eventId) => [
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'order_id' => '7781442829',
+            'amount_paid' => 120.50,
+            'payment_method' => 'worldpay',
+            'currency' => 'GBP',
+            'checkout_info' => [
+                'order_number' => '7781442829',
+                'order_pk' => '991',
+            ],
+        ],
+    ];
+
+    $this->postJson('/api/track', trackPayload($firstSessionId, [$paymentEvent($firstSessionId, $firstEventId)]), $headers)
+        ->assertOk()
+        ->assertJson(['accepted_ids' => [$firstEventId]]);
+
+    $this->postJson('/api/track', trackPayload($secondSessionId, [$paymentEvent($secondSessionId, $secondEventId)]), $headers)
+        ->assertOk()
+        ->assertJson(['accepted_ids' => [$secondEventId]]);
+
+    expect(ActivityEcomUserAction::query()->where('action_type', 'payment_success')->count())->toBe(1);
+    expect(ActivityEcomUserAction::where('event_id', $firstEventId)->exists())->toBeTrue();
+    expect(ActivityEcomUserAction::where('event_id', $secondEventId)->exists())->toBeFalse();
+});
+
 test('payment success updates session user from checkout customer info', function () {
     $sessionId = Str::uuid()->toString();
     $eventId = Str::uuid()->toString();

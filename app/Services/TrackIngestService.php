@@ -88,6 +88,18 @@ class TrackIngestService
 
             $this->validatePaymentSuccessPayload($event);
 
+            if ($this->isDuplicatePaymentSuccess($event)) {
+                $acceptedIds[] = $eventId;
+
+                $this->logWarning('ingest.skip_duplicate_payment', 'Skipped duplicate payment_success for order', [
+                    'session_id' => $sessionId,
+                    'event_id' => $eventId,
+                    'order_id' => $this->paymentSuccessOrderId($event),
+                ]);
+
+                continue;
+            }
+
             $row = $this->mapEventToRow($sessionId, $event);
 
             ActivityEcomUserAction::query()->updateOrInsert(
@@ -669,6 +681,57 @@ class TrackIngestService
         }
 
         return $text;
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function paymentSuccessOrderId(array $event): string
+    {
+        $payload = $event['payment_success'] ?? [];
+
+        if (! is_array($payload)) {
+            return '';
+        }
+
+        $orderId = trim((string) ($payload['order_id'] ?? ''));
+
+        if ($orderId !== '') {
+            return $orderId;
+        }
+
+        $checkoutInfo = $payload['checkout_info'] ?? [];
+
+        if (! is_array($checkoutInfo)) {
+            return '';
+        }
+
+        return trim((string) ($checkoutInfo['order_number'] ?? $checkoutInfo['order_pk'] ?? ''));
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function isDuplicatePaymentSuccess(array $event): bool
+    {
+        if (($event['action_type'] ?? '') !== 'payment_success') {
+            return false;
+        }
+
+        $orderId = $this->paymentSuccessOrderId($event);
+
+        if ($orderId === '') {
+            return false;
+        }
+
+        return ActivityEcomUserAction::query()
+            ->where('action_type', 'payment_success')
+            ->where(function ($query) use ($orderId) {
+                $query->where('payment_success->order_id', $orderId)
+                    ->orWhere('payment_success->checkout_info->order_number', $orderId)
+                    ->orWhere('payment_success->checkout_info->order_pk', $orderId);
+            })
+            ->exists();
     }
 
     /**
