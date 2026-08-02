@@ -598,8 +598,14 @@ class TrackIngestService
             }
         }
 
+        $ingestedAt = TrackerTime::nowUtc();
+
         if ($latest === null) {
-            return;
+            $latest = $ingestedAt;
+        } elseif ($ingestedAt->greaterThan($latest)) {
+            // Client event timestamps can predate session creation (view start time).
+            // Admin "last active" should reflect when we last heard from this session.
+            $latest = $ingestedAt;
         }
 
         $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();

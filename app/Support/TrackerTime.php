@@ -252,6 +252,40 @@ class TrackerTime
         return self::fromStorage($value)?->diffForHumans();
     }
 
+    /**
+     * UTC instant used for admin "last active" display and list ordering.
+     * Server updated_at is preferred over client last_active_at so local/dev
+     * machines stay correct when DB rows were exported from another timezone.
+     */
+    public static function latestActivityUtc(mixed ...$values): ?Carbon
+    {
+        $latest = null;
+
+        foreach ($values as $value) {
+            $utc = self::toUtc($value);
+
+            if ($utc === null) {
+                continue;
+            }
+
+            if ($latest === null || $utc->greaterThan($latest)) {
+                $latest = $utc;
+            }
+        }
+
+        return $latest;
+    }
+
+    public static function diffForHumansLatestActivity(mixed ...$values): ?string
+    {
+        return self::diffForHumansFromStorage(self::latestActivityUtc(...$values));
+    }
+
+    public static function formatLatestActivityFromStorage(mixed ...$values): ?string
+    {
+        return self::formatFromStorage(self::latestActivityUtc(...$values));
+    }
+
     public static function formatFromStorage(mixed $value, string $format = 'd M Y, H:i'): ?string
     {
         return self::fromStorage($value)?->format($format);

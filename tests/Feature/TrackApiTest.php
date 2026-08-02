@@ -4,6 +4,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\ActivityEcomUserBotContext;
 use App\Services\BotContextPersister;
+use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -856,7 +857,7 @@ test('bot persist failure does not block event storage', function () {
 });
 
 test('track endpoint accepts events when event timestamp predates session creation', function () {
-    Carbon::setTestNow(Carbon::parse('2026-08-02 07:20:33', 'Europe/London'));
+    Carbon::setTestNow(Carbon::parse('2026-08-02 07:20:33', 'UTC'));
     config(['tracker.visitor_timezone' => 'Europe/London']);
 
     $sessionId = Str::uuid()->toString();
@@ -883,6 +884,7 @@ test('track endpoint accepts events when event timestamp predates session creati
     expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
     expect($session)->not->toBeNull();
     expect($session->session_duration_seconds)->toBe(0);
+    expect(TrackerTime::formatUtc($session->last_active_at))->toBe('2026-08-02 07:20:33');
 
     Carbon::setTestNow();
 });

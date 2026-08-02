@@ -228,7 +228,7 @@
                             </td>
                             <td class="etd-num">{{ $session->actions_count }}</td>
                             <td>{{ format_duration((int) ($session->session_duration_seconds ?? 0)) }}</td>
-                            <td>{{ TrackerTime::diffForHumansFromStorage($session->last_active_at) ?? '—' }}</td>
+                            <td>{{ TrackerTime::diffForHumansLatestActivity($session->updated_at, $session->last_active_at, $session->created_at) ?? '—' }}</td>
                             <td class="etd-col-action">
                                 @can('ecom_tracker.activity.show')
                                     <a href="{{ \App\Support\EcomTrackerViewData::activityShowUrl($session->session_id) }}" class="etd-link">View session</a>

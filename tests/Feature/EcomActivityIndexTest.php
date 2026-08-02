@@ -262,6 +262,42 @@ test('ecom activity index filters by visitor type bot human and unclassified', f
         ->assertDontSee($botSession);
 });
 
+test('ecom activity index orders by server updated_at when client last active is stale', function () {
+    Carbon::setTestNow(Carbon::parse('2026-07-16 15:00:00', TrackerTime::timezone()));
+    config(['tracker.visitor_timezone' => 'Europe/London']);
+
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    $importedSession = Str::uuid()->toString();
+    $freshSession = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $importedSession,
+        'device_type' => 'desktop',
+        'last_active_at' => activityUtcAt('2026-07-16 14:30:00'),
+        'created_at' => activityUtcAt('2026-07-16 09:00:00'),
+        'updated_at' => activityUtcAt('2026-07-16 14:30:00'),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $freshSession,
+        'device_type' => 'desktop',
+        'last_active_at' => activityUtcAt('2026-07-16 10:00:00'),
+        'created_at' => activityUtcAt('2026-07-16 14:58:00'),
+        'updated_at' => activityUtcAt('2026-07-16 14:59:45'),
+    ]);
+
+    $this->get(route('admin.ecom-activity.index', ['period' => 'all']))
+        ->assertOk()
+        ->assertSeeInOrder([
+            $freshSession,
+            $importedSession,
+        ]);
+});
+
 test('ecom activity index orders sessions by latest activity newest first', function () {
     Carbon::setTestNow(Carbon::parse('2026-07-16 15:00:00', TrackerTime::timezone()));
 
@@ -274,12 +310,14 @@ test('ecom activity index orders sessions by latest activity newest first', func
     $middleSession = Str::uuid()->toString();
     $staleSession = Str::uuid()->toString();
     $missingLastActiveSession = Str::uuid()->toString();
+    $recentIngestSession = Str::uuid()->toString();
 
     ActivityEcomUser::query()->create([
         'session_id' => $staleSession,
         'device_type' => 'desktop',
         'last_active_at' => activityUtcAt('2026-07-16 10:00:00'),
         'created_at' => activityUtcAt('2026-07-16 09:00:00'),
+        'updated_at' => activityUtcAt('2026-07-16 10:00:00'),
     ]);
 
     ActivityEcomUser::query()->create([
@@ -287,6 +325,7 @@ test('ecom activity index orders sessions by latest activity newest first', func
         'device_type' => 'desktop',
         'last_active_at' => activityUtcAt('2026-07-16 14:58:00'),
         'created_at' => activityUtcAt('2026-07-16 13:00:00'),
+        'updated_at' => activityUtcAt('2026-07-16 14:58:00'),
     ]);
 
     ActivityEcomUser::query()->create([
@@ -294,6 +333,7 @@ test('ecom activity index orders sessions by latest activity newest first', func
         'device_type' => 'desktop',
         'last_active_at' => activityUtcAt('2026-07-16 14:00:00'),
         'created_at' => activityUtcAt('2026-07-16 12:00:00'),
+        'updated_at' => activityUtcAt('2026-07-16 14:00:00'),
     ]);
 
     ActivityEcomUser::query()->create([
@@ -301,11 +341,21 @@ test('ecom activity index orders sessions by latest activity newest first', func
         'device_type' => 'desktop',
         'last_active_at' => null,
         'created_at' => activityUtcAt('2026-07-16 13:30:00'),
+        'updated_at' => activityUtcAt('2026-07-16 13:30:00'),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $recentIngestSession,
+        'device_type' => 'desktop',
+        'last_active_at' => activityUtcAt('2026-07-16 10:30:00'),
+        'created_at' => activityUtcAt('2026-07-16 10:00:00'),
+        'updated_at' => activityUtcAt('2026-07-16 14:59:30'),
     ]);
 
     $this->get(route('admin.ecom-activity.index', ['period' => 'all']))
         ->assertOk()
         ->assertSeeInOrder([
+            $recentIngestSession,
             $newestSession,
             $middleSession,
             $missingLastActiveSession,
