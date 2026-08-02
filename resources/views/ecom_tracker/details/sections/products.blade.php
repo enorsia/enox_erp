@@ -17,10 +17,8 @@
                         'align' => 'right',
                     ])
                 </th>
-                <th class="etd-num">Purchases</th>
-                <th class="etd-num">Qty</th>
+                <th class="etd-num">Sale item</th>
                 <th class="etd-num">Sale</th>
-                <th class="etd-num">Variants</th>
             </tr>
         </thead>
         <tbody>
@@ -50,14 +48,12 @@
                     </td>
                     <td class="etd-num">{{ number_format($product['views']) }}</td>
                     <td class="etd-num">{{ number_format($product['adds']) }}</td>
-                    <td class="etd-num">{{ number_format($product['purchases']) }}</td>
                     <td class="etd-num">{{ number_format($product['qty'] ?? 0) }}</td>
                     <td class="etd-num">£{{ number_format($product['revenue'], 2) }}</td>
-                    <td class="etd-num">{{ number_format($variantCount) }}</td>
                 </tr>
                 @if ($variantCount > 0)
                     <tr class="etd-catalog-variant-wrap" x-show="expanded === @js($productKey)" x-cloak>
-                        <td colspan="8" class="!p-0">
+                        <td colspan="6" class="!p-0">
                             <div class="etd-catalog-variant-panel">
                                 <table class="etd-table etd-table--variant-nested etd-table--compact-head w-full">
                                     <thead>
@@ -73,8 +69,7 @@
                                                     'align' => 'right',
                                                 ])
                                             </th>
-                                            <th class="etd-num">Purchases</th>
-                                            <th class="etd-num">Qty</th>
+                                            <th class="etd-num">Sale item</th>
                                             <th class="etd-num">Sale</th>
                                         </tr>
                                     </thead>
@@ -86,7 +81,6 @@
                                                 <td class="etd-num"><span class="etd-chip">{{ $variant['sku'] ?: '—' }}</span></td>
                                                 <td class="etd-num">{{ number_format($variant['views']) }}</td>
                                                 <td class="etd-num">{{ number_format($variant['adds']) }}</td>
-                                                <td class="etd-num">{{ number_format($variant['purchases']) }}</td>
                                                 <td class="etd-num">{{ number_format($variant['qty']) }}</td>
                                                 <td class="etd-num">£{{ number_format($variant['revenue'], 2) }}</td>
                                             </tr>
@@ -98,7 +92,7 @@
                     </tr>
                 @endif
             @empty
-                <tr><td colspan="8" class="text-slate-400">No products match the current filters.</td></tr>
+                <tr><td colspan="6" class="text-slate-400">No products match the current filters.</td></tr>
             @endforelse
         </tbody>
     </table>

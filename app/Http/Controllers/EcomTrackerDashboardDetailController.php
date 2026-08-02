@@ -17,8 +17,8 @@ class EcomTrackerDashboardDetailController extends Controller
 
     private const SECTIONS = [
         'categories' => 'Category performance',
-        'products' => 'Product & variant performance',
-        'colors' => 'Product & variant performance',
+        'products' => 'Product performance',
+        'colors' => 'Product performance',
         'cart-abandonment' => 'Cart abandonment',
         'begin-checkout-abandonment' => 'Begin checkout abandonment',
         'checkout-abandonment' => 'Begin checkout abandonment',

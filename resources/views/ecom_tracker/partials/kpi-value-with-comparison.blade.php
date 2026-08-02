@@ -18,9 +18,10 @@
             $hasBaseline = $previousFormatted !== ''
                 && ! in_array($deltaLabel, ['no_prior_data', 'new'], true)
                 && ($comparison['previous'] ?? null) != 0;
+            $showDivider = $hasBaseline && ($hasDelta || $deltaLabel === 'new');
         @endphp
         <div class="etd-kpi-compare">
-            <div class="etd-kpi-compare__row">
+            <div class="etd-kpi-compare__main">
                 @if ($hasDelta)
                     <span @class([
                         'etd-kpi-compare__change',
@@ -35,23 +36,22 @@
                     </span>
                 @elseif ($deltaLabel === 'new')
                     <span class="etd-kpi-compare__change etd-kpi-compare__change--new">New</span>
-                @else
+                @elseif (! $hasBaseline)
                     <span class="etd-kpi-compare__change etd-kpi-compare__change--muted">No prior data</span>
                 @endif
 
-                @if ($hasBaseline && ($hasDelta || $deltaLabel === 'new'))
+                @if ($showDivider)
                     <span class="etd-kpi-compare__divider" aria-hidden="true"></span>
-                    <span class="etd-kpi-compare__context">
-                        <span class="etd-kpi-compare__prev">{{ $previousFormatted }}</span>
-                        <span class="etd-kpi-compare__period">{{ ucfirst($comparisonLabel) }}</span>
-                    </span>
-                @elseif ($hasBaseline)
-                    <span class="etd-kpi-compare__context etd-kpi-compare__context--solo">
-                        <span class="etd-kpi-compare__prev">{{ $previousFormatted }}</span>
-                        <span class="etd-kpi-compare__period">{{ ucfirst($comparisonLabel) }}</span>
-                    </span>
+                @endif
+
+                @if ($hasBaseline)
+                    <span class="etd-kpi-compare__prev">{{ $previousFormatted }}</span>
                 @endif
             </div>
+
+            @if ($hasBaseline)
+                <span class="etd-kpi-compare__period">{{ ucfirst($comparisonLabel) }}</span>
+            @endif
         </div>
     @endif
 </div>

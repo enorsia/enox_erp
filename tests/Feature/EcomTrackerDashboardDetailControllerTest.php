@@ -67,7 +67,7 @@ test('dashboard detail pages are accessible for authorized users', function () {
     $this->actingAs($user)
         ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d']))
         ->assertOk()
-        ->assertSee('Product & variant performance')
+        ->assertSee('Product performance')
         ->assertSee('product-catalog-search', false)
         ->assertSee('Funnel', false);
 });
@@ -101,9 +101,9 @@ test('dashboard product catalog detail supports sort and variant drill-down', fu
     $this->actingAs($user)
         ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d', 'sort_by' => 'top_views']))
         ->assertOk()
-        ->assertSee('Product & variant performance')
+        ->assertSee('Product performance')
         ->assertSee('Funnel')
-        ->assertSee('Purchases');
+        ->assertSee('Sale item');
 
     $this->actingAs($user)
         ->get(route('admin.ecom-tracker.dashboard.details', ['section' => 'products', 'period' => '7d', 'sort_by' => 'insight_engagement']))

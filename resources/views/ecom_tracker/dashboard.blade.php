@@ -25,18 +25,19 @@
     $saleConversion = $d['sale_conversion'] ?? [];
     $funnelDropoff = $d['funnel_dropoff'] ?? [];
 
+    $period = $period === '90d' ? '30d' : $period;
+
     $activePreset = match ($period) {
-        'yesterday', '7d', '30d', '90d', 'custom' => $period,
+        'yesterday', '7d', '30d', 'custom' => $period,
         default => '24h',
     };
 
-    $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d', '90d'], true) ? $period : '24h';
+    $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d'], true) ? $period : '24h';
     $baseQuery = request()->except([
         'date_from', 'date_to', 'period',
         'search', 'category', 'color', 'size', 'sort_by', 'activity',
         'has_purchases', 'has_views', 'has_adds', 'event_scenario',
     ]);
-    $presetUrl = fn (string $preset) => route('admin.ecom-tracker.dashboard', array_merge($baseQuery, ['period' => $preset]));
 @endphp
 
 <div id="ecom-tracker-dashboard-content" class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
@@ -89,18 +90,11 @@
             </div>
 
             <div class="etd-page-header-right">
-                <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
-                    <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="{{ \App\Support\TrackerTime::todayPresetLabel() }}">{{ \App\Support\TrackerTime::todayPresetButtonLabel() }}</a>
-                    <a href="{{ $presetUrl('yesterday') }}" class="etd-segmented-btn {{ $activePreset === 'yesterday' ? 'active' : '' }} no-underline" aria-label="{{ \App\Support\TrackerTime::yesterdayPresetLabel() }}">{{ \App\Support\TrackerTime::yesterdayPresetButtonLabel() }}</a>
-                    <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
-                    <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
-                    <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
-                    <button type="button"
-                            class="etd-segmented-btn"
-                            :class="{ 'active': presetKey === 'custom' }"
-                            aria-label="Custom date range"
-                            @click="toggleCustom()">Custom</button>
-                </div>
+                @include('ecom_tracker.partials.dashboard-period-controls', [
+                    'baseQuery' => $baseQuery,
+                    'range' => $d['range'],
+                    'period' => $period,
+                ])
 
                 <div class="etd-header-actions">
                     @include('ecom_tracker.partials.header-reset-button', [
@@ -237,31 +231,33 @@
                 <h2 class="etd-panel-title">Category performance</h2>
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
-            <table class="etd-table">
+            <table class="etd-table etd-table--categories">
                 <thead>
                     <tr>
-                        <th>Category</th>
+                        <th class="etd-col-category">Category</th>
                         <th class="etd-num">Views</th>
-                        <th class="etd-num">Adds</th>
-                        <th class="etd-num">Purchase</th>
+                        <th class="etd-num">
+                            @include('ecom_tracker.partials.column-header-with-tip', [
+                                'label' => 'Adds',
+                                'tip' => 'Add to cart',
+                                'align' => 'right',
+                            ])
+                        </th>
                         <th class="etd-num">Sale item</th>
                         <th class="etd-num">Sale</th>
-                        <th class="etd-num">Conv. rate</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($d['categories'] as $category)
                         <tr>
-                            <td>{{ $category['label'] }}</td>
+                            <td class="etd-col-category">{{ $category['label'] }}</td>
                             <td class="etd-num">{{ number_format($category['views']) }}</td>
                             <td class="etd-num">{{ number_format($category['adds']) }}</td>
-                            <td class="etd-num">{{ number_format($category['purchases']) }}</td>
                             <td class="etd-num">{{ number_format($category['sale_items']) }}</td>
                             <td class="etd-num">£{{ number_format($category['sale_amount'], 2) }}</td>
-                            <td class="etd-num">{{ $category['conversion_rate'] }}%</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-slate-400">No category views in this period.</td></tr>
+                        <tr><td colspan="5" class="text-slate-400">No category views in this period.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -270,7 +266,7 @@
 
         <div class="etd-panel" id="products">
             <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Product & variant performance</h2>
+                <h2 class="etd-panel-title">Product performance</h2>
                 @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('products')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
@@ -286,10 +282,8 @@
                                 'align' => 'right',
                             ])
                         </th>
-                        <th class="etd-num">Purchases</th>
-                        <th class="etd-num">Qty</th>
+                        <th class="etd-num">Sale item</th>
                         <th class="etd-num">Sale</th>
-                        <th class="etd-num">Variants</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -301,16 +295,14 @@
                             </td>
                             <td class="etd-num">{{ number_format($product['views']) }}</td>
                             <td class="etd-num">{{ number_format($product['adds']) }}</td>
-                            <td class="etd-num">{{ number_format($product['purchases']) }}</td>
                             <td class="etd-num">{{ number_format($product['qty'] ?? 0) }}</td>
                             <td class="etd-num">
                                 £{{ number_format($product['revenue'], 2) }}
                                 <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] }}%"></div></div>
                             </td>
-                            <td class="etd-num">{{ number_format($product['variant_count'] ?? count($product['variants'] ?? [])) }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-slate-400">No product activity in this period.</td></tr>
+                        <tr><td colspan="5" class="text-slate-400">No product activity in this period.</td></tr>
                     @endforelse
                 </tbody>
             </table>

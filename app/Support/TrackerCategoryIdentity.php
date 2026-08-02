@@ -41,11 +41,39 @@ class TrackerCategoryIdentity
             return '';
         }
 
-        if (! preg_match('#/c/(men|women|boys|girls)(?:/|$)#i', $path, $matches)) {
+        if (! preg_match('#/c/(men|women|boys|girls)(?:/|$)#i', $path, $matches)
+            && ! preg_match('#/style/(men|women|boys|girls)(?:/|$)#i', $path, $matches)) {
             return '';
         }
 
         return self::URL_DEPARTMENT_SLUG_MAP[strtolower($matches[1])] ?? '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $line
+     */
+    public static function lineHasCategoryIdentity(array $line): bool
+    {
+        return self::metaFromLine($line) !== null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $line
+     * @return array<string, mixed>
+     */
+    public static function ensureLineCategoryIdentity(array $line): array
+    {
+        if (self::lineHasCategoryIdentity($line)) {
+            return $line;
+        }
+
+        $departmentName = trim((string) ($line['department_name'] ?? ''));
+
+        if ($departmentName !== '') {
+            $line['category_name'] = $departmentName;
+        }
+
+        return $line;
     }
 
     /**

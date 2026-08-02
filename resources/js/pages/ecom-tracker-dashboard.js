@@ -424,3 +424,63 @@ if (botTrendCtx && botTrend.labels) {
         },
     });
 }
+
+function syncKpiPanelCardHeights() {
+    const panel = document.querySelector('.etd-kpi-panel');
+
+    if (!panel) {
+        return;
+    }
+
+    const cards = panel.querySelectorAll('.etd-kpi--compact');
+
+    if (!cards.length) {
+        return;
+    }
+
+    panel.style.removeProperty('--etd-kpi-sync-height');
+
+    let maxHeight = 0;
+
+    cards.forEach((card) => {
+        card.style.minHeight = '';
+        maxHeight = Math.max(maxHeight, card.getBoundingClientRect().height);
+    });
+
+    if (maxHeight <= 0) {
+        return;
+    }
+
+    const height = `${Math.ceil(maxHeight)}px`;
+    panel.style.setProperty('--etd-kpi-sync-height', height);
+    cards.forEach((card) => {
+        card.style.minHeight = height;
+    });
+}
+
+const kpiPanel = document.querySelector('.etd-kpi-panel');
+
+if (kpiPanel) {
+    syncKpiPanelCardHeights();
+
+    let syncFrame = null;
+
+    const scheduleKpiHeightSync = () => {
+        if (syncFrame !== null) {
+            cancelAnimationFrame(syncFrame);
+        }
+
+        syncFrame = requestAnimationFrame(() => {
+            syncFrame = null;
+            syncKpiPanelCardHeights();
+        });
+    };
+
+    window.addEventListener('resize', scheduleKpiHeightSync);
+
+    if (typeof ResizeObserver !== 'undefined') {
+        const kpiResizeObserver = new ResizeObserver(scheduleKpiHeightSync);
+        kpiResizeObserver.observe(kpiPanel);
+        kpiPanel.querySelectorAll('.etd-kpi-group').forEach((group) => kpiResizeObserver.observe(group));
+    }
+}
