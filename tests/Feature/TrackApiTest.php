@@ -222,6 +222,30 @@ test('track endpoint accepts product view popup', function () {
     expect($action->general_color_name)->toBe('Brown');
 });
 
+test('track endpoint stores parent product code and variant sku separately', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Boys Orange Jersey Shorts',
+        'product_code' => 'BS3874308',
+        'sku' => 'WSHGR14009988',
+        'product_color_id' => '42',
+        'general_color_name' => 'Orange',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $action = ActivityEcomUserAction::where('event_id', $eventId)->first();
+
+    expect($action)->not->toBeNull();
+    expect($action->product_code)->toBe('BS3874308');
+    expect($action->sku)->toBe('WSHGR14009988');
+});
+
 test('track endpoint accepts add to cart with color and size details', function () {
     $sessionId = Str::uuid()->toString();
     $eventId = Str::uuid()->toString();
@@ -232,6 +256,7 @@ test('track endpoint accepts add to cart with color and size details', function 
         'action_type' => 'add_to_cart',
         'product_name' => 'Dress',
         'product_code' => 'GS123',
+        'sku' => 'GS123-M',
         'product_color_id' => '42',
         'general_color_name' => 'Brown',
         'add_to_cart' => [
@@ -245,7 +270,8 @@ test('track endpoint accepts add to cart with color and size details', function 
             'size_name' => 'M',
             'items' => [[
                 'product_id' => '101',
-                'product_code' => 'GS123-M',
+                'product_code' => 'GS123',
+                'sku' => 'GS123-M',
                 'qty' => 1,
                 'price' => 29.99,
                 'color_id' => '42',
@@ -266,6 +292,8 @@ test('track endpoint accepts add to cart with color and size details', function 
     expect($action->add_to_cart['color_id'])->toBe('42');
     expect($action->add_to_cart['product_id'])->toBe('101');
     expect($action->add_to_cart['size_name'])->toBe('M');
+    expect($action->product_code)->toBe('GS123');
+    expect($action->sku)->toBe('GS123-M');
 });
 
 test('track endpoint accepts begin checkout with product line details', function () {

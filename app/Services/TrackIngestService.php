@@ -310,6 +310,7 @@ class TrackIngestService
             'department_name',
             'product_name',
             'product_code',
+            'sku',
             'product_color_id',
             'product_color_code',
             'general_color_name',
@@ -372,7 +373,7 @@ class TrackIngestService
         $items = $cart['items'] ?? [];
         $line = is_array($items[0] ?? null) ? $items[0] : [];
 
-        foreach (['category_name', 'category_code', 'department_name', 'product_name', 'product_code'] as $field) {
+        foreach (['category_name', 'category_code', 'department_name', 'product_name', 'product_code', 'sku'] as $field) {
             if (! empty($row[$field])) {
                 continue;
             }

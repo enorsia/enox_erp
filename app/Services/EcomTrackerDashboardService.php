@@ -2451,6 +2451,7 @@ class EcomTrackerDashboardService
         return collect($items)
             ->map(fn ($item) => [
                 'code' => trim((string) ($item['product_code'] ?? '')),
+                'sku' => trim((string) ($item['sku'] ?? '')),
                 'name' => trim((string) ($item['product_name'] ?? '')),
                 'product_id' => trim((string) ($item['product_id'] ?? '')),
                 'color_name' => trim((string) ($item['color_name'] ?? '')),
@@ -2461,7 +2462,7 @@ class EcomTrackerDashboardService
                 'department_id' => trim((string) ($item['department_id'] ?? '')),
                 'department_name' => trim((string) ($item['department_name'] ?? '')),
             ])
-            ->filter(fn (array $line) => $line['code'] !== '' || $line['name'] !== '' || $line['product_id'] !== '')
+            ->filter(fn (array $line) => $line['code'] !== '' || $line['sku'] !== '' || $line['name'] !== '' || $line['product_id'] !== '')
             ->values()
             ->all();
     }
@@ -2471,16 +2472,18 @@ class EcomTrackerDashboardService
      */
     private function extractPurchaseLineIdentity(array $item): ?array
     {
-        $code = trim((string) ($item['product_code'] ?? $item['sku'] ?? ''));
+        $code = trim((string) ($item['product_code'] ?? ''));
+        $sku = trim((string) ($item['sku'] ?? ''));
         $name = trim((string) ($item['product_name'] ?? ''));
         $productId = trim((string) ($item['product_id'] ?? ''));
 
-        if ($code === '' && $name === '' && $productId === '') {
+        if ($code === '' && $sku === '' && $name === '' && $productId === '') {
             return null;
         }
 
         return [
             'code' => $code,
+            'sku' => $sku,
             'name' => $name,
             'product_id' => $productId,
             'qty' => $this->resolvePurchaseLineQty($item),
@@ -2574,18 +2577,20 @@ class EcomTrackerDashboardService
             ->whereNotNull('general_color_name')
             ->get()
             ->each(function (ActivityEcomUserAction $action) use ($variants) {
-                $sku = trim((string) ($action->product_code ?: $action->product_color_code ?: ''));
+                $variantSku = trim((string) ($action->sku ?: ''));
 
-                if ($sku === '') {
+                if ($variantSku === '') {
                     return;
                 }
 
                 $this->incrementColorVariant(
                     $variants,
-                    $sku,
+                    $variantSku,
                     (string) $action->general_color_name,
                     $action->product_name,
                     'viewed',
+                    1,
+                    (string) ($action->product_code ?? ''),
                 );
             });
 
@@ -2618,22 +2623,25 @@ class EcomTrackerDashboardService
                         $identity['product_name'],
                         'purchased',
                         $identity['quantity'],
+                        $identity['product_code'] ?? '',
                     );
                 }
 
                 if ($items === [] && $action->general_color_name) {
-                    $sku = trim((string) ($action->product_code ?: ''));
+                    $variantSku = trim((string) ($action->sku ?: ''));
 
-                    if ($sku === '') {
+                    if ($variantSku === '') {
                         return;
                     }
 
                     $this->incrementColorVariant(
                         $variants,
-                        $sku,
+                        $variantSku,
                         (string) $action->general_color_name,
                         $action->product_name,
                         'purchased',
+                        1,
+                        (string) ($action->product_code ?? ''),
                     );
                 }
             });
@@ -2646,7 +2654,7 @@ class EcomTrackerDashboardService
                 $variants = $group
                     ->map(fn (array $row) => [
                         'color' => $row['color_name'],
-                        'sku' => $row['product_code'],
+                        'sku' => $row['variant_sku'] ?: $row['product_code'],
                         'viewed' => $row['viewed'],
                         'purchased' => $row['purchased'],
                     ])
@@ -2977,7 +2985,7 @@ class EcomTrackerDashboardService
                 ], [
                     'color' => (string) ($action->general_color_name ?? ''),
                     'size' => '',
-                    'sku' => trim((string) ($action->product_code ?: $action->product_color_code ?: '')),
+                    'sku' => trim((string) ($action->sku ?: '')),
                     'category' => (string) ($action->category_name ?? ''),
                 ], views: 1);
 
@@ -2997,7 +3005,7 @@ class EcomTrackerDashboardService
                     ], [
                         'color' => (string) ($cart['color_name'] ?? $action->general_color_name ?? ''),
                         'size' => (string) ($cart['size_name'] ?? ''),
-                        'sku' => trim((string) ($cart['product_code'] ?? $action->product_code ?? '')),
+                        'sku' => trim((string) ($cart['sku'] ?? $action->sku ?? '')),
                         'category' => $defaultCategory,
                     ], adds: 1);
 
@@ -3008,7 +3016,7 @@ class EcomTrackerDashboardService
                     $this->accumulateCatalogEvent($catalog, $line, [
                         'color' => (string) ($line['color_name'] ?? $cart['color_name'] ?? $action->general_color_name ?? ''),
                         'size' => (string) ($line['size_name'] ?? $cart['size_name'] ?? ''),
-                        'sku' => trim((string) ($line['code'] ?? '')),
+                        'sku' => trim((string) ($line['sku'] ?? '')),
                         'category' => (string) ($line['category'] ?? $defaultCategory),
                     ], adds: 1);
                 }
@@ -3048,7 +3056,7 @@ class EcomTrackerDashboardService
                 ], [
                     'color' => (string) ($action->general_color_name ?? ''),
                     'size' => '',
-                    'sku' => trim((string) $action->product_code),
+                    'sku' => trim((string) ($action->sku ?? '')),
                     'category' => (string) ($action->category_name ?? ''),
                 ], purchases: 1, qty: 1, revenue: $amount);
 
@@ -3073,7 +3081,7 @@ class EcomTrackerDashboardService
                 $this->accumulateCatalogEvent($catalog, $line, [
                     'color' => (string) ($item['color_name'] ?? $item['general_color_name'] ?? ($item['options']['general_color'] ?? '')),
                     'size' => (string) ($item['size_name'] ?? ''),
-                    'sku' => $line['code'],
+                    'sku' => trim((string) ($line['sku'] ?? '')),
                     'category' => (string) ($item['category_name'] ?? $action->category_name ?? ''),
                 ], purchases: 1, qty: (int) $line['qty'], revenue: $revenue);
             }
@@ -3527,16 +3535,18 @@ class EcomTrackerDashboardService
             return null;
         }
 
-        $sku = trim((string) ($item['product_code'] ?? $item['sku'] ?? ''));
+        $sku = trim((string) ($item['sku'] ?? ''));
+        $productCode = trim((string) ($item['product_code'] ?? ''));
         $productId = trim((string) ($item['product_id'] ?? ''));
         $productName = trim((string) ($item['product_name'] ?? ''));
 
-        if ($sku === '' && $productId === '' && $productName === '') {
+        if ($sku === '' && $productCode === '' && $productId === '' && $productName === '') {
             return null;
         }
 
         return [
             'sku' => $sku !== '' ? $sku : $productId,
+            'product_code' => $productCode,
             'product_id' => $productId,
             'product_name' => $productName !== '' ? $productName : 'Unknown product',
             'color_name' => $color,
@@ -3576,11 +3586,11 @@ class EcomTrackerDashboardService
                 return true;
             }
 
-            if ($sku !== '' && strcasecmp($variant['product_code'], $sku) === 0) {
+            if ($sku !== '' && strcasecmp($variant['variant_sku'] ?: $variant['product_code'], $sku) === 0) {
                 return true;
             }
 
-            return $productId !== '' && strcasecmp($variant['product_code'], $productId) === 0;
+            return $productId !== '' && strcasecmp($variant['variant_sku'] ?: $variant['product_code'], $productId) === 0;
         });
 
         if ($matchedKey !== false) {
@@ -3611,46 +3621,51 @@ class EcomTrackerDashboardService
      */
     private function incrementColorVariant(
         Collection $variants,
-        string $productCode,
+        string $variantSku,
         string $colorName,
         ?string $productName,
         string $metric,
         int $quantity = 1,
+        string $parentProductCode = '',
     ): void {
         $this->incrementColorVariantByKey(
             $variants,
-            $this->colorVariantKey($productCode, $colorName),
-            $productCode,
+            $this->colorVariantKey($variantSku, $colorName),
+            $variantSku,
             $colorName,
             $productName,
             $metric,
             $quantity,
+            $parentProductCode,
         );
     }
 
     /**
-     * @param  Collection<string, array{product_name: string, color_name: string, product_code: string, viewed: int, purchased: int}>  $variants
+     * @param  Collection<string, array{product_name: string, color_name: string, product_code: string, variant_sku: string, viewed: int, purchased: int}>  $variants
      */
     private function incrementColorVariantByKey(
         Collection $variants,
         string $key,
-        string $productCode,
+        string $variantSku,
         string $colorName,
         ?string $productName,
         string $metric,
         int $quantity = 1,
+        string $parentProductCode = '',
     ): void {
-        $productCode = trim($productCode);
+        $variantSku = trim($variantSku);
         $colorName = trim($colorName);
+        $parentProductCode = trim($parentProductCode);
 
-        if ($productCode === '' || $colorName === '') {
+        if ($variantSku === '' || $colorName === '') {
             return;
         }
 
         $existing = $variants->get($key, [
             'product_name' => $productName ?: 'Unknown product',
             'color_name' => $colorName,
-            'product_code' => $productCode,
+            'product_code' => $parentProductCode,
+            'variant_sku' => $variantSku,
             'viewed' => 0,
             'purchased' => 0,
         ]);
@@ -3665,8 +3680,12 @@ class EcomTrackerDashboardService
             $existing['purchased'] += $quantity;
         }
 
-        if ($existing['product_code'] === '' || (strlen($productCode) > strlen($existing['product_code']))) {
-            $existing['product_code'] = $productCode;
+        if ($parentProductCode !== '' && ($existing['product_code'] === '' || strlen($parentProductCode) >= strlen($existing['product_code']))) {
+            $existing['product_code'] = $parentProductCode;
+        }
+
+        if ($existing['variant_sku'] === '' || strlen($variantSku) >= strlen($existing['variant_sku'])) {
+            $existing['variant_sku'] = $variantSku;
         }
 
         $variants->put($key, $existing);

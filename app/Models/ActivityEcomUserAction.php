@@ -20,6 +20,7 @@ class ActivityEcomUserAction extends Model
         'department_name',
         'product_name',
         'product_code',
+        'sku',
         'product_color_id',
         'product_color_code',
         'general_color_name',

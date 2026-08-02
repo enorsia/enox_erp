@@ -34,6 +34,7 @@ return [
         'department_name' => 255,
         'product_name' => 255,
         'product_code' => 100,
+        'sku' => 100,
         'product_color_id' => 50,
         'product_color_code' => 255,
         'general_color_name' => 255,
