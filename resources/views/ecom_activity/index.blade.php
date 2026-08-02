@@ -174,7 +174,7 @@
     </header>
 
     <div class="etd-panel">
-        <div class="etd-table-scroll">
+        <div class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity">
             <table class="etd-table etd-table--activity w-full">
                 <thead>
                     <tr>

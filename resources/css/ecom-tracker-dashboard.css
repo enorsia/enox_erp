@@ -1729,6 +1729,11 @@
     --etd-table-scroll-height: clamp(17rem, 42vh, 26rem);
 }
 
+.etd-table-scroll--activity.etd-table-scroll--fixed {
+    --etd-table-scroll-height: clamp(18rem, calc(100dvh - 17.5rem), 44rem);
+    min-height: 14rem;
+}
+
 .dark .etd-table-scroll--fixed {
     border-color: #334155;
     background: #0f172a;
@@ -2112,6 +2117,14 @@
 .etd-table--activity td.etd-col-user {
     width: clamp(10rem, 18vw, 15rem);
     min-width: 10rem;
+    overflow: hidden;
+}
+
+.etd-table--activity td.etd-col-user > div,
+.etd-table--activity td.etd-col-user .etd-subtle {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .etd-table--activity th.etd-col-session,
@@ -2203,7 +2216,7 @@
     left: 0;
     bottom: calc(100% + 0.4rem);
     z-index: 50;
-    display: block;
+    display: none;
     width: max-content;
     max-width: 24rem;
     padding: 0.45rem 0.55rem;
@@ -2217,8 +2230,6 @@
     font-family: var(--font-mono);
     line-height: 1.35;
     white-space: nowrap;
-    opacity: 0;
-    visibility: hidden;
     pointer-events: none;
     user-select: all;
 }
@@ -2226,8 +2237,7 @@
 .etd-hover-tip:hover .etd-hover-tip__content,
 .etd-hover-tip:focus-visible .etd-hover-tip__content,
 .etd-hover-tip:focus .etd-hover-tip__content {
-    opacity: 1;
-    visibility: visible;
+    display: block;
     pointer-events: auto;
 }
 
@@ -2679,7 +2689,7 @@
     right: 0;
     top: calc(100% + 0.4rem);
     z-index: 30;
-    display: flex;
+    display: none;
     flex-direction: column;
     gap: 0.45rem;
     width: max-content;
@@ -2697,8 +2707,6 @@
     text-transform: none;
     letter-spacing: normal;
     white-space: normal;
-    opacity: 0;
-    visibility: hidden;
     pointer-events: none;
 }
 
@@ -2716,8 +2724,7 @@
 .etd-tip-trigger:hover .etd-tip-content,
 .etd-tip-trigger:focus-visible .etd-tip-content,
 .etd-tip-trigger:focus .etd-tip-content {
-    opacity: 1;
-    visibility: visible;
+    display: flex;
     pointer-events: auto;
 }
 
