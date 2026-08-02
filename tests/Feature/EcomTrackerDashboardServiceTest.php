@@ -1691,3 +1691,90 @@ test('ecom tracker product catalog merges view parent code with add variant sku 
     expect($product['variants'][0]['size'])->toBe('XXL');
     expect($product['variants'][0]['sku'])->toBe('MTVYEXXL000755');
 });
+
+test('ecom tracker dashboard device breakdown includes funnel metrics by device and browser', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $from = Carbon::parse('2026-07-20 10:00:00');
+    $to = Carbon::parse('2026-07-20 23:59:59');
+    $mobileSessionId = Str::uuid()->toString();
+    $desktopSessionId = Str::uuid()->toString();
+
+    foreach ([
+        [$mobileSessionId, 'mobile', 'Safari'],
+        [$desktopSessionId, 'desktop', 'Chrome'],
+    ] as [$sessionId, $deviceType, $browser]) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => $deviceType,
+            'browser' => $browser,
+            'created_at' => $from,
+            'updated_at' => $from,
+            'last_active_at' => $from,
+        ]);
+    }
+
+    foreach ([
+        [$mobileSessionId, 'begin_checkout'],
+        [$mobileSessionId, 'proceed_checkout'],
+        [$desktopSessionId, 'begin_checkout'],
+    ] as [$sessionId, $actionType]) {
+        ActivityEcomUserAction::query()->create([
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => $actionType,
+            'created_at' => $from->copy()->addHour(),
+            'start_time' => $from->copy()->addHour(),
+            'end_time' => $from->copy()->addHour()->addSeconds(5),
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $mobileSessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'order_id' => 'ORDER-100',
+            'amount_paid' => 80,
+            'checkout_info' => [
+                'items' => [
+                    ['qty' => 2, 'price' => 40],
+                ],
+            ],
+        ],
+        'created_at' => $from->copy()->addHours(2),
+        'start_time' => $from->copy()->addHours(2),
+        'end_time' => $from->copy()->addHours(2)->addSeconds(10),
+    ]);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    $dashboard = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-20',
+        'date_to' => '2026-07-20',
+    ]);
+
+    $mobileDevice = collect($dashboard['devices']['by_device'])->firstWhere('label', 'Mobile');
+    $desktopDevice = collect($dashboard['devices']['by_device'])->firstWhere('label', 'Desktop');
+    $safariBrowser = collect($dashboard['devices']['by_browser'])->firstWhere('label', 'Safari');
+    $chromeBrowser = collect($dashboard['devices']['by_browser'])->firstWhere('label', 'Chrome');
+
+    expect($mobileDevice)->not->toBeNull();
+    expect($mobileDevice['sessions'])->toBe(1);
+    expect($mobileDevice['begin_checkout'])->toBe(1);
+    expect($mobileDevice['proceed_checkout'])->toBe(1);
+    expect($mobileDevice['sold_qty'])->toBe(2);
+    expect($mobileDevice['conversion_rate'])->toBe(100.0);
+
+    expect($desktopDevice)->not->toBeNull();
+    expect($desktopDevice['sessions'])->toBe(1);
+    expect($desktopDevice['begin_checkout'])->toBe(1);
+    expect($desktopDevice['proceed_checkout'])->toBe(0);
+    expect($desktopDevice['sold_qty'])->toBe(0);
+    expect($desktopDevice['conversion_rate'])->toBe(0.0);
+
+    expect($safariBrowser['sold_qty'])->toBe(2);
+    expect($chromeBrowser['begin_checkout'])->toBe(1);
+
+    Carbon::setTestNow();
+});

@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\TrackerUtmFilter;
 use Illuminate\Http\Request;
 
 final class EcomTrackerViewData
@@ -41,6 +42,7 @@ final class EcomTrackerViewData
             'queryParams' => $queryParams,
             'exportUrl' => route('admin.ecom-tracker.dashboard.export', $exportQuery),
             'detailLink' => fn (string $section) => route('admin.ecom-tracker.dashboard.details', $section).'?'.http_build_query(array_merge($queryParams, ['back' => $back])),
+            'activitySourceLink' => fn (string $source) => self::activitySourceLink($filters, $source),
             'hasActiveFilters' => $activeFilterCount > 0,
         ];
     }
@@ -225,6 +227,76 @@ final class EcomTrackerViewData
             'date_from' => $fromLocal->toDateString(),
             'date_to' => $toLocal->toDateString(),
         ]));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, string>
+     */
+    public static function activityIndexQueryFromFilters(array $filters, ?string $utmSource = null): array
+    {
+        $query = [];
+
+        if ($utmSource !== null && $utmSource !== '' && $utmSource !== 'Other') {
+            $resolved = $utmSource === '(direct)'
+                ? '(direct)'
+                : (TrackerUtmFilter::resolveSource($utmSource) ?? $utmSource);
+
+            if ($resolved !== '') {
+                $query['utm_source'] = $resolved;
+            }
+        }
+
+        $period = $filters['period'] ?? '24h';
+
+        if ($period === 'custom' && filled($filters['date_from'] ?? null) && filled($filters['date_to'] ?? null)) {
+            $query['date_from'] = (string) $filters['date_from'];
+            $query['date_to'] = (string) $filters['date_to'];
+
+            return $query;
+        }
+
+        $today = TrackerTime::localNow()->copy()->startOfDay();
+        $todayStr = $today->toDateString();
+
+        if ($period === 'yesterday') {
+            $yesterday = $today->copy()->subDay();
+
+            return array_merge($query, [
+                'date_from' => $yesterday->toDateString(),
+                'date_to' => $yesterday->toDateString(),
+            ]);
+        }
+
+        if ($period === '7d') {
+            return array_merge($query, [
+                'date_from' => $today->copy()->subDays(6)->toDateString(),
+                'date_to' => $todayStr,
+            ]);
+        }
+
+        if (in_array($period, ['30d', '90d'], true)) {
+            $days = $period === '90d' ? 89 : 29;
+
+            return array_merge($query, [
+                'date_from' => $today->copy()->subDays($days)->toDateString(),
+                'date_to' => $todayStr,
+            ]);
+        }
+
+        return $query;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    public static function activitySourceLink(array $filters, string $source): string
+    {
+        if ($source === '' || $source === 'Other') {
+            return '';
+        }
+
+        return route('admin.ecom-activity.index', self::activityIndexQueryFromFilters($filters, $source));
     }
 
     /**

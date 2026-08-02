@@ -347,114 +347,44 @@
     </div>
 
     <h2 class="etd-section-title"><span class="etd-section-num">03</span> Acquisition &amp; audience</h2>
-    <p class="etd-section-note">Where traffic comes from and which device/market needs UX attention.</p>
+    <p class="etd-section-note">Device mix, engagement depth, and where sessions originate.</p>
 
     <div class="etd-grid-5-7 mb-3">
-        <div class="etd-panel" id="device">
-            <div class="etd-panel-head">
+        <div class="etd-panel etd-panel--acquisition" id="device" x-data="{ view: 'device' }">
+            <div class="etd-panel-head etd-panel-head--device-browser">
                 <h2 class="etd-panel-title">Device &amp; browser</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('devices')])
-            </div>
-            <div class="etd-two-donut">
-                <div class="etd-donut-block">
-                    <div class="etd-chart-wrap sm"><canvas id="etdDeviceChart"></canvas></div>
-                    <div class="etd-donut-cap">by device</div>
-                </div>
-                <div class="etd-donut-block">
-                    <div class="etd-chart-wrap sm"><canvas id="etdLoginChart"></canvas></div>
-                    <div class="etd-donut-cap">guest vs logged-in</div>
+                <div class="etd-panel-head-actions">
+                    @include('ecom_tracker.partials.device-browser-toggle')
+                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('devices')])
                 </div>
             </div>
-            <ul class="etd-legend">
-                @php $deviceColors = ['#1D9E75', '#f59e0b', '#64748b', '#3b82f6', '#8b5cf6']; @endphp
-                @foreach ($d['devices']['legend'] as $index => $item)
-                    <li>
-                        <span>
-                            <span class="etd-swatch" style="background: {{ $deviceColors[$index % count($deviceColors)] }}"></span>
-                            {{ $item['label'] }}
-                        </span>
-                        <span>{{ $item['share'] }}% · conv. {{ $item['conversion_rate'] }}%</span>
-                    </li>
-                @endforeach
-            </ul>
+            @include('ecom_tracker.partials.device-browser-breakdown', [
+                'devices' => $d['devices'],
+            ])
         </div>
 
-        <div class="etd-panel" id="traffic">
-            <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Traffic sources</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('traffic-sources')])
-            </div>
-            <div class="etd-table-scroll etd-table-scroll--fixed">
-            <table class="etd-table">
-                <thead>
-                    <tr>
-                        <th>Source</th>
-                        <th>Medium</th>
-                        <th class="etd-num">Sessions</th>
-                        <th class="etd-num">Conversion</th>
-                        <th class="etd-num">Sale</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($d['traffic_sources'] as $source)
-                        <tr>
-                            <td>{{ $source['source'] }}</td>
-                            <td>{{ $source['medium'] }}</td>
-                            <td class="etd-num">{{ number_format($source['sessions']) }}</td>
-                            <td class="etd-num">{{ $source['conversion_rate'] }}%</td>
-                            <td class="etd-num">£{{ number_format($source['revenue'], 2) }}</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="5" class="text-slate-400">No traffic source data in this period.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="etd-grid-2">
-        <div class="etd-panel" id="geo">
-            <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Geography</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('geography')])
-            </div>
-            <div class="etd-table-scroll etd-table-scroll--narrow etd-table-scroll--fixed">
-            <table class="etd-table">
-                <thead>
-                    <tr>
-                        <th>Location</th>
-                        <th class="etd-num">Sessions</th>
-                        <th class="etd-num">Sale</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($d['geography'] as $geo)
-                        <tr>
-                            <td>{{ $geo['location'] }}</td>
-                            <td class="etd-num">{{ number_format($geo['sessions']) }}</td>
-                            <td class="etd-num">£{{ number_format($geo['revenue'], 2) }}</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="3" class="text-slate-400">No geography data in this period.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-            </div>
-        </div>
-
-        <div class="etd-panel" id="engagement">
+        <div class="etd-panel etd-panel--acquisition" id="engagement">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Engagement quality</h2>
                 @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('engagement')])
             </div>
-            <div class="etd-chart-wrap sm">
-                <canvas id="etdDwellChart"></canvas>
+            <div class="etd-panel-body etd-panel-body--acquisition">
+                @include('ecom_tracker.partials.engagement-quality-panel', [
+                    'engagement' => $d['engagement'],
+                ])
             </div>
-            <p class="etd-section-note" style="margin-top: 0.75rem;">
-                Buyers vs non-buyers average active time on category and product pages.
-            </p>
         </div>
+    </div>
+
+    <div class="etd-panel mb-3" id="traffic">
+        <div class="etd-panel-head">
+            <h2 class="etd-panel-title">Traffic sources</h2>
+            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('traffic-sources')])
+        </div>
+        @include('ecom_tracker.partials.traffic-sources-table', [
+            'rows' => $d['traffic_sources'],
+            'activitySourceLink' => $page['activitySourceLink'],
+        ])
     </div>
 </div>
 
