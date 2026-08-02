@@ -6,6 +6,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Support\EcomTrackerViewData;
+use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -4528,7 +4529,7 @@ class EcomTrackerDashboardService
         $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
 
         $sessionsQuery = ActivityEcomUser::query()
-            ->select('session_id', 'utm_source', 'utm_medium')
+            ->select('id', 'session_id', 'utm_source', 'utm_medium', 'utm_campaign', 'landing_page')
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to));
 
         if ($sessionIds !== null) {
@@ -4545,12 +4546,21 @@ class EcomTrackerDashboardService
             return [];
         }
 
+        $sessionIdList = $sessions->pluck('session_id');
+        $actionUrlsBySession = $this->trafficActionUrlsBySession($sessionIdList);
+        $referersBySession = $this->trafficFirstReferersBySession($sessionIdList);
+
         $buckets = [];
         $sessionBucketMap = [];
 
         foreach ($sessions as $session) {
-            $source = $this->normalizeTrafficSource($session->utm_source);
-            $medium = $this->normalizeTrafficMedium($session->utm_medium);
+            $bucket = SessionTrafficAttribution::resolvedTrafficBucket(
+                $session,
+                $actionUrlsBySession->get($session->session_id, []),
+                $referersBySession->get($session->session_id),
+            );
+            $source = $bucket['source'];
+            $medium = $bucket['medium'];
             $key = $source."\0".$medium;
 
             $sessionBucketMap[$session->session_id] = $key;
@@ -4631,18 +4641,50 @@ class EcomTrackerDashboardService
         return $this->finalizeTrafficSourceRows($buckets, $limit);
     }
 
-    private function normalizeTrafficSource(?string $value): string
+    /**
+     * @return Collection<string, list<string>>
+     */
+    private function trafficActionUrlsBySession(Collection $sessionIds): Collection
     {
-        $label = trim((string) $value);
+        if ($sessionIds->isEmpty()) {
+            return collect();
+        }
 
-        return $label === '' ? '(direct)' : $label;
+        return ActivityEcomUserAction::query()
+            ->select('session_id', 'page_url')
+            ->whereIn('session_id', $sessionIds)
+            ->whereNotNull('page_url')
+            ->where('page_url', '!=', '')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('session_id')
+            ->map(fn (Collection $rows) => $rows
+                ->pluck('page_url')
+                ->map(fn ($url) => (string) $url)
+                ->values()
+                ->all());
     }
 
-    private function normalizeTrafficMedium(?string $value): string
+    /**
+     * @return Collection<string, string>
+     */
+    private function trafficFirstReferersBySession(Collection $sessionIds): Collection
     {
-        $label = trim((string) $value);
+        if ($sessionIds->isEmpty()) {
+            return collect();
+        }
 
-        return $label === '' ? 'none' : $label;
+        return ActivityEcomUserAction::query()
+            ->select('session_id', 'referer')
+            ->whereIn('session_id', $sessionIds)
+            ->whereNotNull('referer')
+            ->where('referer', '!=', '')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get()
+            ->unique('session_id')
+            ->mapWithKeys(fn (ActivityEcomUserAction $row) => [$row->session_id => (string) $row->referer]);
     }
 
     /**

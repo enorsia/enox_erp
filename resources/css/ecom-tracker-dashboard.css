@@ -1408,25 +1408,18 @@
     grid-column: span 6;
 }
 
-.etd-grid-5-7 {
-    display: grid;
-    grid-template-columns: repeat(24, minmax(0, 1fr));
-    gap: clamp(0.625rem, 1.5vw, 1rem);
-    align-items: stretch;
+.etd-panel--device-browser-full .etd-device-browser,
+.etd-panel--device-browser-full .etd-table-scroll--device-browser.etd-table-scroll--fixed {
+    width: 100%;
 }
 
-.etd-grid-5-7 > #device {
-    grid-column: span 15;
-}
-
-.etd-grid-5-7 > #engagement {
-    grid-column: span 9;
+.etd-panel--device-browser-full .etd-table-scroll--device-browser.etd-table-scroll--fixed {
+    --etd-table-scroll-height: clamp(14rem, 30vh, 22rem);
 }
 
 @media (max-width: 1023px) {
     .etd-grid-2,
-    .etd-grid-4-8,
-    .etd-grid-5-7 {
+    .etd-grid-4-8 {
         grid-template-columns: minmax(0, 1fr);
     }
 
@@ -1434,16 +1427,10 @@
     .etd-grid-4-8 > #products {
         grid-column: span 1;
     }
-
-    .etd-grid-5-7 > #device,
-    .etd-grid-5-7 > #engagement {
-        grid-column: 1 / -1;
-    }
 }
 
 @media (min-width: 1920px) {
     .etd-grid-2 { grid-template-columns: 1.2fr 0.8fr; gap: 1.25rem; }
-    .etd-grid-5-7 { gap: 1.25rem; }
 }
 
 .etd-panel {
@@ -1458,8 +1445,7 @@
 .etd-grid-2 > .etd-panel,
 .etd-grid-3 > .etd-panel,
 .etd-grid-4 > .etd-panel,
-.etd-grid-4-8 > .etd-panel,
-.etd-grid-5-7 > .etd-panel {
+.etd-grid-4-8 > .etd-panel {
     margin-bottom: 0;
 }
 
@@ -1467,8 +1453,7 @@
 .etd-grid-3.mb-3,
 .etd-grid-4.mb-3,
 .etd-grid-4-8.mb-3,
-.etd-recoverable-section.mb-3,
-.etd-grid-5-7.mb-3 {
+.etd-recoverable-section.mb-3 {
     margin-bottom: clamp(0.75rem, 2vw, 1rem);
 }
 
@@ -1754,6 +1739,28 @@
     min-width: 0;
 }
 
+.etd-device-browser-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(0.75rem, 1.5vw, 1rem);
+    align-items: start;
+}
+
+.etd-device-browser-panel {
+    min-width: 0;
+}
+
+.etd-device-browser-panel__title {
+    margin: 0 0 0.55rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.dark .etd-device-browser-panel__title {
+    color: #e2e8f0;
+}
+
 .etd-panel-head--device-browser {
     align-items: center;
 }
@@ -1854,51 +1861,20 @@
 }
 
 @media (min-width: 1024px) {
-    .etd-grid-5-7 {
-        --etd-acquisition-panel-min: clamp(18rem, 34vh, 26rem);
+    .etd-panel--device-browser-full.etd-panel--acquisition {
+        display: block;
     }
 
-    .etd-panel--acquisition {
-        display: flex;
-        flex-direction: column;
-        min-height: var(--etd-acquisition-panel-min);
-    }
-
-    .etd-grid-5-7 .etd-device-browser,
-    .etd-panel-body--acquisition {
-        flex: 1 1 auto;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-    }
-
-    .etd-panel-body--acquisition .etd-engagement-quality {
-        flex: 1 1 auto;
-        min-height: 0;
-    }
-
-    .etd-grid-5-7 .etd-table-scroll--device-browser.etd-table-scroll--fixed {
-        flex: 1 1 auto;
-        min-height: 0;
-        max-height: none;
-        height: auto;
-    }
-
-    .etd-panel-body--acquisition .etd-chart-wrap--engagement {
-        flex: 1 1 auto;
-        min-height: 10rem;
-        height: auto;
-        max-height: none;
-    }
-
-    .etd-panel-note--engagement {
-        margin-top: auto;
-        padding-top: 0.65rem;
-        flex-shrink: 0;
+    .etd-panel--device-browser-full .etd-device-browser-grid {
+        width: 100%;
     }
 }
 
 @media (max-width: 1023px) {
+    .etd-device-browser-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .etd-panel--acquisition {
         min-height: 0;
     }
@@ -1906,23 +1882,15 @@
     .etd-table-scroll--device-browser.etd-table-scroll--fixed {
         --etd-table-scroll-height: clamp(14rem, 32vh, 20rem);
     }
-
-    .etd-chart-wrap--engagement {
-        height: clamp(200px, 38vw, 260px);
-    }
 }
 
 @media (max-width: 639px) {
     .etd-table--device-browser {
-        min-width: 42rem;
+        min-width: 36rem;
     }
 
     .etd-table--traffic {
         min-width: 58rem;
-    }
-
-    .etd-chart-wrap--engagement {
-        height: clamp(180px, 52vw, 240px);
     }
 }
 
@@ -3345,8 +3313,7 @@
 
     .etd-grid-2,
     .etd-grid-3,
-    .etd-grid-4-8,
-    .etd-grid-5-7 {
+    .etd-grid-4-8 {
         gap: 1.375rem;
     }
 }

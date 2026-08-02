@@ -240,7 +240,7 @@ final class EcomTrackerViewData
         if ($utmSource !== null && $utmSource !== '' && $utmSource !== 'Other') {
             $resolved = $utmSource === '(direct)'
                 ? '(direct)'
-                : (TrackerUtmFilter::resolveSource($utmSource) ?? $utmSource);
+                : (SessionTrafficAttribution::normalizeSource($utmSource) ?? $utmSource);
 
             if ($resolved !== '') {
                 $query['utm_source'] = $resolved;

@@ -6,6 +6,8 @@
 ])
 
 @php
+    use App\Support\SessionTrafficAttribution;
+
     $resolveSourceLink = function (array $row) use ($activitySourceLink) {
         if (! is_callable($activitySourceLink) || ($row['source'] ?? '') === 'Other') {
             return null;
@@ -104,9 +106,9 @@
                 <tr>
                     <td>
                         @if ($sourceUrl)
-                            <a href="{{ $sourceUrl }}" class="etd-source-link">{{ $source['source'] }}</a>
+                            <a href="{{ $sourceUrl }}" class="etd-source-link">{{ SessionTrafficAttribution::displaySourceLabel($source['source']) ?? $source['source'] }}</a>
                         @else
-                            {{ $source['source'] }}
+                            {{ SessionTrafficAttribution::displaySourceLabel($source['source']) ?? $source['source'] }}
                         @endif
                     </td>
                     <td>{{ $source['medium'] }}</td>

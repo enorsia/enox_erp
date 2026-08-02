@@ -347,33 +347,18 @@
     </div>
 
     <h2 class="etd-section-title"><span class="etd-section-num">03</span> Acquisition &amp; audience</h2>
-    <p class="etd-section-note">Device mix, engagement depth, and where sessions originate.</p>
+    <p class="etd-section-note">Device mix and where sessions originate.</p>
 
-    <div class="etd-grid-5-7 mb-3">
-        <div class="etd-panel etd-panel--acquisition" id="device" x-data="{ view: 'device' }">
-            <div class="etd-panel-head etd-panel-head--device-browser">
-                <h2 class="etd-panel-title">Device &amp; browser</h2>
-                <div class="etd-panel-head-actions">
-                    @include('ecom_tracker.partials.device-browser-toggle')
-                    @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('devices')])
-                </div>
-            </div>
-            @include('ecom_tracker.partials.device-browser-breakdown', [
-                'devices' => $d['devices'],
-            ])
-        </div>
-
-        <div class="etd-panel etd-panel--acquisition" id="engagement">
-            <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Engagement quality</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('engagement')])
-            </div>
-            <div class="etd-panel-body etd-panel-body--acquisition">
-                @include('ecom_tracker.partials.engagement-quality-panel', [
-                    'engagement' => $d['engagement'],
-                ])
+    <div class="etd-panel etd-panel--acquisition etd-panel--device-browser-full mb-3" id="device">
+        <div class="etd-panel-head etd-panel-head--device-browser">
+            <h2 class="etd-panel-title">Device &amp; browser</h2>
+            <div class="etd-panel-head-actions">
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('devices')])
             </div>
         </div>
+        @include('ecom_tracker.partials.device-browser-breakdown', [
+            'devices' => $d['devices'],
+        ])
     </div>
 
     <div class="etd-panel mb-3" id="traffic">

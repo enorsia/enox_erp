@@ -153,6 +153,75 @@ test('session traffic attribution resolves ingest attributes from google organic
     ]);
 });
 
+test('session traffic attribution resolves custom source bucket from landing page utm', function () {
+    $session = ActivityEcomUser::query()->create([
+        'session_id' => 'custom-source-session',
+        'landing_page' => 'https://enorsia.com/?utm_source=klaviyo&utm_medium=email',
+        'device_type' => 'desktop',
+        'created_at' => now(),
+        'updated_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    expect(SessionTrafficAttribution::resolvedTrafficBucket($session))->toMatchArray([
+        'source' => 'klaviyo',
+        'medium' => 'email',
+    ]);
+});
+
+test('session traffic attribution resolves google paid bucket from later action url', function () {
+    $session = ActivityEcomUser::query()->create([
+        'session_id' => 'google-paid-later-action-session',
+        'utm_medium' => 'paid',
+        'device_type' => 'desktop',
+        'created_at' => now(),
+        'updated_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    expect(SessionTrafficAttribution::resolvedTrafficBucket(
+        $session,
+        [
+            'https://enorsia.com/style/test?gad_campaignid=23588680250&gclid=abc123',
+        ],
+        'https://www.google.com/',
+    ))->toMatchArray([
+        'source' => 'google',
+        'medium' => 'paid',
+    ]);
+});
+
+test('session traffic attribution resolves google paid bucket from first action when utm source is missing', function () {
+    $session = ActivityEcomUser::query()->create([
+        'session_id' => 'google-paid-bucket-session',
+        'utm_medium' => 'paid',
+        'utm_campaign' => '23588680250',
+        'device_type' => 'desktop',
+        'created_at' => now(),
+        'updated_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'session_id' => 'google-paid-bucket-session',
+        'action_type' => 'product_view',
+        'page_url' => 'https://enorsia.com/style/test?gad_source=1&gad_campaignid=23588680250&gclid=abc123',
+        'referer' => 'https://www.google.com/',
+        'created_at' => now(),
+    ]);
+
+    $session->load(['firstAction', 'firstRefererAction']);
+
+    expect(SessionTrafficAttribution::resolvedTrafficBucket($session))->toMatchArray([
+        'source' => 'google',
+        'medium' => 'paid',
+    ])->and(SessionTrafficAttribution::listRowSummary($session))->toMatchArray([
+        'source' => 'Google',
+        'utm' => 'paid / 23588680250',
+        'referer' => 'https://www.google.com/',
+    ]);
+});
+
 test('session traffic attribution backfills google ads session columns from first action url', function () {
     $session = ActivityEcomUser::query()->create([
         'session_id' => 'google-ads-session',
