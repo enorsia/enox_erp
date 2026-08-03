@@ -225,6 +225,7 @@
                     </div>
                 </div>
 
+                @if (config('tracker.enabled'))
                 @canany(Cache::get('permissions.available', [])['prefix']['ecom_tracker_'] ?? [])
                 <div x-data="{ open: {{ Request::is('admin/ecom-tracker*') || Request::is('admin/ecom-activity*') ? 'true' : 'false' }} }">
                     <button @click="open = !open"
@@ -275,6 +276,7 @@
                     </div>
                 </div>
                 @endcanany
+                @endif
             </div>
         @endcanany
 

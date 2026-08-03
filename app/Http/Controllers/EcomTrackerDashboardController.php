@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exports\EcomTrackerDashboardExport;
 use App\Http\Controllers\Concerns\CountsTrackerFilters;
 use App\Services\EcomTrackerDashboardService;
+use App\Services\EcomTrackerFeatureGate;
 use App\Support\EcomTrackerLogger;
 use App\Support\TrackerRedisSupport;
 use Illuminate\Contracts\View\View;
@@ -13,13 +14,16 @@ use Illuminate\Support\Facades\Gate;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
-class EcomTrackerDashboardController extends Controller
+class EcomTrackerDashboardController extends EcomTrackerAdminController
 {
     use CountsTrackerFilters;
 
     public function __construct(
+        EcomTrackerFeatureGate $featureGate,
         private EcomTrackerDashboardService $service,
-    ) {}
+    ) {
+        parent::__construct($featureGate);
+    }
 
     public function index(Request $request): View
     {

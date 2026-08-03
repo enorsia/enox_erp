@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\BotTrafficAnalyticsService;
+use App\Services\EcomTrackerFeatureGate;
 use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
 use App\Support\TrackerRedisSupport;
@@ -10,7 +11,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
-class EcomBotTrafficController extends Controller
+class EcomBotTrafficController extends EcomTrackerAdminController
 {
     private const FILTER_KEYS = [
         'search',
@@ -23,8 +24,11 @@ class EcomBotTrafficController extends Controller
     ];
 
     public function __construct(
+        EcomTrackerFeatureGate $featureGate,
         private BotTrafficAnalyticsService $analytics,
-    ) {}
+    ) {
+        parent::__construct($featureGate);
+    }
 
     public function index(Request $request): View
     {

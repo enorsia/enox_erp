@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exports\VisitorAnalyticsExport;
 use App\Models\TrackerUtmFilter;
 use App\Services\BotTrafficAnalyticsService;
+use App\Services\EcomTrackerFeatureGate;
 use App\Services\VisitorAnalyticsService;
 use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
@@ -17,12 +18,15 @@ use Illuminate\Support\Facades\Gate;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
-class VisitorAnalyticsController extends Controller
+class VisitorAnalyticsController extends EcomTrackerAdminController
 {
     public function __construct(
+        EcomTrackerFeatureGate $featureGate,
         private VisitorAnalyticsService $analytics,
         private BotTrafficAnalyticsService $botTrafficAnalytics,
-    ) {}
+    ) {
+        parent::__construct($featureGate);
+    }
 
     public function index(Request $request): View
     {

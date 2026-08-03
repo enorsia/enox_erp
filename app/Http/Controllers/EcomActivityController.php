@@ -7,6 +7,7 @@ use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityFilterCounts;
 use App\Services\EcomActivityTimelinePresenter;
+use App\Services\EcomTrackerFeatureGate;
 use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
 use App\Support\SessionTrafficAttribution;
@@ -19,7 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 
-class EcomActivityController extends Controller
+class EcomActivityController extends EcomTrackerAdminController
 {
     private const TIMELINE_PER_PAGE = 15;
 
@@ -31,6 +32,11 @@ class EcomActivityController extends Controller
         'proceed_checkout',
         'payment_success',
     ];
+
+    public function __construct(EcomTrackerFeatureGate $featureGate)
+    {
+        parent::__construct($featureGate);
+    }
 
     public function index(Request $request): View
     {
