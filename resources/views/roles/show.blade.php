@@ -35,6 +35,9 @@
         @if (!empty($nested) && count($nested))
             <div class="space-y-3">
                 @foreach ($nested as $moduleIndex => $models)
+                    @if (strtolower($moduleIndex) === 'ecom_tracker' && ! config('tracker.enabled'))
+                        @continue
+                    @endif
                     @php $colId = 'view_mod_' . Str::slug($moduleIndex); @endphp
                     <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
                         <!-- Module header -->

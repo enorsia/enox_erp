@@ -2,6 +2,17 @@
 
 return [
 
+    /*
+    |--------------------------------------------------------------------------
+    | Ecom Tracker (admin UI + permissions)
+    |--------------------------------------------------------------------------
+    |
+    | When false, Ecom Tracker is hidden from the admin sidebar, role permission
+    | screens, and web routes. Set ECOM_TRACKER_ENABLED=true to re-enable.
+    |
+    */
+    'enabled' => (bool) env('ECOM_TRACKER_ENABLED', false),
+
     'api_key_hash' => env('TRACKER_API_KEY_HASH'),
 
     'logging_enabled' => (bool) env('TRACKER_LOGGING', env('APP_DEBUG', false)),

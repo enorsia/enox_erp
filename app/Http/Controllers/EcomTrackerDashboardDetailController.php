@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\CountsTrackerFilters;
 use App\Services\EcomTrackerDashboardService;
+use App\Services\EcomTrackerFeatureGate;
 use App\Support\EcomTrackerLogger;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -11,7 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 
-class EcomTrackerDashboardDetailController extends Controller
+class EcomTrackerDashboardDetailController extends EcomTrackerAdminController
 {
     use CountsTrackerFilters;
 
@@ -44,8 +45,11 @@ class EcomTrackerDashboardDetailController extends Controller
     ];
 
     public function __construct(
+        EcomTrackerFeatureGate $featureGate,
         private EcomTrackerDashboardService $service,
-    ) {}
+    ) {
+        parent::__construct($featureGate);
+    }
 
     public function show(Request $request, string $section): View|RedirectResponse
     {
