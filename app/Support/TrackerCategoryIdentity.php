@@ -27,6 +27,28 @@ class TrackerCategoryIdentity
         'girls' => 'Girls',
     ];
 
+    /**
+     * @var list<string>
+     */
+    public const DEPARTMENTS = ['Men', 'Women', 'Boys', 'Girls'];
+
+    public static function normalizeDepartmentName(string $departmentName): string
+    {
+        $departmentName = trim($departmentName);
+
+        if ($departmentName === '') {
+            return '';
+        }
+
+        foreach (self::URL_DEPARTMENT_SLUG_MAP as $slug => $label) {
+            if (strcasecmp($departmentName, $label) === 0 || strcasecmp($departmentName, $slug) === 0) {
+                return $label;
+            }
+        }
+
+        return $departmentName;
+    }
+
     public static function departmentNameFromPageUrl(?string $pageUrl): string
     {
         $pageUrl = trim((string) $pageUrl);

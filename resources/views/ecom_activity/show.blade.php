@@ -118,7 +118,10 @@
                                     <div><span class="text-slate-400">Product:</span> {{ $item->product_name }}</div>
                                 @endif
                                 @if ($item->product_code)
-                                    <div><span class="text-slate-400">Code:</span> {{ $item->product_code }}</div>
+                                    <div><span class="text-slate-400">Product code:</span> {{ $item->product_code }}</div>
+                                @endif
+                                @if ($item->sku)
+                                    <div><span class="text-slate-400">SKU:</span> {{ $item->sku }}</div>
                                 @endif
                                 @if (in_array($item->action_type, ['product_view', 'product_view_popup'], true) && $item->color_timeline)
                                     <div class="sm:col-span-2">

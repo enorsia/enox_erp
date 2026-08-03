@@ -163,8 +163,6 @@ function sessionsForLogScale(values) {
     });
 }
 
-const devicePalette = () => [accent(), gold(), '#64748b', '#3b82f6', '#8b5cf6'];
-
 const TREND_SERIES_ORDER = [
     'unique_visitors',
     'sessions',
@@ -337,61 +335,126 @@ if (trendCtx && D.trend) {
     });
 }
 
-const deviceCtx = ctx('etdDeviceChart');
-if (deviceCtx && D.devices) {
-    new Chart(deviceCtx, {
-        type: 'doughnut',
-        data: {
-            labels: D.devices.labels || [],
-            datasets: [{ data: D.devices.values || [], backgroundColor: devicePalette(), borderWidth: 0 }],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '68%',
-            plugins: { legend: { display: false }, tooltip: tipStyle() },
-        },
-    });
-}
-
-const loginCtx = ctx('etdLoginChart');
-if (loginCtx && D.devices?.login) {
-    new Chart(loginCtx, {
-        type: 'doughnut',
-        data: {
-            labels: D.devices.login.labels || [],
-            datasets: [{ data: D.devices.login.values || [], backgroundColor: ['#64748b', gold()], borderWidth: 0 }],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '68%',
-            plugins: { legend: { display: false }, tooltip: tipStyle() },
-        },
-    });
-}
-
 const dwellCtx = ctx('etdDwellChart');
+
+function formatDwellSeconds(seconds) {
+    const value = Math.max(0, Number(seconds) || 0);
+
+    if (value <= 0) {
+        return '0s';
+    }
+
+    const hours = Math.floor(value / 3600);
+    const minutes = Math.floor((value % 3600) / 60);
+    const remaining = value % 60;
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    }
+
+    if (minutes > 0) {
+        return `${minutes}m ${remaining}s`;
+    }
+
+    return `${value}s`;
+}
+
+function formatDwellAxisTick(value) {
+    const seconds = Number(value) || 0;
+
+    if (seconds >= 3600) {
+        return `${Math.round(seconds / 3600)}h`;
+    }
+
+    if (seconds >= 60) {
+        return `${Math.round(seconds / 60)}m`;
+    }
+
+    return `${seconds}s`;
+}
+
 if (dwellCtx && D.engagement) {
     const { labels = [], buyers = [], non_buyers: nonBuyers = [] } = D.engagement;
+    const rows = D.engagement.rows || [];
 
     new Chart(dwellCtx, {
         type: 'bar',
         data: {
             labels,
             datasets: [
-                { label: 'Buyers (avg active sec)', data: buyers, backgroundColor: gold(), borderRadius: 4, barPercentage: 0.5 },
-                { label: 'Non-buyers (avg active sec)', data: nonBuyers, backgroundColor: `${accent()}80`, borderRadius: 4, barPercentage: 0.5 },
+                {
+                    label: 'Buyers',
+                    data: buyers,
+                    backgroundColor: `${gold()}D9`,
+                    borderColor: gold(),
+                    borderWidth: 1,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                    barPercentage: 0.62,
+                    categoryPercentage: 0.72,
+                },
+                {
+                    label: 'Non-buyers',
+                    data: nonBuyers,
+                    backgroundColor: `${accent()}66`,
+                    borderColor: `${accent()}B3`,
+                    borderWidth: 1,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                    barPercentage: 0.62,
+                    categoryPercentage: 0.72,
+                },
             ],
         },
         options: {
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { labels: { boxWidth: 10 } }, tooltip: tipStyle() },
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    ...tipStyle(),
+                    callbacks: {
+                        title: (items) => items[0]?.label || '',
+                        label: (context) => {
+                            const row = rows[context.dataIndex];
+                            const formatted = context.dataset.label === 'Buyers'
+                                ? row?.buyers_formatted
+                                : row?.non_buyers_formatted;
+
+                            return `${context.dataset.label}: ${formatted || formatDwellSeconds(context.parsed.x)}`;
+                        },
+                        afterBody: (items) => {
+                            const row = rows[items[0]?.dataIndex];
+
+                            if (!row || row.delta_seconds === 0) {
+                                return [];
+                            }
+
+                            return [`Gap: ${row.delta_formatted}`];
+                        },
+                    },
+                },
+            },
             scales: {
-                x: { grid: { color: gridClr() }, beginAtZero: true },
-                y: { grid: { display: false } },
+                x: {
+                    grid: { color: gridClr() },
+                    beginAtZero: true,
+                    ticks: {
+                        callback: (value) => formatDwellAxisTick(value),
+                        font: { size: isNarrow() ? 9 : 10 },
+                    },
+                },
+                y: {
+                    grid: { display: false },
+                    ticks: {
+                        font: { size: isNarrow() ? 10 : 11 },
+                    },
+                },
             },
         },
     });

@@ -10,8 +10,8 @@ use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -87,6 +87,18 @@ class TrackIngestService
             }
 
             $this->validatePaymentSuccessPayload($event);
+
+            if ($this->isDuplicatePaymentSuccess($event)) {
+                $acceptedIds[] = $eventId;
+
+                $this->logWarning('ingest.skip_duplicate_payment', 'Skipped duplicate payment_success for order', [
+                    'session_id' => $sessionId,
+                    'event_id' => $eventId,
+                    'order_id' => $this->paymentSuccessOrderId($event),
+                ]);
+
+                continue;
+            }
 
             $row = $this->mapEventToRow($sessionId, $event);
 
@@ -310,6 +322,7 @@ class TrackIngestService
             'department_name',
             'product_name',
             'product_code',
+            'sku',
             'product_color_id',
             'product_color_code',
             'general_color_name',
@@ -372,7 +385,7 @@ class TrackIngestService
         $items = $cart['items'] ?? [];
         $line = is_array($items[0] ?? null) ? $items[0] : [];
 
-        foreach (['category_name', 'category_code', 'department_name', 'product_name', 'product_code'] as $field) {
+        foreach (['category_name', 'category_code', 'department_name', 'product_name', 'product_code', 'sku'] as $field) {
             if (! empty($row[$field])) {
                 continue;
             }
@@ -567,7 +580,16 @@ class TrackIngestService
 
         $lastActiveAt = TrackerTime::toUtc($session->getRawOriginal('last_active_at')) ?? TrackerTime::nowUtc();
 
-        return (int) $createdAt->diffInSeconds($lastActiveAt);
+        return $this->durationSecondsBetween($createdAt, $lastActiveAt);
+    }
+
+    private function durationSecondsBetween(Carbon $from, Carbon $to): int
+    {
+        if ($to->lessThan($from)) {
+            return 0;
+        }
+
+        return max(0, (int) $from->diffInSeconds($to, absolute: true));
     }
 
     /**
@@ -589,8 +611,14 @@ class TrackIngestService
             }
         }
 
+        $ingestedAt = TrackerTime::nowUtc();
+
         if ($latest === null) {
-            return;
+            $latest = $ingestedAt;
+        } elseif ($ingestedAt->greaterThan($latest)) {
+            // Client event timestamps can predate session creation (view start time).
+            // Admin "last active" should reflect when we last heard from this session.
+            $latest = $ingestedAt;
         }
 
         $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
@@ -604,14 +632,20 @@ class TrackIngestService
             'updated_at' => TrackerTime::formatUtc(TrackerTime::nowUtc()),
         ];
 
+        $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
+
+        if ($createdAt !== null && $latest->lessThan($createdAt)) {
+            $latest = $createdAt->copy();
+        }
+
         if ($current === null || $latest->greaterThan($current)) {
             $updates['last_active_at'] = TrackerTime::formatUtc($latest);
         }
 
-        $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
         $effectiveLastActive = TrackerTime::toUtc($updates['last_active_at'] ?? $session->last_active_at) ?? $latest;
+
         $updates['session_duration_seconds'] = $createdAt
-            ? (int) $createdAt->diffInSeconds($effectiveLastActive)
+            ? $this->durationSecondsBetween($createdAt, $effectiveLastActive)
             : 0;
 
         $session->update($updates);
@@ -647,6 +681,57 @@ class TrackIngestService
         }
 
         return $text;
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function paymentSuccessOrderId(array $event): string
+    {
+        $payload = $event['payment_success'] ?? [];
+
+        if (! is_array($payload)) {
+            return '';
+        }
+
+        $orderId = trim((string) ($payload['order_id'] ?? ''));
+
+        if ($orderId !== '') {
+            return $orderId;
+        }
+
+        $checkoutInfo = $payload['checkout_info'] ?? [];
+
+        if (! is_array($checkoutInfo)) {
+            return '';
+        }
+
+        return trim((string) ($checkoutInfo['order_number'] ?? $checkoutInfo['order_pk'] ?? ''));
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function isDuplicatePaymentSuccess(array $event): bool
+    {
+        if (($event['action_type'] ?? '') !== 'payment_success') {
+            return false;
+        }
+
+        $orderId = $this->paymentSuccessOrderId($event);
+
+        if ($orderId === '') {
+            return false;
+        }
+
+        return ActivityEcomUserAction::query()
+            ->where('action_type', 'payment_success')
+            ->where(function ($query) use ($orderId) {
+                $query->where('payment_success->order_id', $orderId)
+                    ->orWhere('payment_success->checkout_info->order_number', $orderId)
+                    ->orWhere('payment_success->checkout_info->order_pk', $orderId);
+            })
+            ->exists();
     }
 
     /**

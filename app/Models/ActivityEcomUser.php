@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -47,7 +49,8 @@ class ActivityEcomUser extends Model
     }
 
     /**
-     * Newest activity first. NULL last_active_at rows must not float to the top on MySQL.
+     * Newest activity first. Uses UTC server timestamps so list order is stable
+     * when data is imported from production and the app runs on another OS timezone.
      *
      * @param  Builder<self>  $query
      * @return Builder<self>
@@ -58,13 +61,25 @@ class ActivityEcomUser extends Model
 
         if ($driver === 'sqlite') {
             return $query
-                ->orderByRaw('COALESCE(strftime("%s", last_active_at), strftime("%s", created_at)) DESC')
+                ->orderByRaw('CASE WHEN COALESCE(updated_at, created_at) >= COALESCE(last_active_at, created_at) THEN COALESCE(updated_at, created_at) ELSE COALESCE(last_active_at, created_at) END DESC')
                 ->orderByDesc('id');
         }
 
         return $query
-            ->orderByRaw('COALESCE(UNIX_TIMESTAMP(last_active_at), UNIX_TIMESTAMP(created_at)) DESC')
+            ->orderByRaw('GREATEST(COALESCE(updated_at, created_at), COALESCE(last_active_at, created_at)) DESC')
             ->orderByDesc('id');
+    }
+
+    /**
+     * UTC timestamp for admin display / comparisons (updated_at wins over stale client times).
+     */
+    public function latestActivityAt(): ?Carbon
+    {
+        return TrackerTime::latestActivityUtc(
+            $this->getRawOriginal('updated_at'),
+            $this->getRawOriginal('last_active_at'),
+            $this->getRawOriginal('created_at'),
+        );
     }
 
     public function actions(): HasMany

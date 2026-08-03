@@ -4,7 +4,11 @@
     'align' => 'left',
 ])
 
-<span @class(['etd-th-with-tip', 'etd-th-with-tip--end' => $align === 'right'])>
+<span @class([
+    'etd-th-with-tip',
+    'etd-th-with-tip--end' => $align === 'right',
+    'etd-th-with-tip--center' => $align === 'center',
+])>
     {{ $label }}
     <button type="button" class="etd-tip-trigger" aria-label="{{ $tip }}">
         <svg class="etd-tip-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">

@@ -4,6 +4,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\ActivityEcomUserBotContext;
 use App\Services\BotContextPersister;
+use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -221,6 +222,30 @@ test('track endpoint accepts product view popup', function () {
     expect($action->general_color_name)->toBe('Brown');
 });
 
+test('track endpoint stores parent product code and variant sku separately', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Boys Orange Jersey Shorts',
+        'product_code' => 'BS3874308',
+        'sku' => 'WSHGR14009988',
+        'product_color_id' => '42',
+        'general_color_name' => 'Orange',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->assertOk();
+
+    $action = ActivityEcomUserAction::where('event_id', $eventId)->first();
+
+    expect($action)->not->toBeNull();
+    expect($action->product_code)->toBe('BS3874308');
+    expect($action->sku)->toBe('WSHGR14009988');
+});
+
 test('track endpoint accepts add to cart with color and size details', function () {
     $sessionId = Str::uuid()->toString();
     $eventId = Str::uuid()->toString();
@@ -231,6 +256,7 @@ test('track endpoint accepts add to cart with color and size details', function 
         'action_type' => 'add_to_cart',
         'product_name' => 'Dress',
         'product_code' => 'GS123',
+        'sku' => 'GS123-M',
         'product_color_id' => '42',
         'general_color_name' => 'Brown',
         'add_to_cart' => [
@@ -244,7 +270,8 @@ test('track endpoint accepts add to cart with color and size details', function 
             'size_name' => 'M',
             'items' => [[
                 'product_id' => '101',
-                'product_code' => 'GS123-M',
+                'product_code' => 'GS123',
+                'sku' => 'GS123-M',
                 'qty' => 1,
                 'price' => 29.99,
                 'color_id' => '42',
@@ -265,6 +292,8 @@ test('track endpoint accepts add to cart with color and size details', function 
     expect($action->add_to_cart['color_id'])->toBe('42');
     expect($action->add_to_cart['product_id'])->toBe('101');
     expect($action->add_to_cart['size_name'])->toBe('M');
+    expect($action->product_code)->toBe('GS123');
+    expect($action->sku)->toBe('GS123-M');
 });
 
 test('track endpoint accepts begin checkout with product line details', function () {
@@ -425,6 +454,42 @@ test('track endpoint accepts payment success with checkout info', function () {
 
     expect($action->payment_success['checkout_info']['order_pk'])->toBe('55');
     expect($action->payment_success['checkout_info']['items'][0]['size_name'])->toBe('M');
+});
+
+test('duplicate payment success for the same order id is accepted but not stored twice', function () {
+    $firstSessionId = Str::uuid()->toString();
+    $secondSessionId = Str::uuid()->toString();
+    $firstEventId = Str::uuid()->toString();
+    $secondEventId = Str::uuid()->toString();
+    $headers = ['Authorization' => 'Bearer ' . $this->apiKey];
+
+    $paymentEvent = fn (string $sessionId, string $eventId) => [
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'order_id' => '7781442829',
+            'amount_paid' => 120.50,
+            'payment_method' => 'worldpay',
+            'currency' => 'GBP',
+            'checkout_info' => [
+                'order_number' => '7781442829',
+                'order_pk' => '991',
+            ],
+        ],
+    ];
+
+    $this->postJson('/api/track', trackPayload($firstSessionId, [$paymentEvent($firstSessionId, $firstEventId)]), $headers)
+        ->assertOk()
+        ->assertJson(['accepted_ids' => [$firstEventId]]);
+
+    $this->postJson('/api/track', trackPayload($secondSessionId, [$paymentEvent($secondSessionId, $secondEventId)]), $headers)
+        ->assertOk()
+        ->assertJson(['accepted_ids' => [$secondEventId]]);
+
+    expect(ActivityEcomUserAction::query()->where('action_type', 'payment_success')->count())->toBe(1);
+    expect(ActivityEcomUserAction::where('event_id', $firstEventId)->exists())->toBeTrue();
+    expect(ActivityEcomUserAction::where('event_id', $secondEventId)->exists())->toBeFalse();
 });
 
 test('payment success updates session user from checkout customer info', function () {
@@ -853,6 +918,39 @@ test('bot persist failure does not block event storage', function () {
         ->assertJson(['accepted_ids' => [$eventId]]);
 
     expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
+});
+
+test('track endpoint accepts events when event timestamp predates session creation', function () {
+    Carbon::setTestNow(Carbon::parse('2026-08-02 07:20:33', 'UTC'));
+    config(['tracker.visitor_timezone' => 'Europe/London']);
+
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Dress',
+        'product_code' => 'GS123',
+        'created_at' => '2026-08-02T07:20:27.000Z',
+        'start_time' => '2026-08-02T07:20:27.000Z',
+        'end_time' => '2026-08-02T07:20:30.000Z',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk()
+        ->assertJson(['accepted_ids' => [$eventId]]);
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
+    expect($session)->not->toBeNull();
+    expect($session->session_duration_seconds)->toBe(0);
+    expect(TrackerTime::formatUtc($session->last_active_at))->toBe('2026-08-02 07:20:33');
+
+    Carbon::setTestNow();
 });
 
 test('concurrent bot context persist creates exactly one row', function () {

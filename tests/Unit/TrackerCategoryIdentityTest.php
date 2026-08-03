@@ -65,6 +65,13 @@ test('tracker category identity matches cart lines to category rows by code or n
     ], $rowWithId))->toBeTrue();
 });
 
+test('tracker category identity normalizes department names', function () {
+    expect(TrackerCategoryIdentity::normalizeDepartmentName('men'))->toBe('Men');
+    expect(TrackerCategoryIdentity::normalizeDepartmentName('WOMEN'))->toBe('Women');
+    expect(TrackerCategoryIdentity::normalizeDepartmentName('boys'))->toBe('Boys');
+    expect(TrackerCategoryIdentity::DEPARTMENTS)->toBe(['Men', 'Women', 'Boys', 'Girls']);
+});
+
 test('tracker category identity builds department category label', function () {
     $meta = TrackerCategoryIdentity::meta('Women', 'DRS', 'Dresses');
 

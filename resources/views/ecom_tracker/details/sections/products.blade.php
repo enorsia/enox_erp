@@ -4,27 +4,41 @@
 @endphp
 
 <div x-data="{ expanded: @js($expandedProduct) }" class="etd-product-catalog">
-    <table class="etd-table etd-table--catalog etd-table--compact-head w-full">
+    <table class="etd-table etd-table--catalog etd-table--compact-head etd-table--performance-metrics w-full">
         <thead>
             <tr>
                 <th class="etd-catalog-expand-col"></th>
                 <th class="etd-col-product">Product</th>
-                <th class="etd-num">Views</th>
-                <th class="etd-num">
+                <th class="etd-col-product-code">Product code</th>
+                <th class="etd-num etd-col-metric">Views</th>
+                <th class="etd-num etd-col-metric">
                     @include('ecom_tracker.partials.column-header-with-tip', [
                         'label' => 'Adds',
                         'tip' => 'Add to cart',
-                        'align' => 'right',
+                        'align' => 'center',
                     ])
                 </th>
-                <th class="etd-num">Sale item</th>
-                <th class="etd-num">Sale</th>
+                <th class="etd-num etd-col-metric">
+                    @include('ecom_tracker.partials.column-header-with-tip', [
+                        'label' => 'Proceed',
+                        'tip' => 'Proceed to checkout',
+                        'align' => 'center',
+                    ])
+                </th>
+                <th class="etd-num etd-col-metric">
+                    @include('ecom_tracker.partials.column-header-with-tip', [
+                        'label' => 'Sold',
+                        'tip' => 'Sale item',
+                        'align' => 'center',
+                    ])
+                </th>
+                <th class="etd-num etd-col-metric">Sale</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($products as $product)
                 @php
-                    $productKey = $product['key'] ?? $product['code'];
+                    $productKey = $product['key'] ?? $product['product_code'] ?? $product['code'];
                     $variantCount = $product['variant_count'] ?? count($product['variants'] ?? []);
                 @endphp
                 <tr class="etd-catalog-product-row" :class="{ 'is-expanded': expanded === @js($productKey) }">
@@ -43,56 +57,51 @@
                                 class="etd-catalog-product-trigger"
                                 @if ($variantCount > 0) @click="expanded = expanded === @js($productKey) ? null : @js($productKey)" @endif>
                             <span class="font-medium text-slate-800 dark:text-slate-100">{{ $product['name'] }}</span>
-                            <div class="etd-subtle">{{ $product['code'] }}</div>
                         </button>
                     </td>
-                    <td class="etd-num">{{ number_format($product['views']) }}</td>
-                    <td class="etd-num">{{ number_format($product['adds']) }}</td>
-                    <td class="etd-num">{{ number_format($product['qty'] ?? 0) }}</td>
-                    <td class="etd-num">£{{ number_format($product['revenue'], 2) }}</td>
+                    <td class="etd-col-product-code">
+                        @php $productCode = trim((string) ($product['product_code'] ?? $product['code'] ?? '')); @endphp
+                        @if ($productCode !== '')
+                            <span class="etd-chip">{{ $productCode }}</span>
+                        @else
+                            <span class="text-slate-400">—</span>
+                        @endif
+                    </td>
+                    <td class="etd-num etd-col-metric">{{ number_format($product['views']) }}</td>
+                    <td class="etd-num etd-col-metric">{{ number_format($product['adds']) }}</td>
+                    <td class="etd-num etd-col-metric">{{ number_format($product['proceed_checkouts'] ?? 0) }}</td>
+                    <td class="etd-num etd-col-metric">{{ number_format($product['qty'] ?? 0) }}</td>
+                    <td class="etd-num etd-col-metric">£{{ number_format($product['revenue'], 2) }}</td>
                 </tr>
                 @if ($variantCount > 0)
-                    <tr class="etd-catalog-variant-wrap" x-show="expanded === @js($productKey)" x-cloak>
-                        <td colspan="6" class="!p-0">
-                            <div class="etd-catalog-variant-panel">
-                                <table class="etd-table etd-table--variant-nested etd-table--compact-head w-full">
-                                    <thead>
-                                        <tr>
-                                            <th>Color</th>
-                                            <th>Size</th>
-                                            <th class="etd-num">SKU</th>
-                                            <th class="etd-num">Views</th>
-                                            <th class="etd-num">
-                                                @include('ecom_tracker.partials.column-header-with-tip', [
-                                                    'label' => 'Adds',
-                                                    'tip' => 'Add to cart',
-                                                    'align' => 'right',
-                                                ])
-                                            </th>
-                                            <th class="etd-num">Sale item</th>
-                                            <th class="etd-num">Sale</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach ($product['variants'] as $variant)
-                                            <tr>
-                                                <td>{{ $variant['color'] ?: '—' }}</td>
-                                                <td>{{ $variant['size'] ?: '—' }}</td>
-                                                <td class="etd-num"><span class="etd-chip">{{ $variant['sku'] ?: '—' }}</span></td>
-                                                <td class="etd-num">{{ number_format($variant['views']) }}</td>
-                                                <td class="etd-num">{{ number_format($variant['adds']) }}</td>
-                                                <td class="etd-num">{{ number_format($variant['qty']) }}</td>
-                                                <td class="etd-num">£{{ number_format($variant['revenue'], 2) }}</td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        </td>
-                    </tr>
+                    @foreach ($product['variants'] as $variant)
+                        <tr class="etd-catalog-variant-row" x-show="expanded === @js($productKey)" x-cloak>
+                            <td class="etd-catalog-expand-col"></td>
+                            <td class="etd-col-product etd-catalog-variant-detail">
+                                <span class="etd-catalog-variant-label">Color:</span>
+                                <span>{{ $variant['color'] ?: '—' }}</span>
+                                <span class="etd-catalog-variant-sep">·</span>
+                                <span class="etd-catalog-variant-label">Size:</span>
+                                <span>{{ $variant['size'] ?: '—' }}</span>
+                            </td>
+                            <td class="etd-col-product-code">
+                                <span class="etd-catalog-variant-label">SKU:</span>
+                                @if (! empty($variant['sku']))
+                                    <span class="etd-chip">{{ $variant['sku'] }}</span>
+                                @else
+                                    <span class="text-slate-400">—</span>
+                                @endif
+                            </td>
+                            <td class="etd-num etd-col-metric">{{ number_format($variant['views']) }}</td>
+                            <td class="etd-num etd-col-metric">{{ number_format($variant['adds']) }}</td>
+                            <td class="etd-num etd-col-metric">{{ number_format($variant['proceed_checkouts'] ?? 0) }}</td>
+                            <td class="etd-num etd-col-metric">{{ number_format($variant['qty']) }}</td>
+                            <td class="etd-num etd-col-metric">£{{ number_format($variant['revenue'], 2) }}</td>
+                        </tr>
+                    @endforeach
                 @endif
             @empty
-                <tr><td colspan="6" class="text-slate-400">No products match the current filters.</td></tr>
+                <tr><td colspan="8" class="text-slate-400">No products match the current filters.</td></tr>
             @endforelse
         </tbody>
     </table>

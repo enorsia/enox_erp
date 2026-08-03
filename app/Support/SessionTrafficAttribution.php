@@ -382,18 +382,53 @@ final class SessionTrafficAttribution
     }
 
     /**
-     * @param  array<string, string>  $parsed
-     * @return array{source: ?string, medium: ?string, campaign: ?string}
+     * @param  list<string>  $actionPageUrls
+     * @return array<string, string>
      */
-    public static function resolvedUtmFields(ActivityEcomUser $session, array $parsed = []): array
-    {
-        if ($parsed === []) {
-            $firstAction = $session->relationLoaded('firstAction') ? $session->firstAction : null;
-            $parsed = self::parseFromUrl($session->landing_page)
-                + self::parseFromUrl($firstAction?->page_url);
+    public static function buildParsedAttribution(
+        ActivityEcomUser $session,
+        array $actionPageUrls = [],
+        ?string $referer = null,
+    ): array {
+        $parsed = self::parseFromUrl($session->landing_page);
+
+        if ($actionPageUrls === []) {
+            $firstPageUrl = self::firstActionPageUrl($session);
+
+            if (filled($firstPageUrl)) {
+                $actionPageUrls = [$firstPageUrl];
+            }
         }
 
-        $parsed = self::mergeRefererAttribution($parsed, self::refererFromActions($session));
+        foreach ($actionPageUrls as $url) {
+            if (filled($url)) {
+                $parsed = $parsed + self::parseFromUrl((string) $url);
+            }
+        }
+
+        if ($referer === null) {
+            $referer = self::refererFromActions($session);
+        }
+
+        return self::mergeRefererAttribution($parsed, $referer);
+    }
+
+    /**
+     * @param  array<string, string>  $parsed
+     * @param  list<string>  $actionPageUrls
+     * @return array{source: ?string, medium: ?string, campaign: ?string}
+     */
+    public static function resolvedUtmFields(
+        ActivityEcomUser $session,
+        array $parsed = [],
+        array $actionPageUrls = [],
+        ?string $referer = null,
+    ): array {
+        if ($parsed === []) {
+            $parsed = self::buildParsedAttribution($session, $actionPageUrls, $referer);
+        } else {
+            $parsed = self::mergeRefererAttribution($parsed, $referer ?? self::refererFromActions($session));
+        }
 
         $sessionSource = filled($session->utm_source)
             ? self::normalizeSource((string) $session->utm_source)
@@ -419,6 +454,33 @@ final class SessionTrafficAttribution
         $source = self::normalizeSource($source) ?? $source;
 
         return $labels[$source] ?? ucfirst((string) $source);
+    }
+
+    /**
+     * Canonical source/medium keys for dashboard traffic-source grouping.
+     *
+     * @param  list<string>  $actionPageUrls
+     * @return array{source: string, medium: string}
+     */
+    public static function resolvedTrafficBucket(
+        ActivityEcomUser $session,
+        array $actionPageUrls = [],
+        ?string $referer = null,
+    ): array {
+        $utm = self::resolvedUtmFields($session, [], $actionPageUrls, $referer);
+
+        $source = filled($utm['source'] ?? null)
+            ? (self::normalizeSource((string) $utm['source']) ?? (string) $utm['source'])
+            : '(direct)';
+
+        $medium = filled($utm['medium'] ?? null)
+            ? trim((string) $utm['medium'])
+            : 'none';
+
+        return [
+            'source' => $source,
+            'medium' => $medium,
+        ];
     }
 
     /**
@@ -482,10 +544,7 @@ final class SessionTrafficAttribution
      */
     public static function listRowSummary(ActivityEcomUser $session): array
     {
-        $firstAction = $session->relationLoaded('firstAction') ? $session->firstAction : null;
-        $parsed = self::parseFromUrl($session->landing_page)
-            + self::parseFromUrl($firstAction?->page_url);
-        $parsed = self::mergeRefererAttribution($parsed, self::refererFromActions($session));
+        $parsed = self::buildParsedAttribution($session);
         $utm = self::resolvedUtmFields($session, $parsed);
         $utmParts = array_values(array_filter([$utm['medium'], $utm['campaign']], fn ($value) => filled($value)));
 

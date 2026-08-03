@@ -49,7 +49,7 @@
     ])
 
     <div @class(['etd-panel', 'etd-panel--compact' => $section === 'products'])>
-        @include('ecom_tracker.details.sections.'.$section, ['data' => $data, 'range' => $range, 'paginator' => $paginator])
+        @include('ecom_tracker.details.sections.'.$section, ['data' => $data, 'range' => $range, 'paginator' => $paginator, 'filters' => $filters])
     </div>
 
     @if ($paginator)

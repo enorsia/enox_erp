@@ -53,6 +53,7 @@ class TrackController extends Controller
                 'events.*.department_id' => ['nullable', 'string', 'max:50'],
                 'events.*.product_name' => ['nullable', 'string', 'max:255'],
                 'events.*.product_code' => ['nullable', 'string', 'max:100'],
+                'events.*.sku' => ['nullable', 'string', 'max:100'],
                 'events.*.product_color_id' => ['nullable', 'string', 'max:50'],
                 'events.*.product_color_code' => ['nullable', 'string', 'max:255'],
                 'events.*.general_color_name' => ['nullable', 'string', 'max:255'],
