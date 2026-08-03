@@ -20,7 +20,8 @@ class UserController extends Controller
     public function index(Request $request): View
     {
         Gate::authorize('authentication.users.index');
-        $data['users'] = User::filter($request->all())
+        $data['users'] = User::visibleToAdmins()
+            ->filter($request->all())
             ->with(['roles:id,name'])
             ->latest()
             ->paginate(30);
@@ -96,7 +97,8 @@ class UserController extends Controller
     public function show(int $id): View
     {
         Gate::authorize('authentication.users.show');
-        $user = User::with([
+        $user = User::visibleToAdmins()
+            ->with([
             'roles:id,name'
         ])
             ->findOrFail($id);
@@ -229,7 +231,7 @@ class UserController extends Controller
          Gate::authorize('authentication.users.delete');
 
         try {
-            if (isset($user) && $user->id == 1) {
+            if ($user->isSystem() || $user->id == 1) {
                 notify()->error('User can not delete.', 'Error');
                 return redirect()->route('admin.users.index');
             }

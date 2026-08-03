@@ -2,10 +2,13 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use App\View\Composers\EcomTrackerUtmFilterComposer;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
+use Spatie\Activitylog\Models\Activity;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -23,6 +26,30 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         View::composer('ecom_tracker.partials.utm-filters', EcomTrackerUtmFilterComposer::class);
+
+        Gate::before(function (User $user) {
+            if ($user->isSystem()) {
+                return true;
+            }
+
+            return null;
+        });
+
+        Activity::creating(function (Activity $activity) {
+            $user = auth()->user();
+
+            if ($user instanceof User && $user->isSystem()) {
+                return false;
+            }
+
+            if ($activity->causer_type === User::class && $activity->causer_id) {
+                $isSystem = User::whereKey($activity->causer_id)->value('is_system');
+
+                if ($isSystem) {
+                    return false;
+                }
+            }
+        });
 
         Blade::directive('price', function ($expression) {
             return '<?php
