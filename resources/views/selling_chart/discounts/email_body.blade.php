@@ -172,19 +172,45 @@
                     </thead>
                     <tbody>
                         @php
-                            $discounts = $item['discounts']
+                            $discounts = $item['discounts'];
+                            $discountCount = count($discounts);
+                            $hasRange = collect($discounts)->contains(function ($discount) {
+                                return !empty($discount['range']);
+                            });
                         @endphp
-                        @foreach ($discounts as $discount)
-                            <tr>
-                                <td><strong>{{ $item['style'] }}</strong></td>
-                                <td><strong>{{ $item['product_code'] }}</strong></td>
-                                <td>
-                                    {{ $discount['color'] }}
-                                </td>
-                                <td>{{ $discount['range'] ?: '—' }}</td>
-                                <td>{{ $item['platform'] }}</td>
-                                <td class="num discount-price">{{$discount['discount']}}</td>
-                            </tr>
+                        @foreach ($discounts as $index => $discount)
+                            @if ($index === 0)
+                                <tr>
+                                    <td rowspan="{{ $discountCount }}">
+                                        <strong>{{ $item['style'] }}</strong>
+                                    </td>
+                                    <td rowspan="{{ $discountCount }}">
+                                        <strong>{{ $item['product_code'] }}</strong>
+                                    </td>
+                                    <td>
+                                        {{ $discount['color'] }}
+                                    </td>
+                                    <td>{{ $discount['range'] ?: '—' }}</td>
+                                    <td rowspan="{{ $discountCount }}">{{ $item['platform'] }}</td>
+                                    @if (!$hasRange)
+                                        <td rowspan="{{ $discountCount }}" class="num discount-price">{{$discount['discount']}}</td>
+                                    @else
+                                        <td class="num discount-price">{{$discount['discount']}}</td>
+                                    @endif
+
+                                </tr>
+                            @else
+                                <tr>
+                                    <td>
+                                        {{ $discount['color'] }}
+                                    </td>
+                                    <td>{{ $discount['range'] ?: '—' }}</td>
+                                    @if ($hasRange)
+                                        <td class="num discount-price">{{$discount['discount']}}</td>
+                                    @endif
+                                </tr>
+                            @endif
+
                         @endforeach
                     </tbody>
                 </table>
