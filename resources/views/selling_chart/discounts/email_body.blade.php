@@ -144,11 +144,7 @@
             <!-- Header -->
             <div class="header">
                 @php $platform = $discounts->first()?->platform; @endphp
-                @if ($type == 'approval')
-                <h2>Selling Chart Discount — Approval Required</h2>
-                @else
                 <h2>Discount Assigned: {{ $platform?->name }}</h2>
-                @endif
             </div>
 
             <!-- Sub-header -->
@@ -158,13 +154,8 @@
 
             <!-- Body -->
             <div class="body">
-                @if ($type == 'approval')
-                <p>The following discount(s) have been submitted and require <strong>approval for {{ $platform?->name
-                    }}</strong>. Please review and take action.</p>
-                @else
                 <p>The following discount(s) have been <strong>assigned for {{ $platform?->name }}</strong> and are ready
                     for the executor.</p>
-                @endif
 
                 <!-- Data Table -->
                 <table class="data-table">

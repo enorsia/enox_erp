@@ -1292,8 +1292,6 @@ class SalesChartController extends Controller
 
             DB::commit();
 
-            // $save_type = $request->save_type;
-
             // $delay = 0;
             // if ($save_type == 2) {
             //     $approval_emails = SellingChartDiscount::approvalEmails();
@@ -1305,7 +1303,7 @@ class SalesChartController extends Controller
             //         foreach ($approval_emails as $email) {
             //             Mail::to($email)
             //                 ->queue(
-            //                     (new SellingChartDiscountMail($sl_discounts, 'approval'))
+            //                     (new SellingChartDiscountMail($sl_discounts))
             //                         ->delay(now()->addSeconds($delay))
             //                 );
             //             $delay += 10;
@@ -1321,7 +1319,7 @@ class SalesChartController extends Controller
             //         foreach ($executor_emails as $email) {
             //             Mail::to($email)
             //                 ->queue(
-            //                     (new SellingChartDiscountMail($sl_discounts, 'executor'))
+            //                     (new SellingChartDiscountMail($sl_discounts))
             //                         ->delay(now()->addSeconds($delay))
             //                 );
             //             $delay += 10;
