@@ -1278,7 +1278,7 @@ class SalesChartController extends Controller
                         'discount_variants' => $discountVariants,
                     ];
 
-                    $response = $this->api->post(config('enox.endpoints.selling_chart_update_ecom_discount'), $apiData);
+                    $response = $this->api->post(config('enox.endpoints.selling_chart_update_discount'), $apiData);
 
                     if (!$response['status']) {
                         throw new Exception($response['message'] ? $response['message'] : 'Failed to update discount on Enox.');

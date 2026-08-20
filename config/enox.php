@@ -19,6 +19,6 @@ return [
         'selling_chart_sizes_by_category' => 'selling-chart/get-sizes-by-category',
         'selling_chart_po_histories' => 'selling-chart/get-po-histories',
         'style_stock_report' => 'styles/stock',
-        'selling_chart_update_ecom_discount' => 'selling-chart/update-ecom-discount',
+        'selling_chart_update_discount' => 'selling-chart/update-discount',
     ]
 ];
