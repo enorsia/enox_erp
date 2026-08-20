@@ -120,12 +120,85 @@ function initEtdFlatpickr(root = document) {
 
 window.initEtdFlatpickr = initEtdFlatpickr;
 
+function initDepartmentCategoryFilters(root) {
+    const scope = root?.querySelectorAll ? root : document;
+
+    scope.querySelectorAll('[data-etd-department-category]').forEach((container) => {
+        if (container._etdDepartmentCategoryBound) {
+            return;
+        }
+
+        container._etdDepartmentCategoryBound = true;
+
+        const categoriesByDepartment = JSON.parse(container.dataset.categoriesByDepartment || '{}');
+        const departmentSelect = container.querySelector('[data-etd-department-select]');
+        const categorySelect = container.querySelector('[data-etd-category-select]');
+
+        if (!departmentSelect || !categorySelect) {
+            return;
+        }
+
+        const syncCategoryOptions = (preserveSelection = true) => {
+            const department = departmentSelect.value;
+            const previousValue = preserveSelection ? categorySelect.value : '';
+            const categories = department !== '' ? (categoriesByDepartment[department] || []) : [];
+
+            categorySelect.innerHTML = '<option value="">All categories</option>';
+
+            categories.forEach((category) => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+
+                if (previousValue !== '' && previousValue === category) {
+                    option.selected = true;
+                }
+
+                categorySelect.appendChild(option);
+            });
+
+            const shouldDisable = department === '';
+            categorySelect.disabled = shouldDisable;
+
+            if (department === '') {
+                categorySelect.value = '';
+            } else if (previousValue !== '' && !categories.includes(previousValue)) {
+                categorySelect.value = '';
+            }
+
+            if (categorySelect.tomselect) {
+                categorySelect.tomselect.clearOptions();
+                categorySelect.tomselect.addOption({ value: '', text: 'All categories' });
+                categories.forEach((category) => {
+                    categorySelect.tomselect.addOption({ value: category, text: category });
+                });
+                categorySelect.tomselect.setValue(categorySelect.value, true);
+                if (shouldDisable) {
+                    categorySelect.tomselect.disable();
+                } else {
+                    categorySelect.tomselect.enable();
+                }
+            }
+        };
+
+        departmentSelect.addEventListener('change', () => {
+            categorySelect.value = '';
+            syncCategoryOptions(false);
+        });
+
+        syncCategoryOptions(true);
+    });
+}
+
+window.initDepartmentCategoryFilters = initDepartmentCategoryFilters;
+
 window.refreshEtdFilterControls = function (root) {
     if (typeof window.refreshTomSelectIn === 'function') {
         window.refreshTomSelectIn(root);
     }
 
     initEtdFlatpickr(root);
+    initDepartmentCategoryFilters(root);
 };
 
 window.syncEtdFlatpickrEnabled = function (container, enabled) {
@@ -153,6 +226,7 @@ window.syncEtdFlatpickrEnabled = function (container, enabled) {
 
 function boot() {
     initEtdFlatpickr(document);
+    initDepartmentCategoryFilters(document);
 }
 
 if (document.readyState === 'loading') {

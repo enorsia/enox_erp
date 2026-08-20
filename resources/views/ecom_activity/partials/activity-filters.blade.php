@@ -2,8 +2,10 @@
 @php($filterOptionCounts = $filterOptionCounts ?? [])
 @php($utmFilterState = $utmFilterState ?? null)
 @php($includeVisitorTrust = $includeVisitorTrust ?? true)
+@php($includeCountry = $includeCountry ?? true)
 @php($includeSessionSearch = $includeSessionSearch ?? true)
 @php($sessionFiltersHeading = $sessionFiltersHeading ?? null)
+@php($categoryFilterOptions = $categoryFilterOptions ?? ['departments' => [], 'categories_by_department' => []])
 
 @if ($includeSessionSearch)
 <div>
@@ -49,8 +51,6 @@
     </div>
 
     <hr class="border-slate-100 dark:border-slate-700"/>
-@else
-    <hr class="border-slate-100 dark:border-slate-700"/>
 @endif
 
 @if ($sessionFiltersHeading)
@@ -61,4 +61,12 @@
     'filterOptionCounts' => $filterOptionCounts,
     'utmFilterState' => $utmFilterState,
     'includeVisitorTrust' => $includeVisitorTrust,
+    'includeCountry' => $includeCountry,
+])
+
+<hr class="border-slate-100 dark:border-slate-700"/>
+
+@include('ecom_tracker.partials.catalog-department-category-filters', [
+    'filterOptions' => $categoryFilterOptions,
+    'sectionHeading' => 'Product / category',
 ])

@@ -16,7 +16,7 @@
     <div
         class="etd-activity-context"
         role="status"
-        aria-label="Dashboard drill-down summary"
+        aria-label="{{ ($context['clear_label'] ?? 'Clear section') === 'Clear filters' ? 'Filtered activity summary' : 'Dashboard drill-down summary' }}"
         @if ($tooltip !== '') title="{{ $tooltip }}" @endif
     >
         <p class="etd-activity-context__line">
@@ -41,7 +41,7 @@
             @endforeach
 
             @if (! empty($context['clear_focus_url']))
-                <a href="{{ $context['clear_focus_url'] }}" class="etd-activity-context__clear">Clear section</a>
+                <a href="{{ $context['clear_focus_url'] }}" class="etd-activity-context__clear">{{ $context['clear_label'] ?? 'Clear section' }}</a>
             @endif
         </p>
     </div>

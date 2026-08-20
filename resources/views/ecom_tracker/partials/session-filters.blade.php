@@ -1,6 +1,7 @@
 @php
     $filterOptionCounts = $filterOptionCounts ?? [];
     $includeVisitorTrust = $includeVisitorTrust ?? true;
+    $includeCountry = $includeCountry ?? true;
     $countLabel = static function (string $value, string $label, array $counts): string {
         return isset($counts[$value]) ? "{$label} ({$counts[$value]})" : $label;
     };
@@ -52,7 +53,9 @@
 </div>
 @endif
 
+@if ($includeCountry ?? true)
 <div>
     <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">Country</label>
     <input type="text" name="country" value="{{ request('country') }}" placeholder="GB for UK visitors" class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700">
 </div>
+@endif

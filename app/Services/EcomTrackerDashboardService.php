@@ -952,6 +952,233 @@ class EcomTrackerDashboardService
     }
 
     /**
+     * Department → category options for activity/catalog filter drawers.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{
+     *     departments: array<int, string>,
+     *     categories_by_department: array<string, array<int, string>>
+     * }
+     */
+    public function categoryFilterOptionsForRange(
+        Carbon $from,
+        Carbon $to,
+        array $filters = [],
+        ?string $period = null,
+    ): array {
+        $sessionFilters = $this->extractSessionFilters($filters);
+        $categories = $this->buildCategoryPerformance($from, $to, null, $sessionFilters, $period);
+        $grouped = $this->groupCategoryPerformanceByDepartment($categories);
+
+        $departments = [];
+        $categoriesByDepartment = [];
+
+        foreach ($grouped as $department) {
+            $departmentName = trim((string) ($department['name'] ?? ''));
+
+            if ($departmentName === '') {
+                continue;
+            }
+
+            $departments[] = $departmentName;
+            $categoriesByDepartment[$departmentName] = collect($department['categories'] ?? [])
+                ->pluck('category_name')
+                ->map(fn ($name) => trim((string) $name))
+                ->filter()
+                ->unique(fn (string $name) => strtolower($name))
+                ->sort(fn (string $a, string $b) => strcasecmp($a, $b))
+                ->values()
+                ->all();
+        }
+
+        return [
+            'departments' => $departments,
+            'categories_by_department' => $categoriesByDepartment,
+        ];
+    }
+
+    /**
+     * Dashboard-style device metrics for activity drill-down context.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{views: int, adds: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}|null
+     */
+    public function devicePerformanceSummaryForFilters(
+        Carbon $from,
+        Carbon $to,
+        array $filters = [],
+        ?string $period = null,
+    ): ?array {
+        $deviceType = strtolower(trim((string) ($filters['device_type'] ?? '')));
+
+        if (! in_array($deviceType, ['mobile', 'desktop', 'tablet'], true)) {
+            return null;
+        }
+
+        $sessionFilters = $this->extractSessionFilters($filters);
+        $breakdown = $this->buildDeviceBreakdown($from, $to, $sessionFilters, $period);
+        $label = ucfirst($deviceType);
+
+        $row = collect($breakdown['by_device'] ?? [])->first(
+            fn (array $deviceRow) => strcasecmp((string) ($deviceRow['label'] ?? ''), $label) === 0,
+        );
+
+        if ($row === null) {
+            return null;
+        }
+
+        return [
+            'views' => (int) ($row['views'] ?? 0),
+            'adds' => (int) ($row['add_to_cart'] ?? 0),
+            'proceed_checkouts' => (int) ($row['proceed_checkout'] ?? 0),
+            'purchases' => (int) ($row['purchases'] ?? 0),
+            'qty' => (int) ($row['sold_qty'] ?? 0),
+            'revenue' => round((float) ($row['revenue'] ?? 0), 2),
+        ];
+    }
+
+    /**
+     * Dashboard-style traffic source metrics for activity drill-down context.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{views: int, adds: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}|null
+     */
+    public function trafficSourceSummaryForFilters(
+        Carbon $from,
+        Carbon $to,
+        array $filters = [],
+        ?string $period = null,
+    ): ?array {
+        $source = trim((string) ($filters['utm_source'] ?? ''));
+
+        if ($source === '') {
+            return null;
+        }
+
+        $medium = trim((string) ($filters['utm_medium'] ?? ''));
+        $sessionFilters = $this->extractSessionFilters($filters);
+        $rows = $this->buildTrafficSources($from, $to, null, $sessionFilters, $period);
+
+        $row = collect($rows)->first(function (array $trafficRow) use ($source, $medium) {
+            if (strcasecmp((string) ($trafficRow['source'] ?? ''), $source) !== 0) {
+                return false;
+            }
+
+            if ($medium === '') {
+                return true;
+            }
+
+            return strcasecmp((string) ($trafficRow['medium'] ?? ''), $medium) === 0;
+        });
+
+        if ($row === null) {
+            return null;
+        }
+
+        return [
+            'views' => (int) ($row['views'] ?? 0),
+            'adds' => (int) ($row['add_to_cart'] ?? 0),
+            'proceed_checkouts' => (int) ($row['proceed_checkout'] ?? 0),
+            'purchases' => (int) ($row['payment_success'] ?? 0),
+            'qty' => (int) ($row['sold_qty'] ?? 0),
+            'revenue' => round((float) ($row['revenue'] ?? 0), 2),
+        ];
+    }
+
+    /**
+     * Dashboard-style sale conversion metrics for activity drill-down context.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{qty: int, revenue: float}|null
+     */
+    public function saleConversionSummaryForFilters(
+        Carbon $from,
+        Carbon $to,
+        array $filters = [],
+        ?string $period = null,
+    ): ?array {
+        $sessionFilters = $this->extractSessionFilters($filters);
+        $sessions = $this->filteredSessionsForRange($from, $to, $sessionFilters, $period);
+        $metrics = $this->buildSaleConversionMetrics($from, $to, $sessions, [
+            'from' => $from,
+            'to' => $to,
+            'label' => '',
+            'days' => 0,
+            'period' => $period,
+        ], $sessionFilters);
+
+        return [
+            'qty' => (int) ($metrics['item_qty']['value'] ?? 0),
+            'revenue' => round((float) ($metrics['revenue']['value'] ?? 0), 2),
+        ];
+    }
+
+    /**
+     * Dashboard-style abandonment totals for activity drill-down context.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{at_stake: float, items_qty: int, session_count: int}|null
+     */
+    public function abandonmentSummaryForFocus(
+        string $focus,
+        Carbon $from,
+        Carbon $to,
+        array $filters = [],
+        ?string $period = null,
+    ): ?array {
+        $config = match ($focus) {
+            'cart_abandonment' => ['add_to_cart', 'add_to_cart', 'begin_checkout'],
+            'begin_checkout_abandonment' => ['begin_checkout', 'begin_checkout', 'proceed_checkout'],
+            'proceed_checkout_abandonment' => ['proceed_checkout', 'proceed_to_checkout', 'payment_success'],
+            default => null,
+        };
+
+        if ($config === null) {
+            return null;
+        }
+
+        $sessionFilters = $this->extractSessionFilters($filters);
+        $data = $this->abandonedSessions(
+            $from,
+            $to,
+            $config[0],
+            $config[1],
+            null,
+            $sessionFilters,
+            $config[2],
+            $period,
+        );
+
+        return [
+            'at_stake' => (float) ($data['total_at_stake'] ?? 0),
+            'items_qty' => (int) collect($data['rows'] ?? [])->sum(fn (array $row) => (int) ($row['qty'] ?? 0)),
+            'session_count' => (int) ($data['total_count'] ?? 0),
+        ];
+    }
+
+    /**
+     * Dashboard-style audience KPIs for activity drill-down context.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{unique_visitors: int, avg_stay_seconds: int}|null
+     */
+    public function audienceSummaryForFilters(
+        Carbon $from,
+        Carbon $to,
+        array $filters = [],
+        ?string $period = null,
+    ): ?array {
+        $sessionFilters = $this->extractSessionFilters($filters);
+        $sessions = $this->filteredSessionsForRange($from, $to, $sessionFilters, $period);
+        $kpis = $this->buildKpis($from, $to, $sessions);
+
+        return [
+            'unique_visitors' => (int) ($kpis['unique_visitors'] ?? 0),
+            'avg_stay_seconds' => (int) ($kpis['avg_stay_seconds'] ?? 0),
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $product
      * @return array{views: int, adds: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}
      */
@@ -5664,7 +5891,9 @@ class EcomTrackerDashboardService
                     'add_to_cart' => (int) $row['add_to_cart'],
                     'begin_checkout' => (int) $row['begin_checkout'],
                     'proceed_checkout' => (int) $row['proceed_checkout'],
+                    'purchases' => $purchases,
                     'sold_qty' => (int) $row['sold_qty'],
+                    'revenue' => round((float) $row['revenue'], 2),
                     'conversion_rate' => $sessions > 0
                         ? round(($purchases / $sessions) * 100, 1)
                         : 0.0,

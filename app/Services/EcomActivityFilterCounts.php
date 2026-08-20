@@ -13,7 +13,6 @@ class EcomActivityFilterCounts
         'device_type',
         'logged_in',
         'has_order',
-        'visitor_type',
         'utm_source',
         'utm_medium',
     ];
@@ -50,11 +49,6 @@ class EcomActivityFilterCounts
             'has_order' => [
                 '1' => (clone $query)->whereHas('actions', fn (Builder $actions) => $actions->where('action_type', 'payment_success'))->count(),
                 '0' => (clone $query)->whereDoesntHave('actions', fn (Builder $actions) => $actions->where('action_type', 'payment_success'))->count(),
-            ],
-            'visitor_type' => [
-                'human' => (clone $query)->whereHas('botContext', fn (Builder $bot) => $bot->where('is_bot', false))->count(),
-                'bot' => (clone $query)->whereHas('botContext', fn (Builder $bot) => $bot->where('is_bot', true))->count(),
-                'unclassified' => (clone $query)->whereDoesntHave('botContext')->count(),
             ],
             'utm_source' => TrackerUtmFilter::sourceCountsFrom($query),
             'utm_medium' => TrackerUtmFilter::mediumCountsFrom($query),

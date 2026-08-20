@@ -14,6 +14,8 @@
     'activityFiltersIncludeDateRange' => true,
     'includeSessionSearch' => true,
     'includeVisitorTrust' => true,
+    'includeCountry' => true,
+    'categoryFilterOptions' => ['departments' => [], 'categories_by_department' => []],
     'showProductFilters' => false,
     'productFilterOptions' => ['categories' => [], 'colors' => [], 'sizes' => []],
     'eventScenarioOptions' => [],
@@ -131,6 +133,8 @@
                     'filterOptionCounts' => $filterOptionCounts ?? [],
                     'utmFilterState' => $utmFilterState ?? null,
                     'includeVisitorTrust' => $includeVisitorTrust ?? true,
+                    'includeCountry' => $includeCountry ?? true,
+                    'categoryFilterOptions' => $categoryFilterOptions ?? ['departments' => [], 'categories_by_department' => []],
                 ])
                 @if ($showProductFilters)
                     <hr class="etd-filter-divider"/>

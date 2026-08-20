@@ -7,6 +7,7 @@ use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityFunnelSessions;
 use App\Services\EcomTrackerDashboardService;
+use App\Services\VisitorAnalyticsService;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,6 +16,21 @@ use Illuminate\Support\Collection;
 
 final class EcomActivityFocus
 {
+  /** @var list<string> */
+    public const SHARED_SESSION_FILTER_KEYS = [
+        'device_type',
+        'logged_in',
+        'has_order',
+        'utm_source',
+        'utm_medium',
+    ];
+
+    /** @var list<string> */
+    public const DASHBOARD_AUDIENCE_FILTER_KEYS = [
+        'country',
+        'visitor_type',
+    ];
+
     /** @var array<string, string> */
     private const SECTION_MAP = [
         'cart-abandonment' => 'cart_abandonment',
@@ -316,15 +332,12 @@ final class EcomActivityFocus
      */
     public static function sessionFiltersFromRequest(Request $request): array
     {
-        return array_filter([
-            'device_type' => $request->input('device_type'),
-            'logged_in' => $request->input('logged_in'),
-            'has_order' => $request->input('has_order'),
-            'country' => $request->input('country'),
-            'visitor_type' => $request->input('visitor_type'),
-            'utm_source' => $request->input('utm_source'),
-            'utm_medium' => $request->input('utm_medium'),
-        ], fn ($value) => filled($value));
+        $keys = array_merge(self::SHARED_SESSION_FILTER_KEYS, self::DASHBOARD_AUDIENCE_FILTER_KEYS);
+
+        return array_filter(
+            array_intersect_key($request->only($keys), array_flip($keys)),
+            fn ($value) => filled($value),
+        );
     }
 
     /**
@@ -376,7 +389,6 @@ final class EcomActivityFocus
     {
         return [
             'search',
-            'category',
             'color',
             'size',
             'activity',
@@ -387,28 +399,52 @@ final class EcomActivityFocus
         ];
     }
 
+    public static function shouldApplyCatalogConstraintsInIndexQuery(?string $focus, Request $request): bool
+    {
+        if (self::productCatalogFiltersFromRequest($request) === []) {
+            return false;
+        }
+
+        if (! self::isValid($focus)) {
+            return true;
+        }
+
+        return ! in_array($focus, ['products', 'categories'], true);
+    }
+
     /**
      * @return array<int, string>
      */
     public static function sidebarFilterQueryKeys(?Request $request = null): array
     {
-        $keys = [
-            'date_from',
-            'date_to',
-            'device_type',
-            'logged_in',
-            'has_order',
-            'country',
-            'visitor_type',
-            'utm_source',
-            'utm_medium',
-        ];
+        $keys = array_merge(['department', 'category'], self::SHARED_SESSION_FILTER_KEYS);
 
         if ($request === null || ! self::usesCatalogScopedSearch($request)) {
             array_unshift($keys, 'search');
         }
 
         return $keys;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function activitySidebarChipLabels(Request $request): array
+    {
+        $labels = ['Department', 'Category', 'Device', 'Login', 'Orders', 'Source', 'Medium'];
+
+        if (! self::usesCatalogScopedSearch($request)) {
+            $labels[] = 'Product search';
+        }
+
+        if (self::showCatalogFiltersInDrawer($request)) {
+            return array_merge($labels, [
+                'Product code', 'Product', 'Product search', 'Category', 'Color', 'Size',
+                'Activity', 'Funnel step', 'Has purchases', 'Has views', 'Has cart adds',
+            ]);
+        }
+
+        return $labels;
     }
 
     /**
@@ -485,7 +521,7 @@ final class EcomActivityFocus
         Carbon $to,
         ?string $period,
     ): ?string {
-        if ($request->input('focus') !== 'categories' || ! $request->filled('category')) {
+        if (! $request->filled('category')) {
             return null;
         }
 
@@ -506,7 +542,7 @@ final class EcomActivityFocus
         return $departmentName !== '' ? $departmentName : null;
     }
 
-    private static function applyProductCatalogConstraints(
+    public static function applyProductCatalogConstraints(
         Builder $query,
         Carbon $from,
         Carbon $to,
@@ -561,6 +597,83 @@ final class EcomActivityFocus
         });
     }
 
+    public static function resolveFilterSummaryFocus(Request $request): ?string
+    {
+        $focus = $request->input('focus');
+
+        if (self::isValid($focus)) {
+            return $focus;
+        }
+
+        if ($request->filled('category')) {
+            return 'categories';
+        }
+
+        if ($request->filled('department')) {
+            return 'categories';
+        }
+
+        if ($request->filled('product_code') || $request->filled('product_name')
+            || self::productCatalogFiltersFromRequest($request) !== []) {
+            return 'products';
+        }
+
+        if ($request->filled('device_type')) {
+            return 'devices';
+        }
+
+        if ($request->filled('utm_source')) {
+            return 'traffic';
+        }
+
+        if (self::activeFilterCount($request) > 0) {
+            return 'audience';
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $funnelMetrics
+     * @return array<string, mixed>|null
+     */
+    public static function activityListContext(
+        Request $request,
+        string $rangeLabel,
+        int $sessionCount,
+        array $funnelMetrics = [],
+        ?Carbon $from = null,
+        ?Carbon $to = null,
+        ?string $period = null,
+    ): ?array {
+        $summaryFocus = self::resolveFilterSummaryFocus($request);
+
+        if ($summaryFocus === null) {
+            return null;
+        }
+
+        $criteria = self::filterCriteriaFromRequest($request);
+
+        if ($summaryFocus === 'categories' && $request->filled('category') && $from !== null && $to !== null) {
+            $criteria = self::enrichCategoryDrillDownCriteria($request, $criteria, $from, $to, $period);
+        }
+
+        $metrics = self::summaryForFocus($summaryFocus, $sessionCount, $funnelMetrics, $request, $from, $to, $period);
+        $hasDashboardFocus = self::isValid($request->input('focus'));
+
+        return [
+            'section' => self::label($summaryFocus),
+            'description' => self::drillDownDescription($summaryFocus) ?? self::filterSummaryDescription($summaryFocus),
+            'range_label' => $rangeLabel,
+            'criteria' => $criteria,
+            'metrics' => $metrics,
+            'clear_focus_url' => $hasDashboardFocus
+                ? $request->fullUrlWithQuery(['focus' => null, 'page' => null])
+                : self::sidebarFilterResetUrl($request),
+            'clear_label' => $hasDashboardFocus ? 'Clear section' : 'Clear filters',
+        ];
+    }
+
     /**
      * @param  array<string, array<string, mixed>>  $funnelMetrics
      * @return array<string, mixed>|null
@@ -575,26 +688,15 @@ final class EcomActivityFocus
         ?Carbon $to = null,
         ?string $period = null,
     ): ?array {
-        if (! self::isValid($focus)) {
-            return null;
-        }
-
-        $criteria = self::filterCriteriaFromRequest($request);
-
-        if ($focus === 'categories' && $request->filled('category') && $from !== null && $to !== null) {
-            $criteria = self::enrichCategoryDrillDownCriteria($request, $criteria, $from, $to, $period);
-        }
-
-        $metrics = self::summaryForFocus($focus, $sessionCount, $funnelMetrics, $request, $from, $to, $period);
-
-        return [
-            'section' => self::label($focus),
-            'description' => self::drillDownDescription($focus),
-            'range_label' => $rangeLabel,
-            'criteria' => $criteria,
-            'metrics' => $metrics,
-            'clear_focus_url' => $request->fullUrlWithQuery(['focus' => null, 'page' => null]),
-        ];
+        return self::activityListContext(
+            $request,
+            $rangeLabel,
+            $sessionCount,
+            $funnelMetrics,
+            $from,
+            $to,
+            $period,
+        );
     }
 
     /**
@@ -629,6 +731,8 @@ final class EcomActivityFocus
                     (string) $request->input('category'),
                 ),
             );
+        } elseif ($request->filled('department')) {
+            $add('Department', (string) $request->input('department'));
         }
 
         $add('Color', $request->input('color'));
@@ -726,6 +830,7 @@ final class EcomActivityFocus
                 'Product' => 'product_name',
                 'Product search' => 'search',
                 'Category' => 'category',
+                'Department' => 'department',
                 'Color' => 'color',
                 'Size' => 'size',
                 'Device' => 'device_type',
@@ -751,6 +856,15 @@ final class EcomActivityFocus
                 $chips[] = [
                     'label' => $criterion['label'].': '.$criterion['value'],
                     'remove_url' => $request->fullUrlWithQuery(['category' => null, 'department' => null, 'page' => null]),
+                ];
+
+                continue;
+            }
+
+            if ($key === 'department') {
+                $chips[] = [
+                    'label' => $criterion['label'].': '.$criterion['value'],
+                    'remove_url' => $request->fullUrlWithQuery(['department' => null, 'category' => null, 'page' => null]),
                 ];
 
                 continue;
@@ -783,6 +897,7 @@ final class EcomActivityFocus
             'Product' => 'product_name',
             'Product search' => 'search',
             'Category' => 'category',
+            'Department' => 'department',
             'Color' => 'color',
             'Size' => 'size',
             'Device' => 'device_type',
@@ -799,22 +914,9 @@ final class EcomActivityFocus
             'Has cart adds' => 'has_adds',
         ];
 
-        $sidebarLabels = [
-            'Device', 'Login', 'Orders', 'Visitor type', 'Country', 'Source', 'Medium',
-        ];
+        $sidebarLabels = self::activitySidebarChipLabels($request);
 
-        if (! self::usesCatalogScopedSearch($request)) {
-            $sidebarLabels[] = 'Product search';
-        }
-
-        $catalogLabels = [
-            'Product code', 'Product', 'Product search', 'Category', 'Color', 'Size',
-            'Activity', 'Funnel step', 'Has purchases', 'Has views', 'Has cart adds',
-        ];
-
-        $allowedLabels = self::showCatalogFiltersInDrawer($request)
-            ? array_merge($sidebarLabels, $catalogLabels)
-            : $sidebarLabels;
+        $allowedLabels = $sidebarLabels;
 
         $chips = [];
 
@@ -835,6 +937,15 @@ final class EcomActivityFocus
                 $chips[] = [
                     'label' => $label.': '.$criterion['value'],
                     'remove_url' => $request->fullUrlWithQuery(['category' => null, 'department' => null, 'page' => null]),
+                ];
+
+                continue;
+            }
+
+            if ($key === 'department') {
+                $chips[] = [
+                    'label' => $label.': '.$criterion['value'],
+                    'remove_url' => $request->fullUrlWithQuery(['department' => null, 'category' => null, 'page' => null]),
                 ];
 
                 continue;
@@ -867,6 +978,18 @@ final class EcomActivityFocus
         };
     }
 
+    private static function filterSummaryDescription(?string $summaryFocus): ?string
+    {
+        return match ($summaryFocus) {
+            'devices' => 'Sessions on the selected device type.',
+            'traffic' => 'Sessions from the selected traffic source or medium.',
+            'categories' => 'Sessions with category or product activity in the selected category.',
+            'products' => 'Sessions with product views, cart, or purchase activity matching the filters below.',
+            'audience' => 'Sessions matching the selected filters.',
+            default => null,
+        };
+    }
+
     /**
      * @param  array<string, array<string, mixed>>  $funnelMetrics
      * @return array<int, array{label: string, value: int|string}>
@@ -887,14 +1010,21 @@ final class EcomActivityFocus
         $atStake = round(collect($funnelMetrics)->sum(fn (array $row) => (float) ($row['value'] ?? 0)), 2);
 
         return match ($focus) {
-            'cart_abandonment', 'begin_checkout_abandonment', 'proceed_checkout_abandonment' => [
-                ['label' => 'Matching sessions', 'value' => $sessionCount],
-                ['label' => 'At stake', 'value' => '£'.number_format($atStake, 2)],
-            ],
-            'payment_success', 'conversion' => [
-                ['label' => 'Matching sessions', 'value' => $sessionCount],
-                ['label' => 'Revenue', 'value' => '£'.number_format($atStake, 2)],
-            ],
+            'cart_abandonment', 'begin_checkout_abandonment', 'proceed_checkout_abandonment' => array_merge(
+                [
+                    ['label' => 'Matching sessions', 'value' => $sessionCount],
+                    ['label' => 'At stake', 'value' => '£'.number_format($atStake, 2)],
+                ],
+                self::abandonmentSummaryExtras($focus, $request, $from, $to, $period),
+            ),
+            'payment_success' => array_merge(
+                [['label' => 'Matching sessions', 'value' => $sessionCount]],
+                self::paymentSuccessSummaryMetrics($sessionCount, $funnelMetrics),
+            ),
+            'conversion' => array_merge(
+                [['label' => 'Matching sessions', 'value' => $sessionCount]],
+                self::saleConversionSummaryMetrics($request, $from, $to, $period),
+            ),
             'categories' => array_merge(
                 [['label' => 'Matching sessions', 'value' => $sessionCount]],
                 self::categoryPerformanceSummaryMetrics($request, $from, $to, $period),
@@ -903,10 +1033,69 @@ final class EcomActivityFocus
                 [['label' => 'Matching sessions', 'value' => $sessionCount]],
                 self::productPerformanceSummaryMetrics($request, $from, $to, $period),
             ),
+            'devices' => array_merge(
+                [['label' => 'Matching sessions', 'value' => $sessionCount]],
+                self::devicePerformanceSummaryMetrics($request, $from, $to, $period),
+            ),
+            'traffic' => array_merge(
+                [['label' => 'Matching sessions', 'value' => $sessionCount]],
+                self::trafficSourceSummaryMetrics($request, $from, $to, $period),
+            ),
+            'audience' => array_merge(
+                [['label' => 'Matching sessions', 'value' => $sessionCount]],
+                self::audienceSummaryMetrics($request, $from, $to, $period),
+            ),
             default => [
                 ['label' => 'Matching sessions', 'value' => $sessionCount],
             ],
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array{views: int, adds: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}
+     */
+    private static function normalizeAcquisitionRow(array $row): array
+    {
+        return [
+            'views' => (int) ($row['views'] ?? 0),
+            'adds' => (int) ($row['adds'] ?? $row['add_to_cart'] ?? 0),
+            'proceed_checkouts' => (int) ($row['proceed_checkouts'] ?? $row['proceed_checkout'] ?? 0),
+            'purchases' => (int) ($row['purchases'] ?? $row['payment_success'] ?? 0),
+            'qty' => (int) ($row['qty'] ?? $row['sold_qty'] ?? $row['sale_items'] ?? 0),
+            'revenue' => (float) ($row['revenue'] ?? $row['sale_amount'] ?? 0),
+        ];
+    }
+
+    /**
+     * @param  array{views: int, adds: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}  $normalized
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function formatFunnelSummaryMetrics(array $normalized): array
+    {
+        $cartAbandonment = max(0, $normalized['adds'] - $normalized['proceed_checkouts']);
+
+        return [
+            ['label' => 'Views', 'value' => number_format($normalized['views'])],
+            ['label' => 'Adds', 'value' => number_format($normalized['adds'])],
+            ['label' => 'Proceed', 'value' => number_format($normalized['proceed_checkouts'])],
+            ['label' => 'Cart abandoned', 'value' => number_format($cartAbandonment)],
+            ['label' => 'Sold', 'value' => number_format($normalized['purchases'])],
+            ['label' => 'Sold qty', 'value' => number_format($normalized['qty'])],
+            ['label' => 'Sale', 'value' => '£'.number_format($normalized['revenue'], 2)],
+        ];
+    }
+
+    /**
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function funnelSummaryMetricsFromRow(?array $row): array
+    {
+        if ($row === null) {
+            return [];
+        }
+
+        return self::formatFunnelSummaryMetrics(self::normalizeAcquisitionRow($row));
     }
 
     /**
@@ -938,23 +1127,7 @@ final class EcomActivityFocus
             return [];
         }
 
-        $views = (int) ($row['views'] ?? 0);
-        $adds = (int) ($row['adds'] ?? 0);
-        $proceedCheckouts = (int) ($row['proceed_checkouts'] ?? 0);
-        $purchases = (int) ($row['purchases'] ?? 0);
-        $saleItems = (int) ($row['sale_items'] ?? 0);
-        $saleAmount = (float) ($row['sale_amount'] ?? 0);
-        $cartAbandonment = max(0, $adds - $proceedCheckouts);
-
-        return [
-            ['label' => 'Views', 'value' => number_format($views)],
-            ['label' => 'Adds', 'value' => number_format($adds)],
-            ['label' => 'Proceed', 'value' => number_format($proceedCheckouts)],
-            ['label' => 'Cart abandoned', 'value' => number_format($cartAbandonment)],
-            ['label' => 'Sold', 'value' => number_format($purchases)],
-            ['label' => 'Sold qty', 'value' => number_format($saleItems)],
-            ['label' => 'Sale', 'value' => '£'.number_format($saleAmount, 2)],
-        ];
+        return self::funnelSummaryMetricsFromRow($row);
     }
 
     /**
@@ -966,7 +1139,7 @@ final class EcomActivityFocus
         ?Carbon $to,
         ?string $period,
     ): array {
-        if ($request === null || $from === null || $to === null || $request->input('focus') !== 'products') {
+        if ($request === null || $from === null || $to === null) {
             return [];
         }
 
@@ -988,22 +1161,161 @@ final class EcomActivityFocus
             return [];
         }
 
-        $views = (int) ($row['views'] ?? 0);
-        $adds = (int) ($row['adds'] ?? 0);
-        $proceedCheckouts = (int) ($row['proceed_checkouts'] ?? 0);
-        $purchases = (int) ($row['purchases'] ?? 0);
-        $saleItems = (int) ($row['qty'] ?? 0);
-        $saleAmount = (float) ($row['revenue'] ?? 0);
-        $cartAbandonment = max(0, $adds - $proceedCheckouts);
+        return self::funnelSummaryMetricsFromRow($row);
+    }
+
+    /**
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function devicePerformanceSummaryMetrics(
+        ?Request $request,
+        ?Carbon $from,
+        ?Carbon $to,
+        ?string $period,
+    ): array {
+        if ($request === null || $from === null || $to === null || ! $request->filled('device_type')) {
+            return [];
+        }
+
+        $row = app(EcomTrackerDashboardService::class)->devicePerformanceSummaryForFilters(
+            $from,
+            $to,
+            self::sessionFiltersFromRequest($request),
+            $period,
+        );
+
+        return self::funnelSummaryMetricsFromRow($row);
+    }
+
+    /**
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function trafficSourceSummaryMetrics(
+        ?Request $request,
+        ?Carbon $from,
+        ?Carbon $to,
+        ?string $period,
+    ): array {
+        if ($request === null || $from === null || $to === null || ! $request->filled('utm_source')) {
+            return [];
+        }
+
+        $row = app(EcomTrackerDashboardService::class)->trafficSourceSummaryForFilters(
+            $from,
+            $to,
+            self::sessionFiltersFromRequest($request),
+            $period,
+        );
+
+        return self::funnelSummaryMetricsFromRow($row);
+    }
+
+    /**
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function saleConversionSummaryMetrics(
+        ?Request $request,
+        ?Carbon $from,
+        ?Carbon $to,
+        ?string $period,
+    ): array {
+        if ($request === null || $from === null || $to === null) {
+            return [];
+        }
+
+        $row = app(EcomTrackerDashboardService::class)->saleConversionSummaryForFilters(
+            $from,
+            $to,
+            self::sessionFiltersFromRequest($request),
+            $period,
+        );
+
+        if ($row === null) {
+            return [];
+        }
 
         return [
-            ['label' => 'Views', 'value' => number_format($views)],
-            ['label' => 'Adds', 'value' => number_format($adds)],
-            ['label' => 'Proceed', 'value' => number_format($proceedCheckouts)],
-            ['label' => 'Cart abandoned', 'value' => number_format($cartAbandonment)],
-            ['label' => 'Sold', 'value' => number_format($purchases)],
-            ['label' => 'Sold qty', 'value' => number_format($saleItems)],
-            ['label' => 'Sale', 'value' => '£'.number_format($saleAmount, 2)],
+            ['label' => 'Sold qty', 'value' => number_format((int) ($row['qty'] ?? 0))],
+            ['label' => 'Sale', 'value' => '£'.number_format((float) ($row['revenue'] ?? 0), 2)],
+        ];
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $funnelMetrics
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function paymentSuccessSummaryMetrics(int $sessionCount, array $funnelMetrics): array
+    {
+        $soldQty = (int) collect($funnelMetrics)->sum(fn (array $row) => (int) ($row['qty'] ?? 0));
+        $sale = round(collect($funnelMetrics)->sum(fn (array $row) => (float) ($row['value'] ?? 0)), 2);
+
+        return [
+            ['label' => 'Orders', 'value' => number_format($sessionCount)],
+            ['label' => 'Sold qty', 'value' => number_format($soldQty)],
+            ['label' => 'Sale', 'value' => '£'.number_format($sale, 2)],
+        ];
+    }
+
+    /**
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function abandonmentSummaryExtras(
+        ?string $focus,
+        ?Request $request,
+        ?Carbon $from,
+        ?Carbon $to,
+        ?string $period,
+    ): array {
+        if ($focus === null || $request === null || $from === null || $to === null) {
+            return [];
+        }
+
+        $summary = app(EcomTrackerDashboardService::class)->abandonmentSummaryForFocus(
+            $focus,
+            $from,
+            $to,
+            self::sessionFiltersFromRequest($request),
+            $period,
+        );
+
+        if ($summary === null) {
+            return [];
+        }
+
+        return [
+            ['label' => 'Items in cart', 'value' => number_format((int) ($summary['items_qty'] ?? 0))],
+        ];
+    }
+
+    /**
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function audienceSummaryMetrics(
+        ?Request $request,
+        ?Carbon $from,
+        ?Carbon $to,
+        ?string $period,
+    ): array {
+        if ($request === null || $from === null || $to === null) {
+            return [];
+        }
+
+        $summary = app(EcomTrackerDashboardService::class)->audienceSummaryForFilters(
+            $from,
+            $to,
+            self::sessionFiltersFromRequest($request),
+            $period,
+        );
+
+        if ($summary === null) {
+            return [];
+        }
+
+        $avgStayLabel = app(VisitorAnalyticsService::class)->formatDuration((int) ($summary['avg_stay_seconds'] ?? 0));
+
+        return [
+            ['label' => 'Unique visitors', 'value' => number_format((int) ($summary['unique_visitors'] ?? 0))],
+            ['label' => 'Avg stay', 'value' => $avgStayLabel],
         ];
     }
 

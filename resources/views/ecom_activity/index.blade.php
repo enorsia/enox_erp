@@ -71,11 +71,17 @@
         'action' => route('admin.ecom-activity.index'),
         'resetUrl' => $filterResetUrl ?? route('admin.ecom-activity.index'),
         'showActivityFilters' => true,
-        'activityFiltersIncludeDateRange' => true,
+        'activityFiltersIncludeDateRange' => false,
+        'preservePeriodParams' => true,
+        'period' => $period,
+        'dateFrom' => $dateFrom ?? '',
+        'dateTo' => $dateTo ?? '',
+        'includeVisitorTrust' => false,
+        'includeCountry' => false,
         'includeSessionSearch' => ! $showCatalogFilters,
-        'sessionFiltersHeading' => $showCatalogFilters ? 'Session filters' : null,
+        'sessionFiltersHeading' => 'Session filters',
         'showProductFilters' => $showCatalogFilters,
-        'productFiltersHeading' => $showCatalogFilters ? 'Product / category filters' : null,
+        'productFiltersHeading' => $showCatalogFilters ? 'Additional product filters' : null,
         'productFilterOptions' => $productFilterOptions ?? ['categories' => [], 'colors' => [], 'sizes' => []],
         'eventScenarioOptions' => $eventScenarioOptions ?? [],
         'productSortGroups' => $productSortGroups ?? [],
@@ -84,6 +90,7 @@
         'productCatalogShowSort' => false,
         'filterOptionCounts' => $filterOptionCounts ?? [],
         'utmFilterState' => $utmFilterState ?? null,
+        'categoryFilterOptions' => $categoryFilterOptions ?? ['departments' => [], 'categories_by_department' => []],
     ])
 
     <header class="etd-page-header">
@@ -117,7 +124,7 @@
                 @endif
                 <div class="flex items-center flex-wrap gap-x-2 gap-y-1">
                     <h1 class="etd-page-title">User activity</h1>
-                    @if (filled($focusLabel ?? null) && empty($drillDownContext))
+                    @if (filled($focusLabel ?? null) && empty($activityListContext ?? $drillDownContext ?? null))
                         <span class="etd-header-sep" aria-hidden="true">·</span>
                         <span class="etd-page-range">{{ $focusLabel }}</span>
                     @endif
@@ -190,19 +197,15 @@
             </div>
         </div>
 
-        @if (! empty($drillDownContext))
-            @include('ecom_activity.partials.drill-down-context', ['context' => $drillDownContext])
-        @endif
-
-        @if ($sidebarFilterCount > 0)
-            <p class="etd-filter-active-note etd-filter-active-note--compact">Filters applied — combined with the section above.</p>
+        @if (! empty($activityListContext ?? $drillDownContext ?? null))
+            @include('ecom_activity.partials.drill-down-context', ['context' => $activityListContext ?? $drillDownContext])
         @endif
 
         @if (! empty($filterChips))
             @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
         @endif
 
-        @if (empty($drillDownContext) && ! empty($summaryCards))
+        @if (empty($activityListContext ?? $drillDownContext ?? null) && ! empty($summaryCards))
             <div class="etd-kpi-grid mt-3 mb-1">
                 @foreach ($summaryCards as $card)
                     @include('ecom_tracker.partials.ga4-kpi-card', [

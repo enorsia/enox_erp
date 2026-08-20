@@ -102,8 +102,9 @@ class EcomActivityController extends EcomTrackerAdminController
         );
 
         $focusLabel = EcomActivityFocus::label($focus);
+        $summaryFocus = EcomActivityFocus::resolveFilterSummaryFocus($request);
         $summaryCards = EcomActivityFocus::summaryForFocus(
-            $focus,
+            $summaryFocus,
             $sessions->total(),
             $funnelContext['metrics'],
             $request,
@@ -111,9 +112,8 @@ class EcomActivityController extends EcomTrackerAdminController
             $range['to'],
             $range['period'],
         );
-        $drillDownContext = EcomActivityFocus::drillDownContext(
+        $activityListContext = EcomActivityFocus::activityListContext(
             $request,
-            $focus,
             $range['label'],
             $sessions->total(),
             $funnelContext['metrics'],
@@ -124,7 +124,7 @@ class EcomActivityController extends EcomTrackerAdminController
         $backUrl = EcomTrackerViewData::resolveBackUrl($request->input('back'));
         $breadcrumbs = $this->buildBreadcrumbs(
             $request,
-            $drillDownContext ? null : $focusLabel,
+            $activityListContext ? null : $focusLabel,
             $backUrl,
         );
         $focusColumns = EcomActivityFocus::tableColumns($focus, $request);
@@ -133,9 +133,17 @@ class EcomActivityController extends EcomTrackerAdminController
 
         $showCatalogFilters = EcomActivityFocus::showCatalogFiltersInDrawer($request);
         $productFilterOptions = ['categories' => [], 'colors' => [], 'sizes' => []];
+        $categoryFilterOptions = ['departments' => [], 'categories_by_department' => []];
         $eventScenarioOptions = [];
         $productSortGroups = [];
         $productActivityOptions = [];
+
+        $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
+            $range['from'],
+            $range['to'],
+            EcomActivityFocus::sessionFiltersFromRequest($request),
+            $range['period'],
+        );
 
         if ($showCatalogFilters) {
             $catalogData = $this->dashboardService->buildProductCatalogPerformance(
@@ -176,9 +184,11 @@ class EcomActivityController extends EcomTrackerAdminController
             'rangeLabel' => $range['label'],
             'hasFocus' => EcomActivityFocus::isValid($focus),
             'backUrl' => $backUrl,
-            'drillDownContext' => $drillDownContext,
+            'drillDownContext' => $activityListContext,
+            'activityListContext' => $activityListContext,
             'showCatalogFilters' => $showCatalogFilters,
             'productFilterOptions' => $productFilterOptions,
+            'categoryFilterOptions' => $categoryFilterOptions,
             'eventScenarioOptions' => $eventScenarioOptions,
             'productSortGroups' => $productSortGroups,
             'productActivityOptions' => $productActivityOptions,
@@ -410,6 +420,20 @@ class EcomActivityController extends EcomTrackerAdminController
 
         if (! in_array('utm_medium', $except, true)) {
             TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
+        }
+
+        if (
+            ! in_array('focus', $except, true)
+            && EcomActivityFocus::shouldApplyCatalogConstraintsInIndexQuery($focus, $request)
+        ) {
+            EcomActivityFocus::applyProductCatalogConstraints(
+                $query,
+                $range['from'],
+                $range['to'],
+                $request,
+                $this->dashboardService,
+                $range['period'] ?? $request->input('period', '24h'),
+            );
         }
 
         return $query;

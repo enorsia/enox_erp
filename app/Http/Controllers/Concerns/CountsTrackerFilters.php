@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Concerns;
 
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomTrackerDashboardService;
+use App\Support\EcomActivityFocus;
 use App\Support\VisitorClassificationLabels;
 use Illuminate\Http\Request;
 
@@ -13,7 +14,10 @@ trait CountsTrackerFilters
     {
         $count = 0;
 
-        $sessionKeys = ['device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium'];
+        $sessionKeys = array_merge(
+            EcomActivityFocus::SHARED_SESSION_FILTER_KEYS,
+            EcomActivityFocus::DASHBOARD_AUDIENCE_FILTER_KEYS,
+        );
         $productKeys = ['search', 'category', 'color', 'size', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario'];
 
         foreach ($includeProductCatalog ? array_merge($sessionKeys, $productKeys) : $sessionKeys as $key) {
@@ -49,7 +53,11 @@ trait CountsTrackerFilters
      */
     protected function dashboardSessionFilters(Request $request): array
     {
-        $filters = $request->only(['device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium']);
+        $keys = array_merge(
+            EcomActivityFocus::SHARED_SESSION_FILTER_KEYS,
+            EcomActivityFocus::DASHBOARD_AUDIENCE_FILTER_KEYS,
+        );
+        $filters = $request->only($keys);
 
         $filters['utm_source'] = TrackerUtmFilter::resolveSource($filters['utm_source'] ?? null) ?? '';
         $filters['utm_medium'] = TrackerUtmFilter::resolveMedium($filters['utm_medium'] ?? null) ?? '';

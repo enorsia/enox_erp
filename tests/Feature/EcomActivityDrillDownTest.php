@@ -1051,3 +1051,160 @@ test('activity index products focus shows product performance totals in drill-do
         ->assertSee('Sold')
         ->assertSee('Sale');
 });
+
+test('activity index devices focus shows device performance totals in drill-down context', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'mobile',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Mobile Tee',
+        'product_code' => 'MOB-001',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'add_to_cart',
+        'product_name' => 'Mobile Tee',
+        'product_code' => 'MOB-001',
+        'add_to_cart' => [
+            'product_code' => 'MOB-001',
+            'product_name' => 'Mobile Tee',
+            'qty' => 1,
+        ],
+        'created_at' => now()->addMinute(),
+        'start_time' => now()->addMinute(),
+        'end_time' => now()->addMinute(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'devices',
+            'device_type' => 'mobile',
+        ]))
+        ->assertOk()
+        ->assertSee('Device & browser')
+        ->assertSee('Mobile')
+        ->assertSee('Views')
+        ->assertSee('Adds')
+        ->assertSee('Proceed')
+        ->assertSee('Cart abandoned')
+        ->assertSee('Sold')
+        ->assertSee('Sold qty')
+        ->assertSee('Sale');
+});
+
+test('activity index sidebar device filter shows performance totals in context without dashboard focus', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'mobile',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Mobile Tee',
+        'product_code' => 'MOB-001',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'device_type' => 'mobile',
+        ]))
+        ->assertOk()
+        ->assertSee('Device & browser')
+        ->assertSee('Mobile')
+        ->assertSee('Views')
+        ->assertSee('Adds')
+        ->assertSee('Clear filters');
+});
+
+test('activity index traffic focus shows traffic source performance totals in drill-down context', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'utm_source' => 'google',
+        'utm_medium' => 'cpc',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Ad Product',
+        'product_code' => 'AD-001',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'traffic',
+            'utm_source' => 'google',
+            'utm_medium' => 'cpc',
+        ]))
+        ->assertOk()
+        ->assertSee('Traffic sources')
+        ->assertSee('google')
+        ->assertSee('Views')
+        ->assertSee('Adds')
+        ->assertSee('Proceed')
+        ->assertSee('Cart abandoned')
+        ->assertSee('Sold')
+        ->assertSee('Sold qty')
+        ->assertSee('Sale');
+});
+
+test('activity index filter drawer omits visitor trust and country fields', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', ['period' => 'all']))
+        ->assertOk()
+        ->assertSee('Session filters')
+        ->assertSee('Traffic source')
+        ->assertSee('Device')
+        ->assertSee('Logged in')
+        ->assertSee('Has order')
+        ->assertDontSee('Visitor trust')
+        ->assertDontSee('Filter by how we classified each session')
+        ->assertDontSee('>Country</label>', false);
+});
