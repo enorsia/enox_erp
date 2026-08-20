@@ -1,6 +1,7 @@
 @php
     $departments = $departments ?? [];
     $showCurrency = $showCurrency ?? true;
+    $categoryActivityLink = $categoryActivityLink ?? null;
     $maxSaleAmount = max(1, (float) collect($departments)->max('sale_amount'));
 @endphp
 
@@ -85,7 +86,15 @@
                         @endphp
                         <tr class="etd-category-child-row" x-show="expanded === @js($departmentKey)" x-cloak>
                             <td class="etd-catalog-expand-col"></td>
-                            <td class="etd-col-category etd-category-child-name">{{ $category['category_name'] }}</td>
+                            <td class="etd-col-category etd-category-child-name">
+                                @if (is_callable($categoryActivityLink))
+                                    <a href="{{ $categoryActivityLink($category['category_name']) }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
+                                        {{ $category['category_name'] }}
+                                    </a>
+                                @else
+                                    {{ $category['category_name'] }}
+                                @endif
+                            </td>
                             <td class="etd-num etd-col-metric">{{ number_format($category['views']) }}</td>
                             <td class="etd-num etd-col-metric">{{ number_format($category['adds']) }}</td>
                             <td class="etd-num etd-col-metric">{{ number_format($category['proceed_checkouts'] ?? 0) }}</td>

@@ -93,11 +93,11 @@ class EcomTrackerDashboardService
         $productCatalog = $this->buildProductCatalogPerformance(
             $range['from'],
             $range['to'],
-            self::TABLE_DISPLAY_LIMIT,
+            null,
             $extraFilters,
             array_merge($productCatalogOptions, ['period' => $period]),
         );
-        $categories = $this->buildCategoryPerformance($range['from'], $range['to'], filters: $extraFilters, period: $period);
+        $categories = $this->buildCategoryPerformance($range['from'], $range['to'], null, $extraFilters, $period);
 
         return [
             'filters' => $this->normalizeFilters($filters, $range),
@@ -119,17 +119,32 @@ class EcomTrackerDashboardService
             ),
             'funnel' => $this->buildFunnel($range['from'], $range['to'], $extraFilters, $period),
             'trend' => $this->buildTrend($range['from'], $range['to'], $extraFilters, $range['period'] ?? null),
-            'categories' => $categories,
-            'category_departments' => $this->groupCategoryPerformanceByDepartment($categories),
-            'products' => $productCatalog['products'],
+            'categories' => array_slice($categories, 0, self::TABLE_DISPLAY_LIMIT),
+            'category_catalog_totals' => [
+                'category_count' => count($categories),
+                'views' => (int) collect($categories)->sum('views'),
+                'adds' => (int) collect($categories)->sum('adds'),
+                'sale_items' => (int) collect($categories)->sum('sale_items'),
+                'sale_amount' => round((float) collect($categories)->sum('sale_amount'), 2),
+            ],
+            'category_departments' => $this->groupCategoryPerformanceByDepartment(array_slice($categories, 0, self::TABLE_DISPLAY_LIMIT)),
+            'products' => array_slice($productCatalog['products'], 0, self::TABLE_DISPLAY_LIMIT),
+            'product_catalog_totals' => [
+                'product_count' => count($productCatalog['products']),
+                'views' => (int) collect($productCatalog['products'])->sum('views'),
+                'adds' => (int) collect($productCatalog['products'])->sum('adds'),
+                'proceed_checkouts' => (int) collect($productCatalog['products'])->sum('proceed_checkouts'),
+                'qty' => (int) collect($productCatalog['products'])->sum('qty'),
+                'revenue' => round((float) collect($productCatalog['products'])->sum('revenue'), 2),
+            ],
             'product_filter_options' => $productCatalog['filter_options'],
             'product_sort_by' => $productCatalog['sort_by'],
-            'cart_abandonment' => $this->buildCartAbandonment($range['from'], $range['to'], filters: $extraFilters),
-            'begin_checkout_abandonment' => $this->buildBeginCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters),
-            'proceed_checkout_abandonment' => $this->buildProceedCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters),
-            'payment_success_events' => $this->buildPaymentSuccessEvents($range['from'], $range['to'], filters: $extraFilters),
-            'devices' => $this->buildDeviceBreakdown($range['from'], $range['to'], $extraFilters),
-            'traffic_sources' => $this->buildTrafficSources($range['from'], $range['to'], filters: $extraFilters),
+            'cart_abandonment' => $this->buildCartAbandonment($range['from'], $range['to'], filters: $extraFilters, period: $period),
+            'begin_checkout_abandonment' => $this->buildBeginCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters, period: $period),
+            'proceed_checkout_abandonment' => $this->buildProceedCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters, period: $period),
+            'payment_success_events' => $this->buildPaymentSuccessEvents($range['from'], $range['to'], filters: $extraFilters, period: $period),
+            'devices' => $this->buildDeviceBreakdown($range['from'], $range['to'], $extraFilters, $period),
+            'traffic_sources' => $this->buildTrafficSources($range['from'], $range['to'], filters: $extraFilters, period: $period),
             'geography' => $this->buildGeography($range['from'], $range['to'], filters: $extraFilters),
             'engagement' => $this->buildEngagement($range['from'], $range['to'], $extraFilters),
             'has_session_filters' => $extraFilters !== [],
@@ -413,7 +428,7 @@ class EcomTrackerDashboardService
     {
         return array_filter(
             array_intersect_key($filters, array_flip([
-                'search', 'category', 'color', 'size', 'sort_by', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
+                'search', 'product_code', 'product_name', 'category', 'color', 'size', 'sort_by', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
             ])),
             fn ($value) => $value !== null && $value !== '',
         );
@@ -428,6 +443,320 @@ class EcomTrackerDashboardService
             $this->queryCacheKey('filteredSessionIds', $from, $to, $period, $filters),
             fn () => $this->queryFilteredSessionIds($from, $to, $filters, $period),
         );
+    }
+
+    /**
+     * Session IDs in User Activity list scope for the period (plus optional dashboard filters).
+     *
+     * @param  array<string, mixed>  $filters
+     * @return Collection<int, string>
+     */
+    public function activitySessionIds(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): Collection
+    {
+        if ($filters !== []) {
+            return $this->filteredSessionIds($from, $to, $filters, $period);
+        }
+
+        return $this->sessionsInRange($from, $to, $period)->keys()->values();
+    }
+
+    /**
+     * Sessions that match product-catalog filters (product, category, color, size, etc.).
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function productCatalogSessionIds(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): Collection
+    {
+        return $this->rememberQuery(
+            $this->queryCacheKey('productCatalogSessionIds', $from, $to, $period, $filters),
+            fn () => $this->queryProductCatalogSessionIds($from, $to, $filters, $period),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function queryProductCatalogSessionIds(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): Collection
+    {
+        $sessionFilters = $this->extractSessionFilters($filters);
+        $catalogOptions = $this->extractProductCatalogOptions($filters);
+
+        if ($catalogOptions === []) {
+            return $this->filteredSessionIds($from, $to, $sessionFilters, $period);
+        }
+
+        $actionTypes = array_merge(
+            self::PRODUCT_VIEW_TYPES,
+            ['add_to_cart', 'proceed_checkout', 'payment_success', 'category_view'],
+        );
+
+        $actions = ActivityEcomUserAction::query()
+            ->select($this->productCatalogActionColumns())
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+            ->whereIn('action_type', $actionTypes)
+            ->get();
+
+        $matchedSessionIds = $actions
+            ->filter(fn (ActivityEcomUserAction $action) => $this->actionMatchesProductCatalogOptions($action, $catalogOptions))
+            ->pluck('session_id')
+            ->unique()
+            ->values();
+
+        if ($sessionFilters === []) {
+            return $matchedSessionIds;
+        }
+
+        $scopedSessionIds = $this->filteredSessionIds($from, $to, $sessionFilters, $period);
+
+        return $matchedSessionIds
+            ->intersect($scopedSessionIds)
+            ->values();
+    }
+
+    /**
+     * Per-session product metrics for activity drill-down (matches dashboard catalog counting).
+     *
+     * @param  Collection<int, string>  $sessionIds
+     * @param  array<string, mixed>  $options
+     * @return array<string, array{products_viewed: int, adds: int, purchased: string}>
+     */
+    public function countProductCatalogMetricsForSessions(
+        Collection $sessionIds,
+        Carbon $from,
+        Carbon $to,
+        array $options = [],
+    ): array {
+        $metrics = [];
+
+        foreach ($sessionIds as $sessionId) {
+            $metrics[$sessionId] = [
+                'products_viewed' => 0,
+                'adds' => 0,
+                'purchased' => '—',
+            ];
+        }
+
+        if ($sessionIds->isEmpty()) {
+            return $metrics;
+        }
+
+        $actions = ActivityEcomUserAction::query()
+            ->select($this->productCatalogActionColumns())
+            ->whereIn('session_id', $sessionIds->all())
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+            ->whereIn('action_type', array_merge(self::PRODUCT_VIEW_TYPES, ['add_to_cart', 'proceed_checkout', 'payment_success']))
+            ->get();
+
+        foreach ($actions as $action) {
+            $sessionId = $action->session_id;
+
+            if (! isset($metrics[$sessionId])) {
+                continue;
+            }
+
+            foreach ($this->productCatalogLinesFromAction($action) as $line) {
+                if (! $this->productCatalogLineMatchesOptions($line, $options)) {
+                    continue;
+                }
+
+                if (in_array($action->action_type, self::PRODUCT_VIEW_TYPES, true)) {
+                    $metrics[$sessionId]['products_viewed']++;
+                } elseif ($action->action_type === 'add_to_cart') {
+                    $metrics[$sessionId]['adds']++;
+                } elseif ($action->action_type === 'payment_success') {
+                    $metrics[$sessionId]['purchased'] = 'Yes';
+                }
+            }
+        }
+
+        return $metrics;
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     */
+    private function actionMatchesProductCatalogOptions(ActivityEcomUserAction $action, array $options): bool
+    {
+        foreach ($this->productCatalogLinesFromAction($action) as $line) {
+            if ($this->productCatalogLineMatchesOptions($line, $options)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<array{name: string, code: string, sku: string, category: string, color: string, size: string}>
+     */
+    private function productCatalogLinesFromAction(ActivityEcomUserAction $action): array
+    {
+        if (in_array($action->action_type, self::PRODUCT_VIEW_TYPES, true)) {
+            return [[
+                'name' => (string) ($action->product_name ?? ''),
+                'code' => (string) ($action->product_code ?? ''),
+                'sku' => trim((string) ($action->sku ?? '')),
+                'category' => (string) ($action->category_name ?? ''),
+                'color' => (string) ($action->general_color_name ?? ''),
+                'size' => '',
+            ]];
+        }
+
+        if ($action->action_type === 'category_view') {
+            return [[
+                'name' => '',
+                'code' => '',
+                'sku' => '',
+                'category' => (string) ($action->category_name ?? ''),
+                'color' => '',
+                'size' => '',
+            ]];
+        }
+
+        if ($action->action_type === 'add_to_cart' && is_array($action->add_to_cart)) {
+            return $this->mapProductCatalogPayloadLines($action->add_to_cart, $action);
+        }
+
+        if ($action->action_type === 'proceed_checkout' && is_array($action->proceed_to_checkout)) {
+            return $this->mapProductCatalogPayloadLines($action->proceed_to_checkout, $action);
+        }
+
+        if ($action->action_type === 'payment_success' && is_array($action->payment_success)) {
+            $items = $action->payment_success['checkout_info']['items'] ?? [];
+
+            if (! is_array($items) || $items === []) {
+                return $this->mapProductCatalogPayloadLines($action->payment_success, $action);
+            }
+
+            return collect($items)
+                ->filter(fn ($item) => is_array($item))
+                ->map(fn (array $item) => [
+                    'name' => trim((string) ($item['product_name'] ?? '')),
+                    'code' => trim((string) ($item['product_code'] ?? '')),
+                    'sku' => trim((string) ($item['sku'] ?? '')),
+                    'category' => trim((string) ($item['category_name'] ?? $action->category_name ?? '')),
+                    'color' => trim((string) ($item['color_name'] ?? $action->general_color_name ?? '')),
+                    'size' => trim((string) ($item['size_name'] ?? '')),
+                ])
+                ->filter(fn (array $line) => $line['name'] !== '' || $line['code'] !== '' || $line['sku'] !== '')
+                ->values()
+                ->all();
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return list<array{name: string, code: string, sku: string, category: string, color: string, size: string}>
+     */
+    private function mapProductCatalogPayloadLines(array $payload, ActivityEcomUserAction $action): array
+    {
+        $lines = $this->cartPayloadLineItems($payload);
+
+        if ($lines === []) {
+            return [[
+                'name' => (string) ($action->product_name ?? ''),
+                'code' => (string) ($payload['product_code'] ?? $action->product_code ?? ''),
+                'sku' => trim((string) ($payload['sku'] ?? $action->sku ?? '')),
+                'category' => (string) ($action->category_name ?? ''),
+                'color' => (string) ($payload['color_name'] ?? $action->general_color_name ?? ''),
+                'size' => (string) ($payload['size_name'] ?? ''),
+            ]];
+        }
+
+        return collect($lines)
+            ->map(fn (array $line) => [
+                'name' => (string) ($line['name'] ?? ''),
+                'code' => (string) ($line['code'] ?? ''),
+                'sku' => (string) ($line['sku'] ?? ''),
+                'category' => (string) ($line['category'] ?? $action->category_name ?? ''),
+                'color' => (string) ($line['color_name'] ?? $action->general_color_name ?? ''),
+                'size' => (string) ($line['size_name'] ?? ''),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array{name: string, code: string, sku: string, category: string, color: string, size: string}  $line
+     * @param  array<string, mixed>  $options
+     */
+    private function productCatalogLineMatchesOptions(array $line, array $options): bool
+    {
+        if (filled($options['product_code'] ?? null) || filled($options['product_name'] ?? null)) {
+            if (! $this->productCatalogLineMatchesProductIdentity($line, $options)) {
+                return false;
+            }
+        } else {
+            $search = strtolower(trim((string) ($options['search'] ?? '')));
+
+            if ($search !== '') {
+                $matchesSearch = str_contains(strtolower($line['name']), $search)
+                    || str_contains(strtolower($line['code']), $search)
+                    || str_contains(strtolower($line['sku']), $search);
+
+                if (! $matchesSearch) {
+                    return false;
+                }
+            }
+        }
+
+        $categoryFilter = trim((string) ($options['category'] ?? ''));
+
+        if ($categoryFilter !== '' && strcasecmp((string) ($line['category'] ?? ''), $categoryFilter) !== 0) {
+            return false;
+        }
+
+        $colorFilter = trim((string) ($options['color'] ?? ''));
+
+        if ($colorFilter !== '' && strcasecmp((string) ($line['color'] ?? ''), $colorFilter) !== 0) {
+            return false;
+        }
+
+        $sizeFilter = trim((string) ($options['size'] ?? ''));
+
+        if ($sizeFilter !== '' && strcasecmp((string) ($line['size'] ?? ''), $sizeFilter) !== 0) {
+            return false;
+        }
+
+        if (filled($options['product_code'] ?? null) || filled($options['product_name'] ?? null)) {
+            return true;
+        }
+
+        $search = strtolower(trim((string) ($options['search'] ?? '')));
+
+        return $search !== '' || $categoryFilter !== '' || $colorFilter !== '' || $sizeFilter !== '';
+    }
+
+    /**
+     * @param  array{name: string, code: string, sku: string, category: string, color: string, size: string}  $line
+     * @param  array<string, mixed>  $options
+     */
+    private function productCatalogLineMatchesProductIdentity(array $line, array $options): bool
+    {
+        $targetCode = strtoupper(trim((string) ($options['product_code'] ?? '')));
+        $targetName = $this->normalizeProductName((string) ($options['product_name'] ?? ''));
+
+        $lineCode = strtoupper(trim((string) ($line['code'] ?? '')));
+        $lineName = $this->normalizeProductName((string) ($line['name'] ?? ''));
+        $lineSku = strtoupper(trim((string) ($line['sku'] ?? '')));
+
+        if ($targetCode !== '') {
+            if ($lineCode !== '' && strcasecmp($lineCode, $targetCode) === 0) {
+                return true;
+            }
+
+            if ($lineSku !== '' && strcasecmp($lineSku, $targetCode) === 0) {
+                return true;
+            }
+        }
+
+        if ($targetName !== '' && $lineName !== '' && $lineName === $targetName) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -512,12 +841,12 @@ class EcomTrackerDashboardService
                     ),
                 ),
             ],
-            'cart-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildCartAbandonment($from, $to, $effectiveLimit, $extraFilters)],
-            'begin-checkout-abandonment', 'checkout-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildBeginCheckoutAbandonment($from, $to, $effectiveLimit, $extraFilters)],
-            'proceed-checkout-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildProceedCheckoutAbandonment($from, $to, $effectiveLimit, $extraFilters)],
-            'payment-success-events' => ['section' => $section, 'range' => $range, 'data' => $this->buildPaymentSuccessEvents($from, $to, $effectiveLimit, $extraFilters)],
-            'devices' => ['section' => $section, 'range' => $range, 'data' => $this->buildDeviceBreakdown($from, $to, $extraFilters)],
-            'traffic-sources' => ['section' => $section, 'range' => $range, 'data' => $this->buildTrafficSources($from, $to, $effectiveLimit, $extraFilters)],
+            'cart-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildCartAbandonment($from, $to, $effectiveLimit, $extraFilters, $range['period'] ?? null)],
+            'begin-checkout-abandonment', 'checkout-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildBeginCheckoutAbandonment($from, $to, $effectiveLimit, $extraFilters, $range['period'] ?? null)],
+            'proceed-checkout-abandonment' => ['section' => $section, 'range' => $range, 'data' => $this->buildProceedCheckoutAbandonment($from, $to, $effectiveLimit, $extraFilters, $range['period'] ?? null)],
+            'payment-success-events' => ['section' => $section, 'range' => $range, 'data' => $this->buildPaymentSuccessEvents($from, $to, $effectiveLimit, $extraFilters, $range['period'] ?? null)],
+            'devices' => ['section' => $section, 'range' => $range, 'data' => $this->buildDeviceBreakdown($from, $to, $extraFilters, $range['period'] ?? null)],
+            'traffic-sources' => ['section' => $section, 'range' => $range, 'data' => $this->buildTrafficSources($from, $to, $effectiveLimit, $extraFilters, $range['period'] ?? null)],
             'geography' => ['section' => $section, 'range' => $range, 'data' => $this->buildGeography($from, $to, $effectiveLimit, $extraFilters)],
             'engagement' => ['section' => $section, 'range' => $range, 'data' => $this->buildEngagement($from, $to, $extraFilters)],
             default => abort(404),
@@ -623,29 +952,42 @@ class EcomTrackerDashboardService
      * @param  Collection<int, string>|null  $allowedSessionIds
      * @return array{0: Collection<int, ActivityEcomUserAction>, 1: Collection<int, ActivityEcomUserAction>}
      */
-    private function deviceTrafficActions(Carbon $from, Carbon $to, ?Collection $allowedSessionIds): array
-    {
+    private function deviceTrafficActions(
+        Carbon $from,
+        Carbon $to,
+        ?Collection $allowedSessionIds,
+        ?string $period = null,
+    ): array {
         return $this->rememberQuery(
-            $this->queryCacheKey('deviceTrafficActions', $from, $to, $allowedSessionIds?->count(), $allowedSessionIds?->first(), $allowedSessionIds?->last()),
-            function () use ($from, $to, $allowedSessionIds) {
-                $sessionScope = $this->sessionIdsCreatedBetweenSubquery($from, $to, $allowedSessionIds);
+            $this->queryCacheKey('deviceTrafficActions', $from, $to, $period, $allowedSessionIds?->count(), $allowedSessionIds?->first(), $allowedSessionIds?->last()),
+            function () use ($from, $to, $allowedSessionIds, $period) {
+                $scopedSessionIds = $allowedSessionIds;
+
+                if ($scopedSessionIds === null) {
+                    $scopedSessionIds = $this->sessionsInRange($from, $to, $period)->keys();
+                }
+
+                if ($scopedSessionIds->isEmpty()) {
+                    return [collect(), collect()];
+                }
+
                 $range = TrackerTime::storageRange($from, $to);
 
                 $funnel = DB::table('activity_ecom_user_actions')
                     ->select('session_id', 'action_type')
                     ->whereBetween('created_at', $range)
-                    ->whereIn('session_id', $sessionScope)
                     ->whereIn('action_type', array_merge(self::PRODUCT_VIEW_TYPES, ['add_to_cart', 'begin_checkout', 'proceed_checkout']))
+                    ->whereIn('session_id', $scopedSessionIds->values()->all())
                     ->get();
 
                 $payments = ActivityEcomUserAction::query()
                     ->select('session_id', 'payment_success')
                     ->whereBetween('created_at', $range)
-                    ->whereIn('session_id', $this->sessionIdsCreatedBetweenSubquery($from, $to, $allowedSessionIds))
-                    ->where('action_type', 'payment_success')
-                    ->get();
+                    ->where('action_type', 'payment_success');
 
-                return [$funnel, $payments];
+                $this->constrainToSessionIds($payments, $scopedSessionIds);
+
+                return [$funnel, $payments->get()];
             },
         );
     }
@@ -980,29 +1322,29 @@ class EcomTrackerDashboardService
         return [
             'cart_drop' => $this->funnelDropCard(
                 'Cart drop',
-                (float) $current['cart_stage_rate'],
-                (int) $current['cart_stage_count'],
-                (float) $previous['cart_stage_rate'],
-                (int) $previous['cart_stage_count'],
-                'Share of all sessions that added to cart (from session actions in User activity scope).',
+                (float) $current['cart_abandonment_rate'],
+                (int) $current['cart_abandoned_count'],
+                (float) $previous['cart_abandonment_rate'],
+                (int) $previous['cart_abandoned_count'],
+                'Sessions that added to cart but did not begin checkout (matches Cart abandoned drill-down).',
                 $comparisonLabel,
             ),
             'checkout_drop' => $this->funnelDropCard(
                 'Checkout drop',
-                (float) $current['begin_checkout_stage_rate'],
-                (int) $current['begin_checkout_stage_count'],
-                (float) $previous['begin_checkout_stage_rate'],
-                (int) $previous['begin_checkout_stage_count'],
-                'Share of all sessions that began checkout (from session actions in User activity scope).',
+                (float) $current['begin_checkout_abandonment_rate'],
+                (int) $current['begin_checkout_abandoned_count'],
+                (float) $previous['begin_checkout_abandonment_rate'],
+                (int) $previous['begin_checkout_abandoned_count'],
+                'Sessions that began checkout but did not proceed (matches Begin checkout abandoned drill-down).',
                 $comparisonLabel,
             ),
             'proceed_drop' => $this->funnelDropCard(
                 'Proceed drop',
-                (float) $current['proceed_checkout_stage_rate'],
-                (int) $current['proceed_checkout_stage_count'],
-                (float) $previous['proceed_checkout_stage_rate'],
-                (int) $previous['proceed_checkout_stage_count'],
-                'Share of all sessions that proceeded to checkout (from session actions in User activity scope).',
+                (float) $current['proceed_checkout_abandonment_rate'],
+                (int) $current['proceed_checkout_abandoned_count'],
+                (float) $previous['proceed_checkout_abandonment_rate'],
+                (int) $previous['proceed_checkout_abandoned_count'],
+                'Sessions that proceeded to checkout but did not pay (matches Proceed checkout abandoned drill-down).',
                 $comparisonLabel,
             ),
             'payments' => $this->paymentSuccessCard(
@@ -1465,7 +1807,6 @@ class EcomTrackerDashboardService
         $bucketCounts = $this->aggregateTrendBuckets(
             $periodBuckets,
             $scopedSessionIds,
-            $restrictToScopedSessions,
         );
         $labels = $bucketCounts['labels'];
         $sessionCounts = $bucketCounts['session_counts'];
@@ -1557,7 +1898,6 @@ class EcomTrackerDashboardService
     private function aggregateTrendBuckets(
         array $periodBuckets,
         Collection $scopedSessionIds,
-        bool $restrictToScopedSessions,
     ): array {
         $bucketCount = count($periodBuckets);
         $labels = [];
@@ -1565,13 +1905,12 @@ class EcomTrackerDashboardService
         $sessionCounts = array_fill(0, $bucketCount, 0);
         $uniqueVisitorSets = array_fill(0, $bucketCount, []);
         $itemsSoldCounts = array_fill(0, $bucketCount, 0);
-        $seriesSeen = [];
+        $purchaseSessionsPerBucket = array_fill(0, $bucketCount, []);
         $seriesData = [];
         $typeToSeries = [];
 
         foreach (self::TREND_FUNNEL_SERIES as $series) {
             $seriesData[$series['key']] = array_fill(0, $bucketCount, 0);
-            $seriesSeen[$series['key']] = array_fill(0, $bucketCount, []);
 
             foreach ($series['types'] as $type) {
                 $typeToSeries[$type] = $series['key'];
@@ -1586,7 +1925,7 @@ class EcomTrackerDashboardService
             );
         }
 
-        if ($restrictToScopedSessions && $scopedSessionIds->isEmpty()) {
+        if ($scopedSessionIds->isEmpty()) {
             return $this->emptyTrendBucketResult($labels, $seriesData, $sessionCounts, $itemsSoldCounts);
         }
 
@@ -1597,11 +1936,7 @@ class EcomTrackerDashboardService
 
         $sessionQuery = ActivityEcomUser::query()
             ->select('session_id', 'visitor_id', 'created_at')
-            ->whereBetween('created_at', [$trendFrom, $trendTo]);
-
-        if ($restrictToScopedSessions) {
-            $this->constrainToSessionIds($sessionQuery, $scopedSessionIds);
-        }
+            ->whereIn('session_id', $scopedSessionIds->values()->all());
 
         foreach ($sessionQuery->toBase()->get() as $session) {
             $index = $this->trendBucketIndex($this->storedTimestampString($session), $ranges);
@@ -1624,9 +1959,7 @@ class EcomTrackerDashboardService
             ->whereBetween('created_at', [$trendFrom, $trendTo])
             ->whereIn('action_type', $funnelTypes);
 
-        if ($restrictToScopedSessions) {
-            $this->constrainToSessionIds($actionQuery, $scopedSessionIds);
-        }
+        $this->constrainToSessionIds($actionQuery, $scopedSessionIds);
 
         foreach ($actionQuery->toBase()->get() as $action) {
             $seriesKey = $typeToSeries[$action->action_type] ?? null;
@@ -1641,7 +1974,11 @@ class EcomTrackerDashboardService
                 continue;
             }
 
-            $seriesSeen[$seriesKey][$index][$action->session_id] = true;
+            $seriesData[$seriesKey][$index]++;
+
+            if ($seriesKey === 'purchases') {
+                $purchaseSessionsPerBucket[$index][$action->session_id] = true;
+            }
         }
 
         $paymentQuery = ActivityEcomUserAction::query()
@@ -1649,9 +1986,7 @@ class EcomTrackerDashboardService
             ->whereBetween('created_at', [$trendFrom, $trendTo])
             ->where('action_type', 'payment_success');
 
-        if ($restrictToScopedSessions) {
-            $this->constrainToSessionIds($paymentQuery, $scopedSessionIds);
-        }
+        $this->constrainToSessionIds($paymentQuery, $scopedSessionIds);
 
         foreach ($paymentQuery->get() as $action) {
             $index = $this->trendBucketIndex($this->storedTimestampString($action), $ranges);
@@ -1667,15 +2002,11 @@ class EcomTrackerDashboardService
         $conversionRates = [];
 
         foreach ($periodBuckets as $index => $_) {
-            foreach (self::TREND_FUNNEL_SERIES as $series) {
-                $seriesData[$series['key']][$index] = count($seriesSeen[$series['key']][$index] ?? []);
-            }
-
             $uniqueVisitorCounts[$index] = count($uniqueVisitorSets[$index] ?? []);
             $sessionCount = $sessionCounts[$index];
-            $purchaseCount = $seriesData['purchases'][$index] ?? 0;
+            $purchaseSessionCount = count($purchaseSessionsPerBucket[$index] ?? []);
             $conversionRates[$index] = $sessionCount > 0
-                ? round(($purchaseCount / $sessionCount) * 100, 1)
+                ? round(($purchaseSessionCount / $sessionCount) * 100, 1)
                 : 0.0;
         }
 
@@ -1819,13 +2150,13 @@ class EcomTrackerDashboardService
      */
     private function buildCategoryPerformance(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
     {
-        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters, $period) : null;
+        $sessionIds = $this->activitySessionIds($from, $to, $filters, $period);
 
         $conversionActions = ActivityEcomUserAction::query()
             ->select($this->conversionActionColumns())
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->whereIn('action_type', ['add_to_cart', 'proceed_checkout', 'payment_success'])
-            ->when($sessionIds !== null, fn ($query) => $this->constrainToSessionIds($query, $sessionIds))
+            ->tap(fn ($query) => $this->constrainToSessionIds($query, $sessionIds))
             ->orderBy('created_at')
             ->orderBy('id')
             ->get();
@@ -1836,7 +2167,7 @@ class EcomTrackerDashboardService
             ->select($this->categoryViewColumns())
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->whereIn('action_type', ['product_view', 'product_view_popup'])
-            ->when($sessionIds !== null, fn ($query) => $this->constrainToSessionIds($query, $sessionIds))
+            ->tap(fn ($query) => $this->constrainToSessionIds($query, $sessionIds))
             ->orderBy('created_at')
             ->orderBy('id')
             ->toBase()
@@ -1847,7 +2178,7 @@ class EcomTrackerDashboardService
             ->where('action_type', 'category_view')
             ->whereNotNull('category_name')
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-            ->when($sessionIds !== null, fn ($query) => $this->constrainToSessionIds($query, $sessionIds))
+            ->tap(fn ($query) => $this->constrainToSessionIds($query, $sessionIds))
             ->orderBy('created_at')
             ->orderBy('id')
             ->toBase()
@@ -1864,7 +2195,7 @@ class EcomTrackerDashboardService
                     $query->whereBetween('created_at', TrackerTime::storageRange($from, $to))
                         ->orWhereIn('session_id', $conversionSessionIds);
                 })
-                ->when($sessionIds !== null, fn ($query) => $this->constrainToSessionIds($query, $sessionIds))
+                ->tap(fn ($query) => $this->constrainToSessionIds($query, $sessionIds))
                 ->orderBy('created_at')
                 ->orderBy('id')
                 ->toBase()
@@ -1875,16 +2206,14 @@ class EcomTrackerDashboardService
 
         /** @var array<string, array<string, mixed>> $rows */
         $rows = [];
-        /** @var array<string, array<string, true>> $viewSessions */
-        $viewSessions = [];
-        /** @var array<string, int> $productViewCounts */
-        $productViewCounts = [];
+        /** @var array<string, int> $viewCounts */
+        $viewCounts = [];
 
         foreach ($categoryViewsInRange as $action) {
             $meta = $this->categoryPerformanceMeta($action);
             $key = $meta['key'];
             $rows[$key] ??= $this->emptyCategoryPerformanceRow($meta);
-            $viewSessions[$key][$action->session_id] = true;
+            $viewCounts[$key] = ($viewCounts[$key] ?? 0) + 1;
         }
 
         foreach ($productViews as $action) {
@@ -1896,11 +2225,11 @@ class EcomTrackerDashboardService
 
             $key = $meta['key'];
             $rows[$key] ??= $this->emptyCategoryPerformanceRow($meta);
-            $productViewCounts[$key] = ($productViewCounts[$key] ?? 0) + 1;
+            $viewCounts[$key] = ($viewCounts[$key] ?? 0) + 1;
         }
 
-        foreach (array_unique(array_merge(array_keys($viewSessions), array_keys($productViewCounts))) as $key) {
-            $rows[$key]['views'] = count($viewSessions[$key] ?? []) + ($productViewCounts[$key] ?? 0);
+        foreach ($viewCounts as $key => $count) {
+            $rows[$key]['views'] = $count;
         }
 
         foreach ($conversionActions as $action) {
@@ -2900,10 +3229,6 @@ class EcomTrackerDashboardService
 
         $result = $products
             ->map(function (array $product) use ($maxRevenue) {
-                if ($product['purchases'] > 0 && $product['views'] < $product['purchases']) {
-                    $product['views'] = $product['purchases'];
-                }
-
                 $product['revenue'] = round((float) $product['revenue'], 2);
                 $product['revenue_bar_percent'] = (int) round(($product['revenue'] / $maxRevenue) * 100);
 
@@ -3664,14 +3989,14 @@ class EcomTrackerDashboardService
         array $options = [],
     ): array {
         $period = $options['period'] ?? null;
-        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters, $period) : null;
+        $sessionIds = $this->activitySessionIds($from, $to, $filters, $period);
         /** @var Collection<string, array{key: string, name: string, code: string, category: string, variants: Collection<string, array<string, mixed>>}> $catalog */
         $catalog = collect();
 
         $viewRows = DB::table('activity_ecom_user_actions')
             ->select('product_name', 'product_code', 'general_color_name', 'sku', 'category_name')
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-            ->when($sessionIds !== null, fn ($q) => $this->constrainToSessionIds($q, $sessionIds))
+            ->tap(fn ($q) => $this->constrainToSessionIds($q, $sessionIds))
             ->whereIn('action_type', self::PRODUCT_VIEW_TYPES)
             ->get();
 
@@ -3691,7 +4016,7 @@ class EcomTrackerDashboardService
         $actions = ActivityEcomUserAction::query()
             ->select($this->productCatalogActionColumns())
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-            ->when($sessionIds !== null, fn ($q) => $this->constrainToSessionIds($q, $sessionIds))
+            ->tap(fn ($q) => $this->constrainToSessionIds($q, $sessionIds))
             ->whereIn('action_type', ['add_to_cart', 'proceed_checkout', 'payment_success'])
             ->get()
             ->sortBy(fn (ActivityEcomUserAction $action) => match ($action->action_type) {
@@ -4024,10 +4349,6 @@ class EcomTrackerDashboardService
 
         $products = $catalog->map(function (array $product) use ($colorFilter, $sizeFilter, $sortBy, $purchasedOnly) {
             $variants = $product['variants']->map(function (array $variant) {
-                if ($variant['purchases'] > 0 && $variant['views'] < $variant['purchases']) {
-                    $variant['views'] = $variant['purchases'];
-                }
-
                 $variant['revenue'] = round((float) $variant['revenue'], 2);
 
                 return $variant;
@@ -4453,9 +4774,9 @@ class EcomTrackerDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function buildCartAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
+    private function buildCartAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
     {
-        $abandonment = $this->abandonedSessions($from, $to, 'add_to_cart', 'add_to_cart', $limit, $filters, 'begin_checkout');
+        $abandonment = $this->abandonedSessions($from, $to, 'add_to_cart', 'add_to_cart', $limit, $filters, 'begin_checkout', $period);
 
         return [
             'session_count' => $abandonment['total_count'],
@@ -4467,9 +4788,9 @@ class EcomTrackerDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function buildBeginCheckoutAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
+    private function buildBeginCheckoutAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
     {
-        $abandonment = $this->abandonedSessions($from, $to, 'begin_checkout', 'begin_checkout', $limit, $filters, 'proceed_checkout');
+        $abandonment = $this->abandonedSessions($from, $to, 'begin_checkout', 'begin_checkout', $limit, $filters, 'proceed_checkout', $period);
 
         return [
             'session_count' => $abandonment['total_count'],
@@ -4481,9 +4802,9 @@ class EcomTrackerDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function buildProceedCheckoutAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
+    private function buildProceedCheckoutAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
     {
-        $abandonment = $this->abandonedSessions($from, $to, 'proceed_checkout', 'proceed_to_checkout', $limit, $filters, 'payment_success');
+        $abandonment = $this->abandonedSessions($from, $to, 'proceed_checkout', 'proceed_to_checkout', $limit, $filters, 'payment_success', $period);
 
         return [
             'session_count' => $abandonment['total_count'],
@@ -4495,9 +4816,17 @@ class EcomTrackerDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function buildPaymentSuccessEvents(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
+    private function buildPaymentSuccessEvents(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
     {
-        $allowedSessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
+        $allowedSessionIds = $this->activitySessionIds($from, $to, $filters, $period);
+
+        if ($allowedSessionIds->isEmpty()) {
+            return [
+                'session_count' => 0,
+                'at_stake' => 0.0,
+                'rows' => [],
+            ];
+        }
 
         $actionsQuery = ActivityEcomUserAction::query()
             ->select('event_id', 'session_id', 'created_at', 'payment_success')
@@ -4505,9 +4834,7 @@ class EcomTrackerDashboardService
             ->where('action_type', 'payment_success')
             ->orderByDesc('created_at');
 
-        if ($allowedSessionIds !== null) {
-            $actionsQuery->whereIn('session_id', $allowedSessionIds);
-        }
+        $this->constrainToSessionIds($actionsQuery, $allowedSessionIds);
 
         $rows = $this->uniquePaymentSuccessActions($actionsQuery->get())
             ->map(function (ActivityEcomUserAction $action) {
@@ -4574,11 +4901,11 @@ class EcomTrackerDashboardService
     /**
      * @return array{total_count: int, total_at_stake: float, rows: array<int, array<string, mixed>>}
      */
-    private function abandonedSessions(Carbon $from, Carbon $to, string $stage, string $payloadKey, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], string $excludeActionType = 'payment_success'): array
+    private function abandonedSessions(Carbon $from, Carbon $to, string $stage, string $payloadKey, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], string $excludeActionType = 'payment_success', ?string $period = null): array
     {
         $full = $this->rememberQuery(
-            $this->queryCacheKey('abandonedSessions', $from, $to, $stage, $payloadKey, $filters, $excludeActionType),
-            fn () => $this->queryAbandonedSessions($from, $to, $stage, $payloadKey, $filters, $excludeActionType),
+            $this->queryCacheKey('abandonedSessions', $from, $to, $stage, $payloadKey, $filters, $excludeActionType, $period),
+            fn () => $this->queryAbandonedSessions($from, $to, $stage, $payloadKey, $filters, $excludeActionType, $period),
         );
 
         return $this->finalizeRecoverableSessionRows(
@@ -4598,8 +4925,9 @@ class EcomTrackerDashboardService
         string $payloadKey,
         array $filters,
         string $excludeActionType,
+        ?string $period = null,
     ): array {
-        $allowedSessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
+        $allowedSessionIds = $this->activitySessionIds($from, $to, $filters, $period);
 
         $candidatesQuery = ActivityEcomUserAction::query()
             ->select('session_id', 'created_at', $payloadKey)
@@ -4607,13 +4935,11 @@ class EcomTrackerDashboardService
             ->where('action_type', $stage)
             ->orderByDesc('created_at');
 
-        if ($allowedSessionIds !== null) {
-            if ($allowedSessionIds->isEmpty()) {
-                return ['total_count' => 0, 'total_at_stake' => 0.0, 'rows' => []];
-            }
-
-            $this->constrainToSessionIds($candidatesQuery, $allowedSessionIds);
+        if ($allowedSessionIds->isEmpty()) {
+            return ['total_count' => 0, 'total_at_stake' => 0.0, 'rows' => []];
         }
+
+        $this->constrainToSessionIds($candidatesQuery, $allowedSessionIds);
 
         $candidates = $candidatesQuery->get()->groupBy('session_id');
         $excludedSessionIds = $this->sessionIdsHavingActionType($candidates->keys(), $excludeActionType);
@@ -4644,13 +4970,12 @@ class EcomTrackerDashboardService
     /**
      * @return array{by_device: array<int, array<string, mixed>>, by_browser: array<int, array<string, mixed>>}
      */
-    private function buildDeviceBreakdown(Carbon $from, Carbon $to, array $filters = []): array
+    private function buildDeviceBreakdown(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): array
     {
-        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
+        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters, $period) : null;
 
         $sessionsQuery = ActivityEcomUser::query()
-            ->select('session_id', 'device_type', 'browser')
-            ->whereBetween('created_at', TrackerTime::storageRange($from, $to));
+            ->select('session_id', 'device_type', 'browser');
 
         if ($sessionIds !== null) {
             if ($sessionIds->isEmpty()) {
@@ -4658,6 +4983,8 @@ class EcomTrackerDashboardService
             }
 
             $this->constrainToSessionIds($sessionsQuery, $sessionIds);
+        } else {
+            TrackerTime::applyEcomActivitySessionScope($sessionsQuery, $from, $to, $period);
         }
 
         $sessions = $sessionsQuery->get();
@@ -4684,21 +5011,18 @@ class EcomTrackerDashboardService
 
         $beginCheckoutSeen = [];
         $proceedCheckoutSeen = [];
-        $viewSeen = [];
         $addToCartSeen = [];
         $devicePurchaseSeen = [];
         $browserPurchaseSeen = [];
 
-        [$funnelActions, $paymentActions] = $this->deviceTrafficActions($from, $to, $sessionIds);
+        [$funnelActions, $paymentActions] = $this->deviceTrafficActions($from, $to, $sessionIds, $period);
 
         foreach ($funnelActions as $action) {
             $sessionId = $action->session_id;
             $deviceLabel = $sessionDeviceMap[$sessionId] ?? null;
             $browserLabel = $sessionBrowserMap[$sessionId] ?? null;
 
-            if (in_array($action->action_type, self::PRODUCT_VIEW_TYPES, true) && ! isset($viewSeen[$sessionId])) {
-                $viewSeen[$sessionId] = true;
-
+            if (in_array($action->action_type, self::PRODUCT_VIEW_TYPES, true)) {
                 if ($deviceLabel) {
                     $this->incrementDeviceBrowserBucket($deviceBuckets, $deviceLabel, 'views');
                 }
@@ -4895,13 +5219,12 @@ class EcomTrackerDashboardService
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function buildTrafficSources(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
+    private function buildTrafficSources(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
     {
-        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
+        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters, $period) : null;
 
         $sessionsQuery = ActivityEcomUser::query()
-            ->select('id', 'session_id', 'utm_source', 'utm_medium', 'utm_campaign', 'landing_page')
-            ->whereBetween('created_at', TrackerTime::storageRange($from, $to));
+            ->select('id', 'session_id', 'utm_source', 'utm_medium', 'utm_campaign', 'landing_page');
 
         if ($sessionIds !== null) {
             if ($sessionIds->isEmpty()) {
@@ -4909,6 +5232,8 @@ class EcomTrackerDashboardService
             }
 
             $this->constrainToSessionIds($sessionsQuery, $sessionIds);
+        } else {
+            TrackerTime::applyEcomActivitySessionScope($sessionsQuery, $from, $to, $period);
         }
 
         $sessions = $sessionsQuery->get();
@@ -4951,13 +5276,12 @@ class EcomTrackerDashboardService
             $this->incrementTrafficSourceBucket($buckets, $key, $source, $medium, 'sessions');
         }
 
-        $viewSeen = [];
         $addToCartSeen = [];
         $beginCheckoutSeen = [];
         $proceedCheckoutSeen = [];
         $paymentSuccessSeen = [];
 
-        [$funnelActions, $paymentActions] = $this->deviceTrafficActions($from, $to, $sessionIds);
+        [$funnelActions, $paymentActions] = $this->deviceTrafficActions($from, $to, $sessionIds, $period);
 
         foreach ($funnelActions as $action) {
             $bucketKey = $sessionBucketMap[$action->session_id] ?? null;
@@ -4968,8 +5292,7 @@ class EcomTrackerDashboardService
 
             $sessionId = $action->session_id;
 
-            if (in_array($action->action_type, self::PRODUCT_VIEW_TYPES, true) && ! isset($viewSeen[$sessionId])) {
-                $viewSeen[$sessionId] = true;
+            if (in_array($action->action_type, self::PRODUCT_VIEW_TYPES, true)) {
                 $this->incrementTrafficSourceBucket($buckets, $bucketKey, field: 'views');
             }
 
@@ -5380,10 +5703,6 @@ class EcomTrackerDashboardService
      */
     private function saleMetricSessionScope(array $extraFilters, Collection $sessions): ?Collection
     {
-        if ($extraFilters === []) {
-            return null;
-        }
-
         return $sessions->keys();
     }
 

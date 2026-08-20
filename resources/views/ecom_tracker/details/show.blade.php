@@ -14,7 +14,10 @@
         'engagement' => ['engagement' => $data],
         default => [],
     };
-    $dashboardBack = request('back') ? urldecode(request('back')) : route('admin.ecom-tracker.dashboard', $queryParams);
+    $dashboardBack = \App\Support\EcomTrackerViewData::resolveBackUrl(
+        request('back'),
+        route('admin.ecom-tracker.dashboard', $queryParams),
+    );
     $breadcrumbs = [
         ['label' => 'Store performance', 'url' => $dashboardBack],
         ['label' => $title],

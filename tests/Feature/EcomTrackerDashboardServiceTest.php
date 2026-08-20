@@ -491,7 +491,7 @@ test('ecom tracker dashboard matches product views and purchases by product name
 
     expect($product)->not->toBeNull();
     expect($product['code'])->toBe('WJEPI10009400');
-    expect($product['views'])->toBeGreaterThanOrEqual(1);
+    expect($product['views'])->toBe(1);
     expect($product['purchases'])->toBe(1);
     expect($product['revenue'])->toBe(22.99);
 });
@@ -1631,6 +1631,78 @@ test('ecom tracker product catalog allows add to cart without a product view in 
 
     expect($catalog['products'][0]['views'])->toBe(0);
     expect($catalog['products'][0]['adds'])->toBe(1);
+});
+
+test('ecom tracker product catalog does not count views for purchased variants without product views', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $sessionId = Str::uuid()->toString();
+    $from = Carbon::parse('2026-07-15 14:00:00');
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    $productName = 'Red Ruched Side Seam T-Shirt';
+    $productCode = 'WS312259';
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'add_to_cart',
+        'product_name' => $productName,
+        'product_code' => $productCode,
+        'sku' => 'WLOPU14001245',
+        'general_color_name' => 'Purple',
+        'add_to_cart' => [
+            'product_code' => $productCode,
+            'product_name' => $productName,
+            'sku' => 'WLOPU14001245',
+            'color_name' => 'Purple',
+            'size_name' => '14',
+            'qty' => 1,
+        ],
+        'created_at' => $from,
+        'start_time' => $from,
+        'end_time' => $from->copy()->addSeconds(5),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'product_name' => $productName,
+        'product_code' => $productCode,
+        'payment_success' => [
+            'amount_paid' => 12.5,
+            'checkout_info' => [
+                'items' => [[
+                    'product_code' => $productCode,
+                    'product_name' => $productName,
+                    'sku' => 'WLOPU14001245',
+                    'color_name' => 'Purple',
+                    'size_name' => '14',
+                    'qty' => 1,
+                    'price' => 12.5,
+                ]],
+            ],
+        ],
+        'created_at' => $from->copy()->addMinute(),
+        'start_time' => $from->copy()->addMinute(),
+        'end_time' => $from->copy()->addMinute()->addSeconds(10),
+    ]);
+
+    $catalog = $service->buildProductCatalogPerformance($from, $from->copy()->endOfDay(), null, [], []);
+
+    expect($catalog['products'])->toHaveCount(1);
+    expect($catalog['products'][0]['views'])->toBe(0);
+    expect($catalog['products'][0]['adds'])->toBe(1);
+    expect($catalog['products'][0]['purchases'])->toBe(1);
+    expect($catalog['products'][0]['variants'][0]['views'])->toBe(0);
+    expect($catalog['products'][0]['variants'][0]['purchases'])->toBe(1);
 });
 
 test('ecom tracker product catalog merges view parent code with add variant sku product code', function () {

@@ -45,7 +45,7 @@
                 <th class="etd-num">
                     @include('ecom_tracker.partials.column-header-with-tip', [
                         'label' => 'Views',
-                        'tip' => 'Sessions with a product view',
+                        'tip' => 'Product view events (product_view / product_view_popup)',
                         'align' => 'right',
                     ])
                 </th>

@@ -58,6 +58,27 @@ test('store dashboard shows custom date picker only when period is custom', func
         ->assertSee('Total time on site', false);
 });
 
+test('store dashboard kpi cards link to user activity drill down', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.dashboard.index');
+
+    $response = $this->actingAs($user)
+        ->get(route('admin.ecom-tracker.dashboard', ['period' => '7d']))
+        ->assertOk();
+
+    expect($response->getContent())
+        ->toContain('focus=audience')
+        ->toContain('focus=conversion')
+        ->toContain('focus=cart_abandonment')
+        ->toContain('focus=begin_checkout_abandonment')
+        ->toContain('focus=proceed_checkout_abandonment')
+        ->toContain('focus=payment_success')
+        ->toContain('focus=session_quality')
+        ->toContain('visitor_type=human')
+        ->toContain('focus=categories')
+        ->toContain('etd-kpi-drilldown-link');
+});
+
 test('store dashboard period preset links keep active drawer filters', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.dashboard.index');

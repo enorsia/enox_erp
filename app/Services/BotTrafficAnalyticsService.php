@@ -307,20 +307,10 @@ class BotTrafficAnalyticsService
      */
     private function countVisitorQualityMetrics(Carbon $from, Carbon $to, array $filters): array
     {
-        $row = $this->allSessionQuery($from, $to, $filters)
-            ->leftJoin('activity_ecom_user_bot_context as bc', 'activity_ecom_user.session_id', '=', 'bc.session_id')
-            ->toBase()
-            ->select([
-                DB::raw('COUNT(CASE WHEN bc.session_id IS NOT NULL AND bc.is_bot = 0 THEN 1 END) as real_shoppers'),
-                DB::raw('COUNT(CASE WHEN bc.is_bot = 1 THEN 1 END) as automated_traffic'),
-                DB::raw('COUNT(CASE WHEN bc.session_id IS NULL THEN 1 END) as not_classified'),
-            ])
-            ->first();
-
         return [
-            'real_shoppers' => (int) ($row->real_shoppers ?? 0),
-            'automated_traffic' => (int) ($row->automated_traffic ?? 0),
-            'not_classified' => (int) ($row->not_classified ?? 0),
+            'real_shoppers' => $this->countClassification($from, $to, 'human', $filters),
+            'automated_traffic' => $this->countClassification($from, $to, 'bot', $filters),
+            'not_classified' => $this->countClassification($from, $to, 'unclassified', $filters),
         ];
     }
 
@@ -456,7 +446,7 @@ class BotTrafficAnalyticsService
         $rows = ActivityEcomUserBotContext::query()
             ->where('is_bot', true)
             ->whereHas('session', function ($q) use ($currentRange, $filters) {
-                $this->applySessionWindow($q, $currentRange['from'], $currentRange['to']);
+                $this->applySessionWindow($q, $currentRange['from'], $currentRange['to'], $filters['period'] ?? null);
                 $this->applySessionFilters($q, $filters);
             })
             ->select('bot_reason', DB::raw('COUNT(*) as total'))
@@ -533,7 +523,7 @@ class BotTrafficAnalyticsService
     {
         $query = ActivityEcomUser::query()
             ->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
-        $this->applySessionWindow($query, $from, $to);
+        $this->applySessionWindow($query, $from, $to, $filters['period'] ?? null);
         $this->applySessionFilters($query, $filters);
 
         return $query;
@@ -545,16 +535,16 @@ class BotTrafficAnalyticsService
     private function allSessionQuery(Carbon $from, Carbon $to, array $filters): Builder
     {
         $query = ActivityEcomUser::query();
-        $this->applySessionWindow($query, $from, $to);
+        $this->applySessionWindow($query, $from, $to, $filters['period'] ?? null);
         $this->applySessionFilters($query, $filters);
 
         return $query;
     }
 
-    private function applySessionWindow(Builder $query, Carbon $from, Carbon $to): void
+    private function applySessionWindow(Builder $query, Carbon $from, Carbon $to, ?string $period = null): void
     {
         $table = $query->getModel()->getTable();
-        TrackerTime::applySessionActivityWindow($query, $from, $to, $table);
+        TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, $table);
     }
 
     /**

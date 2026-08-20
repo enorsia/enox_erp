@@ -195,19 +195,20 @@ class TrackerTime
      *
      * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
      */
-    public static function applyEcomActivitySessionScope($query, Carbon $from, Carbon $to, ?string $period = null): void
+    public static function applyEcomActivitySessionScope($query, Carbon $from, Carbon $to, ?string $period = null, ?string $table = null): void
     {
         if ($period === '24h') {
-            self::applySessionActivityWindow($query, $from, $to);
+            self::applySessionActivityWindow($query, $from, $to, $table);
 
             return;
         }
 
+        $createdAt = $table ? "{$table}.created_at" : 'created_at';
         $fromLocal = self::toLocal($from);
         $toLocal = self::toLocal($to);
 
         if ($fromLocal !== null && $toLocal !== null) {
-            $query->whereBetween('created_at', self::storageRange(
+            $query->whereBetween($createdAt, self::storageRange(
                 $fromLocal->copy()->startOfDay()->utc(),
                 $toLocal->copy()->endOfDay()->utc(),
             ));
@@ -215,7 +216,7 @@ class TrackerTime
             return;
         }
 
-        $query->whereBetween('created_at', self::storageRange($from, $to));
+        $query->whereBetween($createdAt, self::storageRange($from, $to));
     }
 
     /**

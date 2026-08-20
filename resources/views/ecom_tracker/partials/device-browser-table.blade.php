@@ -2,6 +2,7 @@
     'title' => 'Device',
     'rows' => [],
     'emptyMessage' => 'No data in this period.',
+    'rowActivityLink' => null,
 ])
 
 <div class="etd-device-browser-panel">
@@ -15,7 +16,7 @@
                     <th class="etd-num">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Views',
-                            'tip' => 'Sessions with a product view',
+                            'tip' => 'Product view events (product_view / product_view_popup)',
                             'align' => 'right',
                         ])
                     </th>
@@ -52,8 +53,17 @@
             </thead>
             <tbody>
                 @forelse ($rows as $row)
+                    @php
+                        $rowLink = is_callable($rowActivityLink) ? $rowActivityLink($row['label'] ?? '') : null;
+                    @endphp
                     <tr>
-                        <td>{{ $row['label'] }}</td>
+                        <td>
+                            @if (filled($rowLink))
+                                <a href="{{ $rowLink }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">{{ $row['label'] }}</a>
+                            @else
+                                {{ $row['label'] }}
+                            @endif
+                        </td>
                         <td class="etd-num">{{ number_format($row['sessions']) }}</td>
                         <td class="etd-num">{{ number_format($row['views']) }}</td>
                         <td class="etd-num">{{ number_format($row['add_to_cart']) }}</td>

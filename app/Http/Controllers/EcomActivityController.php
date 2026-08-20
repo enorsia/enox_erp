@@ -6,18 +6,22 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityFilterCounts;
+use App\Services\EcomActivityFunnelSessions;
+use App\Services\EcomActivityRowMetrics;
 use App\Services\EcomActivityTimelinePresenter;
+use App\Services\EcomTrackerDashboardService;
 use App\Services\EcomTrackerFeatureGate;
+use App\Support\EcomActivityFocus;
 use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
-use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 
 class EcomActivityController extends EcomTrackerAdminController
@@ -33,8 +37,12 @@ class EcomActivityController extends EcomTrackerAdminController
         'payment_success',
     ];
 
-    public function __construct(EcomTrackerFeatureGate $featureGate)
-    {
+    public function __construct(
+        EcomTrackerFeatureGate $featureGate,
+        private EcomTrackerDashboardService $dashboardService,
+        private EcomActivityFunnelSessions $funnelSessions,
+        private EcomActivityRowMetrics $rowMetrics,
+    ) {
         parent::__construct($featureGate);
     }
 
@@ -43,17 +51,35 @@ class EcomActivityController extends EcomTrackerAdminController
         $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.activity.index');
 
-        $query = $this->buildIndexQuery($request);
+        $focus = $request->input('focus');
+        $range = $this->resolveActivityRange($request);
+        $funnelContext = EcomActivityFocus::isValid($focus)
+            ? EcomActivityFocus::resolveFunnelContext(
+                $focus,
+                $range['from'],
+                $range['to'],
+                EcomActivityFocus::sessionFiltersFromRequest($request),
+                $range['period'],
+                $this->funnelSessions,
+            )
+            : ['session_ids' => collect(), 'metrics' => []];
 
-        $sessions = (clone $query)
-            ->orderByLatestActivity()
-            ->paginate(25)
-            ->withQueryString();
+        $query = $this->buildIndexQuery($request, $range);
+        $sessions = $this->paginateSessions($query, $request, $focus, $funnelContext['session_ids']);
 
-        $visitorQualitySummary = $this->visitorQualityCounts($request);
+        $rowMetrics = $this->rowMetrics->forSessions(
+            collect($sessions->items()),
+            EcomActivityFocus::isValid($focus) ? $focus : null,
+            $range['from'],
+            $range['to'],
+            $funnelContext['metrics'],
+            $focus === 'products' ? EcomActivityFocus::productCatalogFiltersFromRequest($request) : [],
+        );
+
+        $visitorQualitySummary = $this->visitorQualityCounts($request, $range);
         $filterOptionCounts = app(EcomActivityFilterCounts::class)->counts(
             $request,
-            fn (Request $filterRequest, array $except) => $this->buildIndexQuery($filterRequest, $except, forCounts: true),
+            fn (Request $filterRequest, array $except) => $this->buildIndexQuery($filterRequest, $this->resolveActivityRange($filterRequest), $except, forCounts: true),
         );
         $utmFilterState = TrackerUtmFilter::formState(
             $request->input('utm_source'),
@@ -62,17 +88,49 @@ class EcomActivityController extends EcomTrackerAdminController
             $filterOptionCounts['utm_medium'] ?? [],
         );
 
+        $focusLabel = EcomActivityFocus::label($focus);
+        $summaryCards = EcomActivityFocus::summaryForFocus($focus, $sessions->total(), $funnelContext['metrics']);
+        $drillDownContext = EcomActivityFocus::drillDownContext(
+            $request,
+            $focus,
+            $range['label'],
+            $sessions->total(),
+            $funnelContext['metrics'],
+        );
+        $backUrl = EcomTrackerViewData::resolveBackUrl($request->input('back'));
+        $breadcrumbs = $this->buildBreadcrumbs(
+            $request,
+            $drillDownContext ? null : $focusLabel,
+            $backUrl,
+        );
+        $focusColumns = EcomActivityFocus::tableColumns($focus);
+        $emptyMessage = EcomActivityFocus::emptyMessage($focus);
+        $clearFocusUrl = $request->fullUrlWithQuery(['focus' => null, 'page' => null]);
+
         EcomTrackerLogger::backend()->info('analytics.activity.index', 'Admin opened user activity list', [
             'session_count' => $sessions->total(),
+            'focus' => $focus,
             'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
         ]);
 
         return view('ecom_activity.index', [
             'sessions' => $sessions,
             'visitorQualitySummary' => $visitorQualitySummary,
-            'filterChips' => $this->buildActivityFilterChips($request),
+            'filterChips' => $drillDownContext ? [] : $this->buildActivityFilterChips($request),
             'filterOptionCounts' => $filterOptionCounts,
             'utmFilterState' => $utmFilterState,
+            'focus' => $focus,
+            'focusLabel' => $focusLabel,
+            'summaryCards' => $summaryCards,
+            'breadcrumbs' => $breadcrumbs,
+            'focusColumns' => $focusColumns,
+            'rowMetrics' => $rowMetrics,
+            'emptyMessage' => $emptyMessage,
+            'clearFocusUrl' => $clearFocusUrl,
+            'rangeLabel' => $range['label'],
+            'hasFocus' => EcomActivityFocus::isValid($focus),
+            'backUrl' => $backUrl,
+            'drillDownContext' => $drillDownContext,
         ]);
     }
 
@@ -124,10 +182,11 @@ class EcomActivityController extends EcomTrackerAdminController
 
         $timeline->appends($request->except('timeline_page'));
 
-        $returnQuery = $request->only(['search', 'period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium', 'page']);
-        $backUrl = $request->filled('back')
-            ? urldecode((string) $request->input('back'))
-            : route('admin.ecom-activity.index', $returnQuery);
+        $returnQuery = EcomTrackerViewData::activityIndexQueryFromRequest($request);
+        $backUrl = EcomTrackerViewData::resolveBackUrl(
+            $request->input('back'),
+            route('admin.ecom-activity.index', $returnQuery),
+        );
 
         EcomTrackerLogger::backend()->info('analytics.activity.show', 'Admin opened one user session', [
             'session_id' => $session,
@@ -159,41 +218,59 @@ class EcomActivityController extends EcomTrackerAdminController
         ]);
     }
 
-    private function applySessionDateFilter(\Illuminate\Database\Eloquent\Builder $query, Request $request): void
+    /**
+     * @return array{from: Carbon, to: Carbon, label: string, period: ?string}
+     */
+    private function resolveActivityRange(Request $request): array
     {
         if ($request->input('period') === 'all') {
+            return [
+                'from' => Carbon::parse('2000-01-01', 'UTC'),
+                'to' => TrackerTime::nowUtc(),
+                'label' => 'All sessions',
+                'period' => 'all',
+            ];
+        }
+
+        $range = $this->dashboardService->resolveDateRange([
+            'period' => $request->input('period', '24h'),
+            'date_from' => $request->input('date_from'),
+            'date_to' => $request->input('date_to'),
+        ]);
+
+        return [
+            'from' => $range['from'],
+            'to' => $range['to'],
+            'label' => $range['label'],
+            'period' => $range['period'] ?? $request->input('period', '24h'),
+        ];
+    }
+
+    private function applySessionDateFilter(Builder $query, Request $request, array $range): void
+    {
+        if (($range['period'] ?? null) === 'all') {
             return;
         }
 
-        if ($request->filled('date_from') || $request->filled('date_to')) {
-            $timezone = TrackerTime::timezone();
-
-            if ($request->filled('date_from') && $request->filled('date_to')) {
-                $from = \Carbon\Carbon::parse($request->date_from, $timezone)->startOfDay()->utc();
-                $to = \Carbon\Carbon::parse($request->date_to, $timezone)->endOfDay()->utc();
-                $query->whereBetween('created_at', TrackerTime::storageRange($from, $to));
-            } elseif ($request->filled('date_from')) {
-                $from = \Carbon\Carbon::parse($request->date_from, $timezone)->startOfDay()->utc();
-                $query->where('created_at', '>=', TrackerTime::formatUtc($from));
-            } elseif ($request->filled('date_to')) {
-                $to = \Carbon\Carbon::parse($request->date_to, $timezone)->endOfDay()->utc();
-                $query->where('created_at', '<=', TrackerTime::formatUtc($to));
-            }
-
-            return;
-        }
-
-        $today = TrackerTime::todayRangeUtc();
-
-        TrackerTime::applyEcomActivitySessionScope($query, $today['from'], $today['to'], '24h');
+        TrackerTime::applyEcomActivitySessionScope(
+            $query,
+            $range['from'],
+            $range['to'],
+            $range['period'] ?? $request->input('period', '24h'),
+        );
     }
 
     /**
      * @param  array<int, string>  $except
      */
-    private function buildIndexQuery(Request $request, array $except = [], bool $forCounts = false): Builder
-    {
+    private function buildIndexQuery(
+        Request $request,
+        array $range,
+        array $except = [],
+        bool $forCounts = false,
+    ): Builder {
         $query = ActivityEcomUser::query();
+        $focus = $request->input('focus');
 
         if (! $forCounts) {
             $query->with(['botContext', 'firstAction', 'firstRefererAction'])
@@ -201,7 +278,21 @@ class EcomActivityController extends EcomTrackerAdminController
                 ->withCount(['actions as order_qty' => fn ($q) => $q->where('action_type', 'payment_success')]);
         }
 
-        $this->applySessionDateFilter($query, $request);
+        if (! EcomActivityFocus::usesActionScopedSessionDate($request)) {
+            $this->applySessionDateFilter($query, $request, $range);
+        }
+
+        if (! in_array('focus', $except, true)) {
+            EcomActivityFocus::applyFocusFilter(
+                $query,
+                $focus,
+                $range['from'],
+                $range['to'],
+                $request,
+                $this->dashboardService,
+                $this->funnelSessions,
+            );
+        }
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -274,11 +365,47 @@ class EcomActivityController extends EcomTrackerAdminController
     }
 
     /**
+     * @param  Collection<int, string>  $funnelSessionIds
+     */
+    private function paginateSessions(
+        Builder $query,
+        Request $request,
+        ?string $focus,
+        Collection $funnelSessionIds,
+    ): LengthAwarePaginator {
+        $perPage = 25;
+        $page = max(1, (int) $request->input('page', 1));
+
+        if (EcomActivityFocus::isValid($focus) && EcomActivityFocus::sortMode($focus) === 'value_desc' && $funnelSessionIds->isNotEmpty()) {
+            $total = $funnelSessionIds->count();
+            $pageIds = $funnelSessionIds->slice(($page - 1) * $perPage, $perPage)->values();
+            $sessions = $query->whereIn('session_id', $pageIds->all())->get()->keyBy('session_id');
+            $items = $pageIds
+                ->map(fn (string $id) => $sessions->get($id))
+                ->filter()
+                ->values();
+
+            return new LengthAwarePaginator(
+                $items,
+                $total,
+                $perPage,
+                $page,
+                ['path' => $request->url(), 'query' => $request->query()],
+            );
+        }
+
+        return $query
+            ->orderByLatestActivity()
+            ->paginate($perPage)
+            ->withQueryString();
+    }
+
+    /**
      * @return array{real_shoppers: int, automated_traffic: int, not_classified: int}
      */
-    private function visitorQualityCounts(Request $request): array
+    private function visitorQualityCounts(Request $request, array $range): array
     {
-        $base = $this->buildIndexQuery($request, forCounts: true);
+        $base = $this->buildIndexQuery($request, $range, forCounts: true);
 
         return [
             'real_shoppers' => (clone $base)->whereHas('botContext', fn ($b) => $b->where('is_bot', false))->count(),
@@ -292,46 +419,24 @@ class EcomActivityController extends EcomTrackerAdminController
      */
     private function buildActivityFilterChips(Request $request): array
     {
-        $chips = [];
-        $labels = VisitorClassificationLabels::filterTypeLabels();
+        return EcomActivityFocus::filterChipsFromRequest($request);
+    }
 
-        if ($request->filled('visitor_type')) {
-            $chips[] = [
-                'label' => $labels[$request->visitor_type] ?? $request->visitor_type,
-                'remove_url' => $request->fullUrlWithQuery(['visitor_type' => null, 'page' => null]),
-            ];
+    /**
+     * @return array<int, array{label: string, url?: string}>
+     */
+    private function buildBreadcrumbs(Request $request, ?string $focusLabel, ?string $dashboardBack = null): array
+    {
+        $dashboardBack ??= EcomTrackerViewData::resolveBackUrl($request->input('back'));
+
+        if ($dashboardBack !== null) {
+            return filled($focusLabel) ? [['label' => $focusLabel]] : [];
         }
 
-        if ($request->filled('country')) {
-            $chips[] = [
-                'label' => 'Country: '.$request->country,
-                'remove_url' => $request->fullUrlWithQuery(['country' => null, 'page' => null]),
-            ];
+        if (! filled($focusLabel)) {
+            return [];
         }
 
-        if ($request->filled('search')) {
-            $chips[] = [
-                'label' => '"'.$request->search.'"',
-                'remove_url' => $request->fullUrlWithQuery(['search' => null, 'page' => null]),
-            ];
-        }
-
-        if ($request->filled('utm_source')) {
-            $sourceLabel = TrackerUtmFilter::sources()[$request->utm_source] ?? $request->utm_source;
-            $chips[] = [
-                'label' => 'Source: '.$sourceLabel,
-                'remove_url' => $request->fullUrlWithQuery(['utm_source' => null, 'page' => null]),
-            ];
-        }
-
-        if ($request->filled('utm_medium')) {
-            $mediumLabel = TrackerUtmFilter::mediums()[$request->utm_medium] ?? $request->utm_medium;
-            $chips[] = [
-                'label' => 'Medium: '.$mediumLabel,
-                'remove_url' => $request->fullUrlWithQuery(['utm_medium' => null, 'page' => null]),
-            ];
-        }
-
-        return $chips;
+        return [['label' => $focusLabel]];
     }
 }

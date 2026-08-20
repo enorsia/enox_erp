@@ -35,13 +35,24 @@ final class EcomTrackerViewData
         $period = $filters['period'] ?? '24h';
         $queryParams = self::dashboardQueryParams($request);
         $exportQuery = array_filter(array_merge($queryParams, ['period' => $period]), fn ($value) => filled($value));
-        $back = urlencode($request->fullUrl());
+        $back = $request->fullUrl();
 
         return [
             'period' => $period,
             'queryParams' => $queryParams,
             'exportUrl' => route('admin.ecom-tracker.dashboard.export', $exportQuery),
-            'detailLink' => fn (string $section) => route('admin.ecom-tracker.dashboard.details', $section).'?'.http_build_query(array_merge($queryParams, ['back' => $back])),
+            'detailLink' => fn (string $section) => self::activityDrillDownLink(
+                EcomActivityFocus::fromSection($section) ?? 'audience',
+                array_merge($filters, $queryParams),
+                self::dashboardSectionDrillExtras($section),
+                $back,
+            ),
+            'activityFocusLink' => fn (string $focus, array $extra = []) => self::activityDrillDownLink(
+                $focus,
+                array_merge($filters, $queryParams),
+                $extra,
+                $back,
+            ),
             'activitySourceLink' => fn (string $source) => self::activitySourceLink($filters, $source),
             'hasActiveFilters' => $activeFilterCount > 0,
         ];
@@ -70,7 +81,7 @@ final class EcomTrackerViewData
             : '';
         $activeFilterCount = $hasCustomRange ? 0 : (($request->has('window') && ! in_array($window, ['24h', '7d', '30d', '90d'], true)) ? 1 : 0);
         $exportQuery = array_filter($request->only(self::visitorQueryKeys()), fn ($value) => filled($value));
-        $back = urlencode($request->fullUrl());
+        $back = $request->fullUrl();
 
         return [
             'window' => $window,
@@ -108,9 +119,10 @@ final class EcomTrackerViewData
         $queryParams = $request->only(array_merge(self::visitorQueryKeys(), [
             'search', 'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium', 'sort_by',
         ]));
-        $visitorsBack = $request->filled('back')
-            ? urldecode((string) $request->input('back'))
-            : route('admin.ecom-tracker.visitors', $queryParams);
+        $visitorsBack = EcomTrackerViewData::resolveBackUrl(
+            $request->input('back'),
+            route('admin.ecom-tracker.visitors', $queryParams),
+        );
         $exportQuery = array_filter($request->only(self::visitorQueryKeys()), fn ($value) => filled($value));
         $resetQuery = array_filter([
             'section' => $section,
@@ -153,15 +165,116 @@ final class EcomTrackerViewData
         } elseif (request()->filled('back')) {
             $params['back'] = request()->input('back');
         } else {
-            $params['back'] = urlencode(request()->fullUrl());
+            $params['back'] = request()->fullUrl();
         }
 
         return $params;
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public static function activityQueryKeys(): array
+    {
+        return [
+            'period', 'date_from', 'date_to', 'focus', 'back',
+            'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
+            'utm_source', 'utm_medium', 'search', 'category', 'color', 'size',
+            'product_code', 'product_name', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $dashboardFilters
+     * @param  array<string, mixed>  $extra
+     */
+    public static function activityDrillDownLink(
+        string $focus,
+        array $dashboardFilters,
+        array $extra = [],
+        ?string $back = null,
+    ): string {
+        $query = array_merge(
+            self::activityIndexQueryFromFilters($dashboardFilters),
+            EcomActivityFocus::implicitQueryParams($focus),
+            array_filter(['focus' => $focus], fn ($value) => filled($value)),
+            array_filter($extra, fn ($value) => filled($value)),
+        );
+
+        if (filled($back)) {
+            $query['back'] = $back;
+        }
+
+        return route('admin.ecom-activity.index', $query);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function dashboardSectionDrillExtras(string $section): array
+    {
+        return match ($section) {
+            'products', 'colors' => array_filter([
+                'search' => request('search'),
+                'category' => request('category'),
+                'color' => request('color'),
+                'size' => request('size'),
+                'activity' => request('activity'),
+                'has_purchases' => request('has_purchases'),
+                'has_views' => request('has_views'),
+                'has_adds' => request('has_adds'),
+                'event_scenario' => request('event_scenario'),
+            ], fn ($value) => filled($value)),
+            default => [],
+        };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function activityIndexQueryFromRequest(Request $request): array
+    {
+        return array_filter(
+            $request->only(self::activityQueryKeys()),
+            fn ($value) => filled($value),
+        );
+    }
+
     public static function activityShowUrl(string $sessionId, ?string $back = null): string
     {
         return route('admin.ecom-activity.show', self::activityShowParams($sessionId, $back));
+    }
+
+    /**
+     * Build show URL preserving current list filters for back navigation.
+     */
+    public static function activityShowUrlFromRequest(Request $request, string $sessionId): string
+    {
+        return self::activityShowUrl($sessionId, $request->fullUrl());
+    }
+
+    /**
+     * Decode back URLs from query params (handles legacy double-encoded values).
+     */
+    public static function resolveBackUrl(?string $back, ?string $fallback = null): ?string
+    {
+        if (! filled($back)) {
+            return $fallback;
+        }
+
+        $decoded = (string) $back;
+
+        for ($i = 0; $i < 3 && str_contains($decoded, '%'); $i++) {
+            $next = urldecode($decoded);
+
+            if ($next === $decoded) {
+                break;
+            }
+
+            $decoded = $next;
+        }
+
+        return $decoded;
     }
 
     /**
@@ -235,7 +348,24 @@ final class EcomTrackerViewData
      */
     public static function activityIndexQueryFromFilters(array $filters, ?string $utmSource = null): array
     {
-        $query = [];
+        $query = array_filter([
+            'period' => $filters['period'] ?? null,
+            'device_type' => $filters['device_type'] ?? null,
+            'logged_in' => $filters['logged_in'] ?? null,
+            'has_order' => $filters['has_order'] ?? null,
+            'country' => $filters['country'] ?? null,
+            'visitor_type' => $filters['visitor_type'] ?? null,
+            'utm_medium' => $filters['utm_medium'] ?? null,
+            'search' => $filters['search'] ?? null,
+            'category' => $filters['category'] ?? null,
+            'color' => $filters['color'] ?? null,
+            'size' => $filters['size'] ?? null,
+            'activity' => $filters['activity'] ?? null,
+            'has_purchases' => $filters['has_purchases'] ?? null,
+            'has_views' => $filters['has_views'] ?? null,
+            'has_adds' => $filters['has_adds'] ?? null,
+            'event_scenario' => $filters['event_scenario'] ?? null,
+        ], fn ($value) => filled($value));
 
         if ($utmSource !== null && $utmSource !== '' && $utmSource !== 'Other') {
             $resolved = $utmSource === '(direct)'
@@ -245,6 +375,8 @@ final class EcomTrackerViewData
             if ($resolved !== '') {
                 $query['utm_source'] = $resolved;
             }
+        } elseif (filled($filters['utm_source'] ?? null)) {
+            $query['utm_source'] = (string) $filters['utm_source'];
         }
 
         $period = $filters['period'] ?? '24h';
@@ -252,6 +384,7 @@ final class EcomTrackerViewData
         if ($period === 'custom' && filled($filters['date_from'] ?? null) && filled($filters['date_to'] ?? null)) {
             $query['date_from'] = (string) $filters['date_from'];
             $query['date_to'] = (string) $filters['date_to'];
+            $query['period'] = 'custom';
 
             return $query;
         }
@@ -263,6 +396,7 @@ final class EcomTrackerViewData
             $yesterday = $today->copy()->subDay();
 
             return array_merge($query, [
+                'period' => 'yesterday',
                 'date_from' => $yesterday->toDateString(),
                 'date_to' => $yesterday->toDateString(),
             ]);
@@ -270,6 +404,7 @@ final class EcomTrackerViewData
 
         if ($period === '7d') {
             return array_merge($query, [
+                'period' => '7d',
                 'date_from' => $today->copy()->subDays(6)->toDateString(),
                 'date_to' => $todayStr,
             ]);
@@ -279,9 +414,14 @@ final class EcomTrackerViewData
             $days = $period === '90d' ? 89 : 29;
 
             return array_merge($query, [
+                'period' => $period,
                 'date_from' => $today->copy()->subDays($days)->toDateString(),
                 'date_to' => $todayStr,
             ]);
+        }
+
+        if ($period === '24h') {
+            $query['period'] = '24h';
         }
 
         return $query;
@@ -296,7 +436,11 @@ final class EcomTrackerViewData
             return '';
         }
 
-        return route('admin.ecom-activity.index', self::activityIndexQueryFromFilters($filters, $source));
+        $resolved = $source === '(direct)'
+            ? '(direct)'
+            : (SessionTrafficAttribution::normalizeSource($source) ?? $source);
+
+        return self::activityDrillDownLink('traffic', array_merge($filters, ['utm_source' => $resolved]));
     }
 
     /**
