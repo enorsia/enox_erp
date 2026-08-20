@@ -68,7 +68,7 @@ function shouldUseOriginalCalc($row, form, ch_price_id) {
     const shipping = parseFloat(getShippingValue(form, ch_price_id)) || 0;
     const originalShipping = parseFloat($row.data('original-shipping')) || 0;
     const cost_basis = getCostBasis(form, ch_price_id);
-    return cost_basis === 'unit' && Math.abs(shipping - originalShipping) < 0.005;
+    return cost_basis === 'unit' && shipping > 0 && Math.abs(shipping - originalShipping) < 0.005;
 }
 
 function calculateProfitForRow(form, $row, ch_price_id) {

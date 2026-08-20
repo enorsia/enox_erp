@@ -341,7 +341,6 @@
                                                     @php
                                                         $platform  = $platforms->get($p_code);
                                                         $d_price   = $ch_price?->discounts
-                                                                        ->where('status', 1)
                                                                         ->where('platform_id', $platform->id)
                                                                         ->first();
 

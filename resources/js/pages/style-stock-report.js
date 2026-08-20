@@ -2,9 +2,9 @@
 // MODULE: Style Stock Report
 // ============================================
 
-import { Fancybox } from '@fancyapps/ui';
-import '@fancyapps/ui/dist/fancybox/fancybox.css';
-import { prepareFancyboxPublicLinks } from './fancybox-public-url';
+import { Fancybox } from "@fancyapps/ui";
+import "@fancyapps/ui/dist/fancybox/fancybox.css";
+import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
 
 (function () {
     "use strict";
@@ -40,23 +40,25 @@ import { prepareFancyboxPublicLinks } from './fancybox-public-url';
             let deptDiscountCount = 0;
             const categories = [];
 
-            Object.entries(department?.categories || {}).forEach(([catKey, category]) => {
-                let catDiscountCount = 0;
+            Object.entries(department?.categories || {}).forEach(
+                ([catKey, category]) => {
+                    let catDiscountCount = 0;
 
-                iterateProducts(category?.products, (product) => {
-                    if (productHasDiscount(product)) {
-                        catDiscountCount++;
-                    }
-                });
+                    iterateProducts(category?.products, (product) => {
+                        if (productHasDiscount(product)) {
+                            catDiscountCount++;
+                        }
+                    });
 
-                deptDiscountCount += catDiscountCount;
+                    deptDiscountCount += catDiscountCount;
 
-                categories.push({
-                    key: catKey,
-                    name: category?.category_name || "—",
-                    count: catDiscountCount,
-                });
-            });
+                    categories.push({
+                        key: catKey,
+                        name: category?.category_name || "—",
+                        count: catDiscountCount,
+                    });
+                },
+            );
 
             departments.push({
                 key: deptKey,
@@ -84,7 +86,10 @@ import { prepareFancyboxPublicLinks } from './fancybox-public-url';
         if (!$container.length) return;
 
         const departments = buildDiscountSummary(data);
-        const grandTotal = departments.reduce((sum, dept) => sum + dept.count, 0);
+        const grandTotal = departments.reduce(
+            (sum, dept) => sum + dept.count,
+            0,
+        );
 
         if ($badge.length) {
             $badge.text(grandTotal + " item" + (grandTotal === 1 ? "" : "s"));
@@ -103,7 +108,7 @@ import { prepareFancyboxPublicLinks } from './fancybox-public-url';
                     .map(
                         (cat) =>
                             '<div class="ssr-discount-cat-row">' +
-                            '<span>' +
+                            "<span>" +
                             escapeHtml(cat.name) +
                             "</span>" +
                             '<span class="ssr-discount-cat-count">' +
@@ -162,11 +167,17 @@ import { prepareFancyboxPublicLinks } from './fancybox-public-url';
                 return;
             }
 
-            $.each(styleStockData[deptKey].categories, function (catKey, category) {
-                $categorySelect.append(
-                    $("<option>", { value: catKey, text: category.category_name }),
-                );
-            });
+            $.each(
+                styleStockData[deptKey].categories,
+                function (catKey, category) {
+                    $categorySelect.append(
+                        $("<option>", {
+                            value: catKey,
+                            text: category.category_name,
+                        }),
+                    );
+                },
+            );
 
             $categorySelect.prop("disabled", false);
         }
@@ -316,11 +327,65 @@ import { prepareFancyboxPublicLinks } from './fancybox-public-url';
             $(this).find(".ssr-chevron").toggleClass("ssr-chevron--open");
         });
 
+        $(document).on("click", ".discount-btn", function () {
+            let url = $(this).data("url");
+            $.ajax({
+                type: "GET",
+                url: url,
+                beforeSend: function () {
+                    $("#discountContent").html(`
+                <div class="flex flex-col items-center justify-center py-12">
+                    <svg
+                        class="w-10 h-10 animate-spin text-indigo-600"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                    >
+                        <circle
+                            class="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            stroke-width="4"
+                        ></circle>
+                        <path
+                            class="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                    </svg>
+
+                    <p class="mt-4 text-sm text-slate-500">
+                        Fetching data ...
+                    </p>
+                </div>
+            `);
+                },
+                success: function (response) {
+                    if (response.status) {
+                        $("#discountContent").html(response.data);
+                        const ecomSku = $('p[identify="Ecom SKU"]')
+                            .text()
+                            .trim();
+                        $("#setEcomSku").text("#"+ecomSku);
+                    }
+                },
+                error: function () {
+                    $("#discountContent").html(`
+                <div class="py-8 text-center text-red-500">
+                    Something went wrong.
+                </div>
+            `);
+                },
+            });
+        });
+
         prepareFancyboxPublicLinks('[data-fancybox^="gallery-style-stock-"]');
         Fancybox.bind('[data-fancybox^="gallery-style-stock-"]', {
-            closeButton: 'top',
+            closeButton: "top",
             Thumbs: {
-                type: 'classic',
+                type: "classic",
             },
         });
     }

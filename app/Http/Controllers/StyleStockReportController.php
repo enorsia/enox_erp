@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\ApiServices\SellingChartApiService;
+use App\Models\Platform;
+use App\Models\SellingChartBasicInfo;
+use App\Models\SellingChartExpense;
 use App\Services\StyleStockReportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,7 +17,9 @@ class StyleStockReportController extends Controller
 {
     public function __construct(
         protected StyleStockReportService $service,
+        protected SellingChartApiService $sellingChartApiService,
     ) {}
+
 
     public function index(Request $request): View|RedirectResponse|StreamedResponse
     {
@@ -56,5 +62,25 @@ class StyleStockReportController extends Controller
                 'Content-Type' => $result['content_type'],
             ],
         );
+    }
+
+    public function viewDiscount(Request $request, $style)
+    {
+        $data['chartInfo'] = SellingChartBasicInfo::with('sellingChartPrices.discounts')->firstWhere('design_no', $style);
+
+        $ecommerceProducts = $this->sellingChartApiService->getEcomProducts([
+            'designNos' => [$style]
+        ]);
+
+        $data['ecommerceProduct'] = $ecommerceProducts->first();
+
+        $data["platform_ncs"] = Platform::selectedPlatforms();
+        $data["platforms"] = Platform::all()->keyBy('code');
+
+        $data['expenseConfig'] = SellingChartExpense::configForSeason($data['chartInfo']->season_name);
+
+        $html = view('selling_chart.discounts.partials.card-edit-panel', $data)->render();
+
+        return response()->json(['status' => true, 'data' => $html]);
     }
 }

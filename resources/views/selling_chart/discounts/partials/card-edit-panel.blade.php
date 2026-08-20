@@ -48,7 +48,7 @@
             ] as $label => $value)
                 <div>
                     <p class="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-0.5">{{ $label }}</p>
-                    <p class="text-[12px] text-slate-700 dark:text-slate-200 font-medium leading-snug truncate" title="{{ $value }}">{{ $value ?: '—' }}</p>
+                    <p class="text-[12px] text-slate-700 dark:text-slate-200 font-medium leading-snug truncate" title="{{ $value }}" identify="{{ $label }}">{{ $value ?: '—' }}</p>
                 </div>
             @endforeach
             <div>
@@ -130,6 +130,8 @@
                       data-default-shipping="{{ $defaultShippingCost }}">
                     @csrf
                     <input type="hidden" name="platform_id"   class="platform_id"   value="{{ $platform->id }}" />
+                    <input type="hidden" name="ecom_product_id" value="{{ $ecommerceProduct['id'] }}" />
+                    <input type="hidden" name="ecom_sku" value="{{ $ecommerceProduct['sku'] }}" />
                     <input type="hidden" name="department_id" class="department_id" value="{{ $chartInfo->department_id }}" />
 
                     @include('selling_chart.discounts.partials.calc-table', [

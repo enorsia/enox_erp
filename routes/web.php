@@ -102,6 +102,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
 
     Route::controller(StyleStockReportController::class)->group(function () {
         Route::get('style/stock', 'index')->name('style.stock.index');
+        Route::get('style/stock/{style}/discounts', 'viewDiscount')->name('style.stock.discounts');
     });
 
 

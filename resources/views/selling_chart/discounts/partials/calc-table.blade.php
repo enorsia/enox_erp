@@ -18,7 +18,7 @@
                     <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Range</th>
                 @endif
                 <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700 w-24">Discount</th>
-                <th class="px-2 py-2 text-center text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700 w-14">Status</th>
+                {{-- <th class="px-2 py-2 text-center text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700 w-14">Status</th> --}}
                 <th class="toogle-item commission px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none" title="FOB $ converted to £">FOB ($→£)</th>
                 <th class="toogle-item commission px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Unit</th>
                 <th class="toogle-item commission px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">Shipping</th>
@@ -31,7 +31,7 @@
                 <th class="toogle-item vat px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">SP+VAT</th>
                 <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">PM%</th>
                 <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">NP</th>
-                <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700 w-36">Action</th>
+                {{-- <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700 w-36">Action</th> --}}
             </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 dark:divide-slate-700/40">
@@ -102,7 +102,7 @@
                     @endif
 
                     {{-- Status (merged for men/women & girls/boys) --}}
-                    @if ($loop->first && ($isMenWomen || $isGirlsBoys))
+                    {{-- @if ($loop->first && ($isMenWomen || $isGirlsBoys))
                         <td class="px-2 py-1.5 text-center" rowspan="{{ $rowCount }}">
                             @can('general.discounts.approve')
                                 <input type="checkbox" role="switch" name="group_status"
@@ -136,7 +136,7 @@
                                 @endif
                             @endcan
                         </td>
-                    @endif
+                    @endif --}}
 
                     {{-- FOB / Unit / Shipping — single row for men/women --}}
                     @if ($isMenWomen)
@@ -224,7 +224,7 @@
                         <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap np">@price($profit_cal['net_profit'])</td>
                     @endif
 
-                    @if ($loop->first)
+                    {{-- @if ($loop->first)
                         <td class="px-2 py-1.5" rowspan="{{ $rowCount }}">
                             <select name="save_type" class="save_type w-full px-1.5 py-1 text-[11px] border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-accent-400">
                                 <option value="1">Save</option>
@@ -234,7 +234,7 @@
                                 @endcan
                             </select>
                         </td>
-                    @endif
+                    @endif --}}
                 </tr>
             @endforeach
         </tbody>

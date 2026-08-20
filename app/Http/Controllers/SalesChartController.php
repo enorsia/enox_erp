@@ -6,6 +6,7 @@ use App\ApiServices\FabricationService;
 use App\ApiServices\SellingChartApiService;
 use App\Exports\SellingChartExport;
 use App\Exports\SellingChartMismatchExport;
+use App\Http\Clients\EnoxApiClient;
 use App\Imports\SellingChartImport;
 use App\Jobs\CloudflareFileDeleteJob;
 use App\Jobs\CloudflareFileUploadJob;
@@ -13,6 +14,7 @@ use App\Mail\SellingChartDiscountMail;
 use App\Models\Platform;
 use App\Models\SellingChartBasicInfo;
 use App\Models\SellingChartDiscount;
+use App\Models\SellingChartDiscountHistory;
 use App\Models\SellingChartExpense;
 use App\Models\SellingChartPrice;
 use App\Models\SellingChartType;
@@ -34,7 +36,8 @@ class SalesChartController extends Controller
 
     public function __construct(
         protected SellingChartApiService $sellingChartApiService,
-        protected FabricationService $fabricationService
+        protected FabricationService $fabricationService,
+        protected EnoxApiClient $api
     ) {}
 
     public function index(Request $request)
@@ -1109,11 +1112,16 @@ class SalesChartController extends Controller
             ]);
 
             $platform_id = $request->platform_id;
+            $ecom_product_id = $request->ecom_product_id;
+            $ecom_sku = $request->ecom_sku;
             $ch_price_ids = array_values($request->ch_price_id ?? []);
             $department_id = $request->department_id;
             $statuses = $request->statuses;
             $groupStatus = $request->has('group_status') ? ($request->boolean('group_status') ? 1 : 0) : null;
             $primaryId = $ch_price_ids[0] ?? null;
+            $discountItems = [];
+            $discountVariants = [];
+            $ecom_discount_status = 0;
 
             if (empty($ch_price_ids)) {
                 throw new Exception('No price items found.');
@@ -1138,12 +1146,12 @@ class SalesChartController extends Controller
                     ->where('platform_id', $platform_id)
                     ->first();
 
-                if (in_array($department_id, [1926, 1927], true)) {
+                if (in_array($department_id, [1926, 1927])) {
                     $price = $request->discount_price[$primaryId] ?? null;
                     $status = $groupStatus ?? 0;
                     $costBasis = $request->cost_basis[$primaryId] ?? 'unit';
                     $shippingCost = $request->shipping_cost[$primaryId] ?? $defaultShippingCost;
-                } elseif (in_array($department_id, [1928, 1929], true)) {
+                } elseif (in_array($department_id, [1928, 1929])) {
                     $price = $request->discount_price[$sl_price_id] ?? null;
                     $status = $groupStatus ?? 0;
                     $costBasis = $request->cost_basis[$sl_price_id] ?? 'unit';
@@ -1162,6 +1170,21 @@ class SalesChartController extends Controller
                 }
 
                 $oldDiscountPrice = $scd?->price;
+                if ($price != $oldDiscountPrice) {
+                    $discountItems[] = [
+                        'color' => $sl_price->color_name,
+                        'range' => $sl_price->range ?? null,
+                        'discount' => $price,
+                    ];
+                    $discountVariants[] = [
+                        'color_id' => $sl_price->color_id,
+                        'range_id' => $sl_price->range_id,
+                        'discount' => $price,
+                    ];
+                }
+                if ($price > 0 && !$ecom_discount_status) {
+                    $ecom_discount_status = 1;
+                }
 
                 if ($scd) {
                     if ($price) {
@@ -1171,9 +1194,9 @@ class SalesChartController extends Controller
                         $scd->price =  $price;
                         $scd->cost_basis = $costBasis;
                         $scd->shipping_cost = $shippingCost;
-                        if (Auth::user()?->can('general.discounts.approve')) {
-                            $scd->status =  $status;
-                        }
+                        // if (Auth::user()?->can('general.discounts.approve')) {
+                        //     $scd->status =  $status;
+                        // }
                         $scd->save();
                         $savedAny = true;
                         $lastScd = $scd;
@@ -1233,48 +1256,78 @@ class SalesChartController extends Controller
                 }
             }
 
-            if (!$savedAny) {
-                throw new Exception('Enter at least one discount price to save.');
+            if (!empty($discountItems) && $firstPriceRow) {
+                $scdhData = [
+                    "style" => $firstPriceRow?->sellingChartBasicInfo?->design_no,
+                    "product_code" => $ecom_sku,
+                    "platform" => $platform->name,
+                    "discounts" => $discountItems,
+                ];
+                $scdh = SellingChartDiscountHistory::create(
+                    [
+                        'basic_info_id' => $firstPriceRow->basic_info_id,
+                        'items' => json_encode($scdhData),
+                        'created_by' => Auth::user()->name,
+                    ]
+                );
+
+                if ($platform->code == 'enox') {
+                    $apiData = [
+                        'ecom_product_id' => $ecom_product_id,
+                        'ecom_discount_status' => $ecom_discount_status,
+                        'discount_variants' => $discountVariants,
+                    ];
+
+                    $response = $this->api->post(config('enox.endpoints.selling_chart_update_ecom_discount'), $apiData);
+
+                    if (!$response['status']) {
+                        throw new Exception($response['message'] ? $response['message'] : 'Failed to update discount on Enox.');
+                    }
+
+                    $scdh->updated_by = Auth::user()->name;
+                    $scdh->status = 1;
+                    $scdh->save();
+                }
             }
 
             DB::commit();
 
-            $save_type = $request->save_type;
+            // $save_type = $request->save_type;
 
-            $delay = 0;
-            if ($save_type == 2) {
-                $approval_emails = SellingChartDiscount::approvalEmails();
-                $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
-                    ->whereIn('id', $sldIds)
-                    ->where('status', 0)
-                    ->get();
-                if ($sl_discounts->isNotEmpty()) {
-                    foreach ($approval_emails as $email) {
-                        Mail::to($email)
-                            ->queue(
-                                (new SellingChartDiscountMail($sl_discounts, 'approval'))
-                                    ->delay(now()->addSeconds($delay))
-                            );
-                        $delay += 10;
-                    }
-                }
-            } elseif ($save_type == 3) {
-                $executor_emails = SellingChartDiscount::executorEmails();
-                $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
-                    ->whereIn('id', $sldIds)
-                    ->where('status', 1)
-                    ->get();
-                if ($sl_discounts->isNotEmpty()) {
-                    foreach ($executor_emails as $email) {
-                        Mail::to($email)
-                            ->queue(
-                                (new SellingChartDiscountMail($sl_discounts, 'executor'))
-                                    ->delay(now()->addSeconds($delay))
-                            );
-                        $delay += 10;
-                    }
-                }
-            }
+            // $delay = 0;
+            // if ($save_type == 2) {
+            //     $approval_emails = SellingChartDiscount::approvalEmails();
+            //     $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
+            //         ->whereIn('id', $sldIds)
+            //         ->where('status', 0)
+            //         ->get();
+            //     if ($sl_discounts->isNotEmpty()) {
+            //         foreach ($approval_emails as $email) {
+            //             Mail::to($email)
+            //                 ->queue(
+            //                     (new SellingChartDiscountMail($sl_discounts, 'approval'))
+            //                         ->delay(now()->addSeconds($delay))
+            //                 );
+            //             $delay += 10;
+            //         }
+            //     }
+            // } elseif ($save_type == 3) {
+            //     $executor_emails = SellingChartDiscount::executorEmails();
+            //     $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
+            //         ->whereIn('id', $sldIds)
+            //         ->where('status', 1)
+            //         ->get();
+            //     if ($sl_discounts->isNotEmpty()) {
+            //         foreach ($executor_emails as $email) {
+            //             Mail::to($email)
+            //                 ->queue(
+            //                     (new SellingChartDiscountMail($sl_discounts, 'executor'))
+            //                         ->delay(now()->addSeconds($delay))
+            //                 );
+            //             $delay += 10;
+            //         }
+            //     }
+            // }
 
             if ($lastScd) {
                 activity()
