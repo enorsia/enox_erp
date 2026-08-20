@@ -87,9 +87,9 @@
                     <div>
                         <label class="f-label" for="discount_status">Discount</label>
                         <select id="discount_status" class="f-input custom-select">
-                            <option value="">All items</option>
-                            <option value="">Non discount items</option>
-                            <option value="">Discount items</option>
+                            <option value="1">All items</option>
+                            <option value="2">Non discount items</option>
+                            <option value="3">Discount items</option>
                         </select>
                     </div>
 
