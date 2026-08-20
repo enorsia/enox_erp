@@ -36,6 +36,8 @@ test('ecom tracker groups category performance by department with totals', funct
     expect($grouped[0]['views'])->toBe(13);
     expect($grouped[0]['sale_items'])->toBe(3);
     expect($grouped[0]['categories'][0]['category_name'])->toBe('Dresses');
+    expect($grouped[0]['categories'][0]['department_name'])->toBe('Women');
     expect($grouped[1]['categories'][0]['category_name'])->toBe('Jumpers');
+    expect($grouped[1]['categories'][0]['department_name'])->toBe('Men');
     expect(collect($grouped)->pluck('name'))->not->toContain('Boys');
 });

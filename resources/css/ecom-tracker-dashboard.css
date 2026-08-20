@@ -2456,10 +2456,31 @@
     z-index: 2;
 }
 
-.etd-table--activity th.etd-col-trust,
-.etd-table--activity td.etd-col-trust {
-    min-width: 11.5rem;
+.etd-table--activity th.etd-col-trust {
+    min-width: 7.5rem;
     white-space: nowrap;
+}
+
+.etd-table--activity td.etd-col-trust {
+    min-width: 7.5rem;
+    max-width: 8.75rem;
+    white-space: normal;
+    vertical-align: top;
+}
+
+.etd-visitor-ip {
+    display: block;
+    font-size: 0.625rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: #94a3b8;
+    line-height: 1.3;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+}
+
+.dark .etd-visitor-ip {
+    color: #64748b;
 }
 
 .etd-table--activity th.etd-col-commerce,

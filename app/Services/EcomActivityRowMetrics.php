@@ -71,7 +71,7 @@ class EcomActivityRowMetrics
         }
 
         if ($focus === 'categories') {
-            $this->attachCategoryMetrics($metrics, $sessionIds, $from, $to);
+            $this->attachCategoryMetrics($metrics, $sessionIds, $from, $to, $productCatalogOptions);
         }
 
         if ($focus === 'traffic') {
@@ -105,7 +105,13 @@ class EcomActivityRowMetrics
             }
         }
 
-        $this->attachCommerceSummary($metrics, $sessionIds, $from, $to);
+        $this->attachCommerceSummary(
+            $metrics,
+            $sessionIds,
+            $from,
+            $to,
+            in_array($focus, ['products', 'categories'], true) ? $productCatalogOptions : [],
+        );
 
         foreach ($metrics as $sessionId => $row) {
             if (! empty($row['abandoned_at']) && ($row['abandoned_at'] ?? '—') !== '—') {
@@ -125,17 +131,25 @@ class EcomActivityRowMetrics
         Collection $sessionIds,
         Carbon $from,
         Carbon $to,
+        array $catalogOptions = [],
     ): void {
         $actions = ActivityEcomUserAction::query()
-            ->select('id', 'session_id', 'action_type', 'add_to_cart', 'begin_checkout', 'proceed_to_checkout', 'payment_success', 'created_at')
+            ->select('id', 'session_id', 'action_type', 'add_to_cart', 'begin_checkout', 'proceed_to_checkout', 'payment_success', 'created_at', 'category_name', 'department_name', 'product_name', 'product_code', 'sku', 'general_color_name', 'page_url')
             ->whereIn('session_id', $sessionIds)
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->whereIn('action_type', ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'])
             ->get()
             ->groupBy('session_id');
 
+        $useCatalogScope = filled($catalogOptions['category'] ?? null)
+            || filled($catalogOptions['product_code'] ?? null)
+            || filled($catalogOptions['product_name'] ?? null);
+
         foreach ($sessionIds as $sessionId) {
-            $summary = EcomActivityCommerceSummary::summarizeActions($actions->get($sessionId, collect()));
+            $sessionActions = $actions->get($sessionId, collect());
+            $summary = $useCatalogScope
+                ? EcomActivityCommerceSummary::summarizeCatalogActions($sessionActions, $catalogOptions, $this->dashboardService)
+                : EcomActivityCommerceSummary::summarizeActions($sessionActions);
             $metrics[$sessionId] = array_merge($metrics[$sessionId] ?? [], $summary);
         }
     }
@@ -234,8 +248,28 @@ class EcomActivityRowMetrics
      * @param  array<string, array<string, mixed>>  $metrics
      * @param  Collection<int, string>  $sessionIds
      */
-    private function attachCategoryMetrics(array &$metrics, Collection $sessionIds, Carbon $from, Carbon $to): void
-    {
+    private function attachCategoryMetrics(
+        array &$metrics,
+        Collection $sessionIds,
+        Carbon $from,
+        Carbon $to,
+        array $categoryCatalogOptions = [],
+    ): void {
+        if (filled($categoryCatalogOptions['category'] ?? null)) {
+            $categoryMetrics = $this->dashboardService->countCategoryCatalogMetricsForSessions(
+                $sessionIds,
+                $from,
+                $to,
+                $categoryCatalogOptions,
+            );
+
+            foreach ($categoryMetrics as $sessionId => $row) {
+                $metrics[$sessionId] = array_merge($metrics[$sessionId] ?? [], $row);
+            }
+
+            return;
+        }
+
         $actions = ActivityEcomUserAction::query()
             ->select('session_id', 'action_type', 'category_name', 'payment_success')
             ->whereIn('session_id', $sessionIds)

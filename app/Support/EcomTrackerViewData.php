@@ -179,7 +179,7 @@ final class EcomTrackerViewData
         return [
             'period', 'date_from', 'date_to', 'focus', 'back',
             'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
-            'utm_source', 'utm_medium', 'search', 'category', 'color', 'size',
+            'utm_source', 'utm_medium', 'search', 'category', 'department', 'color', 'size',
             'product_code', 'product_name', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
         ];
     }

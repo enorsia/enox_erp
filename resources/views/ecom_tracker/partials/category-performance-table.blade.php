@@ -88,7 +88,7 @@
                             <td class="etd-catalog-expand-col"></td>
                             <td class="etd-col-category etd-category-child-name">
                                 @if (is_callable($categoryActivityLink))
-                                    <a href="{{ $categoryActivityLink($category['category_name']) }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
+                                    <a href="{{ $categoryActivityLink(array_merge($category, ['department_name' => $category['department_name'] ?? $department['name'] ?? ''])) }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
                                         {{ $category['category_name'] }}
                                     </a>
                                 @else

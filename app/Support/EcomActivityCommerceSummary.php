@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\ActivityEcomUserAction;
+use App\Services\EcomTrackerDashboardService;
 use Illuminate\Support\Collection;
 
 final class EcomActivityCommerceSummary
@@ -36,6 +37,60 @@ final class EcomActivityCommerceSummary
             'commerce_display' => self::formatDisplay($label, $value),
             'commerce_tip' => self::tipForStage($stage, $action, $value),
         ];
+    }
+
+    /**
+     * Summarize commerce using only actions that match catalog drill-down filters.
+     *
+     * @param  Collection<int, ActivityEcomUserAction>  $actions
+     * @param  array<string, mixed>  $options
+     */
+    public static function summarizeCatalogActions(
+        Collection $actions,
+        array $options,
+        EcomTrackerDashboardService $dashboard,
+    ): array {
+        $filtered = $actions->filter(function (ActivityEcomUserAction $action) use ($dashboard, $options) {
+            if ($action->action_type === 'payment_success') {
+                return $dashboard->paymentActionMatchesCategoryCatalog($action, $options);
+            }
+
+            return $dashboard->actionMatchesCatalogOptions($action, $options);
+        });
+
+        if ($filtered->isEmpty()) {
+            return self::emptySummary();
+        }
+
+        $summary = self::summarizeActions($filtered);
+
+        if (($summary['commerce_label'] ?? '') !== 'Order') {
+            return $summary;
+        }
+
+        $payment = $filtered
+            ->where('action_type', 'payment_success')
+            ->sortByDesc(fn (ActivityEcomUserAction $action) => [
+                $action->created_at?->timestamp ?? 0,
+                $action->id,
+            ])
+            ->first();
+
+        if (! $payment instanceof ActivityEcomUserAction) {
+            return $summary;
+        }
+
+        $scopedValue = $dashboard->catalogPaymentAmount($payment, $options);
+
+        if ($scopedValue === null) {
+            return self::emptySummary();
+        }
+
+        $summary['commerce_value'] = $scopedValue;
+        $summary['commerce_display'] = self::formatDisplay('Order', $scopedValue);
+        $summary['commerce_tip'] = self::tipForStage('payment_success', $payment, $scopedValue);
+
+        return $summary;
     }
 
     public static function formatDisplay(?string $label, ?float $value): string

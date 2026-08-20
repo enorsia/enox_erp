@@ -66,6 +66,61 @@ test('product catalog session ids match dashboard product identity', function ()
         ->and($metrics[$sessionB]['products_viewed'])->toBe(1);
 });
 
+test('category catalog metrics count payment success actions once per order', function () {
+    $sessionId = Str::uuid()->toString();
+    $categoryName = 'Tops and T-Shirts';
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'department_name' => 'Women',
+        'payment_success' => [
+            'amount_paid' => 45.50,
+            'checkout_info' => [
+                'items' => [
+                    [
+                        'product_name' => 'Summer Tee',
+                        'product_code' => 'TEE-001',
+                        'category_name' => $categoryName,
+                        'qty' => 1,
+                    ],
+                    [
+                        'product_name' => 'Classic Tee',
+                        'product_code' => 'TEE-002',
+                        'category_name' => $categoryName,
+                        'qty' => 1,
+                    ],
+                ],
+            ],
+        ],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $dashboard = app(EcomTrackerDashboardService::class);
+    $range = $dashboard->resolveDateRange(['period' => 'all']);
+    $metrics = $dashboard->countCategoryCatalogMetricsForSessions(
+        collect([$sessionId]),
+        $range['from'],
+        $range['to'],
+        [
+            'department' => 'Women',
+            'category' => $categoryName,
+        ],
+    );
+
+    expect($metrics[$sessionId]['purchases'])->toBe(1);
+});
+
 test('product catalog metrics sum matches dashboard view totals across sessions', function () {
     $sessionA = Str::uuid()->toString();
     $sessionB = Str::uuid()->toString();

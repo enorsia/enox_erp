@@ -53,6 +53,17 @@ class EcomActivityController extends EcomTrackerAdminController
 
         $focus = $request->input('focus');
         $range = $this->resolveActivityRange($request);
+        $resolvedDepartment = EcomActivityFocus::resolvedCategoryDepartment(
+            $request,
+            $range['from'],
+            $range['to'],
+            $range['period'],
+        );
+
+        if ($resolvedDepartment !== null && ! $request->filled('department')) {
+            $request->merge(['department' => $resolvedDepartment]);
+        }
+
         $funnelContext = EcomActivityFocus::isValid($focus)
             ? EcomActivityFocus::resolveFunnelContext(
                 $focus,
@@ -73,7 +84,9 @@ class EcomActivityController extends EcomTrackerAdminController
             $range['from'],
             $range['to'],
             $funnelContext['metrics'],
-            $focus === 'products' ? EcomActivityFocus::productCatalogFiltersFromRequest($request) : [],
+            in_array($focus, ['products', 'categories'], true)
+                ? EcomActivityFocus::productCatalogFiltersFromRequest($request)
+                : [],
         );
 
         $visitorQualitySummary = $this->visitorQualityCounts($request, $range);
@@ -89,13 +102,24 @@ class EcomActivityController extends EcomTrackerAdminController
         );
 
         $focusLabel = EcomActivityFocus::label($focus);
-        $summaryCards = EcomActivityFocus::summaryForFocus($focus, $sessions->total(), $funnelContext['metrics']);
+        $summaryCards = EcomActivityFocus::summaryForFocus(
+            $focus,
+            $sessions->total(),
+            $funnelContext['metrics'],
+            $request,
+            $range['from'],
+            $range['to'],
+            $range['period'],
+        );
         $drillDownContext = EcomActivityFocus::drillDownContext(
             $request,
             $focus,
             $range['label'],
             $sessions->total(),
             $funnelContext['metrics'],
+            $range['from'],
+            $range['to'],
+            $range['period'],
         );
         $backUrl = EcomTrackerViewData::resolveBackUrl($request->input('back'));
         $breadcrumbs = $this->buildBreadcrumbs(
@@ -103,7 +127,7 @@ class EcomActivityController extends EcomTrackerAdminController
             $drillDownContext ? null : $focusLabel,
             $backUrl,
         );
-        $focusColumns = EcomActivityFocus::tableColumns($focus);
+        $focusColumns = EcomActivityFocus::tableColumns($focus, $request);
         $emptyMessage = EcomActivityFocus::emptyMessage($focus);
         $clearFocusUrl = $request->fullUrlWithQuery(['focus' => null, 'page' => null]);
 

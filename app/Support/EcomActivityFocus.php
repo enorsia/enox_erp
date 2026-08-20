@@ -158,7 +158,7 @@ final class EcomActivityFocus
     /**
      * @return array<int, array<string, mixed>>
      */
-    public static function tableColumns(?string $focus): array
+    public static function tableColumns(?string $focus, ?Request $request = null): array
     {
         $defs = [
             'actions_count' => ['key' => 'actions_count', 'label' => 'Actions', 'class' => 'etd-num'],
@@ -174,7 +174,7 @@ final class EcomActivityFocus
             'adds' => ['key' => 'adds', 'label' => 'Adds', 'class' => 'etd-num'],
             'purchased' => ['key' => 'purchased', 'label' => 'Bought'],
             'top_category' => ['key' => 'top_category', 'label' => 'Top category'],
-            'purchases' => ['key' => 'purchases', 'label' => 'Purchases', 'class' => 'etd-num'],
+            'purchases' => ['key' => 'purchases', 'label' => 'Purchases', 'class' => 'etd-num', 'tip' => 'Completed orders with items in this category'],
             'device_detail' => ['key' => 'device_detail', 'label' => 'Device & browser'],
             'traffic_source' => ['key' => 'traffic_source', 'label' => 'Source'],
             'traffic_medium' => ['key' => 'traffic_medium', 'label' => 'Medium'],
@@ -182,6 +182,10 @@ final class EcomActivityFocus
         ];
 
         $focusKeys = self::definition($focus)['columns'] ?? [];
+
+        if ($request?->filled('category')) {
+            $defs['top_category']['label'] = 'Category';
+        }
 
         return array_values(array_filter(array_map(
             fn (string $key) => $defs[$key] ?? null,
@@ -335,6 +339,7 @@ final class EcomActivityFocus
             'product_code' => $request->input('product_code'),
             'product_name' => $request->input('product_name'),
             'category' => $request->input('category'),
+            'department' => $request->input('department'),
             'color' => $request->input('color'),
             'size' => $request->input('size'),
             'activity' => $request->input('activity'),
@@ -343,6 +348,33 @@ final class EcomActivityFocus
             'has_adds' => $request->input('has_adds'),
             'event_scenario' => $request->input('event_scenario'),
         ], fn ($value) => filled($value));
+    }
+
+    public static function resolvedCategoryDepartment(
+        Request $request,
+        Carbon $from,
+        Carbon $to,
+        ?string $period,
+    ): ?string {
+        if ($request->input('focus') !== 'categories' || ! $request->filled('category')) {
+            return null;
+        }
+
+        if ($request->filled('department')) {
+            return (string) $request->input('department');
+        }
+
+        $row = app(EcomTrackerDashboardService::class)->categoryPerformanceForName(
+            $from,
+            $to,
+            (string) $request->input('category'),
+            self::sessionFiltersFromRequest($request),
+            $period,
+        );
+
+        $departmentName = trim((string) ($row['department_name'] ?? ''));
+
+        return $departmentName !== '' ? $departmentName : null;
     }
 
     private static function applyProductCatalogConstraints(
@@ -410,13 +442,21 @@ final class EcomActivityFocus
         string $rangeLabel,
         int $sessionCount,
         array $funnelMetrics = [],
+        ?Carbon $from = null,
+        ?Carbon $to = null,
+        ?string $period = null,
     ): ?array {
         if (! self::isValid($focus)) {
             return null;
         }
 
         $criteria = self::filterCriteriaFromRequest($request);
-        $metrics = self::summaryForFocus($focus, $sessionCount, $funnelMetrics);
+
+        if ($focus === 'categories' && $request->filled('category') && $from !== null && $to !== null) {
+            $criteria = self::enrichCategoryDrillDownCriteria($request, $criteria, $from, $to, $period);
+        }
+
+        $metrics = self::summaryForFocus($focus, $sessionCount, $funnelMetrics, $request, $from, $to, $period);
 
         return [
             'section' => self::label($focus),
@@ -452,7 +492,16 @@ final class EcomActivityFocus
             $add('Product search', '"'.$request->search.'"');
         }
 
-        $add('Category', $request->input('category'));
+        if ($request->filled('category')) {
+            $add(
+                'Category',
+                TrackerCategoryIdentity::label(
+                    (string) $request->input('department', ''),
+                    (string) $request->input('category'),
+                ),
+            );
+        }
+
         $add('Color', $request->input('color'));
         $add('Size', $request->input('size'));
 
@@ -502,6 +551,33 @@ final class EcomActivityFocus
     }
 
     /**
+     * @param  array<int, array{label: string, value: string}>  $criteria
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function enrichCategoryDrillDownCriteria(
+        Request $request,
+        array $criteria,
+        Carbon $from,
+        Carbon $to,
+        ?string $period,
+    ): array {
+        $categoryName = (string) $request->input('category');
+        $departmentName = self::resolvedCategoryDepartment($request, $from, $to, $period) ?? '';
+        $label = TrackerCategoryIdentity::label($departmentName, $categoryName);
+
+        return collect($criteria)->map(function (array $criterion) use ($label) {
+            if (($criterion['label'] ?? '') !== 'Category') {
+                return $criterion;
+            }
+
+            return [
+                'label' => 'Category',
+                'value' => $label,
+            ];
+        })->all();
+    }
+
+    /**
      * @return array<int, array{label: string, remove_url: string}>
      */
     public static function filterChipsFromRequest(Request $request): array
@@ -542,6 +618,15 @@ final class EcomActivityFocus
                 continue;
             }
 
+            if ($key === 'category') {
+                $chips[] = [
+                    'label' => $criterion['label'].': '.$criterion['value'],
+                    'remove_url' => $request->fullUrlWithQuery(['category' => null, 'department' => null, 'page' => null]),
+                ];
+
+                continue;
+            }
+
             $chips[] = [
                 'label' => $criterion['label'].': '.$criterion['value'],
                 'remove_url' => $request->fullUrlWithQuery([$key => null, 'page' => null]),
@@ -577,6 +662,10 @@ final class EcomActivityFocus
         ?string $focus,
         int $sessionCount,
         array $funnelMetrics = [],
+        ?Request $request = null,
+        ?Carbon $from = null,
+        ?Carbon $to = null,
+        ?string $period = null,
     ): array {
         if (! self::isValid($focus)) {
             return [];
@@ -593,9 +682,58 @@ final class EcomActivityFocus
                 ['label' => 'Matching sessions', 'value' => $sessionCount],
                 ['label' => 'Revenue', 'value' => '£'.number_format($atStake, 2)],
             ],
+            'categories' => array_merge(
+                [['label' => 'Matching sessions', 'value' => $sessionCount]],
+                self::categoryPerformanceSummaryMetrics($request, $from, $to, $period),
+            ),
             default => [
                 ['label' => 'Matching sessions', 'value' => $sessionCount],
             ],
         };
+    }
+
+    /**
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function categoryPerformanceSummaryMetrics(
+        ?Request $request,
+        ?Carbon $from,
+        ?Carbon $to,
+        ?string $period,
+    ): array {
+        if ($request === null || $from === null || $to === null || ! $request->filled('category')) {
+            return [];
+        }
+
+        $row = app(EcomTrackerDashboardService::class)->categoryPerformanceForName(
+            $from,
+            $to,
+            (string) $request->input('category'),
+            self::sessionFiltersFromRequest($request),
+            $period,
+            self::resolvedCategoryDepartment($request, $from, $to, $period),
+        );
+
+        if ($row === null) {
+            return [];
+        }
+
+        $views = (int) ($row['views'] ?? 0);
+        $adds = (int) ($row['adds'] ?? 0);
+        $proceedCheckouts = (int) ($row['proceed_checkouts'] ?? 0);
+        $purchases = (int) ($row['purchases'] ?? 0);
+        $saleItems = (int) ($row['sale_items'] ?? 0);
+        $saleAmount = (float) ($row['sale_amount'] ?? 0);
+        $cartAbandonment = max(0, $adds - $proceedCheckouts);
+
+        return [
+            ['label' => 'Views', 'value' => number_format($views)],
+            ['label' => 'Adds', 'value' => number_format($adds)],
+            ['label' => 'Proceed', 'value' => number_format($proceedCheckouts)],
+            ['label' => 'Cart abandoned', 'value' => number_format($cartAbandonment)],
+            ['label' => 'Sold', 'value' => number_format($purchases)],
+            ['label' => 'Sold qty', 'value' => number_format($saleItems)],
+            ['label' => 'Sale', 'value' => '£'.number_format($saleAmount, 2)],
+        ];
     }
 }

@@ -431,6 +431,178 @@ test('activity index categories focus renders category columns from category_nam
         ->assertSee('Women');
 });
 
+test('activity index categories focus scopes row metrics to filtered category', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $topsSession = Str::uuid()->toString();
+    $shortsOnlySession = Str::uuid()->toString();
+
+    foreach ([$topsSession, $shortsOnlySession] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => now(),
+            'last_active_at' => now(),
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $topsSession,
+        'action_type' => 'category_view',
+        'category_name' => 'Tops and T-Shirts',
+        'created_at' => now()->subMinutes(10),
+        'start_time' => now()->subMinutes(10),
+        'end_time' => now()->subMinutes(10),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $topsSession,
+        'action_type' => 'category_view',
+        'category_name' => 'Shorts',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $shortsOnlySession,
+        'action_type' => 'category_view',
+        'category_name' => 'Shorts',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $response = $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'categories',
+            'category' => 'Tops and T-Shirts',
+        ]))
+        ->assertOk()
+        ->assertSee('Tops and T-Shirts')
+        ->assertSee($topsSession)
+        ->assertDontSee($shortsOnlySession);
+
+    expect(substr_count($response->getContent(), 'Shorts'))->toBe(0);
+});
+
+test('activity index categories focus scopes sessions to department and category', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $womenSession = Str::uuid()->toString();
+    $boysSession = Str::uuid()->toString();
+    $categoryName = 'Tops and T-Shirts';
+
+    foreach ([$womenSession, $boysSession] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => now(),
+            'last_active_at' => now(),
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $womenSession,
+        'action_type' => 'category_view',
+        'department_name' => 'Women',
+        'category_name' => $categoryName,
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $boysSession,
+        'action_type' => 'category_view',
+        'department_name' => 'Boys',
+        'category_name' => $categoryName,
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'categories',
+            'department' => 'Women',
+            'category' => $categoryName,
+        ]))
+        ->assertOk()
+        ->assertSee('Women -> '.$categoryName)
+        ->assertSee($womenSession)
+        ->assertDontSee($boysSession);
+});
+
+test('activity index categories focus shows category performance totals in drill-down context', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $sessionId = Str::uuid()->toString();
+    $categoryName = 'Tops and T-Shirts';
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'category_name' => $categoryName,
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'add_to_cart',
+        'category_name' => $categoryName,
+        'product_name' => 'Summer Tee',
+        'product_code' => 'TEE-001',
+        'add_to_cart' => [
+            'product_code' => 'TEE-001',
+            'product_name' => 'Summer Tee',
+            'qty' => 1,
+            'category_name' => $categoryName,
+        ],
+        'created_at' => now()->addMinute(),
+        'start_time' => now()->addMinute(),
+        'end_time' => now()->addMinute(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'categories',
+            'category' => $categoryName,
+        ]))
+        ->assertOk()
+        ->assertSee('Category performance')
+        ->assertSee($categoryName)
+        ->assertSee('Views')
+        ->assertSee('Adds')
+        ->assertSee('Proceed')
+        ->assertSee('Cart abandoned')
+        ->assertSee('Sold')
+        ->assertSee('Sold qty')
+        ->assertSee('Sale');
+});
+
 test('activity index date scope matches dashboard session range for 7d', function () {
     Carbon::setTestNow(Carbon::parse('2026-07-16 15:00:00', TrackerTime::timezone()));
 

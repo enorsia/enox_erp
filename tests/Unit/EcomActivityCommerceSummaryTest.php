@@ -59,3 +59,36 @@ test('commerce summary returns dash when no funnel actions exist', function () {
 
     expect($summary['commerce_display'])->toBe('—');
 });
+
+test('catalog commerce summary ignores orders outside the filtered category', function () {
+    $dashboard = app(\App\Services\EcomTrackerDashboardService::class);
+    $actions = collect([
+        new ActivityEcomUserAction([
+            'id' => 20,
+            'action_type' => 'payment_success',
+            'payment_success' => [
+                'amount_paid' => 38,
+                'checkout_info' => [
+                    'items' => [
+                        [
+                            'product_name' => 'Trouser',
+                            'product_code' => 'TR-1',
+                            'category_name' => 'Trousers',
+                            'department_name' => 'Women',
+                            'qty' => 1,
+                            'price' => 38,
+                        ],
+                    ],
+                ],
+            ],
+            'created_at' => now(),
+        ]),
+    ]);
+
+    $summary = EcomActivityCommerceSummary::summarizeCatalogActions($actions, [
+        'department' => 'Women',
+        'category' => 'Tops and T-Shirts',
+    ], $dashboard);
+
+    expect($summary['commerce_display'])->toBe('—');
+});

@@ -256,7 +256,10 @@
                 @include('ecom_tracker.partials.category-performance-table', [
                     'departments' => $d['category_departments'] ?? [],
                     'showCurrency' => true,
-                    'categoryActivityLink' => fn (string $categoryName) => $activityFocusLink('categories', ['category' => $categoryName]),
+                    'categoryActivityLink' => fn (array $category) => $activityFocusLink('categories', [
+                        'category' => $category['category_name'] ?? '',
+                        'department' => $category['department_name'] ?? '',
+                    ]),
                 ])
             </div>
         </div>

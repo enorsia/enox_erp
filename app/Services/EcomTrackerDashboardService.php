@@ -428,7 +428,7 @@ class EcomTrackerDashboardService
     {
         return array_filter(
             array_intersect_key($filters, array_flip([
-                'search', 'product_code', 'product_name', 'category', 'color', 'size', 'sort_by', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
+                'search', 'product_code', 'product_name', 'category', 'department', 'color', 'size', 'sort_by', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
             ])),
             fn ($value) => $value !== null && $value !== '',
         );
@@ -573,6 +573,179 @@ class EcomTrackerDashboardService
     }
 
     /**
+     * Per-session category metrics for activity drill-down (scoped to catalog filters).
+     *
+     * @param  Collection<int, string>  $sessionIds
+     * @param  array<string, mixed>  $options
+     * @return array<string, array{top_category: string, purchases: int}>
+     */
+    public function countCategoryCatalogMetricsForSessions(
+        Collection $sessionIds,
+        Carbon $from,
+        Carbon $to,
+        array $options = [],
+    ): array {
+        $categoryFilter = trim((string) ($options['category'] ?? ''));
+        $departmentFilter = trim((string) ($options['department'] ?? ''));
+        $metrics = [];
+
+        foreach ($sessionIds as $sessionId) {
+            $metrics[$sessionId] = [
+                'top_category' => $categoryFilter !== ''
+                    ? TrackerCategoryIdentity::label($departmentFilter, $categoryFilter)
+                    : '—',
+                'purchases' => 0,
+            ];
+        }
+
+        if ($sessionIds->isEmpty() || $categoryFilter === '') {
+            return $metrics;
+        }
+
+        $actions = ActivityEcomUserAction::query()
+            ->select($this->productCatalogActionColumns())
+            ->whereIn('session_id', $sessionIds->all())
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+            ->where('action_type', 'payment_success')
+            ->get();
+
+        foreach ($actions as $action) {
+            $sessionId = $action->session_id;
+
+            if (! isset($metrics[$sessionId])) {
+                continue;
+            }
+
+            if ($this->paymentSuccessMatchesCategoryCatalog($action, $options)) {
+                $metrics[$sessionId]['purchases']++;
+            }
+        }
+
+        return $metrics;
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     */
+    public function paymentActionMatchesCategoryCatalog(ActivityEcomUserAction $action, array $options): bool
+    {
+        return $this->paymentSuccessMatchesCategoryCatalog($action, $options);
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     */
+    public function catalogPaymentAmount(ActivityEcomUserAction $action, array $options): ?float
+    {
+        if ($action->action_type !== 'payment_success') {
+            return null;
+        }
+
+        $payload = is_array($action->payment_success) ? $action->payment_success : [];
+        $items = $payload['checkout_info']['items'] ?? [];
+        $total = 0.0;
+
+        if (is_array($items) && $items !== []) {
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+
+                $line = [
+                    'name' => (string) ($item['product_name'] ?? ''),
+                    'code' => (string) ($item['product_code'] ?? ''),
+                    'sku' => (string) ($item['sku'] ?? ''),
+                    'category' => (string) ($item['category_name'] ?? ''),
+                    'department_name' => $this->catalogDepartmentFromLine($item, $action),
+                    'color' => (string) ($item['color_name'] ?? ''),
+                    'size' => (string) ($item['size_name'] ?? ''),
+                ];
+
+                if (! $this->productCatalogLineMatchesOptions($line, $options)) {
+                    continue;
+                }
+
+                $purchaseLine = $this->extractPurchaseLineIdentity($item);
+
+                if ($purchaseLine !== null) {
+                    $total += $purchaseLine['revenue'];
+                }
+            }
+        } elseif ($this->paymentSuccessMatchesCategoryCatalog($action, $options)) {
+            $total = (float) ($payload['amount_paid'] ?? 0);
+        }
+
+        return $total > 0 ? round($total, 2) : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     */
+    public function actionMatchesCatalogOptions(ActivityEcomUserAction $action, array $options): bool
+    {
+        return $this->actionMatchesProductCatalogOptions($action, $options);
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     */
+    private function paymentSuccessMatchesCategoryCatalog(ActivityEcomUserAction $action, array $options): bool
+    {
+        foreach ($this->productCatalogLinesFromAction($action) as $line) {
+            if ($this->productCatalogLineMatchesOptions($line, $options)) {
+                return true;
+            }
+        }
+
+        return $this->productCatalogLineMatchesOptions([
+            'name' => (string) ($action->product_name ?? ''),
+            'code' => (string) ($action->product_code ?? ''),
+            'sku' => trim((string) ($action->sku ?? '')),
+            'category' => (string) ($action->category_name ?? ''),
+            'department_name' => $this->catalogDepartmentFromAction($action),
+            'color' => (string) ($action->general_color_name ?? ''),
+            'size' => '',
+        ], $options);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>|null
+     */
+    public function categoryPerformanceForName(
+        Carbon $from,
+        Carbon $to,
+        string $categoryName,
+        array $filters = [],
+        ?string $period = null,
+        ?string $departmentName = null,
+    ): ?array {
+        $categoryName = trim($categoryName);
+        $departmentName = trim((string) $departmentName);
+
+        if ($categoryName === '') {
+            return null;
+        }
+
+        $categories = $this->buildCategoryPerformance($from, $to, null, $filters, $period);
+
+        return collect($categories)->first(function (array $row) use ($categoryName, $departmentName) {
+            if (strcasecmp((string) ($row['category_name'] ?? ''), $categoryName) !== 0) {
+                return false;
+            }
+
+            if ($departmentName === '') {
+                return true;
+            }
+
+            return strcasecmp(
+                TrackerCategoryIdentity::normalizeDepartmentName((string) ($row['department_name'] ?? '')),
+                TrackerCategoryIdentity::normalizeDepartmentName($departmentName),
+            ) === 0;
+        });
+    }
+
+    /**
      * @param  array<string, mixed>  $options
      */
     private function actionMatchesProductCatalogOptions(ActivityEcomUserAction $action, array $options): bool
@@ -591,12 +764,15 @@ class EcomTrackerDashboardService
      */
     private function productCatalogLinesFromAction(ActivityEcomUserAction $action): array
     {
+        $actionDepartment = $this->catalogDepartmentFromAction($action);
+
         if (in_array($action->action_type, self::PRODUCT_VIEW_TYPES, true)) {
             return [[
                 'name' => (string) ($action->product_name ?? ''),
                 'code' => (string) ($action->product_code ?? ''),
                 'sku' => trim((string) ($action->sku ?? '')),
                 'category' => (string) ($action->category_name ?? ''),
+                'department_name' => $actionDepartment,
                 'color' => (string) ($action->general_color_name ?? ''),
                 'size' => '',
             ]];
@@ -608,6 +784,7 @@ class EcomTrackerDashboardService
                 'code' => '',
                 'sku' => '',
                 'category' => (string) ($action->category_name ?? ''),
+                'department_name' => $actionDepartment,
                 'color' => '',
                 'size' => '',
             ]];
@@ -635,6 +812,7 @@ class EcomTrackerDashboardService
                     'code' => trim((string) ($item['product_code'] ?? '')),
                     'sku' => trim((string) ($item['sku'] ?? '')),
                     'category' => trim((string) ($item['category_name'] ?? $action->category_name ?? '')),
+                    'department_name' => $this->catalogDepartmentFromLine($item, $action),
                     'color' => trim((string) ($item['color_name'] ?? $action->general_color_name ?? '')),
                     'size' => trim((string) ($item['size_name'] ?? '')),
                 ])
@@ -660,6 +838,7 @@ class EcomTrackerDashboardService
                 'code' => (string) ($payload['product_code'] ?? $action->product_code ?? ''),
                 'sku' => trim((string) ($payload['sku'] ?? $action->sku ?? '')),
                 'category' => (string) ($action->category_name ?? ''),
+                'department_name' => $this->catalogDepartmentFromLine($payload, $action),
                 'color' => (string) ($payload['color_name'] ?? $action->general_color_name ?? ''),
                 'size' => (string) ($payload['size_name'] ?? ''),
             ]];
@@ -671,6 +850,7 @@ class EcomTrackerDashboardService
                 'code' => (string) ($line['code'] ?? ''),
                 'sku' => (string) ($line['sku'] ?? ''),
                 'category' => (string) ($line['category'] ?? $action->category_name ?? ''),
+                'department_name' => $this->catalogDepartmentFromLine($line, $action),
                 'color' => (string) ($line['color_name'] ?? $action->general_color_name ?? ''),
                 'size' => (string) ($line['size_name'] ?? ''),
             ])
@@ -708,6 +888,17 @@ class EcomTrackerDashboardService
             return false;
         }
 
+        $departmentFilter = trim((string) ($options['department'] ?? ''));
+
+        if ($departmentFilter !== '') {
+            $lineDepartment = TrackerCategoryIdentity::normalizeDepartmentName((string) ($line['department_name'] ?? ''));
+
+            if ($lineDepartment !== ''
+                && strcasecmp($lineDepartment, TrackerCategoryIdentity::normalizeDepartmentName($departmentFilter)) !== 0) {
+                return false;
+            }
+        }
+
         $colorFilter = trim((string) ($options['color'] ?? ''));
 
         if ($colorFilter !== '' && strcasecmp((string) ($line['color'] ?? ''), $colorFilter) !== 0) {
@@ -726,7 +917,33 @@ class EcomTrackerDashboardService
 
         $search = strtolower(trim((string) ($options['search'] ?? '')));
 
-        return $search !== '' || $categoryFilter !== '' || $colorFilter !== '' || $sizeFilter !== '';
+        return $search !== ''
+            || $categoryFilter !== ''
+            || $departmentFilter !== ''
+            || $colorFilter !== ''
+            || $sizeFilter !== '';
+    }
+
+    private function catalogDepartmentFromAction(ActivityEcomUserAction $action): string
+    {
+        return TrackerCategoryIdentity::resolveDepartmentName([
+            'department_name' => (string) ($action->department_name ?? ''),
+            'page_url' => (string) ($action->page_url ?? ''),
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $line
+     */
+    private function catalogDepartmentFromLine(array $line, ActivityEcomUserAction $action): string
+    {
+        $department = trim((string) ($line['department_name'] ?? $line['department'] ?? ''));
+
+        if ($department !== '') {
+            return TrackerCategoryIdentity::normalizeDepartmentName($department);
+        }
+
+        return $this->catalogDepartmentFromAction($action);
     }
 
     /**
@@ -2342,6 +2559,7 @@ class EcomTrackerDashboardService
             }
 
             $departments[$target]['categories'][] = [
+                'department_name' => $target,
                 'category_name' => $categoryName,
                 'category_code' => (string) ($row['category_code'] ?? ''),
                 'views' => (int) ($row['views'] ?? 0),
