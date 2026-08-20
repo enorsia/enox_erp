@@ -453,11 +453,15 @@ class EcomTrackerDashboardService
      */
     public function activitySessionIds(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): Collection
     {
-        if ($filters !== []) {
-            return $this->filteredSessionIds($from, $to, $filters, $period);
+        if ($filters === []) {
+            return $this->sessionsInRange($from, $to, $period)->keys()->values();
         }
 
-        return $this->sessionsInRange($from, $to, $period)->keys()->values();
+        if ($this->extractProductCatalogOptions($filters) !== []) {
+            return $this->productCatalogSessionIds($from, $to, $filters, $period);
+        }
+
+        return $this->filteredSessionIds($from, $to, $filters, $period);
     }
 
     /**
@@ -480,11 +484,43 @@ class EcomTrackerDashboardService
     {
         $sessionFilters = $this->extractSessionFilters($filters);
         $catalogOptions = $this->extractProductCatalogOptions($filters);
+        $hasOrder = $sessionFilters['has_order'] ?? null;
+        unset($sessionFilters['has_order']);
 
         if ($catalogOptions === []) {
-            return $this->filteredSessionIds($from, $to, $sessionFilters, $period);
+            return $this->filteredSessionIds(
+                $from,
+                $to,
+                $hasOrder !== null && $hasOrder !== '' ? array_merge($sessionFilters, ['has_order' => $hasOrder]) : $sessionFilters,
+                $period,
+            );
         }
 
+        $matchedSessionIds = match ($hasOrder) {
+            '1' => $this->queryProductCatalogPurchaseSessionIds($from, $to, $catalogOptions),
+            '0' => $this->queryProductCatalogActivitySessionIds($from, $to, $catalogOptions)
+                ->diff($this->queryProductCatalogPurchaseSessionIds($from, $to, $catalogOptions))
+                ->values(),
+            default => $this->queryProductCatalogActivitySessionIds($from, $to, $catalogOptions),
+        };
+
+        if ($sessionFilters === []) {
+            return $matchedSessionIds;
+        }
+
+        $scopedSessionIds = $this->filteredSessionIds($from, $to, $sessionFilters, $period);
+
+        return $matchedSessionIds
+            ->intersect($scopedSessionIds)
+            ->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $catalogOptions
+     * @return Collection<int, string>
+     */
+    private function queryProductCatalogActivitySessionIds(Carbon $from, Carbon $to, array $catalogOptions): Collection
+    {
         $actionTypes = array_merge(
             self::PRODUCT_VIEW_TYPES,
             ['add_to_cart', 'proceed_checkout', 'payment_success', 'category_view'],
@@ -496,20 +532,29 @@ class EcomTrackerDashboardService
             ->whereIn('action_type', $actionTypes)
             ->get();
 
-        $matchedSessionIds = $actions
+        return $actions
             ->filter(fn (ActivityEcomUserAction $action) => $this->actionMatchesProductCatalogOptions($action, $catalogOptions))
             ->pluck('session_id')
             ->unique()
             ->values();
+    }
 
-        if ($sessionFilters === []) {
-            return $matchedSessionIds;
-        }
+    /**
+     * @param  array<string, mixed>  $catalogOptions
+     * @return Collection<int, string>
+     */
+    private function queryProductCatalogPurchaseSessionIds(Carbon $from, Carbon $to, array $catalogOptions): Collection
+    {
+        $actions = ActivityEcomUserAction::query()
+            ->select($this->productCatalogActionColumns())
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+            ->where('action_type', 'payment_success')
+            ->get();
 
-        $scopedSessionIds = $this->filteredSessionIds($from, $to, $sessionFilters, $period);
-
-        return $matchedSessionIds
-            ->intersect($scopedSessionIds)
+        return $actions
+            ->filter(fn (ActivityEcomUserAction $action) => $this->paymentSuccessMatchesCategoryCatalog($action, $catalogOptions))
+            ->pluck('session_id')
+            ->unique()
             ->values();
     }
 

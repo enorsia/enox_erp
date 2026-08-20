@@ -543,6 +543,47 @@ test('activity index categories focus scopes sessions to department and category
         ->assertDontSee($boysSession);
 });
 
+test('activity index categories focus includes product-view-only sessions in category drill-down', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $sessionId = Str::uuid()->toString();
+    $categoryName = 'Sweatshirts and Hoodies';
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'department_name' => 'Boys',
+        'category_name' => $categoryName,
+        'product_name' => 'Boys Hoodie',
+        'product_code' => 'BH-001',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'categories',
+            'department' => 'Boys',
+            'category' => $categoryName,
+        ]))
+        ->assertOk()
+        ->assertSee('Boys -> '.$categoryName)
+        ->assertSee('Matching sessions')
+        ->assertSee('1')
+        ->assertSee($sessionId);
+});
+
 test('activity index categories focus shows category performance totals in drill-down context', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.activity.index');
@@ -694,4 +735,140 @@ test('conversion focus drill down shows revenue from payment success events', fu
         ->assertSee('£15.49')
         ->assertSee('1 session')
         ->assertSee(substr($sessionId, 0, 8));
+});
+
+test('activity index keeps dashboard drill-down filters when sidebar filters are applied', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $mobileSession = Str::uuid()->toString();
+    $desktopSession = Str::uuid()->toString();
+    $categoryName = 'Tops and T-Shirts';
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $mobileSession,
+        'device_type' => 'mobile',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $desktopSession,
+        'device_type' => 'desktop',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    foreach ([$mobileSession, $desktopSession] as $sessionId) {
+        ActivityEcomUserAction::query()->create([
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => 'category_view',
+            'department_name' => 'Women',
+            'category_name' => $categoryName,
+            'created_at' => now(),
+            'start_time' => now(),
+            'end_time' => now(),
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'categories',
+            'department' => 'Women',
+            'category' => $categoryName,
+            'device_type' => 'mobile',
+        ]))
+        ->assertOk()
+        ->assertSee('Category performance')
+        ->assertSee('Women -> '.$categoryName)
+        ->assertSee('Device: Mobile')
+        ->assertSee($mobileSession)
+        ->assertDontSee($desktopSession);
+});
+
+test('activity index category drill-down with order filter only includes category purchases', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $categoryBuyer = Str::uuid()->toString();
+    $otherCategoryBuyer = Str::uuid()->toString();
+    $categoryName = 'Tops and T-Shirts';
+
+    foreach ([$categoryBuyer, $otherCategoryBuyer] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => now(),
+            'last_active_at' => now(),
+        ]);
+
+        ActivityEcomUserAction::query()->create([
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => 'category_view',
+            'department_name' => 'Women',
+            'category_name' => $categoryName,
+            'created_at' => now(),
+            'start_time' => now(),
+            'end_time' => now(),
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $categoryBuyer,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'amount_paid' => 25,
+            'checkout_info' => [
+                'items' => [[
+                    'product_name' => 'Summer Tee',
+                    'product_code' => 'TEE-001',
+                    'category_name' => $categoryName,
+                    'department_name' => 'Women',
+                    'qty' => 1,
+                    'price' => 25,
+                ]],
+            ],
+        ],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $otherCategoryBuyer,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'amount_paid' => 38,
+            'checkout_info' => [
+                'items' => [[
+                    'product_name' => 'Trouser',
+                    'product_code' => 'TR-1',
+                    'category_name' => 'Trousers',
+                    'department_name' => 'Women',
+                    'qty' => 1,
+                    'price' => 38,
+                ]],
+            ],
+        ],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'categories',
+            'department' => 'Women',
+            'category' => $categoryName,
+            'has_order' => '1',
+        ]))
+        ->assertOk()
+        ->assertSee($categoryBuyer)
+        ->assertDontSee($otherCategoryBuyer);
 });

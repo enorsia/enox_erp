@@ -62,15 +62,15 @@
         default => route('admin.ecom-activity.index', $baseQuery),
     };
 
-    $activeFilterCount = collect(['search', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium', 'focus'])
-        ->filter(fn (string $key) => filled(request($key)))
-        ->count();
+    $sidebarFilterCount = $sidebarFilterCount ?? collect([
+        'search', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium',
+    ])->filter(fn (string $key) => filled(request($key)))->count();
 @endphp
 
 <div class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
     @include('ecom_tracker.partials.filter-drawer', [
         'action' => route('admin.ecom-activity.index'),
-        'resetUrl' => route('admin.ecom-activity.index'),
+        'resetUrl' => $filterResetUrl ?? route('admin.ecom-activity.index'),
         'showActivityFilters' => true,
         'filterOptionCounts' => $filterOptionCounts ?? [],
         'utmFilterState' => $utmFilterState ?? null,
@@ -142,11 +142,11 @@
                         'url' => route('admin.ecom-activity.index'),
                         'active' => count(request()->except('page')) > 0,
                     ])
-                    <button type="button" @click="drawerOpen = true" class="etd-header-btn etd-header-btn--icon {{ $activeFilterCount > 0 ? 'etd-header-btn--filtered' : '' }}" aria-label="Filters">
+                    <button type="button" @click="drawerOpen = true" class="etd-header-btn etd-header-btn--icon {{ $sidebarFilterCount > 0 ? 'etd-header-btn--filtered' : '' }}" aria-label="Filters">
                         <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
                         <span class="etd-header-btn-text">Filters</span>
-                        @if ($activeFilterCount > 0)
-                            <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
+                        @if ($sidebarFilterCount > 0)
+                            <span class="etd-header-btn-badge">{{ $sidebarFilterCount }}</span>
                         @endif
                     </button>
                 </div>
@@ -180,17 +180,19 @@
             </div>
         </div>
 
-        @if ($activeFilterCount > 0 && empty($drillDownContext))
-            <p class="etd-filter-active-note etd-filter-active-note--compact">Filters applied — open Filters to change or reset.</p>
+        @if (! empty($drillDownContext))
+            @include('ecom_activity.partials.drill-down-context', ['context' => $drillDownContext])
         @endif
 
-        @if (empty($drillDownContext))
+        @if ($sidebarFilterCount > 0)
+            <p class="etd-filter-active-note etd-filter-active-note--compact">Sidebar filters applied — combined with the section above.</p>
+        @endif
+
+        @if (! empty($filterChips))
             @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
         @endif
 
-        @if (! empty($drillDownContext))
-            @include('ecom_activity.partials.drill-down-context', ['context' => $drillDownContext])
-        @elseif (! empty($summaryCards))
+        @if (empty($drillDownContext) && ! empty($summaryCards))
             <div class="etd-kpi-grid mt-3 mb-1">
                 @foreach ($summaryCards as $card)
                     @include('ecom_tracker.partials.ga4-kpi-card', [

@@ -289,6 +289,15 @@ final class EcomActivityFocus
         }
 
         if (! empty($definition['action_types'])) {
+            if (
+                in_array($focus, ['products', 'categories'], true)
+                && self::productCatalogFiltersFromRequest($request) !== []
+            ) {
+                self::applyProductCatalogConstraints($query, $from, $to, $request, $dashboardService, $period);
+
+                return;
+            }
+
             $types = $definition['action_types'];
             $query->whereHas('actions', fn (Builder $actions) => $actions
                 ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
@@ -348,6 +357,66 @@ final class EcomActivityFocus
             'has_adds' => $request->input('has_adds'),
             'event_scenario' => $request->input('event_scenario'),
         ], fn ($value) => filled($value));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function sidebarFilterQueryKeys(): array
+    {
+        return [
+            'search',
+            'date_from',
+            'date_to',
+            'device_type',
+            'logged_in',
+            'has_order',
+            'country',
+            'visitor_type',
+            'utm_source',
+            'utm_medium',
+        ];
+    }
+
+    /**
+     * Drill-down and catalog params kept when applying sidebar filters.
+     *
+     * @return array<string, mixed>
+     */
+    public static function drawerPreserveQueryParams(Request $request): array
+    {
+        $preserveKeys = array_values(array_diff(
+            EcomTrackerViewData::activityQueryKeys(),
+            self::sidebarFilterQueryKeys(),
+        ));
+
+        return array_filter(
+            $request->only($preserveKeys),
+            fn ($value) => filled($value),
+        );
+    }
+
+    public static function sidebarFilterActiveCount(Request $request): int
+    {
+        return collect(self::sidebarFilterQueryKeys())
+            ->filter(fn (string $key) => filled($request->input($key)))
+            ->count();
+    }
+
+    public static function sidebarFilterResetUrl(Request $request): string
+    {
+        return route('admin.ecom-activity.index', self::drawerPreserveQueryParams($request));
+    }
+
+    public static function shouldDeferHasOrderFilter(Request $request): bool
+    {
+        $focus = $request->input('focus');
+
+        if (! in_array($focus, ['categories', 'products'], true)) {
+            return false;
+        }
+
+        return self::productCatalogFiltersFromRequest($request) !== [];
     }
 
     public static function resolvedCategoryDepartment(
@@ -636,6 +705,40 @@ final class EcomActivityFocus
         return $chips;
     }
 
+    /**
+     * @return array<int, array{label: string, remove_url: string}>
+     */
+    public static function sidebarFilterChipsFromRequest(Request $request): array
+    {
+        $sidebarKeys = [
+            'Product search' => 'search',
+            'Device' => 'device_type',
+            'Login' => 'logged_in',
+            'Orders' => 'has_order',
+            'Visitor type' => 'visitor_type',
+            'Country' => 'country',
+            'Source' => 'utm_source',
+            'Medium' => 'utm_medium',
+        ];
+
+        $chips = [];
+
+        foreach (self::filterCriteriaFromRequest($request) as $criterion) {
+            $key = $sidebarKeys[$criterion['label'] ?? ''] ?? null;
+
+            if ($key === null) {
+                continue;
+            }
+
+            $chips[] = [
+                'label' => $criterion['label'].': '.$criterion['value'],
+                'remove_url' => $request->fullUrlWithQuery([$key => null, 'page' => null]),
+            ];
+        }
+
+        return $chips;
+    }
+
     private static function drillDownDescription(?string $focus): ?string
     {
         return match ($focus) {
@@ -709,7 +812,10 @@ final class EcomActivityFocus
             $from,
             $to,
             (string) $request->input('category'),
-            self::sessionFiltersFromRequest($request),
+            array_merge(
+                self::sessionFiltersFromRequest($request),
+                self::productCatalogFiltersFromRequest($request),
+            ),
             $period,
             self::resolvedCategoryDepartment($request, $from, $to, $period),
         );

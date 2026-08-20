@@ -140,7 +140,9 @@ class EcomActivityController extends EcomTrackerAdminController
         return view('ecom_activity.index', [
             'sessions' => $sessions,
             'visitorQualitySummary' => $visitorQualitySummary,
-            'filterChips' => $drillDownContext ? [] : $this->buildActivityFilterChips($request),
+            'filterChips' => EcomActivityFocus::sidebarFilterChipsFromRequest($request),
+            'sidebarFilterCount' => EcomActivityFocus::sidebarFilterActiveCount($request),
+            'filterResetUrl' => EcomActivityFocus::sidebarFilterResetUrl($request),
             'filterOptionCounts' => $filterOptionCounts,
             'utmFilterState' => $utmFilterState,
             'focus' => $focus,
@@ -369,7 +371,7 @@ class EcomActivityController extends EcomTrackerAdminController
             $query->where('is_logged_in', $request->logged_in === '1');
         }
 
-        if (! in_array('has_order', $except, true) && $request->filled('has_order')) {
+        if (! in_array('has_order', $except, true) && $request->filled('has_order') && ! EcomActivityFocus::shouldDeferHasOrderFilter($request)) {
             if ($request->has_order === '1') {
                 $query->whereHas('actions', fn ($q) => $q->where('action_type', 'payment_success'));
             } elseif ($request->has_order === '0') {
@@ -436,14 +438,6 @@ class EcomActivityController extends EcomTrackerAdminController
             'automated_traffic' => (clone $base)->whereHas('botContext', fn ($b) => $b->where('is_bot', true))->count(),
             'not_classified' => (clone $base)->whereDoesntHave('botContext')->count(),
         ];
-    }
-
-    /**
-     * @return array<int, array{label: string, remove_url: string}>
-     */
-    private function buildActivityFilterChips(Request $request): array
-    {
-        return EcomActivityFocus::filterChipsFromRequest($request);
     }
 
     /**

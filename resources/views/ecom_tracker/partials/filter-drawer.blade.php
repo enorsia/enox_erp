@@ -59,7 +59,9 @@
     </div>
 
     <form method="GET" action="{{ $action }}" class="flex-1 flex flex-col overflow-hidden">
-        @if (request('back'))
+        @if ($showActivityFilters)
+            @include('ecom_activity.partials.preserve-filter-params')
+        @elseif (request('back'))
             <input type="hidden" name="back" value="{{ request('back') }}">
         @endif
         @if ($preservePeriodParams)
