@@ -123,7 +123,7 @@
 
             <!-- ── PLATFORM TABS (Alpine.js) ── -->
             @php $firstPlatformCode = array_key_first($platform_ncs); @endphp
-            <div x-data="{ tab: '{{ $firstPlatformCode }}' }">
+            <div class="discount-edit-panel" x-data="{ tab: '{{ $firstPlatformCode }}' }">
 
                 <!-- Tab Strip -->
                 <div class="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-700 mb-4 overflow-x-auto pb-px">
@@ -160,20 +160,21 @@
                                 'defaultShippingCost' => $defaultShippingCost,
                             ])
 
-                            @can('general.discounts.update')
-                                <div class="flex justify-end">
-                                    <button type="submit"
-                                            class="submit-btn flex items-center gap-2 px-5 py-2.5 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" d="M5 13l4 4L19 7"/>
-                                        </svg>
-                                        Save
-                                    </button>
-                                </div>
-                            @endcan
                         </form>
                     </div>
                 @endforeach
+
+                @can('general.discounts.update')
+                    <div class="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <button type="button"
+                                class="save-all-discounts-btn flex items-center gap-2 px-5 py-2.5 text-sm rounded-xl bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            Save Discounts
+                        </button>
+                    </div>
+                @endcan
 
             </div>{{-- /Alpine tabs --}}
         </div>{{-- /body --}}

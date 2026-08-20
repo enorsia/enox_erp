@@ -232,7 +232,8 @@ $(document).ready(function () {
         recalculateDiscountRow($(this));
     });
 
-    function validateDiscountForm($form) {
+    function validateDiscountForm($form, options = {}) {
+        const requireDiscount = options.requireDiscount !== false;
         let saveType   = $form.find('.save_type').val();
         let hasError   = false;
         let hasDiscount = false;
@@ -249,9 +250,8 @@ $(document).ready(function () {
             }
         });
 
-        if (!hasDiscount) {
-            Swal.fire({ title: 'No Discount', text: 'Enter at least one discount price to save.', icon: 'warning' });
-            return false;
+        if (requireDiscount && !hasDiscount) {
+            return { valid: false, hasDiscount: false };
         }
 
         $form.find('.discount_price').each(function () {
@@ -262,7 +262,7 @@ $(document).ready(function () {
             }
         });
 
-        if (hasError) return false;
+        if (hasError) return { valid: false, hasDiscount };
 
         if (isGrouped && saveType == 2 && groupStatus) {
             Swal.fire({
@@ -270,7 +270,7 @@ $(document).ready(function () {
                 text: 'All items must have Status OFF for Approval.',
                 icon: 'error'
             });
-            return false;
+            return { valid: false, hasDiscount };
         }
 
         if (isGrouped && saveType == 3 && !groupStatus) {
@@ -279,7 +279,7 @@ $(document).ready(function () {
                 text: 'All items must have Status ON for Executor.',
                 icon: 'error'
             });
-            return false;
+            return { valid: false, hasDiscount };
         }
 
         if (!isGrouped) {
@@ -304,22 +304,55 @@ $(document).ready(function () {
                         : 'Selected items must have Status ON for Executor.',
                     icon: 'error'
                 });
-                return false;
+                return { valid: false, hasDiscount };
             }
         }
 
-        return true;
+        return { valid: true, hasDiscount };
     }
 
-    $(document).on('submit', '.pp-form', function (e) {
-        e.preventDefault();
+    function submitDiscountForm($form) {
+        return $.ajax({
+            url:  SAVE_URL || $form.attr('action'),
+            type: 'POST',
+            data: $form.serialize(),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        });
+    }
 
-        let $form = $(this);
-        if (!validateDiscountForm($form)) return false;
+    function isVisiblePlatformForm($form) {
+        const $panel = $form.closest('[x-show]');
+        return !$panel.length || $panel.is(':visible');
+    }
+
+    function saveAllDiscountForms($scope) {
+        const $forms = $scope.find('.pp-form').filter(function () {
+            return isVisiblePlatformForm($(this));
+        });
+        if (!$forms.length) return;
+
+        const formsToSave = [];
+        let hasAnyDiscount = false;
+
+        for (let i = 0; i < $forms.length; i++) {
+            const $form = $($forms[i]);
+            const result = validateDiscountForm($form, { requireDiscount: false });
+            if (!result.valid) return;
+
+            if (result.hasDiscount) {
+                hasAnyDiscount = true;
+                formsToSave.push($form);
+            }
+        }
+
+        if (!hasAnyDiscount) {
+            Swal.fire({ title: 'No Discount', text: 'Enter at least one discount price to save.', icon: 'warning' });
+            return;
+        }
 
         Swal.fire({
             title: 'Are you sure?',
-            text: 'Do you want to save this discount?',
+            text: 'Do you want to save discounts for all platforms?',
             icon: 'question',
             showCancelButton:   true,
             confirmButtonText:  'Yes, Save it!',
@@ -329,33 +362,39 @@ $(document).ready(function () {
         }).then((result) => {
             if (!result.isConfirmed) return;
 
-            let $btn = $form.find('.submit-btn');
-            let btnHtml = $btn.html();
+            const $btn = $scope.find('.save-all-discounts-btn');
+            const btnHtml = $btn.html();
             $btn.html(window.loader || 'Saving...').prop('disabled', true);
 
-            $.ajax({
-                url:  SAVE_URL,
-                type: 'POST',
-                data: $form.serialize(),
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                success: function (response) {
+            const requests = formsToSave.map(($form) => submitDiscountForm($form));
+
+            $.when.apply($, requests)
+                .done(function () {
                     Swal.fire({
                         icon: 'success',
                         title: 'Saved',
-                        text: response.message || 'Discount prices updated successfully.',
+                        text: 'Discount prices updated successfully.',
                         timer: 2000,
                         showConfirmButton: false
                     });
-                },
-                error: function (xhr) {
-                    let msg = xhr.responseJSON?.message || 'Something went wrong. Please try again.';
+                })
+                .fail(function (xhr) {
+                    const msg = xhr?.responseJSON?.message || 'Something went wrong. Please try again.';
                     Swal.fire({ icon: 'error', title: 'Error', text: msg });
-                },
-                complete: function () {
+                })
+                .always(function () {
                     $btn.html(btnHtml).prop('disabled', false);
-                }
-            });
+                });
         });
+    }
+
+    $(document).on('submit', '.pp-form', function (e) {
+        e.preventDefault();
+    });
+
+    $(document).on('click', '.save-all-discounts-btn', function () {
+        const $scope = $(this).closest('.discount-edit-panel');
+        saveAllDiscountForms($scope);
     });
 
     $(document).on('change', '.toggle-column', function () {

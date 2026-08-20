@@ -140,20 +140,21 @@
                         'conversionRate' => $conversionRate,
                         'defaultShippingCost' => $defaultShippingCost,
                     ])
-
-                    @can('general.discounts.update')
-                        <div class="flex justify-end">
-                            <button type="submit"
-                                    class="submit-btn flex items-center gap-1.5 px-4 py-1.5 text-[12px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" d="M5 13l4 4L19 7"/>
-                                </svg>
-                                Save {{ $p_name }}
-                            </button>
-                        </div>
-                    @endcan
                 </form>
             </div>
         @endforeach
     </div>
+
+    @can('general.discounts.update')
+        <div x-show="Object.values(openPlatforms).includes(true)" x-cloak
+             class="flex justify-end px-4 py-3 border-t border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-700/20">
+            <button type="button"
+                    class="save-all-discounts-btn flex items-center gap-1.5 px-5 py-2 text-[12px] rounded-lg bg-accent-400 hover:bg-accent-600 text-white font-semibold transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" d="M5 13l4 4L19 7"/>
+                </svg>
+                Save Discounts
+            </button>
+        </div>
+    @endcan
 </div>
