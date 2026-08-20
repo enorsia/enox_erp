@@ -62,9 +62,8 @@
         default => route('admin.ecom-activity.index', $baseQuery),
     };
 
-    $sidebarFilterCount = $sidebarFilterCount ?? collect([
-        'search', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium',
-    ])->filter(fn (string $key) => filled(request($key)))->count();
+    $sidebarFilterCount = $sidebarFilterCount ?? \App\Support\EcomActivityFocus::activeFilterCount(request());
+    $showCatalogFilters = $showCatalogFilters ?? in_array(request('focus'), ['products', 'categories'], true);
 @endphp
 
 <div class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
@@ -72,6 +71,17 @@
         'action' => route('admin.ecom-activity.index'),
         'resetUrl' => $filterResetUrl ?? route('admin.ecom-activity.index'),
         'showActivityFilters' => true,
+        'activityFiltersIncludeDateRange' => true,
+        'includeSessionSearch' => ! $showCatalogFilters,
+        'sessionFiltersHeading' => $showCatalogFilters ? 'Session filters' : null,
+        'showProductFilters' => $showCatalogFilters,
+        'productFiltersHeading' => $showCatalogFilters ? 'Product / category filters' : null,
+        'productFilterOptions' => $productFilterOptions ?? ['categories' => [], 'colors' => [], 'sizes' => []],
+        'eventScenarioOptions' => $eventScenarioOptions ?? [],
+        'productSortGroups' => $productSortGroups ?? [],
+        'productActivityOptions' => $productActivityOptions ?? [],
+        'currentProductSort' => request('sort_by', ''),
+        'productCatalogShowSort' => false,
         'filterOptionCounts' => $filterOptionCounts ?? [],
         'utmFilterState' => $utmFilterState ?? null,
     ])
@@ -185,7 +195,7 @@
         @endif
 
         @if ($sidebarFilterCount > 0)
-            <p class="etd-filter-active-note etd-filter-active-note--compact">Sidebar filters applied — combined with the section above.</p>
+            <p class="etd-filter-active-note etd-filter-active-note--compact">Filters applied — combined with the section above.</p>
         @endif
 
         @if (! empty($filterChips))

@@ -359,13 +359,40 @@ final class EcomActivityFocus
         ], fn ($value) => filled($value));
     }
 
+    public static function showCatalogFiltersInDrawer(Request $request): bool
+    {
+        return in_array($request->input('focus'), ['products', 'categories'], true);
+    }
+
+    public static function usesCatalogScopedSearch(Request $request): bool
+    {
+        return self::showCatalogFiltersInDrawer($request);
+    }
+
     /**
      * @return array<int, string>
      */
-    public static function sidebarFilterQueryKeys(): array
+    public static function catalogFilterQueryKeys(): array
     {
         return [
             'search',
+            'category',
+            'color',
+            'size',
+            'activity',
+            'event_scenario',
+            'has_purchases',
+            'has_views',
+            'has_adds',
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function sidebarFilterQueryKeys(?Request $request = null): array
+    {
+        $keys = [
             'date_from',
             'date_to',
             'device_type',
@@ -376,6 +403,12 @@ final class EcomActivityFocus
             'utm_source',
             'utm_medium',
         ];
+
+        if ($request === null || ! self::usesCatalogScopedSearch($request)) {
+            array_unshift($keys, 'search');
+        }
+
+        return $keys;
     }
 
     /**
@@ -385,9 +418,15 @@ final class EcomActivityFocus
      */
     public static function drawerPreserveQueryParams(Request $request): array
     {
+        $editableKeys = self::sidebarFilterQueryKeys($request);
+
+        if (self::showCatalogFiltersInDrawer($request)) {
+            $editableKeys = array_merge($editableKeys, self::catalogFilterQueryKeys());
+        }
+
         $preserveKeys = array_values(array_diff(
             EcomTrackerViewData::activityQueryKeys(),
-            self::sidebarFilterQueryKeys(),
+            $editableKeys,
         ));
 
         return array_filter(
@@ -398,9 +437,30 @@ final class EcomActivityFocus
 
     public static function sidebarFilterActiveCount(Request $request): int
     {
-        return collect(self::sidebarFilterQueryKeys())
+        return self::activeFilterCount($request);
+    }
+
+    public static function activeFilterCount(Request $request): int
+    {
+        $count = collect(self::sidebarFilterQueryKeys($request))
             ->filter(fn (string $key) => filled($request->input($key)))
             ->count();
+
+        if (! self::showCatalogFiltersInDrawer($request)) {
+            return $count;
+        }
+
+        $count += collect(self::catalogFilterQueryKeys())
+            ->filter(fn (string $key) => filled($request->input($key)))
+            ->count();
+
+        foreach (['product_code', 'product_name'] as $key) {
+            if (filled($request->input($key))) {
+                $count++;
+            }
+        }
+
+        return $count;
     }
 
     public static function sidebarFilterResetUrl(Request $request): string
@@ -710,8 +770,21 @@ final class EcomActivityFocus
      */
     public static function sidebarFilterChipsFromRequest(Request $request): array
     {
-        $sidebarKeys = [
+        return self::activeFilterChipsFromRequest($request);
+    }
+
+    /**
+     * @return array<int, array{label: string, remove_url: string}>
+     */
+    public static function activeFilterChipsFromRequest(Request $request): array
+    {
+        $chipKeyMap = [
+            'Product code' => 'product_code',
+            'Product' => 'product_name',
             'Product search' => 'search',
+            'Category' => 'category',
+            'Color' => 'color',
+            'Size' => 'size',
             'Device' => 'device_type',
             'Login' => 'logged_in',
             'Orders' => 'has_order',
@@ -719,19 +792,56 @@ final class EcomActivityFocus
             'Country' => 'country',
             'Source' => 'utm_source',
             'Medium' => 'utm_medium',
+            'Activity' => 'activity',
+            'Funnel step' => 'event_scenario',
+            'Has purchases' => 'has_purchases',
+            'Has views' => 'has_views',
+            'Has cart adds' => 'has_adds',
         ];
+
+        $sidebarLabels = [
+            'Device', 'Login', 'Orders', 'Visitor type', 'Country', 'Source', 'Medium',
+        ];
+
+        if (! self::usesCatalogScopedSearch($request)) {
+            $sidebarLabels[] = 'Product search';
+        }
+
+        $catalogLabels = [
+            'Product code', 'Product', 'Product search', 'Category', 'Color', 'Size',
+            'Activity', 'Funnel step', 'Has purchases', 'Has views', 'Has cart adds',
+        ];
+
+        $allowedLabels = self::showCatalogFiltersInDrawer($request)
+            ? array_merge($sidebarLabels, $catalogLabels)
+            : $sidebarLabels;
 
         $chips = [];
 
         foreach (self::filterCriteriaFromRequest($request) as $criterion) {
-            $key = $sidebarKeys[$criterion['label'] ?? ''] ?? null;
+            $label = $criterion['label'] ?? '';
+
+            if (! in_array($label, $allowedLabels, true)) {
+                continue;
+            }
+
+            $key = $chipKeyMap[$label] ?? null;
 
             if ($key === null) {
                 continue;
             }
 
+            if ($key === 'category') {
+                $chips[] = [
+                    'label' => $label.': '.$criterion['value'],
+                    'remove_url' => $request->fullUrlWithQuery(['category' => null, 'department' => null, 'page' => null]),
+                ];
+
+                continue;
+            }
+
             $chips[] = [
-                'label' => $criterion['label'].': '.$criterion['value'],
+                'label' => $label.': '.$criterion['value'],
                 'remove_url' => $request->fullUrlWithQuery([$key => null, 'page' => null]),
             ];
         }
@@ -789,6 +899,10 @@ final class EcomActivityFocus
                 [['label' => 'Matching sessions', 'value' => $sessionCount]],
                 self::categoryPerformanceSummaryMetrics($request, $from, $to, $period),
             ),
+            'products' => array_merge(
+                [['label' => 'Matching sessions', 'value' => $sessionCount]],
+                self::productPerformanceSummaryMetrics($request, $from, $to, $period),
+            ),
             default => [
                 ['label' => 'Matching sessions', 'value' => $sessionCount],
             ],
@@ -841,5 +955,64 @@ final class EcomActivityFocus
             ['label' => 'Sold qty', 'value' => number_format($saleItems)],
             ['label' => 'Sale', 'value' => '£'.number_format($saleAmount, 2)],
         ];
+    }
+
+    /**
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function productPerformanceSummaryMetrics(
+        ?Request $request,
+        ?Carbon $from,
+        ?Carbon $to,
+        ?string $period,
+    ): array {
+        if ($request === null || $from === null || $to === null || $request->input('focus') !== 'products') {
+            return [];
+        }
+
+        if (! self::hasProductPerformanceSummaryScope($request)) {
+            return [];
+        }
+
+        $row = app(EcomTrackerDashboardService::class)->productPerformanceSummaryForFilters(
+            $from,
+            $to,
+            array_merge(
+                self::sessionFiltersFromRequest($request),
+                self::productCatalogFiltersFromRequest($request),
+            ),
+            $period,
+        );
+
+        if ($row === null) {
+            return [];
+        }
+
+        $views = (int) ($row['views'] ?? 0);
+        $adds = (int) ($row['adds'] ?? 0);
+        $proceedCheckouts = (int) ($row['proceed_checkouts'] ?? 0);
+        $purchases = (int) ($row['purchases'] ?? 0);
+        $saleItems = (int) ($row['qty'] ?? 0);
+        $saleAmount = (float) ($row['revenue'] ?? 0);
+        $cartAbandonment = max(0, $adds - $proceedCheckouts);
+
+        return [
+            ['label' => 'Views', 'value' => number_format($views)],
+            ['label' => 'Adds', 'value' => number_format($adds)],
+            ['label' => 'Proceed', 'value' => number_format($proceedCheckouts)],
+            ['label' => 'Cart abandoned', 'value' => number_format($cartAbandonment)],
+            ['label' => 'Sold', 'value' => number_format($purchases)],
+            ['label' => 'Sold qty', 'value' => number_format($saleItems)],
+            ['label' => 'Sale', 'value' => '£'.number_format($saleAmount, 2)],
+        ];
+    }
+
+    private static function hasProductPerformanceSummaryScope(Request $request): bool
+    {
+        if ($request->filled('product_code') || $request->filled('product_name')) {
+            return true;
+        }
+
+        return self::productCatalogFiltersFromRequest($request) !== [];
     }
 }

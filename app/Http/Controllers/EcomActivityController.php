@@ -131,6 +131,26 @@ class EcomActivityController extends EcomTrackerAdminController
         $emptyMessage = EcomActivityFocus::emptyMessage($focus);
         $clearFocusUrl = $request->fullUrlWithQuery(['focus' => null, 'page' => null]);
 
+        $showCatalogFilters = EcomActivityFocus::showCatalogFiltersInDrawer($request);
+        $productFilterOptions = ['categories' => [], 'colors' => [], 'sizes' => []];
+        $eventScenarioOptions = [];
+        $productSortGroups = [];
+        $productActivityOptions = [];
+
+        if ($showCatalogFilters) {
+            $catalogData = $this->dashboardService->buildProductCatalogPerformance(
+                $range['from'],
+                $range['to'],
+                null,
+                EcomActivityFocus::sessionFiltersFromRequest($request),
+                ['period' => $range['period']],
+            );
+            $productFilterOptions = $catalogData['filter_options'] ?? $productFilterOptions;
+            $eventScenarioOptions = $this->dashboardService->productCatalogEventScenarioOptions();
+            $productSortGroups = $this->dashboardService->productCatalogSortGroups();
+            $productActivityOptions = $this->dashboardService->productCatalogActivityFilterOptions();
+        }
+
         EcomTrackerLogger::backend()->info('analytics.activity.index', 'Admin opened user activity list', [
             'session_count' => $sessions->total(),
             'focus' => $focus,
@@ -157,6 +177,11 @@ class EcomActivityController extends EcomTrackerAdminController
             'hasFocus' => EcomActivityFocus::isValid($focus),
             'backUrl' => $backUrl,
             'drillDownContext' => $drillDownContext,
+            'showCatalogFilters' => $showCatalogFilters,
+            'productFilterOptions' => $productFilterOptions,
+            'eventScenarioOptions' => $eventScenarioOptions,
+            'productSortGroups' => $productSortGroups,
+            'productActivityOptions' => $productActivityOptions,
         ]);
     }
 
@@ -320,7 +345,7 @@ class EcomActivityController extends EcomTrackerAdminController
             );
         }
 
-        if ($request->filled('search')) {
+        if ($request->filled('search') && ! EcomActivityFocus::usesCatalogScopedSearch($request)) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('session_id', 'like', "%{$search}%")

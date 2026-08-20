@@ -504,6 +504,13 @@ class EcomTrackerDashboardService
             default => $this->queryProductCatalogActivitySessionIds($from, $to, $catalogOptions),
         };
 
+        $matchedSessionIds = $this->filterSessionIdsByProductCatalogActivity(
+            $matchedSessionIds,
+            $from,
+            $to,
+            $catalogOptions,
+        );
+
         if ($sessionFilters === []) {
             return $matchedSessionIds;
         }
@@ -559,6 +566,93 @@ class EcomTrackerDashboardService
     }
 
     /**
+     * @param  Collection<int, string>  $sessionIds
+     * @param  array<string, mixed>  $options
+     * @return Collection<int, string>
+     */
+    public function filterSessionIdsByProductCatalogActivity(
+        Collection $sessionIds,
+        Carbon $from,
+        Carbon $to,
+        array $options,
+    ): Collection {
+        $activityFlags = $this->resolveProductCatalogActivityFlags($options);
+        $hasViews = $activityFlags['views'] || ($options['has_views'] ?? '') === '1';
+        $hasAdds = $activityFlags['adds'] || ($options['has_adds'] ?? '') === '1';
+        $hasPurchases = $activityFlags['purchases'] || ($options['has_purchases'] ?? '') === '1';
+        $eventScenario = $this->resolveProductCatalogEventScenario($options['event_scenario'] ?? null);
+
+        if (! $hasViews && ! $hasAdds && ! $hasPurchases && $eventScenario === '') {
+            return $sessionIds;
+        }
+
+        if ($sessionIds->isEmpty()) {
+            return $sessionIds;
+        }
+
+        $identityOptions = $this->extractProductCatalogIdentityOptions($options);
+        $metrics = $this->countProductCatalogMetricsForSessions($sessionIds, $from, $to, $identityOptions);
+
+        return $sessionIds
+            ->filter(function (string $sessionId) use ($metrics, $hasViews, $hasAdds, $hasPurchases, $eventScenario) {
+                $row = $metrics[$sessionId] ?? null;
+
+                if ($row === null) {
+                    return false;
+                }
+
+                $views = (int) ($row['products_viewed'] ?? 0);
+                $adds = (int) ($row['adds'] ?? 0);
+                $purchases = (int) ($row['purchases'] ?? 0);
+
+                if ($hasViews || $hasAdds || $hasPurchases) {
+                    $matches = [];
+
+                    if ($hasViews) {
+                        $matches[] = $views > 0;
+                    }
+
+                    if ($hasAdds) {
+                        $matches[] = $adds > 0;
+                    }
+
+                    if ($hasPurchases) {
+                        $matches[] = $purchases > 0;
+                    }
+
+                    if (! in_array(true, $matches, true)) {
+                        return false;
+                    }
+                }
+
+                if ($eventScenario !== '') {
+                    return $this->productMatchesEventScenario([
+                        'views' => $views,
+                        'adds' => $adds,
+                        'purchases' => $purchases,
+                    ], $eventScenario);
+                }
+
+                return true;
+            })
+            ->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     * @return array<string, mixed>
+     */
+    private function extractProductCatalogIdentityOptions(array $options): array
+    {
+        return array_filter(
+            array_intersect_key($options, array_flip([
+                'search', 'product_code', 'product_name', 'category', 'department', 'color', 'size',
+            ])),
+            fn ($value) => $value !== null && $value !== '',
+        );
+    }
+
+    /**
      * Per-session product metrics for activity drill-down (matches dashboard catalog counting).
      *
      * @param  Collection<int, string>  $sessionIds
@@ -577,6 +671,7 @@ class EcomTrackerDashboardService
             $metrics[$sessionId] = [
                 'products_viewed' => 0,
                 'adds' => 0,
+                'purchases' => 0,
                 'purchased' => '—',
             ];
         }
@@ -609,6 +704,7 @@ class EcomTrackerDashboardService
                 } elseif ($action->action_type === 'add_to_cart') {
                     $metrics[$sessionId]['adds']++;
                 } elseif ($action->action_type === 'payment_success') {
+                    $metrics[$sessionId]['purchases']++;
                     $metrics[$sessionId]['purchased'] = 'Yes';
                 }
             }
@@ -791,6 +887,87 @@ class EcomTrackerDashboardService
     }
 
     /**
+     * Dashboard-style product metrics for activity drill-down context.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{views: int, adds: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}|null
+     */
+    public function productPerformanceSummaryForFilters(
+        Carbon $from,
+        Carbon $to,
+        array $filters = [],
+        ?string $period = null,
+    ): ?array {
+        $productCode = trim((string) ($filters['product_code'] ?? ''));
+        $productName = trim((string) ($filters['product_name'] ?? ''));
+        $sessionFilters = $this->extractSessionFilters($filters);
+        $catalogOptions = $this->extractProductCatalogOptions($filters);
+
+        if ($catalogOptions === [] && $sessionFilters === []) {
+            return null;
+        }
+
+        $result = $this->buildProductCatalogPerformance(
+            $from,
+            $to,
+            null,
+            array_merge($sessionFilters, $catalogOptions),
+            array_merge($catalogOptions, ['period' => $period]),
+        );
+
+        $products = collect($result['products'] ?? []);
+
+        if ($products->isEmpty()) {
+            return null;
+        }
+
+        if ($productCode !== '' || $productName !== '') {
+            $product = $products->first(function (array $row) use ($productCode, $productName) {
+                if ($productCode !== '' && strcasecmp((string) ($row['code'] ?? ''), $productCode) === 0) {
+                    return true;
+                }
+
+                if ($productName !== '' && strcasecmp((string) ($row['name'] ?? ''), $productName) === 0) {
+                    return true;
+                }
+
+                return false;
+            });
+
+            if ($product === null) {
+                return null;
+            }
+
+            return $this->normalizeProductPerformanceSummaryRow($product);
+        }
+
+        return [
+            'views' => (int) $products->sum('views'),
+            'adds' => (int) $products->sum('adds'),
+            'proceed_checkouts' => (int) $products->sum('proceed_checkouts'),
+            'purchases' => (int) $products->sum('purchases'),
+            'qty' => (int) $products->sum('qty'),
+            'revenue' => round((float) $products->sum('revenue'), 2),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $product
+     * @return array{views: int, adds: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}
+     */
+    private function normalizeProductPerformanceSummaryRow(array $product): array
+    {
+        return [
+            'views' => (int) ($product['views'] ?? 0),
+            'adds' => (int) ($product['adds'] ?? 0),
+            'proceed_checkouts' => (int) ($product['proceed_checkouts'] ?? 0),
+            'purchases' => (int) ($product['purchases'] ?? 0),
+            'qty' => (int) ($product['qty'] ?? 0),
+            'revenue' => round((float) ($product['revenue'] ?? 0), 2),
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $options
      */
     private function actionMatchesProductCatalogOptions(ActivityEcomUserAction $action, array $options): bool
@@ -909,6 +1086,10 @@ class EcomTrackerDashboardService
      */
     private function productCatalogLineMatchesOptions(array $line, array $options): bool
     {
+        if (! $this->hasProductCatalogIdentityFilters($options)) {
+            return true;
+        }
+
         if (filled($options['product_code'] ?? null) || filled($options['product_name'] ?? null)) {
             if (! $this->productCatalogLineMatchesProductIdentity($line, $options)) {
                 return false;
@@ -967,6 +1148,20 @@ class EcomTrackerDashboardService
             || $departmentFilter !== ''
             || $colorFilter !== ''
             || $sizeFilter !== '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     */
+    private function hasProductCatalogIdentityFilters(array $options): bool
+    {
+        foreach (['search', 'product_code', 'product_name', 'category', 'department', 'color', 'size'] as $key) {
+            if (filled($options[$key] ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function catalogDepartmentFromAction(ActivityEcomUserAction $action): string

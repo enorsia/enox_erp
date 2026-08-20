@@ -2,12 +2,18 @@
 @php($filterOptionCounts = $filterOptionCounts ?? [])
 @php($utmFilterState = $utmFilterState ?? null)
 @php($includeVisitorTrust = $includeVisitorTrust ?? true)
+@php($includeSessionSearch = $includeSessionSearch ?? true)
+@php($sessionFiltersHeading = $sessionFiltersHeading ?? null)
 
+@if ($includeSessionSearch)
 <div>
     <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">Search</label>
     <input type="text" name="search" value="{{ request('search') }}" placeholder="Session, visitor, UTM, URL, name, email or IP…"
            class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
 </div>
+
+<hr class="border-slate-100 dark:border-slate-700"/>
+@endif
 
 @if ($includeDateRange)
     <hr class="border-slate-100 dark:border-slate-700"/>
@@ -45,6 +51,10 @@
     <hr class="border-slate-100 dark:border-slate-700"/>
 @else
     <hr class="border-slate-100 dark:border-slate-700"/>
+@endif
+
+@if ($sessionFiltersHeading)
+    <p class="etd-kpi-section-label mb-2">{{ $sessionFiltersHeading }}</p>
 @endif
 
 @include('ecom_tracker.partials.session-filters', [

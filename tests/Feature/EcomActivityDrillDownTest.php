@@ -872,3 +872,182 @@ test('activity index category drill-down with order filter only includes categor
         ->assertSee($categoryBuyer)
         ->assertDontSee($otherCategoryBuyer);
 });
+
+test('activity index products focus applies activity filter to session list', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $viewerSession = Str::uuid()->toString();
+    $buyerSession = Str::uuid()->toString();
+    $productCode = 'PARITY-TEE';
+
+    foreach ([$viewerSession, $buyerSession] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => now(),
+            'last_active_at' => now(),
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $viewerSession,
+        'action_type' => 'product_view',
+        'product_name' => 'Parity Tee',
+        'product_code' => $productCode,
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $buyerSession,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'amount_paid' => 20,
+            'checkout_info' => [
+                'items' => [[
+                    'product_name' => 'Parity Tee',
+                    'product_code' => $productCode,
+                    'qty' => 1,
+                    'price' => 20,
+                ]],
+            ],
+        ],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'products',
+            'product_code' => $productCode,
+            'activity' => 'views',
+        ]))
+        ->assertOk()
+        ->assertSee($viewerSession)
+        ->assertDontSee($buyerSession);
+});
+
+test('activity index products focus uses catalog search instead of session search', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $productSession = Str::uuid()->toString();
+    $decoySession = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $productSession,
+        'device_type' => 'desktop',
+        'visitor_id' => 'visitor-alpha',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $decoySession,
+        'device_type' => 'desktop',
+        'visitor_id' => 'hoodie-shopper',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $productSession,
+        'action_type' => 'product_view',
+        'product_name' => 'Blue Hoodie',
+        'product_code' => 'BH-100',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'products',
+            'search' => 'hoodie',
+        ]))
+        ->assertOk()
+        ->assertSee($productSession)
+        ->assertDontSee($decoySession);
+});
+
+test('activity index shows catalog filter sections for products focus', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'products',
+        ]))
+        ->assertOk()
+        ->assertSee('Session filters')
+        ->assertSee('Product / category filters')
+        ->assertSee('Product name, code or SKU');
+});
+
+test('activity index products focus shows product performance totals in drill-down context', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $sessionId = Str::uuid()->toString();
+    $productCode = 'MS4421735';
+    $productName = 'Cream Design Pique Polo With Rib Detailing';
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => $productName,
+        'product_code' => $productCode,
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'add_to_cart',
+        'product_name' => $productName,
+        'product_code' => $productCode,
+        'add_to_cart' => [
+            'product_code' => $productCode,
+            'product_name' => $productName,
+            'qty' => 1,
+        ],
+        'created_at' => now()->addMinute(),
+        'start_time' => now()->addMinute(),
+        'end_time' => now()->addMinute(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'products',
+            'product_code' => $productCode,
+            'product_name' => $productName,
+        ]))
+        ->assertOk()
+        ->assertSee('Product performance')
+        ->assertSee($productCode)
+        ->assertSee('Views')
+        ->assertSee('Adds')
+        ->assertSee('Proceed')
+        ->assertSee('Sold')
+        ->assertSee('Sale');
+});

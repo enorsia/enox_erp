@@ -12,6 +12,7 @@
     'showVisitorFilters' => false,
     'showActivityFilters' => false,
     'activityFiltersIncludeDateRange' => true,
+    'includeSessionSearch' => true,
     'includeVisitorTrust' => true,
     'showProductFilters' => false,
     'productFilterOptions' => ['categories' => [], 'colors' => [], 'sizes' => []],
@@ -125,10 +126,28 @@
             @elseif ($showActivityFilters)
                 @include('ecom_activity.partials.activity-filters', [
                     'includeDateRange' => $activityFiltersIncludeDateRange,
+                    'includeSessionSearch' => $includeSessionSearch ?? true,
+                    'sessionFiltersHeading' => $sessionFiltersHeading ?? null,
                     'filterOptionCounts' => $filterOptionCounts ?? [],
                     'utmFilterState' => $utmFilterState ?? null,
                     'includeVisitorTrust' => $includeVisitorTrust ?? true,
                 ])
+                @if ($showProductFilters)
+                    <hr class="etd-filter-divider"/>
+                    @if ($productFiltersHeading)
+                        <p class="etd-kpi-section-label mb-2">{{ $productFiltersHeading }}</p>
+                    @endif
+                    <div class="etd-filter-product-wrap">
+                        @include('ecom_tracker.partials.product-catalog-filters', [
+                            'filterOptions' => $productFilterOptions,
+                            'eventScenarioOptions' => $eventScenarioOptions,
+                            'sortGroups' => $productSortGroups,
+                            'activityOptions' => $productActivityOptions,
+                            'currentSort' => $currentProductSort,
+                            'showSort' => $productCatalogShowSort ?? true,
+                        ])
+                    </div>
+                @endif
             @elseif ($preservePeriodParams)
                 {{-- Period/compare controlled in page header; hidden fields preserve them on apply --}}
             @else
@@ -203,6 +222,7 @@
                         'sortGroups' => $productSortGroups,
                         'activityOptions' => $productActivityOptions,
                         'currentSort' => $currentProductSort,
+                        'showSort' => $productCatalogShowSort ?? true,
                     ])
                     </div>
                     @if ($showVisitorFilters)

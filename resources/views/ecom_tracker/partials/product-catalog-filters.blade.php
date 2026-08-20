@@ -4,6 +4,7 @@
     'sortGroups' => [],
     'activityOptions' => [],
     'currentSort' => 'top_revenue',
+    'showSort' => true,
 ])
 
 @php
@@ -54,6 +55,7 @@
         </select>
     </label>
 
+    @if ($showSort)
     <label class="etd-filter-compact-field">
         <span class="etd-filter-compact-label">Sort</span>
         <select id="product-catalog-sort" name="sort_by" class="{{ $tomSelectClass }}" data-placeholder="All">
@@ -67,6 +69,7 @@
             @endforeach
         </select>
     </label>
+    @endif
 
     <label class="etd-filter-compact-field">
         <span class="etd-filter-compact-label">Funnel</span>
