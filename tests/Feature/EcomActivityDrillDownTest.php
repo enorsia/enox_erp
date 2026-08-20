@@ -121,7 +121,8 @@ test('activity index with cart abandonment focus shows only abandoned sessions',
         ]))
         ->assertOk()
         ->assertSee('Cart abandoned')
-        ->assertSee('Cart value')
+        ->assertSee('Commerce')
+        ->assertSee('Cart ·')
         ->assertSee(substr($abandoned, 0, 8))
         ->assertDontSee(substr($converted, 0, 8));
 });

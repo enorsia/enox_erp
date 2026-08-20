@@ -547,6 +547,45 @@ test('payment success updates session user from checkout customer info', functio
     expect($session->is_logged_in)->toBeFalse();
 });
 
+test('guest checkout identity is not cleared by later track payloads with null session user fields', function () {
+    $sessionId = Str::uuid()->toString();
+    $headers = ['Authorization' => 'Bearer ' . $this->apiKey];
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'proceed_checkout',
+        'proceed_to_checkout' => [
+            'customer' => [
+                'first_name' => 'Madina',
+                'last_name' => 'Burkhanova',
+                'email' => 'sargentczerny@gmail.com',
+                'phone' => '07795991557',
+            ],
+        ],
+    ]], [
+        'is_logged_in' => false,
+    ]), $headers)->assertOk();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Dress',
+        'product_code' => 'GS123',
+    ]], [
+        'user_name' => null,
+        'user_email' => null,
+        'is_logged_in' => false,
+    ]), $headers)->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session->user_name)->toBe('Madina Burkhanova');
+    expect($session->user_email)->toBe('sargentczerny@gmail.com');
+    expect($session->user_phone)->toBe('07795991557');
+});
+
 test('proceed checkout updates session user from checkout customer info', function () {
     $sessionId = Str::uuid()->toString();
     $eventId = Str::uuid()->toString();

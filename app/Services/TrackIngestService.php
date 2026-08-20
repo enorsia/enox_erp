@@ -89,6 +89,8 @@ class TrackIngestService
             $this->validatePaymentSuccessPayload($event);
 
             if ($this->isDuplicatePaymentSuccess($event)) {
+                $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
+
                 $acceptedIds[] = $eventId;
 
                 $this->logWarning('ingest.skip_duplicate_payment', 'Skipped duplicate payment_success for order', [
@@ -169,17 +171,7 @@ class TrackIngestService
             $attributes['country'] = $clientContext['ip_country'];
         }
 
-        foreach (['user_id', 'user_name', 'user_email', 'user_phone'] as $field) {
-            if (array_key_exists($field, $sessionData)) {
-                $attributes[$field] = $sessionData[$field];
-            }
-        }
-
-        if (! empty($sessionData['user_id'])) {
-            $attributes['is_logged_in'] = true;
-        } elseif (array_key_exists('is_logged_in', $sessionData)) {
-            $attributes['is_logged_in'] = ! empty($sessionData['user_id']) && (bool) $sessionData['is_logged_in'];
-        }
+        $attributes = array_merge($attributes, $this->sessionIdentityUpdates($sessionData, $existing));
 
         if (! empty($sessionData['visitor_id'])) {
             $attributes['visitor_id'] = $sessionData['visitor_id'];
@@ -402,6 +394,38 @@ class TrackIngestService
     }
 
     /**
+     * @param  array<string, mixed>  $sessionData
+     * @return array<string, mixed>
+     */
+    private function sessionIdentityUpdates(array $sessionData, ?ActivityEcomUser $existing = null): array
+    {
+        $updates = [];
+
+        if (! empty($sessionData['user_id'])) {
+            $updates['user_id'] = $sessionData['user_id'];
+            $updates['is_logged_in'] = true;
+        } elseif (array_key_exists('is_logged_in', $sessionData) && ($existing === null || ! $existing->isRegisteredUser())) {
+            $updates['is_logged_in'] = ! empty($sessionData['user_id']) && (bool) $sessionData['is_logged_in'];
+        }
+
+        foreach (['user_name', 'user_email', 'user_phone'] as $field) {
+            if (! array_key_exists($field, $sessionData)) {
+                continue;
+            }
+
+            $value = trim((string) ($sessionData[$field] ?? ''));
+
+            if ($value === '') {
+                continue;
+            }
+
+            $updates[$field] = $value;
+        }
+
+        return $updates;
+    }
+
+    /**
      * Guest checkout often has no user on the session until proceed_checkout or payment_success.
      *
      * @param  array<string, mixed>  $event
@@ -450,26 +474,7 @@ class TrackIngestService
      */
     private function syncSessionCustomerInfo(string $sessionId, array $customer, mixed $eventCreatedAt = null): void
     {
-        $firstName = trim((string) ($customer['first_name'] ?? ''));
-        $lastName = trim((string) ($customer['last_name'] ?? ''));
-        $fullName = trim((string) ($customer['full_name'] ?? ''));
-        $email = trim((string) ($customer['email'] ?? ''));
-        $phone = $this->extractCustomerPhone($customer);
-        $name = trim($fullName !== '' ? $fullName : implode(' ', array_filter([$firstName, $lastName])));
-
-        $updates = [];
-
-        if ($name !== '') {
-            $updates['user_name'] = $name;
-        }
-
-        if ($email !== '') {
-            $updates['user_email'] = $email;
-        }
-
-        if ($phone !== null) {
-            $updates['user_phone'] = $phone;
-        }
+        $updates = $this->customerFieldsFromPayload($customer);
 
         if ($updates === []) {
             return;
@@ -491,13 +496,43 @@ class TrackIngestService
 
         $session->update($updates);
 
-        $this->logInfo('ingest.checkout_user_sync', 'Logged-in user updated from checkout', [
+        $this->logInfo('ingest.checkout_user_sync', 'Session customer updated from checkout', [
             'session_id' => $sessionId,
             'user_name' => $updates['user_name'] ?? $session->user_name,
             'user_email' => $updates['user_email'] ?? $session->user_email,
             'user_phone' => $updates['user_phone'] ?? $session->user_phone,
             'is_logged_in' => $updates['is_logged_in'] ?? $session->is_logged_in,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $customer
+     * @return array<string, string>
+     */
+    private function customerFieldsFromPayload(array $customer): array
+    {
+        $firstName = trim((string) ($customer['first_name'] ?? $customer['firstName'] ?? ''));
+        $lastName = trim((string) ($customer['last_name'] ?? $customer['lastName'] ?? ''));
+        $fullName = trim((string) ($customer['full_name'] ?? $customer['fullName'] ?? ''));
+        $email = trim((string) ($customer['email'] ?? ''));
+        $phone = $this->extractCustomerPhone($customer);
+        $name = trim($fullName !== '' ? $fullName : implode(' ', array_filter([$firstName, $lastName])));
+
+        $updates = [];
+
+        if ($name !== '') {
+            $updates['user_name'] = $name;
+        }
+
+        if ($email !== '') {
+            $updates['user_email'] = $email;
+        }
+
+        if ($phone !== null) {
+            $updates['user_phone'] = $phone;
+        }
+
+        return $updates;
     }
 
     /**
@@ -518,22 +553,43 @@ class TrackIngestService
 
     public function backfillSessionPhonesFromCheckoutActions(int $chunkSize = 100): int
     {
+        return $this->backfillSessionCustomerFromCheckoutActions($chunkSize);
+    }
+
+    public function backfillSessionCustomerFromCheckoutActions(int $chunkSize = 100): int
+    {
         $updated = 0;
 
         ActivityEcomUser::query()
             ->where(function ($query) {
-                $query->whereNull('user_phone')->orWhere('user_phone', '');
+                $query->whereNull('user_name')->orWhere('user_name', '')
+                    ->orWhereNull('user_email')->orWhere('user_email', '')
+                    ->orWhereNull('user_phone')->orWhere('user_phone', '');
             })
             ->orderBy('id')
             ->chunkById($chunkSize, function ($sessions) use (&$updated) {
                 foreach ($sessions as $session) {
-                    $phone = $this->phoneFromCheckoutActions($session->session_id);
+                    $fields = $this->customerFieldsFromCheckoutActions($session->session_id);
 
-                    if ($phone === null) {
+                    if ($fields === []) {
                         continue;
                     }
 
-                    $session->update(['user_phone' => $phone]);
+                    $updates = [];
+
+                    foreach (['user_name', 'user_email', 'user_phone'] as $field) {
+                        if (filled($session->{$field}) || empty($fields[$field] ?? null)) {
+                            continue;
+                        }
+
+                        $updates[$field] = $fields[$field];
+                    }
+
+                    if ($updates === []) {
+                        continue;
+                    }
+
+                    $session->update($updates);
                     $updated++;
                 }
             });
@@ -541,7 +597,10 @@ class TrackIngestService
         return $updated;
     }
 
-    private function phoneFromCheckoutActions(string $sessionId): ?string
+    /**
+     * @return array<string, string>
+     */
+    private function customerFieldsFromCheckoutActions(string $sessionId): array
     {
         $actions = ActivityEcomUserAction::query()
             ->where('session_id', $sessionId)
@@ -549,6 +608,8 @@ class TrackIngestService
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->get();
+
+        $fields = [];
 
         foreach ($actions as $action) {
             foreach ([
@@ -559,15 +620,20 @@ class TrackIngestService
                     continue;
                 }
 
-                $phone = $this->extractCustomerPhone($customer);
-
-                if ($phone !== null) {
-                    return $phone;
+                foreach ($this->customerFieldsFromPayload($customer) as $field => $value) {
+                    if (! isset($fields[$field]) && filled($value)) {
+                        $fields[$field] = $value;
+                    }
                 }
             }
         }
 
-        return null;
+        return $fields;
+    }
+
+    private function phoneFromCheckoutActions(string $sessionId): ?string
+    {
+        return $this->customerFieldsFromCheckoutActions($sessionId)['user_phone'] ?? null;
     }
 
     private function sessionDurationSeconds(ActivityEcomUser $session): int

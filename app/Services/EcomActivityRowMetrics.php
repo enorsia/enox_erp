@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Support\EcomActivityCommerceSummary;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -94,14 +95,49 @@ class EcomActivityRowMetrics
             }
         }
 
+        foreach ($sessions as $session) {
+            $metrics[$session->session_id]['actions_count'] = $session->actions_count ?? 0;
+        }
+
         if ($focus === 'audience' || $focus === null) {
             foreach ($sessions as $session) {
-                $metrics[$session->session_id]['actions_count'] = $session->actions_count ?? 0;
                 $metrics[$session->session_id]['device'] = ucfirst((string) ($session->device_type ?? '—'));
             }
         }
 
+        $this->attachCommerceSummary($metrics, $sessionIds, $from, $to);
+
+        foreach ($metrics as $sessionId => $row) {
+            if (! empty($row['abandoned_at']) && ($row['abandoned_at'] ?? '—') !== '—') {
+                $metrics[$sessionId]['commerce_meta'] = $row['abandoned_at'];
+            }
+        }
+
         return $metrics;
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $metrics
+     * @param  Collection<int, string>  $sessionIds
+     */
+    private function attachCommerceSummary(
+        array &$metrics,
+        Collection $sessionIds,
+        Carbon $from,
+        Carbon $to,
+    ): void {
+        $actions = ActivityEcomUserAction::query()
+            ->select('id', 'session_id', 'action_type', 'add_to_cart', 'begin_checkout', 'proceed_to_checkout', 'payment_success', 'created_at')
+            ->whereIn('session_id', $sessionIds)
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+            ->whereIn('action_type', ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'])
+            ->get()
+            ->groupBy('session_id');
+
+        foreach ($sessionIds as $sessionId) {
+            $summary = EcomActivityCommerceSummary::summarizeActions($actions->get($sessionId, collect()));
+            $metrics[$sessionId] = array_merge($metrics[$sessionId] ?? [], $summary);
+        }
     }
 
     /**

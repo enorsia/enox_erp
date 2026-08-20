@@ -12,7 +12,7 @@
     use App\Support\EcomTrackerViewData;
 
     $focusColspan = count($focusColumns);
-    $totalCols = 6 + $focusColspan;
+    $totalCols = 8 + $focusColspan;
 @endphp
 
 <div class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity">
@@ -25,6 +25,19 @@
                     @include('ecom_tracker.partials.column-header-with-tip', [
                         'label' => 'Visitor trust',
                         'tip' => 'Whether this session looks like a real visitor, automated traffic, or could not be checked',
+                    ])
+                </th>
+                <th class="etd-col-commerce">
+                    @include('ecom_tracker.partials.column-header-with-tip', [
+                        'label' => 'Commerce',
+                        'tip' => 'Highest funnel stage reached in this period: Cart, Checkout, Proceed, or Order with value',
+                    ])
+                </th>
+                <th class="etd-col-actions etd-num">
+                    @include('ecom_tracker.partials.column-header-with-tip', [
+                        'label' => 'Actions',
+                        'tip' => 'Total tracked events in this session',
+                        'align' => 'center',
                     ])
                 </th>
                 @foreach ($focusColumns as $column)
@@ -74,6 +87,10 @@
                     <td class="etd-col-trust">
                         @include('ecom_tracker.partials.visitor-classification-badge', ['session' => $session, 'mode' => 'compact'])
                     </td>
+                    <td class="etd-col-commerce">
+                        @include('ecom_activity.partials.commerce-cell', ['metrics' => $metrics])
+                    </td>
+                    <td class="etd-col-actions etd-num">{{ number_format((int) ($session->actions_count ?? $metrics['actions_count'] ?? 0)) }}</td>
                     @foreach ($focusColumns as $column)
                         <td @class([$column['class'] ?? null])>
                             {{ $formatMetric($column['key']) }}
