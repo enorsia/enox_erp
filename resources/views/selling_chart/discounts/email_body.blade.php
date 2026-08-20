@@ -21,7 +21,7 @@
         }
 
         .container {
-            max-width: 680px;
+            max-width: 720px;
             margin: 0 auto;
             background: #ffffff;
             border-radius: 12px;
@@ -79,16 +79,17 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.6px;
-            padding: 10px 12px;
+            padding: 8px;
             border: 1px solid #e5e7eb;
             text-align: left;
         }
 
         .data-table td {
-            padding: 10px 12px;
+            padding: 8px;
             border: 1px solid #e5e7eb;
             color: #374151;
             vertical-align: middle;
+            font-size: 12px;
         }
 
         .data-table tr:nth-child(even) td {
@@ -130,8 +131,7 @@
 
             .data-table th,
             .data-table td {
-                padding: 8px 8px;
-                font-size: 12px;
+                font-size: 11px;
             }
         }
     </style>
@@ -143,8 +143,7 @@
 
             <!-- Header -->
             <div class="header">
-                @php $platform = $discounts->first()?->platform; @endphp
-                <h2>Discount Assigned: {{ $platform?->name }}</h2>
+                <h2>Discount Assigned: {{ $item['platform'] }}</h2>
             </div>
 
             <!-- Sub-header -->
@@ -154,36 +153,38 @@
 
             <!-- Body -->
             <div class="body">
-                <p>The following discount(s) have been <strong>assigned for {{ $platform?->name }}</strong> and are ready
-                    for the executor.</p>
+                <p>
+                    The following discount(s) have been <strong>assigned to {{ $item['platform'] }}</strong> and are
+                    ready for execution.
+                </p>
 
                 <!-- Data Table -->
                 <table class="data-table">
                     <thead>
                         <tr>
                             <th>Design No</th>
+                            <th>Ecom SKU</th>
                             <th>Color</th>
                             <th>Range</th>
                             <th>Platform</th>
-                            <th style="text-align:right">Orig. Price (£)</th>
                             <th style="text-align:right">Discount Price (£)</th>
                         </tr>
                     </thead>
                     <tbody>
+                        @php
+                            $discounts = $item['discounts']
+                        @endphp
                         @foreach ($discounts as $discount)
-                        <tr>
-                            <td><strong>{{ $discount?->sellingChartPrice?->sellingChartBasicInfo?->design_no }}</strong></td>
-                            <td>
-                                {{ $discount?->sellingChartPrice?->color_name }}
-                                @if ($discount?->sellingChartPrice?->color_code)
-                                <span style="color:#9ca3af;">({{ $discount->sellingChartPrice->color_code }})</span>
-                                @endif
-                            </td>
-                            <td>{{ $discount?->sellingChartPrice?->range ?: '—' }}</td>
-                            <td>{{ $discount?->platform?->name }}</td>
-                            <td class="num">@price($discount?->sellingChartPrice?->confirm_selling_price)</td>
-                            <td class="num discount-price">@price($discount->price)</td>
-                        </tr>
+                            <tr>
+                                <td><strong>{{ $item['style'] }}</strong></td>
+                                <td><strong>{{ $item['product_code'] }}</strong></td>
+                                <td>
+                                    {{ $discount['color'] }}
+                                </td>
+                                <td>{{ $discount['range'] ?: '—' }}</td>
+                                <td>{{ $item['platform'] }}</td>
+                                <td class="num discount-price">{{$discount['discount']}}</td>
+                            </tr>
                         @endforeach
                     </tbody>
                 </table>

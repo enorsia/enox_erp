@@ -5,24 +5,22 @@ namespace App\Mail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Content;
-use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 class SellingChartDiscountMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public $discounts;
+    public $item;
 
-    public function __construct($discounts)
+    public function __construct($scdh)
     {
-        $this->discounts = $discounts;
+        $this->item = json_decode($scdh['items'], true);
     }
 
     public function build()
     {
-        $subject = config('app.name') . ' - Discount Assigned for '. $this->discounts->first()?->platform?->name;
+        $subject = config('app.name') . ' - Discount Assigned for '. $this->item['platform'];
 
         return $this->subject($subject)
             ->view('selling_chart.discounts.email_body');

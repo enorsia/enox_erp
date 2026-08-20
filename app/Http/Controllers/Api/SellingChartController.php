@@ -28,8 +28,7 @@ class SellingChartController extends Controller
                 });
             });
 
-            $discountHistories = $query->where('status', 0)
-                ->orderBy('id', 'desc')
+            $discountHistories = $query->orderBy('id', 'desc')
                 ->paginate($perPage);
 
             $response = [

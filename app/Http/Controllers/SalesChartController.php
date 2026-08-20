@@ -1270,20 +1270,24 @@ class SalesChartController extends Controller
                         'created_by' => Auth::user()->name,
                     ]
                 );
+                $no_of_pending_discounts = SellingChartDiscountHistory::where('status', 0)->count() ?? 0;
+                $apiData = [
+                    'platform_code' => $platform->code,
+                    'ecom_product_id' => $ecom_product_id,
+                    'ecom_discount_status' => $ecom_discount_status,
+                    'discount_variants' => $discountVariants,
+                    'no_of_pending_discounts' => $no_of_pending_discounts,
+                ];
+                Log::info('ENOX DISCOUNT UPDATE API - Request', $apiData);
+
+                $response = $this->api->post(config('enox.endpoints.selling_chart_update_discount'), $apiData);
+
+                if (!$response['status']) {
+                    throw new Exception($response['message'] ? $response['message'] : 'Failed to update discount on Enox.');
+                }
+                $sender_emails = isset($response['data']['emails']) ? $response['data']['emails'] : [];
 
                 if ($platform->code == 'enox') {
-                    $apiData = [
-                        'ecom_product_id' => $ecom_product_id,
-                        'ecom_discount_status' => $ecom_discount_status,
-                        'discount_variants' => $discountVariants,
-                    ];
-
-                    $response = $this->api->post(config('enox.endpoints.selling_chart_update_discount'), $apiData);
-
-                    if (!$response['status']) {
-                        throw new Exception($response['message'] ? $response['message'] : 'Failed to update discount on Enox.');
-                    }
-
                     $scdh->updated_by = Auth::user()->name;
                     $scdh->status = 1;
                     $scdh->save();
@@ -1292,7 +1296,18 @@ class SalesChartController extends Controller
 
             DB::commit();
 
-            // $delay = 0;
+            $delay = 0;
+            if (!empty($sender_emails) && $scdh) {
+                foreach ($sender_emails as $email) {
+                    Mail::to($email)
+                        ->queue(
+                            (new SellingChartDiscountMail($scdh))
+                                ->delay(now()->addSeconds($delay))
+                        );
+                    $delay += 10;
+                    break;
+                }
+            }
             // if ($save_type == 2) {
             //     $approval_emails = SellingChartDiscount::approvalEmails();
             //     $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
