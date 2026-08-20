@@ -105,17 +105,30 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
         const html = departments
             .map((dept) => {
                 const categoryRows = dept.categories
-                    .map(
-                        (cat) =>
-                            '<div class="ssr-discount-cat-row">' +
+                    .map((cat) => {
+                        const clickable =
+                            cat.count > 0
+                                ? ' ssr-discount-cat-link" data-dept-key="' +
+                                  escapeHtml(dept.key) +
+                                  '" data-cat-key="' +
+                                  escapeHtml(cat.key) +
+                                  '" data-count="' +
+                                  cat.count
+                                : '"';
+
+                        return (
+                            '<div class="ssr-discount-cat-row' +
+                            clickable +
+                            '">' +
                             "<span>" +
                             escapeHtml(cat.name) +
                             "</span>" +
                             '<span class="ssr-discount-cat-count">' +
                             cat.count +
                             "</span>" +
-                            "</div>",
-                    )
+                            "</div>"
+                        );
+                    })
                     .join("");
 
                 return (
@@ -156,6 +169,168 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
             resetToggleIcons();
         }
 
+        function clearFilterHidden() {
+            $(".department-row, .category-row, .product-row").removeClass(
+                "ssr-filter-hidden",
+            );
+        }
+
+        function getProductLocation($product) {
+            const classes = ($product.attr("class") || "").split(/\s+/);
+            const catClass = classes.find((cls) => cls.startsWith("category-"));
+
+            if (!catClass) return null;
+
+            const $catRow = $(
+                '.category-row[data-target="' + catClass + '"]',
+            );
+            if (!$catRow.length) return null;
+
+            const deptClass = ($catRow.attr("class") || "")
+                .split(/\s+/)
+                .find((cls) => cls.startsWith("department-"));
+
+            if (!deptClass) return null;
+
+            const deptKey = deptClass.replace("department-", "");
+            const catKey = String($catRow.data("target")).replace(
+                "category-" + deptKey + "-",
+                "",
+            );
+
+            return { deptKey, catKey };
+        }
+
+        function productRowMatchesDiscountFilter($row, discountMode) {
+            const hasDiscount =
+                String($row.attr("data-has-discount") || "0") === "1";
+
+            if (discountMode === "2") return !hasDiscount;
+            if (discountMode === "3") return hasDiscount;
+            return true;
+        }
+
+        function applyFilters() {
+            const discountMode = $("#discount_status").val() || "1";
+            const deptKey = $("#search_department").val();
+            const catKey = $("#search_category").val();
+            const productCode = $("#search_product").val().trim().toLowerCase();
+            const hasActiveFilter =
+                discountMode !== "1" || deptKey || catKey || productCode;
+            const autoExpandProducts =
+                !!catKey || !!productCode || discountMode !== "1";
+            const autoExpandCategories =
+                !!deptKey || !!catKey || !!productCode || discountMode !== "1";
+
+            clearFilterHidden();
+            hideAllSubRows();
+
+            let firstMatch = null;
+
+            $(".department-row").each(function () {
+                const $deptRow = $(this);
+                const deptTarget = $deptRow.data("target");
+                const currentDeptKey = String(deptTarget).replace(
+                    "department-",
+                    "",
+                );
+
+                if (deptKey && deptKey !== currentDeptKey) {
+                    $deptRow.addClass("ssr-filter-hidden hidden");
+                    return;
+                }
+
+                $deptRow.removeClass("ssr-filter-hidden hidden");
+
+                let deptVisible = false;
+
+                $(".category-row." + deptTarget).each(function () {
+                    const $catRow = $(this);
+                    const catTarget = $catRow.data("target");
+                    const currentCatKey = String(catTarget).replace(
+                        "category-" + currentDeptKey + "-",
+                        "",
+                    );
+
+                    if (catKey && catKey !== currentCatKey) {
+                        $catRow.addClass("ssr-filter-hidden hidden");
+                        return;
+                    }
+
+                    let catVisible = false;
+
+                    $("tr.product-row." + catTarget).each(function () {
+                        const $product = $(this);
+                        let show = productRowMatchesDiscountFilter(
+                            $product,
+                            discountMode,
+                        );
+
+                        if (show && productCode) {
+                            const itemNo = $product
+                                .find(".ssr-product-link")
+                                .text()
+                                .trim()
+                                .toLowerCase();
+                            show = itemNo.indexOf(productCode) !== -1;
+                        }
+
+                        if (show) {
+                            $product.removeClass("ssr-filter-hidden");
+
+                            if (
+                                autoExpandProducts &&
+                                (!catKey || catKey === currentCatKey)
+                            ) {
+                                $product.removeClass("hidden");
+                            } else {
+                                $product.addClass("hidden");
+                            }
+
+                            catVisible = true;
+
+                            if (!firstMatch) {
+                                firstMatch = $product;
+                            }
+                        } else {
+                            $product.addClass("ssr-filter-hidden hidden");
+                        }
+                    });
+
+                    if (catVisible) {
+                        $catRow.removeClass("ssr-filter-hidden");
+                        deptVisible = true;
+
+                        if (autoExpandCategories) {
+                            $catRow.removeClass("hidden");
+                        }
+
+                        const shouldOpenCategory =
+                            (catKey && catKey === currentCatKey) ||
+                            (autoExpandProducts && !catKey);
+
+                        if (shouldOpenCategory) {
+                            $catRow
+                                .find(".ssr-chevron")
+                                .addClass("ssr-chevron--open");
+                        }
+                    } else {
+                        $catRow.addClass("ssr-filter-hidden hidden");
+                    }
+                });
+
+                if (!deptVisible && hasActiveFilter) {
+                    $deptRow.addClass("ssr-filter-hidden hidden");
+                } else if (deptVisible && autoExpandCategories) {
+                    $deptRow
+                        .find(".ssr-chevron")
+                        .addClass("ssr-chevron--open");
+                }
+            });
+
+            return firstMatch;
+        }
+
         function populateCategoryOptions(deptKey) {
             const $categorySelect = $("#search_category");
             $categorySelect
@@ -182,105 +357,52 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
             $categorySelect.prop("disabled", false);
         }
 
-        function expandDepartment(deptKey) {
-            $(".department-" + deptKey).removeClass("hidden");
-            $('.department-row[data-target="department-' + deptKey + '"]')
-                .find(".ssr-chevron")
-                .addClass("ssr-chevron--open");
-        }
-
-        function expandCategory(deptKey, catKey) {
-            $(".category-" + deptKey + "-" + catKey).removeClass("hidden");
-            $(
-                '.category-row[data-target="category-' +
-                    deptKey +
-                    "-" +
-                    catKey +
-                    '"]',
-            )
-                .find(".ssr-chevron")
-                .addClass("ssr-chevron--open");
-        }
-
         $(document).on("change", "#search_department", function () {
             const deptKey = $(this).val();
 
             $("#search_product").val("");
-            hideAllSubRows();
             populateCategoryOptions(deptKey);
-
-            if (deptKey) {
-                expandDepartment(deptKey);
-            }
+            applyFilters();
         });
 
         $(document).on("change", "#search_category", function () {
-            const catKey = $(this).val();
-            const deptKey = $("#search_department").val();
+            applyFilters();
+        });
 
-            if (!deptKey) return;
-
-            $(".product-row").addClass("hidden");
-            $(".category-row .ssr-chevron").removeClass("ssr-chevron--open");
-
-            if (catKey) {
-                expandCategory(deptKey, catKey);
-            }
+        $(document).on("change", "#discount_status", function () {
+            applyFilters();
         });
 
         function searchByProductCode() {
             const code = $("#search_product").val().trim().toLowerCase();
 
-            if (!code) return;
+            if (!code) {
+                applyFilters();
+                return;
+            }
 
-            hideAllSubRows();
+            const firstMatch = applyFilters();
 
-            let foundDept = null;
-            let foundCat = null;
+            if (firstMatch && firstMatch.length) {
+                const $matchedRow = firstMatch;
+                const location = getProductLocation($matchedRow);
 
-            $.each(styleStockData, function (deptKey, department) {
-                if (foundDept) return;
-
-                $.each(department.categories, function (catKey, category) {
-                    if (foundDept) return;
-
-                    $.each(category.products, function (i, product) {
-                        if (
-                            product.item_no &&
-                            product.item_no.toLowerCase().indexOf(code) !== -1
-                        ) {
-                            foundDept = deptKey;
-                            foundCat = catKey;
-                            return false;
-                        }
-                    });
-                });
-            });
-
-            if (foundDept) {
-                $("#search_department").val(foundDept);
-                populateCategoryOptions(foundDept);
-                $("#search_category").val(foundCat);
-
-                expandDepartment(foundDept);
-                expandCategory(foundDept, foundCat);
-
-                const $matchedRow = $(
-                    ".category-" + foundDept + "-" + foundCat,
-                ).filter(function () {
-                    return $(this).text().toLowerCase().indexOf(code) !== -1;
-                });
-
-                if ($matchedRow.length) {
-                    $("html, body").animate(
-                        { scrollTop: $matchedRow.offset().top - 150 },
-                        400,
-                    );
-                    $matchedRow.addClass("ssr-row--highlight");
-                    setTimeout(function () {
-                        $matchedRow.removeClass("ssr-row--highlight");
-                    }, 2000);
+                if (location) {
+                    $("#search_department").val(location.deptKey);
+                    populateCategoryOptions(location.deptKey);
+                    $("#search_category").val(location.catKey);
                 }
+
+                applyFilters();
+
+                $("html, body").animate(
+                    { scrollTop: $matchedRow.offset().top - 150 },
+                    400,
+                );
+                $matchedRow.addClass("ssr-row--highlight");
+                setTimeout(function () {
+                    $matchedRow.removeClass("ssr-row--highlight");
+                }, 2000);
             } else {
                 $("#search_department").val("");
                 $("#search_category")
@@ -302,16 +424,54 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
             }
         });
 
+        $(document).on("click", ".ssr-discount-cat-link", function () {
+            const deptKey = String($(this).data("deptKey") || "");
+            const catKey = String($(this).data("catKey") || "");
+            const count = parseInt($(this).data("count"), 10) || 0;
+
+            if (!deptKey || !catKey || count <= 0) return;
+
+            $("#discount_status").val("3");
+            $("#search_product").val("");
+            $("#search_department").val(deptKey);
+            populateCategoryOptions(deptKey);
+            $("#search_category").val(catKey);
+            applyFilters();
+
+            const $catRow = $(
+                '.category-row[data-target="category-' +
+                    deptKey +
+                    "-" +
+                    catKey +
+                    '"]',
+            );
+
+            if ($catRow.length) {
+                $("html, body").animate(
+                    { scrollTop: $catRow.offset().top - 150 },
+                    400,
+                );
+                $catRow.addClass("ssr-row--highlight");
+                setTimeout(function () {
+                    $catRow.removeClass("ssr-row--highlight");
+                }, 2000);
+            }
+        });
+
         $(document).on("click", ".department-row", function () {
+            if ($(this).hasClass("ssr-filter-hidden")) return;
+
             const target = $(this).data("target");
-            const $targets = $("." + target);
+            const $targets = $("." + target).filter(":not(.ssr-filter-hidden)");
 
             $targets.toggleClass("hidden");
 
             if ($targets.hasClass("hidden")) {
                 $targets.each(function () {
                     const categoryTarget = $(this).data("target");
-                    $("." + categoryTarget).addClass("hidden");
+                    $("." + categoryTarget)
+                        .filter(":not(.ssr-filter-hidden)")
+                        .addClass("hidden");
                     $(this)
                         .find(".ssr-chevron")
                         .removeClass("ssr-chevron--open");
@@ -322,8 +482,12 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
         });
 
         $(document).on("click", ".category-row", function () {
+            if ($(this).hasClass("ssr-filter-hidden")) return;
+
             const target = $(this).data("target");
-            $("." + target).toggleClass("hidden");
+            $("." + target)
+                .filter(":not(.ssr-filter-hidden)")
+                .toggleClass("hidden");
             $(this).find(".ssr-chevron").toggleClass("ssr-chevron--open");
         });
 

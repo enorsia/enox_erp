@@ -1939,9 +1939,24 @@ body > .ts-dropdown .ts-dropdown-content {
     justify-content: space-between;
     gap: 0.5rem;
     padding: 0.3rem 0 0.3rem 0.5rem;
-    border-left: 2px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
     font-size: 0.6875rem;
     color: #475569;
+}
+
+.ssr-discount-cat-link {
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ssr-discount-cat-link:hover {
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.dark .ssr-discount-cat-link:hover {
+    background: rgba(245, 158, 11, 0.1);
+    color: #fbbf24;
 }
 
 .ssr-discount-cat-row span:first-child {
@@ -1952,7 +1967,7 @@ body > .ts-dropdown .ts-dropdown-content {
 }
 
 .dark .ssr-discount-cat-row {
-    border-left-color: #475569;
+    border-bottom-color: #475569;
     color: #cbd5e1;
 }
 
