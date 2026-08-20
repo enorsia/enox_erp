@@ -1191,7 +1191,7 @@ test('ecom tracker dashboard includes visitor quality summary', function () {
     $data = $service->getDashboardData(['period' => '7d']);
 
     expect($data)->toHaveKey('visitor_quality');
-    expect($data['visitor_quality'])->toHaveKeys(['real_shoppers', 'automated_traffic', 'not_classified', 'uk_shoppers']);
+    expect($data['visitor_quality'])->toHaveKeys(['real_shoppers', 'automated_traffic', 'not_classified']);
 });
 
 test('ecom tracker dashboard audience kpis align with user activity session scope', function () {

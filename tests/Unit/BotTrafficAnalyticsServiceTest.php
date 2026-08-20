@@ -55,6 +55,51 @@ test('resolveComparisonRange previous period is equal length before current', fu
     expect($compare['mode'])->toBe('previous_period');
 });
 
+test('summaryOnly counts real, automated and unclassified visitors in one pass', function () {
+    $humanGb = \Illuminate\Support\Str::uuid()->toString();
+    $humanUs = \Illuminate\Support\Str::uuid()->toString();
+    $bot = \Illuminate\Support\Str::uuid()->toString();
+    $unclassified = \Illuminate\Support\Str::uuid()->toString();
+
+    foreach ([$humanGb, $humanUs, $bot, $unclassified] as $sessionId) {
+        \App\Models\ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'last_active_at' => now(),
+            'created_at' => now(),
+        ]);
+    }
+
+    \App\Models\ActivityEcomUserBotContext::query()->create([
+        'session_id' => $humanGb,
+        'is_bot' => false,
+        'bot_confidence' => 'low',
+        'bot_reason' => 'no bot signals detected',
+        'ip_country' => 'GB',
+    ]);
+    \App\Models\ActivityEcomUserBotContext::query()->create([
+        'session_id' => $humanUs,
+        'is_bot' => false,
+        'bot_confidence' => 'low',
+        'bot_reason' => 'no bot signals detected',
+        'ip_country' => 'US',
+    ]);
+    \App\Models\ActivityEcomUserBotContext::query()->create([
+        'session_id' => $bot,
+        'is_bot' => true,
+        'bot_confidence' => 'high',
+        'bot_reason' => 'known crawler/script UA',
+        'ip_country' => 'US',
+    ]);
+
+    $summary = $this->service->summaryOnly(['period' => '24h']);
+
+    expect($summary['real_shoppers']['current'])->toBe(2);
+    expect($summary['automated_traffic']['current'])->toBe(1);
+    expect($summary['not_classified']['current'])->toBe(1);
+    expect($summary)->not->toHaveKey('uk_shoppers');
+});
+
 test('summaryOnly uses cache when enabled', function () {
     config(['tracker.analytics_cache_enabled' => true]);
 
@@ -63,7 +108,7 @@ test('summaryOnly uses cache when enabled', function () {
     $second = $this->service->summaryOnly($filters);
 
     expect($first)->toBe($second);
-    expect($first)->toHaveKeys(['real_shoppers', 'automated_traffic', 'not_classified', 'uk_shoppers']);
+    expect($first)->toHaveKeys(['real_shoppers', 'automated_traffic', 'not_classified']);
 });
 
 test('buildReport country breakdown groups detected countries for real visitors', function () {

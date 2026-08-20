@@ -371,6 +371,30 @@
             'activitySourceLink' => $page['activitySourceLink'],
         ])
     </div>
+
+    @include('ecom_tracker.partials.session-quality', [
+        'visitorQuality' => $d['visitor_quality'] ?? [],
+        'botTrafficUrl' => route('admin.ecom-tracker.bot-traffic', array_filter([
+            'period' => $period,
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+        ], fn ($value) => filled($value))),
+        'gridClass' => 'etd-kpi-grid--6',
+        'extraMetrics' => [
+            [
+                'label' => 'Returning visitors',
+                'value' => max(0, (int) ($kpiByLabel->get('Sessions')['value'] ?? 0) - (int) ($kpiByLabel->get('Unique visitors')['value'] ?? 0)),
+            ],
+            [
+                'label' => 'Avg session duration',
+                'value' => $kpiByLabel->get('Avg stay time')['formatted'] ?? '0s',
+            ],
+            [
+                'label' => 'Total time on site',
+                'value' => $kpiByLabel->get('Total stay time')['formatted'] ?? '0s',
+            ],
+        ],
+    ])
 </div>
 
 <script>

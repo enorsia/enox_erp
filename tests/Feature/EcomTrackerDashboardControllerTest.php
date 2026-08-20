@@ -51,7 +51,11 @@ test('store dashboard shows custom date picker only when period is custom', func
         ->assertOk()
         ->assertSee('presetKey: \'custom\'', false)
         ->assertSee('value="2026-07-01"', false)
-        ->assertSee('value="2026-07-15"', false);
+        ->assertSee('value="2026-07-15"', false)
+        ->assertSee('Session quality', false)
+        ->assertSee('Returning visitors', false)
+        ->assertSee('Avg session duration', false)
+        ->assertSee('Total time on site', false);
 });
 
 test('store dashboard period preset links keep active drawer filters', function () {

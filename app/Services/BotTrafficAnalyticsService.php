@@ -96,11 +96,15 @@ class BotTrafficAnalyticsService
             'mode' => 'none',
         ];
 
-        $cacheKey = 'bot_traffic_summary:' . md5(json_encode([
+        $cacheKey = 'bot_traffic_summary:v3:' . md5(json_encode([
             'from' => $currentRange['from']->toIso8601String(),
             'to' => $currentRange['to']->toIso8601String(),
             'device_type' => $filters['device_type'] ?? '',
             'country' => $filters['country'] ?? '',
+            'logged_in' => $filters['logged_in'] ?? '',
+            'has_order' => $filters['has_order'] ?? '',
+            'utm_source' => $filters['utm_source'] ?? '',
+            'utm_medium' => $filters['utm_medium'] ?? '',
         ]));
 
         return $this->remember($cacheKey, self::CACHE_TTL_SUMMARY_SECONDS, function () use ($currentRange, $emptyComparison, $filters) {
@@ -218,25 +222,20 @@ class BotTrafficAnalyticsService
     private function buildSummary(array $currentRange, array $comparisonRange, string $compareMode, array $filters): array
     {
         $comparisonLabel = $comparisonRange['label'] ?? '';
-
-        $metrics = [
-            'real_shoppers' => fn (Carbon $from, Carbon $to) => $this->countClassification($from, $to, 'human', $filters),
-            'automated_traffic' => fn (Carbon $from, Carbon $to) => $this->countClassification($from, $to, 'bot', $filters),
-            'not_classified' => fn (Carbon $from, Carbon $to) => $this->countClassification($from, $to, 'unclassified', $filters),
-            'uk_shoppers' => fn (Carbon $from, Carbon $to) => $this->countUkShoppers($from, $to, $filters),
-        ];
+        $currentCounts = $this->countVisitorQualityMetrics($currentRange['from'], $currentRange['to'], $filters);
+        $compareCounts = $compareMode === 'none'
+            ? [
+                'real_shoppers' => 0,
+                'automated_traffic' => 0,
+                'not_classified' => 0,
+            ]
+            : $this->countVisitorQualityMetrics($comparisonRange['from'], $comparisonRange['to'], $filters);
 
         $summary = [];
 
-        foreach ($metrics as $key => $counter) {
-            $current = $counter($currentRange['from'], $currentRange['to']);
-            $compare = $compareMode === 'none'
-                ? 0
-                : $counter($comparisonRange['from'], $comparisonRange['to']);
-            $sparkline = $this->sparklineForVisitorQualityMetric($key, $currentRange, $filters);
-
+        foreach ($currentCounts as $key => $current) {
             $summary[$key] = array_merge(
-                $this->computeMetricSummary($current, $compare, $sparkline, $compareMode),
+                $this->computeMetricSummary($current, (int) $compareCounts[$key], [], $compareMode),
                 ['comparison_label' => $comparisonLabel],
             );
         }
@@ -300,6 +299,29 @@ class BotTrafficAnalyticsService
             ->whereRaw("{$countryExpression} != ''")
             ->distinct()
             ->count(DB::raw($countryExpression));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{real_shoppers: int, automated_traffic: int, not_classified: int}
+     */
+    private function countVisitorQualityMetrics(Carbon $from, Carbon $to, array $filters): array
+    {
+        $row = $this->allSessionQuery($from, $to, $filters)
+            ->leftJoin('activity_ecom_user_bot_context as bc', 'activity_ecom_user.session_id', '=', 'bc.session_id')
+            ->toBase()
+            ->select([
+                DB::raw('COUNT(CASE WHEN bc.session_id IS NOT NULL AND bc.is_bot = 0 THEN 1 END) as real_shoppers'),
+                DB::raw('COUNT(CASE WHEN bc.is_bot = 1 THEN 1 END) as automated_traffic'),
+                DB::raw('COUNT(CASE WHEN bc.session_id IS NULL THEN 1 END) as not_classified'),
+            ])
+            ->first();
+
+        return [
+            'real_shoppers' => (int) ($row->real_shoppers ?? 0),
+            'automated_traffic' => (int) ($row->automated_traffic ?? 0),
+            'not_classified' => (int) ($row->not_classified ?? 0),
+        ];
     }
 
     /**

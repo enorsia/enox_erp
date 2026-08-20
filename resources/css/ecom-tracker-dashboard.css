@@ -703,8 +703,16 @@
     grid-template-columns: repeat(auto-fit, minmax(7.75rem, 1fr));
 }
 
+.etd-kpi-grid--6 {
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+}
+
 @media (min-width: 768px) {
     .etd-kpi-grid--5 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .etd-kpi-grid--6 {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
@@ -712,6 +720,10 @@
 @media (min-width: 1200px) {
     .etd-kpi-grid--5 {
         grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .etd-kpi-grid--6 {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
     }
 }
 
@@ -1262,14 +1274,14 @@
 }
 
 @media (max-width: 1279px) {
-    .etd-kpi-grid:not(.etd-kpi-grid--5),
+    .etd-kpi-grid:not(.etd-kpi-grid--5):not(.etd-kpi-grid--6),
     .etd-kpi-grid--3 {
         grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
     }
 }
 
 @media (min-width: 768px) {
-    .etd-kpi-grid:not(.etd-kpi-grid--5) {
+    .etd-kpi-grid:not(.etd-kpi-grid--5):not(.etd-kpi-grid--6) {
         grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
