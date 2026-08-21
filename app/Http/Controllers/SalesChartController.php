@@ -1305,42 +1305,8 @@ class SalesChartController extends Controller
                                 ->delay(now()->addSeconds($delay))
                         );
                     $delay += 10;
-                    break;
                 }
             }
-            // if ($save_type == 2) {
-            //     $approval_emails = SellingChartDiscount::approvalEmails();
-            //     $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
-            //         ->whereIn('id', $sldIds)
-            //         ->where('status', 0)
-            //         ->get();
-            //     if ($sl_discounts->isNotEmpty()) {
-            //         foreach ($approval_emails as $email) {
-            //             Mail::to($email)
-            //                 ->queue(
-            //                     (new SellingChartDiscountMail($sl_discounts))
-            //                         ->delay(now()->addSeconds($delay))
-            //                 );
-            //             $delay += 10;
-            //         }
-            //     }
-            // } elseif ($save_type == 3) {
-            //     $executor_emails = SellingChartDiscount::executorEmails();
-            //     $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
-            //         ->whereIn('id', $sldIds)
-            //         ->where('status', 1)
-            //         ->get();
-            //     if ($sl_discounts->isNotEmpty()) {
-            //         foreach ($executor_emails as $email) {
-            //             Mail::to($email)
-            //                 ->queue(
-            //                     (new SellingChartDiscountMail($sl_discounts))
-            //                         ->delay(now()->addSeconds($delay))
-            //                 );
-            //             $delay += 10;
-            //         }
-            //     }
-            // }
 
             if ($lastScd) {
                 activity()

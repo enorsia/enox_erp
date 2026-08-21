@@ -326,7 +326,8 @@
                             @if ($chartInfo->selling_chart_prices_count)
                                 <div class="discount-summary-strip border-t border-slate-100 dark:border-slate-700">
                                     @foreach ($chartInfo->sellingChartPrices as $ch_price)
-                                        <div class="discount-summary-color {{ !$loop->first ? 'discount-summary-color-border' : '' }}">
+                                        <div class="discount-summary-color {{ !$loop->first ? 'discount-summary-color-border' : '' }}"
+                                             data-price-id="{{ $ch_price->id }}">
                                             <div class="discount-summary-color-label">
                                                 <span class="discount-summary-color-dot"></span>
                                                 <span class="discount-summary-color-text">Color / Range :</span>
@@ -363,7 +364,8 @@
                                                             $dis_val   = calculatePlatformProfit($dch_price, $platform, $profitOptions);
                                                         }
                                                     @endphp
-                                                    <div class="plat-card {{ $d_price ? 'plat-card-disc' : '' }}">
+                                                    <div class="plat-card {{ $d_price ? 'plat-card-disc' : '' }}"
+                                                         data-platform-id="{{ $platform->id }}">
                                                         <p class="plat-name">{{ $p_name }}</p>
 
                                                         <div class="plat-line plat-line-org">

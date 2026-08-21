@@ -311,6 +311,90 @@ $(document).ready(function () {
         return { valid: true, hasDiscount };
     }
 
+    // save summary
+    function parseFormRowProfit($row) {
+        return {
+            pm: ($row.find('.pm').first().text() || '').trim(),
+            np: ($row.find('.np').first().text() || '').trim(),
+        };
+    }
+
+    function buildDiscountSummaryLine(discountPrice, pmText, npText) {
+        return (
+            '<div class="plat-line plat-line-dis">' +
+                '<span class="plat-type plat-type-dis">Dis</span>' +
+                '<span class="plat-val"><span class="plat-key">CSP</span> £' + parseFloat(discountPrice).toFixed(2) + '</span>' +
+                '<span class="plat-sep">·</span>' +
+                '<span class="plat-val"><span class="plat-key">PM</span> ' + pmText + '</span>' +
+                '<span class="plat-sep">·</span>' +
+                '<span class="plat-val"><span class="plat-key">NP</span> ' + npText + '</span>' +
+            '</div>'
+        );
+    }
+
+    function updatePlatCardSummary($platCard, discountPrice, pmText, npText) {
+        if (!$platCard.length) return;
+
+        $platCard.find('.plat-line-dis').remove();
+
+        if (discountPrice > 0) {
+            $platCard.addClass('plat-card-disc');
+            $platCard.append(buildDiscountSummaryLine(discountPrice, pmText, npText));
+            return;
+        }
+
+        $platCard.removeClass('plat-card-disc');
+    }
+
+    function getSummaryUpdatesForForm($form) {
+        const department_id = $form.find('.department_id').val();
+        const updates = [];
+
+        if (isGroupedDept(department_id)) {
+            const $firstRow = $form.find('tbody tr.discount-calc-row').first();
+            const primaryId = getRowPriceId($firstRow);
+            const discount_price = parseFloat(getDiscountInputForRow($form, primaryId).val()) || 0;
+            const profit = parseFormRowProfit($firstRow);
+
+            $form.find('input.ch_price_id').each(function () {
+                updates.push({
+                    ch_price_id: $(this).val(),
+                    discount_price,
+                    profit,
+                });
+            });
+        } else {
+            $form.find('tbody tr.discount-calc-row').each(function () {
+                const $row = $(this);
+                const ch_price_id = getRowPriceId($row);
+                updates.push({
+                    ch_price_id,
+                    discount_price: parseFloat(getDiscountInputForRow($form, ch_price_id).val()) || 0,
+                    profit: parseFormRowProfit($row),
+                });
+            });
+        }
+
+        return updates;
+    }
+
+    function updateDiscountSummaryForForm($form) {
+        const $card = $form.closest('.discount-card');
+        const $summary = $card.find('.discount-summary-strip');
+        if (!$summary.length) return;
+
+        const platform_id = $form.find('.platform_id').val();
+
+        getSummaryUpdatesForForm($form).forEach(({ ch_price_id, discount_price, profit }) => {
+            const $platCard = $summary
+                .find('.discount-summary-color[data-price-id="' + ch_price_id + '"]')
+                .find('.plat-card[data-platform-id="' + platform_id + '"]');
+
+            updatePlatCardSummary($platCard, discount_price, profit.pm, profit.np);
+        });
+    }
+    // save summary
+
     function submitDiscountForm($form) {
         return $.ajax({
             url:  SAVE_URL || $form.attr('action'),
@@ -370,6 +454,8 @@ $(document).ready(function () {
 
             $.when.apply($, requests)
                 .done(function () {
+                    formsToSave.forEach(($form) => updateDiscountSummaryForForm($form));
+
                     Swal.fire({
                         icon: 'success',
                         title: 'Saved',
