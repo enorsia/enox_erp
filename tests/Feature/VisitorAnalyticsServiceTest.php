@@ -288,3 +288,35 @@ test('visitor breakdown includes latest session for classification badge', funct
     expect($breakdown->items()[0]['latest_session'])->not->toBeNull();
     expect($breakdown->items()[0]['latest_session']->marketer_type_label)->toBe('Real visitor');
 });
+
+test('duration buckets include percentage and distribution summary', function () {
+    $service = app(VisitorAnalyticsService::class);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => (string) Str::uuid(),
+        'created_at' => Carbon::parse('2026-07-16 12:00:00', 'Europe/London'),
+        'updated_at' => Carbon::parse('2026-07-16 12:01:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 12:01:00', 'Europe/London'),
+        'session_duration_seconds' => 30,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => (string) Str::uuid(),
+        'created_at' => Carbon::parse('2026-07-16 13:00:00', 'Europe/London'),
+        'updated_at' => Carbon::parse('2026-07-16 13:10:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 13:10:00', 'Europe/London'),
+        'session_duration_seconds' => 600,
+    ]);
+
+    $since = $service->resolveWindow('24h');
+    $buckets = $service->buildDurationBuckets($since);
+    $distribution = $service->buildDurationDistribution($since);
+
+    expect($buckets)->toHaveCount(5)
+        ->and($buckets[0])->toHaveKeys(['label', 'count', 'pct', 'min', 'max'])
+        ->and(collect($buckets)->sum('count'))->toBe(2)
+        ->and($distribution['total_sessions'])->toBe(2)
+        ->and($distribution['median_seconds'])->toBe(315);
+});

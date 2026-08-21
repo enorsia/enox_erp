@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\TrackerUtmFilter;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 final class EcomTrackerViewData
@@ -55,6 +56,10 @@ final class EcomTrackerViewData
             ),
             'activitySourceLink' => fn (string $source) => self::activitySourceLink($filters, $source),
             'hasActiveFilters' => $activeFilterCount > 0,
+            'visitorDetailLink' => fn (string $section) => route('admin.ecom-tracker.visitors.details', $section).'?'.http_build_query(array_filter(
+                array_merge(self::visitorQueryFromDashboardFilters($filters), ['back' => $back]),
+                fn ($value) => filled($value),
+            )),
         ];
     }
 
@@ -425,6 +430,44 @@ final class EcomTrackerViewData
         }
 
         return $query;
+    }
+
+    /**
+     * Map dashboard period/date filters to visitor analytics query params.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array<string, string>
+     */
+    public static function visitorQueryFromDashboardFilters(array $filters): array
+    {
+        $period = $filters['period'] ?? '24h';
+
+        if ($period === 'custom' && filled($filters['date_from'] ?? null) && filled($filters['date_to'] ?? null)) {
+            $fromLocal = TrackerTime::toLocal(Carbon::parse($filters['date_from'], TrackerTime::timezone())->startOfDay()->utc());
+            $toLocal = TrackerTime::toLocal(Carbon::parse($filters['date_to'], TrackerTime::timezone())->endOfDay()->utc());
+
+            return array_filter([
+                'datetime_from' => $fromLocal?->format('Y-m-d\TH:i'),
+                'datetime_to' => $toLocal?->format('Y-m-d\TH:i'),
+            ]);
+        }
+
+        if ($period === 'yesterday') {
+            $yesterday = TrackerTime::localNow()->copy()->subDay();
+
+            return [
+                'datetime_from' => $yesterday->copy()->startOfDay()->format('Y-m-d\TH:i'),
+                'datetime_to' => $yesterday->copy()->endOfDay()->format('Y-m-d\TH:i'),
+            ];
+        }
+
+        $window = match ($period) {
+            '7d' => '7d',
+            '30d', '90d' => '30d',
+            default => '24h',
+        };
+
+        return ['window' => $window];
     }
 
     /**

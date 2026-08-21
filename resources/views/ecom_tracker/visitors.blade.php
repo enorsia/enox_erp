@@ -80,20 +80,12 @@
         'gridClass' => 'etd-kpi-grid--3',
     ])
 
-    <div class="etd-panel mb-5">
-        <div class="etd-panel-head">
-            <h2 class="etd-panel-title">Session duration distribution</h2>
-            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('duration')])
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-            @foreach ($a['duration_buckets'] as $bucket)
-                <div class="rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-center">
-                    <div class="text-2xl font-semibold">{{ number_format($bucket['count']) }}</div>
-                    <div class="text-xs text-slate-500 mt-1">{{ $bucket['label'] }}</div>
-                </div>
-            @endforeach
-        </div>
-    </div>
+    @include('ecom_tracker.partials.session-duration-distribution', [
+        'distribution' => $a['duration_distribution'] ?? [],
+        'detailsUrl' => $detailLink('duration'),
+        'chartId' => 'vaDurationDistChart',
+        'class' => 'mb-5',
+    ])
 
     <div class="etd-panel">
         <div class="etd-panel-head">
@@ -124,11 +116,15 @@
     </div>
 </div>
 
-<script>
-    window.visitorAnalyticsData = @json([
+@php
+    $visitorAnalyticsChartData = [
         'trend' => $a['trend'],
         'new_returning' => $a['new_returning'],
-    ]);
+        'duration_distribution' => $a['duration_distribution'] ?? null,
+    ];
+@endphp
+<script>
+    window.visitorAnalyticsData = @json($visitorAnalyticsChartData);
 </script>
 @vite('resources/js/pages/visitor-analytics.js')
 @endsection

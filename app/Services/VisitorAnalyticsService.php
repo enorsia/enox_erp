@@ -596,29 +596,34 @@ class VisitorAnalyticsService
             ->selectRaw($durationSql.' as duration_seconds')
             ->pluck('duration_seconds');
 
-        $buckets = [
-            ['label' => '0–1 min', 'min' => 0, 'max' => 60, 'count' => 0],
-            ['label' => '1–5 min', 'min' => 61, 'max' => 300, 'count' => 0],
-            ['label' => '5–15 min', 'min' => 301, 'max' => 900, 'count' => 0],
-            ['label' => '15–30 min', 'min' => 901, 'max' => 1800, 'count' => 0],
-            ['label' => '30+ min', 'min' => 1801, 'max' => PHP_INT_MAX, 'count' => 0],
+        return \App\Support\SessionDurationBuckets::withCounts($sessions)['buckets'];
+    }
+
+    /**
+     * @return array{
+     *     buckets: array<int, array{label: string, min: int, max: int, count: int, pct: float}>,
+     *     total_sessions: int,
+     *     median_seconds: int,
+     *     median_label: string
+     * }
+     */
+    public function buildDurationDistribution(Carbon $from, ?Carbon $until = null): array
+    {
+        $durationSql = $this->effectiveDurationSecondsSql();
+
+        $sessions = $this->applyLastActiveRange(ActivityEcomUser::query(), $from, $until)
+            ->whereNotNull('visitor_id')
+            ->selectRaw($durationSql.' as duration_seconds')
+            ->pluck('duration_seconds');
+
+        $distribution = \App\Support\SessionDurationBuckets::withCounts($sessions);
+
+        return [
+            'buckets' => $distribution['buckets'],
+            'total_sessions' => $distribution['total_sessions'],
+            'median_seconds' => $distribution['median_seconds'],
+            'median_label' => $this->formatDuration($distribution['median_seconds']),
         ];
-
-        foreach ($sessions as $seconds) {
-            $seconds = (int) $seconds;
-
-            foreach ($buckets as &$bucket) {
-                if ($seconds >= $bucket['min'] && $seconds <= $bucket['max']) {
-                    $bucket['count']++;
-                    break;
-                }
-            }
-        }
-
-        return array_map(fn (array $bucket) => [
-            'label' => $bucket['label'],
-            'count' => $bucket['count'],
-        ], $buckets);
     }
 
     /**

@@ -62,35 +62,45 @@ final class EcomActivityCommerceSummary
             return self::emptySummary();
         }
 
-        $summary = self::summarizeActions($filtered);
-
-        if (($summary['commerce_label'] ?? '') !== 'Order') {
-            return $summary;
-        }
-
-        $payment = $filtered
+        $paymentActions = $filtered
             ->where('action_type', 'payment_success')
-            ->sortByDesc(fn (ActivityEcomUserAction $action) => [
+            ->sortBy(fn (ActivityEcomUserAction $action) => [
                 $action->created_at?->timestamp ?? 0,
                 $action->id,
             ])
-            ->first();
+            ->values();
 
-        if (! $payment instanceof ActivityEcomUserAction) {
-            return $summary;
+        $totalRevenue = 0.0;
+        $matchingPayments = 0;
+        $latestPayment = null;
+
+        foreach ($paymentActions as $payment) {
+            $lines = $dashboard->sumCatalogPaymentLines($payment, $options);
+
+            if ($lines['revenue'] <= 0) {
+                continue;
+            }
+
+            $totalRevenue += $lines['revenue'];
+            $matchingPayments++;
+            $latestPayment = $payment;
         }
 
-        $scopedValue = $dashboard->catalogPaymentAmount($payment, $options);
+        if ($totalRevenue > 0 && $latestPayment instanceof ActivityEcomUserAction) {
+            $roundedTotal = round($totalRevenue, 2);
 
-        if ($scopedValue === null) {
-            return self::emptySummary();
+            return [
+                'commerce_label' => 'Order',
+                'commerce_value' => $roundedTotal,
+                'commerce_has_order' => true,
+                'commerce_display' => self::formatDisplay('Order', $roundedTotal),
+                'commerce_tip' => $matchingPayments > 1
+                    ? 'Order · £'.number_format($roundedTotal, 2).' · '.$matchingPayments.' payments'
+                    : self::tipForStage('payment_success', $latestPayment, $roundedTotal),
+            ];
         }
 
-        $summary['commerce_value'] = $scopedValue;
-        $summary['commerce_display'] = self::formatDisplay('Order', $scopedValue);
-        $summary['commerce_tip'] = self::tipForStage('payment_success', $payment, $scopedValue);
-
-        return $summary;
+        return self::summarizeActions($filtered);
     }
 
     public static function formatDisplay(?string $label, ?float $value): string

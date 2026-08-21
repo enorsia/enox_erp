@@ -46,6 +46,7 @@ class VisitorAnalyticsController extends EcomTrackerAdminController
             'to' => $range['to'],
             'summary' => $overview,
             'duration_buckets' => $overview['duration_buckets'],
+            'duration_distribution' => $this->analytics->buildDurationDistribution($range['from'], $range['until']),
             'new_returning' => $overview['new_returning'],
             'trend' => $overview['trend'],
             'top_visitors' => $overview['top_visitors'],
@@ -92,7 +93,7 @@ class VisitorAnalyticsController extends EcomTrackerAdminController
         $data = match ($section) {
             'trend' => $this->buildTrendDetailData($range, $request, $paginator),
             'new-returning' => ['new_returning' => $this->analytics->buildNewVsReturning($range['from'], $range['until'])],
-            'duration' => ['duration_buckets' => $this->analytics->buildDurationBuckets($range['from'], $range['until'])],
+            'duration' => $this->analytics->buildDurationDistribution($range['from'], $range['until']),
             'visitors' => ['visitors' => $this->analytics->buildVisitorBreakdown($range['from'], $perPage, $range['until'], $extraFilters)],
         };
 

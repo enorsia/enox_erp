@@ -6,8 +6,10 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Support\EcomTrackerViewData;
+use App\Support\SessionDurationBuckets;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
+use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -149,6 +151,7 @@ class EcomTrackerDashboardService
             'engagement' => $this->buildEngagement($range['from'], $range['to'], $extraFilters),
             'has_session_filters' => $extraFilters !== [],
             'visitor_quality' => app(BotTrafficAnalyticsService::class)->summaryOnly($filters),
+            'duration_distribution' => $this->buildDurationDistribution($currentSessions),
         ];
     }
 
@@ -164,6 +167,7 @@ class EcomTrackerDashboardService
             'trend' => $data['trend'],
             'devices' => $data['devices'],
             'engagement' => $data['engagement'],
+            'duration_distribution' => $data['duration_distribution'] ?? null,
         ];
     }
 
@@ -778,13 +782,70 @@ class EcomTrackerDashboardService
      */
     public function catalogPaymentAmount(ActivityEcomUserAction $action, array $options): ?float
     {
-        if ($action->action_type !== 'payment_success') {
-            return null;
+        $totals = $this->sumCatalogPaymentLines($action, $options);
+
+        return $totals['revenue'] > 0 ? $totals['revenue'] : null;
+    }
+
+    /**
+     * @param  Collection<int, string>  $sessionIds
+     * @param  array<string, mixed>  $options
+     * @return array{revenue: float, qty: int, purchases: int}
+     */
+    public function categoryCatalogCommerceTotalsForSessions(
+        Collection $sessionIds,
+        Carbon $from,
+        Carbon $to,
+        array $options = [],
+    ): array {
+        if ($sessionIds->isEmpty()) {
+            return ['revenue' => 0.0, 'qty' => 0, 'purchases' => 0];
         }
 
-        $payload = is_array($action->payment_success) ? $action->payment_success : [];
+        $revenue = 0.0;
+        $qty = 0;
+        $purchases = 0;
+
+        $actions = ActivityEcomUserAction::query()
+            ->select($this->productCatalogActionColumns())
+            ->whereIn('session_id', $sessionIds->all())
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+            ->where('action_type', 'payment_success')
+            ->get();
+
+        foreach ($actions as $action) {
+            $lines = $this->sumCatalogPaymentLines($action, $options);
+
+            if ($lines['revenue'] <= 0) {
+                continue;
+            }
+
+            $revenue += $lines['revenue'];
+            $qty += $lines['qty'];
+            $purchases++;
+        }
+
+        return [
+            'revenue' => round($revenue, 2),
+            'qty' => $qty,
+            'purchases' => $purchases,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     * @return array{revenue: float, qty: int}
+     */
+    public function sumCatalogPaymentLines(ActivityEcomUserAction $action, array $options): array
+    {
+        if ($action->action_type !== 'payment_success') {
+            return ['revenue' => 0.0, 'qty' => 0];
+        }
+
+        $payload = app(TrackerPaymentCheckoutEnricher::class)->enrichPayloadForAction($action);
         $items = $payload['checkout_info']['items'] ?? [];
-        $total = 0.0;
+        $revenue = 0.0;
+        $qty = 0;
 
         if (is_array($items) && $items !== []) {
             foreach ($items as $item) {
@@ -809,14 +870,19 @@ class EcomTrackerDashboardService
                 $purchaseLine = $this->extractPurchaseLineIdentity($item);
 
                 if ($purchaseLine !== null) {
-                    $total += $purchaseLine['revenue'];
+                    $revenue += $purchaseLine['revenue'];
+                    $qty += $purchaseLine['qty'];
                 }
             }
         } elseif ($this->paymentSuccessMatchesCategoryCatalog($action, $options)) {
-            $total = (float) ($payload['amount_paid'] ?? 0);
+            $revenue = round((float) ($payload['amount_paid'] ?? 0), 2);
+            $qty = 1;
         }
 
-        return $total > 0 ? round($total, 2) : null;
+        return [
+            'revenue' => $revenue > 0 ? round($revenue, 2) : 0.0,
+            'qty' => $qty,
+        ];
     }
 
     /**
@@ -2280,6 +2346,27 @@ class EcomTrackerDashboardService
         }
 
         return (int) round($this->totalStaySecondsFromSessions($sessions) / $sessions->count());
+    }
+
+    /**
+     * @return array{
+     *     buckets: array<int, array{label: string, min: int, max: int, count: int, pct: float}>,
+     *     total_sessions: int,
+     *     median_seconds: int,
+     *     median_label: string
+     * }
+     */
+    private function buildDurationDistribution(Collection $sessions): array
+    {
+        $durations = $sessions->map(fn (ActivityEcomUser $session) => $this->effectiveSessionDurationSeconds($session));
+        $distribution = SessionDurationBuckets::withCounts($durations);
+
+        return [
+            'buckets' => $distribution['buckets'],
+            'total_sessions' => $distribution['total_sessions'],
+            'median_seconds' => $distribution['median_seconds'],
+            'median_label' => $this->visitorAnalytics->formatDuration($distribution['median_seconds']),
+        ];
     }
 
     private function formatPreviousPeriodLabel(Carbon $from, Carbon $to): string

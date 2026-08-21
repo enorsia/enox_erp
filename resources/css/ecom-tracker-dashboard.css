@@ -1904,6 +1904,67 @@
     height: clamp(170px, 28vh, 240px);
 }
 
+.etd-chart-wrap--duration-dist {
+    min-height: 11rem;
+    height: clamp(180px, 24vh, 220px);
+}
+
+.etd-duration-summary {
+    font-size: 0.875rem;
+    color: var(--etd-muted, #64748b);
+}
+
+.etd-duration-buckets {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.etd-duration-bucket__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.35rem;
+    font-size: 0.8125rem;
+}
+
+.etd-duration-bucket__label {
+    font-weight: 500;
+    color: var(--etd-text, #1e293b);
+}
+
+.dark .etd-duration-bucket__label {
+    color: #e2e8f0;
+}
+
+.etd-duration-bucket__stats {
+    font-variant-numeric: tabular-nums;
+    color: var(--etd-muted, #64748b);
+}
+
+.etd-duration-bucket__pct {
+    margin-left: 0.15rem;
+}
+
+.etd-duration-bucket__bar {
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--etd-accent) 12%, transparent);
+    overflow: hidden;
+}
+
+.etd-duration-bucket__fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--etd-accent) 78%, transparent);
+}
+
+.etd-panel-note--duration {
+    font-size: 0.75rem;
+}
+
 @media (min-width: 1024px) {
     .etd-panel--device-browser-full.etd-panel--acquisition {
         display: block;

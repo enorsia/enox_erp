@@ -92,3 +92,53 @@ test('catalog commerce summary ignores orders outside the filtered category', fu
 
     expect($summary['commerce_display'])->toBe('—');
 });
+
+test('catalog commerce summary sums all category-scoped payments in a session', function () {
+    $dashboard = app(\App\Services\EcomTrackerDashboardService::class);
+    $actions = collect([
+        new ActivityEcomUserAction([
+            'id' => 21,
+            'action_type' => 'payment_success',
+            'payment_success' => [
+                'amount_paid' => 24.99,
+                'checkout_info' => [
+                    'items' => [[
+                        'product_name' => 'Jumpsuit A',
+                        'product_code' => 'JMP-1',
+                        'category_name' => 'Jumpsuits',
+                        'department_name' => 'Women',
+                        'qty' => 1,
+                        'price' => 24.99,
+                    ]],
+                ],
+            ],
+            'created_at' => now()->subMinutes(10),
+        ]),
+        new ActivityEcomUserAction([
+            'id' => 22,
+            'action_type' => 'payment_success',
+            'payment_success' => [
+                'amount_paid' => 16.00,
+                'checkout_info' => [
+                    'items' => [[
+                        'product_name' => 'Jumpsuit B',
+                        'product_code' => 'JMP-2',
+                        'category_name' => 'Jumpsuits',
+                        'department_name' => 'Women',
+                        'qty' => 1,
+                        'price' => 16.00,
+                    ]],
+                ],
+            ],
+            'created_at' => now()->subMinutes(5),
+        ]),
+    ]);
+
+    $summary = EcomActivityCommerceSummary::summarizeCatalogActions($actions, [
+        'department' => 'Women',
+        'category' => 'Jumpsuits',
+    ], $dashboard);
+
+    expect($summary['commerce_display'])->toBe('Order · £40.99')
+        ->and($summary['commerce_value'])->toBe(40.99);
+});

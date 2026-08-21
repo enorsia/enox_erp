@@ -430,21 +430,14 @@
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
         ], fn ($value) => filled($value))),
-        'gridClass' => 'etd-kpi-grid--6',
-        'extraMetrics' => [
-            [
-                'label' => 'Returning visitors',
-                'value' => max(0, (int) ($kpiByLabel->get('Sessions')['value'] ?? 0) - (int) ($kpiByLabel->get('Unique visitors')['value'] ?? 0)),
-            ],
-            [
-                'label' => 'Avg session duration',
-                'value' => $kpiByLabel->get('Avg stay time')['formatted'] ?? '0s',
-            ],
-            [
-                'label' => 'Total time on site',
-                'value' => $kpiByLabel->get('Total stay time')['formatted'] ?? '0s',
-            ],
-        ],
+        'gridClass' => 'etd-kpi-grid--3',
+    ])
+
+    @include('ecom_tracker.partials.session-duration-distribution', [
+        'distribution' => $d['duration_distribution'] ?? [],
+        'detailsUrl' => $page['visitorDetailLink']('duration'),
+        'chartId' => 'etdDurationDistChart',
+        'class' => 'mb-5',
     ])
 </div>
 

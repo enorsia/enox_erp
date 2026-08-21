@@ -7,6 +7,7 @@ use App\Models\ActivityEcomUserAction;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
+use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
@@ -21,6 +22,7 @@ class TrackIngestService
         private VisitorSessionResolver $visitorSessionResolver,
         private TrackerClientContextResolver $clientContextResolver,
         private BotContextPersister $botContextPersister,
+        private TrackerPaymentCheckoutEnricher $paymentCheckoutEnricher,
     ) {}
 
     /**
@@ -353,7 +355,13 @@ class TrackIngestService
         }
 
         if ($actionType === 'payment_success' && isset($event['payment_success'])) {
-            $row['payment_success'] = json_encode($event['payment_success']);
+            $payload = is_array($event['payment_success']) ? $event['payment_success'] : [];
+            $payload = $this->paymentCheckoutEnricher->enrichPayload(
+                $sessionId,
+                $payload,
+                TrackerTime::formatUtc($event['created_at'] ?? TrackerTime::nowUtc()),
+            );
+            $row['payment_success'] = json_encode($payload);
         }
 
         if (($row['department_name'] ?? '') === '' && ($actionType === 'category_view' || ! empty($row['category_name']))) {

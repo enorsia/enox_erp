@@ -56,9 +56,14 @@
 
 @endsection
 
-@if (in_array($section, ['trend', 'new-returning'], true))
+@if (in_array($section, ['trend', 'new-returning', 'duration'], true))
     @push('js')
-        <script>window.visitorAnalyticsData = @json($data);</script>
+        @php
+            $visitorAnalyticsChartData = $section === 'duration'
+                ? ['duration_distribution' => $data]
+                : $data;
+        @endphp
+        <script>window.visitorAnalyticsData = @json($visitorAnalyticsChartData);</script>
         @vite('resources/js/pages/visitor-analytics.js')
     @endpush
 @endif

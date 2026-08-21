@@ -92,7 +92,13 @@ class EcomActivityController extends EcomTrackerAdminController
         $visitorQualitySummary = $this->visitorQualityCounts($request, $range);
         $filterOptionCounts = app(EcomActivityFilterCounts::class)->counts(
             $request,
-            fn (Request $filterRequest, array $except) => $this->buildIndexQuery($filterRequest, $this->resolveActivityRange($filterRequest), $except, forCounts: true),
+            fn (Request $filterRequest, array $except) => $this->buildIndexQuery(
+                $filterRequest,
+                $this->resolveActivityRange($filterRequest),
+                $except,
+                forCounts: true,
+            ),
+            fn (Request $filterRequest, array $except) => $this->deferredHasOrderFacetCounts($filterRequest, $except),
         );
         $utmFilterState = TrackerUtmFilter::formState(
             $request->input('utm_source'),
@@ -141,7 +147,10 @@ class EcomActivityController extends EcomTrackerAdminController
         $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
             $range['from'],
             $range['to'],
-            EcomActivityFocus::sessionFiltersFromRequest($request),
+            array_merge(
+                EcomActivityFocus::sessionFiltersFromRequest($request),
+                EcomActivityFocus::productCatalogFiltersFromRequest($request),
+            ),
             $range['period'],
         );
 
@@ -352,6 +361,7 @@ class EcomActivityController extends EcomTrackerAdminController
                 $request,
                 $this->dashboardService,
                 $this->funnelSessions,
+                $except,
             );
         }
 
@@ -433,6 +443,7 @@ class EcomActivityController extends EcomTrackerAdminController
                 $request,
                 $this->dashboardService,
                 $range['period'] ?? $request->input('period', '24h'),
+                $except,
             );
         }
 
@@ -473,6 +484,34 @@ class EcomActivityController extends EcomTrackerAdminController
             ->orderByLatestActivity()
             ->paginate($perPage)
             ->withQueryString();
+    }
+
+    /**
+     * @param  array<int, string>  $except
+     * @return array{1: int, 0: int}
+     */
+    private function deferredHasOrderFacetCounts(Request $request, array $except): array
+    {
+        $range = $this->resolveActivityRange($request);
+        $baseFilters = array_merge(
+            EcomActivityFocus::sessionFiltersFromRequest($request, $except),
+            EcomActivityFocus::productCatalogFiltersFromRequest($request, $except),
+        );
+
+        return [
+            '1' => $this->dashboardService->productCatalogSessionIds(
+                $range['from'],
+                $range['to'],
+                array_merge($baseFilters, ['has_order' => '1']),
+                $range['period'],
+            )->count(),
+            '0' => $this->dashboardService->productCatalogSessionIds(
+                $range['from'],
+                $range['to'],
+                array_merge($baseFilters, ['has_order' => '0']),
+                $range['period'],
+            )->count(),
+        ];
     }
 
     /**

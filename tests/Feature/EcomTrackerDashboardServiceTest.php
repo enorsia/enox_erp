@@ -1194,6 +1194,48 @@ test('ecom tracker dashboard includes visitor quality summary', function () {
     expect($data['visitor_quality'])->toHaveKeys(['real_shoppers', 'automated_traffic', 'not_classified']);
 });
 
+test('ecom tracker dashboard includes session duration distribution', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-short',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-20 09:00:00',
+        'updated_at' => '2026-07-20 09:01:00',
+        'last_active_at' => '2026-07-20 09:01:00',
+        'session_duration_seconds' => 45,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-long',
+        'device_type' => 'mobile',
+        'created_at' => '2026-07-20 10:00:00',
+        'updated_at' => '2026-07-20 10:10:00',
+        'last_active_at' => '2026-07-20 10:10:00',
+        'session_duration_seconds' => 600,
+    ]);
+
+    $data = $service->getDashboardData(['period' => '24h']);
+    $distribution = $data['duration_distribution'];
+
+    expect($distribution)->toHaveKeys(['buckets', 'total_sessions', 'median_seconds', 'median_label'])
+        ->and($distribution['total_sessions'])->toBe(2);
+
+    $byLabel = collect($distribution['buckets'])->keyBy('label');
+    expect($byLabel['0–1 min']['count'])->toBe(1)
+        ->and($byLabel['1–5 min']['count'])->toBe(1)
+        ->and($byLabel['0–1 min']['pct'])->toBe(50.0);
+
+    $filtered = $service->getDashboardData(['period' => '24h', 'device_type' => 'mobile']);
+    expect($filtered['duration_distribution']['total_sessions'])->toBe(1);
+
+    Carbon::setTestNow();
+});
+
 test('ecom tracker dashboard audience kpis align with user activity session scope', function () {
     $service = app(EcomTrackerDashboardService::class);
 

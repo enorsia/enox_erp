@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\TrackerUtmFilter;
+use App\Support\EcomActivityFocus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -19,14 +20,20 @@ class EcomActivityFilterCounts
 
     /**
      * @param  callable(Request, array<int, string>): Builder  $queryBuilder
+     * @param  null|callable(Request, array<int, string>): array<string, int>  $deferredHasOrderCounter
      * @return array<string, array<string, int>>
      */
-    public function counts(Request $request, callable $queryBuilder): array
+    public function counts(Request $request, callable $queryBuilder, ?callable $deferredHasOrderCounter = null): array
     {
         $counts = [];
 
         foreach (self::DIMENSIONS as $dimension) {
-            $counts[$dimension] = $this->countDimension($request, $queryBuilder, $dimension);
+            $counts[$dimension] = $this->countDimension(
+                $request,
+                $queryBuilder,
+                $dimension,
+                $deferredHasOrderCounter,
+            );
         }
 
         return $counts;
@@ -34,10 +41,15 @@ class EcomActivityFilterCounts
 
     /**
      * @param  callable(Request, array<int, string>): Builder  $queryBuilder
+     * @param  null|callable(Request, array<int, string>): array<string, int>  $deferredHasOrderCounter
      * @return array<string, int>
      */
-    private function countDimension(Request $request, callable $queryBuilder, string $dimension): array
-    {
+    private function countDimension(
+        Request $request,
+        callable $queryBuilder,
+        string $dimension,
+        ?callable $deferredHasOrderCounter = null,
+    ): array {
         $query = $queryBuilder($request, [$dimension]);
 
         return match ($dimension) {
@@ -46,14 +58,27 @@ class EcomActivityFilterCounts
                 '1' => (clone $query)->where('is_logged_in', true)->count(),
                 '0' => (clone $query)->where('is_logged_in', false)->count(),
             ],
-            'has_order' => [
-                '1' => (clone $query)->whereHas('actions', fn (Builder $actions) => $actions->where('action_type', 'payment_success'))->count(),
-                '0' => (clone $query)->whereDoesntHave('actions', fn (Builder $actions) => $actions->where('action_type', 'payment_success'))->count(),
-            ],
+            'has_order' => $this->countHasOrder($request, $query, $deferredHasOrderCounter),
             'utm_source' => TrackerUtmFilter::sourceCountsFrom($query),
             'utm_medium' => TrackerUtmFilter::mediumCountsFrom($query),
             default => [],
         };
+    }
+
+    /**
+     * @param  null|callable(Request, array<int, string>): array<string, int>  $deferredHasOrderCounter
+     * @return array<string, int>
+     */
+    private function countHasOrder(Request $request, Builder $query, ?callable $deferredHasOrderCounter = null): array
+    {
+        if ($deferredHasOrderCounter !== null && EcomActivityFocus::shouldDeferHasOrderFilter($request)) {
+            return $deferredHasOrderCounter($request, ['has_order']);
+        }
+
+        return [
+            '1' => (clone $query)->whereHas('actions', fn (Builder $actions) => $actions->where('action_type', 'payment_success'))->count(),
+            '0' => (clone $query)->whereDoesntHave('actions', fn (Builder $actions) => $actions->where('action_type', 'payment_success'))->count(),
+        ];
     }
 
     /**

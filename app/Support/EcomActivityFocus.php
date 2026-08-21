@@ -280,6 +280,7 @@ final class EcomActivityFocus
         Request $request,
         EcomTrackerDashboardService $dashboardService,
         EcomActivityFunnelSessions $funnelSessions,
+        array $except = [],
     ): void {
         if (! self::isValid($focus)) {
             return;
@@ -307,9 +308,9 @@ final class EcomActivityFocus
         if (! empty($definition['action_types'])) {
             if (
                 in_array($focus, ['products', 'categories'], true)
-                && self::productCatalogFiltersFromRequest($request) !== []
+                && self::productCatalogFiltersFromRequest($request, $except) !== []
             ) {
-                self::applyProductCatalogConstraints($query, $from, $to, $request, $dashboardService, $period);
+                self::applyProductCatalogConstraints($query, $from, $to, $request, $dashboardService, $period, $except);
 
                 return;
             }
@@ -320,7 +321,7 @@ final class EcomActivityFocus
                 ->whereIn('action_type', $types));
 
             if ($focus === 'products' || $focus === 'categories') {
-                self::applyProductCatalogConstraints($query, $from, $to, $request, $dashboardService, $period);
+                self::applyProductCatalogConstraints($query, $from, $to, $request, $dashboardService, $period, $except);
             }
 
             return;
@@ -330,9 +331,10 @@ final class EcomActivityFocus
     /**
      * @return array<string, mixed>
      */
-    public static function sessionFiltersFromRequest(Request $request): array
+    public static function sessionFiltersFromRequest(Request $request, array $except = []): array
     {
         $keys = array_merge(self::SHARED_SESSION_FILTER_KEYS, self::DASHBOARD_AUDIENCE_FILTER_KEYS);
+        $keys = array_values(array_diff($keys, $except));
 
         return array_filter(
             array_intersect_key($request->only($keys), array_flip($keys)),
@@ -354,22 +356,27 @@ final class EcomActivityFocus
         return self::productCatalogFiltersFromRequest($request) !== [];
     }
 
-    public static function productCatalogFiltersFromRequest(Request $request): array
+    public static function productCatalogFiltersFromRequest(Request $request, array $except = []): array
     {
-        return array_filter([
-            'search' => $request->input('search'),
-            'product_code' => $request->input('product_code'),
-            'product_name' => $request->input('product_name'),
-            'category' => $request->input('category'),
-            'department' => $request->input('department'),
-            'color' => $request->input('color'),
-            'size' => $request->input('size'),
-            'activity' => $request->input('activity'),
-            'has_purchases' => $request->input('has_purchases'),
-            'has_views' => $request->input('has_views'),
-            'has_adds' => $request->input('has_adds'),
-            'event_scenario' => $request->input('event_scenario'),
-        ], fn ($value) => filled($value));
+        $keys = array_values(array_diff([
+            'search',
+            'product_code',
+            'product_name',
+            'category',
+            'department',
+            'color',
+            'size',
+            'activity',
+            'has_purchases',
+            'has_views',
+            'has_adds',
+            'event_scenario',
+        ], $except));
+
+        return array_filter(
+            array_intersect_key($request->only($keys), array_flip($keys)),
+            fn ($value) => filled($value),
+        );
     }
 
     public static function showCatalogFiltersInDrawer(Request $request): bool
@@ -549,10 +556,11 @@ final class EcomActivityFocus
         Request $request,
         EcomTrackerDashboardService $dashboardService,
         ?string $period,
+        array $except = [],
     ): void {
         $productFilters = array_merge(
-            self::sessionFiltersFromRequest($request),
-            self::productCatalogFiltersFromRequest($request),
+            self::sessionFiltersFromRequest($request, $except),
+            self::productCatalogFiltersFromRequest($request, $except),
         );
 
         if ($productFilters === []) {
@@ -1126,6 +1134,24 @@ final class EcomActivityFocus
         if ($row === null) {
             return [];
         }
+
+        $filters = array_merge(
+            self::sessionFiltersFromRequest($request),
+            self::productCatalogFiltersFromRequest($request),
+        );
+        $catalogOptions = self::productCatalogFiltersFromRequest($request);
+        $dashboard = app(EcomTrackerDashboardService::class);
+        $sessionIds = $dashboard->productCatalogSessionIds($from, $to, $filters, $period);
+        $commerceTotals = $dashboard->categoryCatalogCommerceTotalsForSessions(
+            $sessionIds,
+            $from,
+            $to,
+            $catalogOptions,
+        );
+
+        $row['sale_amount'] = $commerceTotals['revenue'];
+        $row['sale_items'] = $commerceTotals['qty'];
+        $row['purchases'] = $commerceTotals['purchases'];
 
         return self::funnelSummaryMetricsFromRow($row);
     }

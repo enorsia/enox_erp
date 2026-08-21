@@ -124,6 +124,16 @@ test('category performance summary metrics use shared funnel formatter', functio
             'sale_items' => 3,
             'sale_amount' => 45.0,
         ]);
+    $dashboard->shouldReceive('productCatalogSessionIds')
+        ->once()
+        ->andReturn(collect(['session-a']));
+    $dashboard->shouldReceive('categoryCatalogCommerceTotalsForSessions')
+        ->once()
+        ->andReturn([
+            'revenue' => 45.0,
+            'qty' => 3,
+            'purchases' => 1,
+        ]);
 
     app()->instance(EcomTrackerDashboardService::class, $dashboard);
 
@@ -242,4 +252,22 @@ test('catalog constraints apply on non catalog focus when department is set', fu
     ]);
 
     expect(EcomActivityFocus::shouldApplyCatalogConstraintsInIndexQuery('devices', $request))->toBeTrue();
+});
+
+test('session and catalog filters exclude facet dimension when computing option counts', function () {
+    $request = Request::create('/', 'GET', [
+        'focus' => 'categories',
+        'department' => 'Women',
+        'category' => 'Jumpsuits',
+        'device_type' => 'mobile',
+        'logged_in' => '1',
+    ]);
+
+    expect(EcomActivityFocus::sessionFiltersFromRequest($request, ['device_type']))
+        ->not->toHaveKey('device_type')
+        ->toHaveKeys(['logged_in']);
+
+    expect(EcomActivityFocus::productCatalogFiltersFromRequest($request, ['category']))
+        ->not->toHaveKey('category')
+        ->toHaveKey('department');
 });

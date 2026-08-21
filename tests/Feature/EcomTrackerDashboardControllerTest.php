@@ -53,9 +53,9 @@ test('store dashboard shows custom date picker only when period is custom', func
         ->assertSee('value="2026-07-01"', false)
         ->assertSee('value="2026-07-15"', false)
         ->assertSee('Session quality', false)
-        ->assertSee('Returning visitors', false)
-        ->assertSee('Avg session duration', false)
-        ->assertSee('Total time on site', false);
+        ->assertSee('Session duration distribution', false)
+        ->assertSee('etdDurationDistChart', false)
+        ->assertDontSee('Total time on site', false);
 });
 
 test('store dashboard kpi cards link to user activity drill down', function () {
