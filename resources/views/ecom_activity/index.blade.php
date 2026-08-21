@@ -4,63 +4,16 @@
 
 @section('content')
 @php
-    use App\Support\TrackerTime;
-    use Carbon\Carbon;
-
-    $today = TrackerTime::localNow()->copy()->startOfDay();
-    $todayStr = $today->toDateString();
-    $dateFrom = request('date_from');
-    $dateTo = request('date_to');
-    $period = request('period', '24h');
-    $activePreset = $period === 'all' ? 'all' : '24h';
-    $rangeLabel = $rangeLabel ?? ($period === 'all' ? 'All sessions' : TrackerTime::todayPresetLabel());
-
-    if ($period !== 'all' && filled($dateFrom) && filled($dateTo)) {
-        $from = Carbon::parse($dateFrom, TrackerTime::timezone())->startOfDay();
-        $to = Carbon::parse($dateTo, TrackerTime::timezone())->startOfDay();
-
-        if ($from->equalTo($today->copy()->subDays(6)) && $to->equalTo($today)) {
-            $activePreset = '7d';
-            $rangeLabel = 'Last 7 days';
-        } elseif ($from->equalTo($today->copy()->subDays(29)) && $to->equalTo($today)) {
-            $activePreset = '30d';
-            $rangeLabel = 'Last 30 days';
-        } elseif ($from->equalTo($today->copy()->subDays(89)) && $to->equalTo($today)) {
-            $activePreset = '90d';
-            $rangeLabel = 'Last 90 days';
-        } elseif ($period === 'yesterday' && $from->equalTo($to)) {
-            $activePreset = 'custom';
-            $rangeLabel = TrackerTime::yesterdayPresetLabel();
-        } else {
-            $activePreset = 'custom';
-            $rangeLabel = $from->format('d M Y').' – '.$to->format('d M Y');
-        }
-    } elseif (filled($dateFrom) || filled($dateTo)) {
-        $activePreset = 'custom';
-        $rangeLabel = 'Custom range';
-    }
-
-    $baseQuery = request()->except(['date_from', 'date_to', 'page', 'period']);
-    $presetUrl = fn (string $preset) => match ($preset) {
-        '24h' => route('admin.ecom-activity.index', array_merge($baseQuery, ['period' => '24h'])),
-        'all' => route('admin.ecom-activity.index', array_merge($baseQuery, ['period' => 'all'])),
-        '7d' => route('admin.ecom-activity.index', array_merge($baseQuery, [
-            'period' => '7d',
-            'date_from' => $today->copy()->subDays(6)->toDateString(),
-            'date_to' => $todayStr,
-        ])),
-        '30d' => route('admin.ecom-activity.index', array_merge($baseQuery, [
-            'period' => '30d',
-            'date_from' => $today->copy()->subDays(29)->toDateString(),
-            'date_to' => $todayStr,
-        ])),
-        '90d' => route('admin.ecom-activity.index', array_merge($baseQuery, [
-            'period' => '90d',
-            'date_from' => $today->copy()->subDays(89)->toDateString(),
-            'date_to' => $todayStr,
-        ])),
-        default => route('admin.ecom-activity.index', $baseQuery),
+    $period = $period ?? request('period', '24h');
+    $activePreset = match ($period) {
+        'yesterday', '7d', '30d', 'custom' => $period,
+        default => '24h',
     };
+    $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d'], true) ? $period : '24h';
+    $baseQuery = request()->except(['date_from', 'date_to', 'period', 'page']);
+    $dateFrom = $dateFrom ?? request('date_from', '');
+    $dateTo = $dateTo ?? request('date_to', '');
+    $rangeLabel = $rangeLabel ?? ($range['label'] ?? '');
 
     $sidebarFilterCount = $sidebarFilterCount ?? \App\Support\EcomActivityFocus::activeFilterCount(request());
     $showCatalogFilters = $showCatalogFilters ?? in_array(request('focus'), ['products', 'categories'], true);
@@ -74,8 +27,8 @@
         'activityFiltersIncludeDateRange' => false,
         'preservePeriodParams' => true,
         'period' => $period,
-        'dateFrom' => $dateFrom ?? '',
-        'dateTo' => $dateTo ?? '',
+        'dateFrom' => $dateFrom,
+        'dateTo' => $dateTo,
         'includeVisitorTrust' => false,
         'includeCountry' => false,
         'includeSessionSearch' => ! $showCatalogFilters,
@@ -97,8 +50,12 @@
         <div class="etd-page-header-bar"
              x-data="{
                 presetKey: '{{ $activePreset }}',
-                dateFrom: '{{ $dateFrom ?? '' }}',
-                dateTo: '{{ $dateTo ?? '' }}',
+                basePreset: '{{ $basePreset }}',
+                dateFrom: '{{ $dateFrom }}',
+                dateTo: '{{ $dateTo }}',
+                toggleCustom() {
+                    this.presetKey = this.presetKey === 'custom' ? this.basePreset : 'custom';
+                },
                 applyCustom() {
                     const url = new URL(window.location.href);
                     url.searchParams.delete('page');
@@ -138,21 +95,19 @@
             </div>
 
             <div class="etd-page-header-right">
-                <div class="etd-header-range-row">
-                    @if (filled($backUrl ?? null))
-                        @include('ecom_tracker.partials.header-back-button', [
-                            'url' => $backUrl,
-                            'label' => 'Dashboard',
-                        ])
-                    @endif
-                    <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Session date range">
-                        <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="{{ TrackerTime::todayPresetLabel() }}">{{ TrackerTime::todayPresetButtonLabel() }}</a>
-                        <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
-                        <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
-                        <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
-                        <button type="button" class="etd-segmented-btn {{ $activePreset === 'custom' ? 'active' : '' }}" aria-label="Custom date range" @click="presetKey = 'custom'">Custom</button>
-                    </div>
-                </div>
+                @if (filled($backUrl ?? null))
+                    @include('ecom_tracker.partials.header-back-button', [
+                        'url' => $backUrl,
+                        'label' => 'Dashboard',
+                    ])
+                @endif
+
+                @include('ecom_tracker.partials.dashboard-period-controls', [
+                    'baseQuery' => $baseQuery,
+                    'range' => $range,
+                    'period' => $period,
+                    'routeName' => 'admin.ecom-activity.index',
+                ])
 
                 <div class="etd-header-actions">
                     @include('ecom_tracker.partials.header-reset-button', [
@@ -173,12 +128,13 @@
                  x-collapse
                  x-effect="if (presetKey === 'custom') { $nextTick(() => window.refreshEtdFilterControls?.($el)) }"
                  class="etd-custom-dates etd-custom-dates--inline etd-date-range"
-                 data-etd-date-range>
+                 data-etd-date-range
+                 @if ($activePreset !== 'custom') style="display: none" @endif>
                 <input type="text"
                        x-model="dateFrom"
                        data-range="from"
-                       data-default="{{ $dateFrom ?? '' }}"
-                       value="{{ $dateFrom ?? '' }}"
+                       data-default="{{ $dateFrom }}"
+                       value="{{ $dateFrom }}"
                        placeholder="From date"
                        readonly
                        class="etd-flatpickr-date f-input etd-date-input"
@@ -187,8 +143,8 @@
                 <input type="text"
                        x-model="dateTo"
                        data-range="to"
-                       data-default="{{ $dateTo ?? '' }}"
-                       value="{{ $dateTo ?? '' }}"
+                       data-default="{{ $dateTo }}"
+                       value="{{ $dateTo }}"
                        placeholder="To date"
                        readonly
                        class="etd-flatpickr-date f-input etd-date-input"

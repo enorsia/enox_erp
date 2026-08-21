@@ -190,7 +190,17 @@ class EcomActivityController extends EcomTrackerAdminController
             'rowMetrics' => $rowMetrics,
             'emptyMessage' => $emptyMessage,
             'clearFocusUrl' => $clearFocusUrl,
+            'range' => [
+                'from' => $range['from'],
+                'to' => $range['to'],
+                'label' => $range['label'],
+            ],
             'rangeLabel' => $range['label'],
+            'period' => ($range['period'] ?? $request->input('period', '24h')) === '90d'
+                ? '30d'
+                : ($range['period'] ?? $request->input('period', '24h')),
+            'dateFrom' => $request->input('date_from', ''),
+            'dateTo' => $request->input('date_to', ''),
             'hasFocus' => EcomActivityFocus::isValid($focus),
             'backUrl' => $backUrl,
             'drillDownContext' => $activityListContext,
