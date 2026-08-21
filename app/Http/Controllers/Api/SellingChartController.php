@@ -24,12 +24,12 @@ class SellingChartController extends Controller
                 ->pluck('platform')
                 ->unique()
                 ->values();
+
             $all_count = $all_histories->count() ?? 0;
             $applied_count = $all_histories->where('status', 1)->count() ?? 0;
             $pending_count = $all_histories->where('status', 0)->count() ?? 0;
 
             $query = SellingChartDiscountHistory::query();
-
 
             $query->when($search, function ($q) use ($search) {
                 $q->where(function ($query) use ($search) {
