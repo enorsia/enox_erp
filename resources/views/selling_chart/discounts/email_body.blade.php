@@ -193,9 +193,9 @@
                                     <td>{{ $discount['range'] ?: '—' }}</td>
                                     <td rowspan="{{ $discountCount }}">{{ $item['platform'] }}</td>
                                     @if (!$hasRange)
-                                        <td rowspan="{{ $discountCount }}" class="num discount-price">{{$discount['discount']}}</td>
+                                        <td rowspan="{{ $discountCount }}" class="num discount-price">{{number_format($discount['discount'], 2)}}</td>
                                     @else
-                                        <td class="num discount-price">{{$discount['discount']}}</td>
+                                        <td class="num discount-price">{{number_format($discount['discount'], 2)}}</td>
                                     @endif
 
                                 </tr>
@@ -206,7 +206,7 @@
                                     </td>
                                     <td>{{ $discount['range'] ?: '—' }}</td>
                                     @if ($hasRange)
-                                        <td class="num discount-price">{{$discount['discount']}}</td>
+                                        <td class="num discount-price">{{number_format($discount['discount'], 2)}}</td>
                                     @endif
                                 </tr>
                             @endif
