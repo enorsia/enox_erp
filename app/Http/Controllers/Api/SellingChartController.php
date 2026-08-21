@@ -19,11 +19,14 @@ class SellingChartController extends Controller
             $status = $request->status;
             $perPage = $request->per_page ?? 30;
 
-            $platforms = SellingChartDiscountHistory::get()
-                ->map(fn($item) => json_decode($item->items, true))
+            $all_histories = SellingChartDiscountHistory::get();
+            $platforms =  $all_histories->map(fn($item) => json_decode($item->items, true))
                 ->pluck('platform')
                 ->unique()
                 ->values();
+            $all_count = $all_histories->count() ?? 0;
+            $applied_count = $all_histories->where('status', 1)->count() ?? 0;
+            $pending_count = $all_histories->where('status', 0)->count() ?? 0;
 
             $query = SellingChartDiscountHistory::query();
 
@@ -48,6 +51,11 @@ class SellingChartController extends Controller
                 'status' => true,
                 'data' => $discountHistories->items(),
                 'platforms' => $platforms,
+                'total_count' => [
+                    'all' => $all_count,
+                    'applied' => $applied_count,
+                    'pending' => $pending_count,
+                ],
                 'pagination' => [
                     'current_page' => $discountHistories->currentPage(),
                     'per_page' => $discountHistories->perPage(),
