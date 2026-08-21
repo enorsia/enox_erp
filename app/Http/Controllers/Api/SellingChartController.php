@@ -15,18 +15,31 @@ class SellingChartController extends Controller
     {
         try {
             $search = $request->search;
+            $platform = $request->platform;
             $status = $request->status;
             $perPage = $request->per_page ?? 30;
 
+            $platforms = SellingChartDiscountHistory::get()
+                ->map(fn($item) => json_decode($item->items, true))
+                ->pluck('platform')
+                ->unique()
+                ->values();
+
             $query = SellingChartDiscountHistory::query();
+
 
             $query->when($search, function ($q) use ($search) {
                 $q->where(function ($query) use ($search) {
                     $query->where('items->style', 'like', "%{$search}%")
-                        ->orWhere('items->product_code', 'like', "%{$search}%")
-                        ->orWhere('items->platform', 'like', "%{$search}%");
+                        ->orWhere('items->product_code', 'like', "%{$search}%");
                 });
-            });
+            })
+                ->when($platform, function ($q) use ($platform) {
+                    $q->where('items->platform', 'like', "%{$platform}%");
+                })
+                ->when($status !== null && $status !== '', function ($q) use ($status) {
+                    $q->where('status', $status);
+                });
 
             $discountHistories = $query->orderBy('id', 'desc')
                 ->paginate($perPage);
@@ -34,6 +47,7 @@ class SellingChartController extends Controller
             $response = [
                 'status' => true,
                 'data' => $discountHistories->items(),
+                'platforms' => $platforms,
                 'pagination' => [
                     'current_page' => $discountHistories->currentPage(),
                     'per_page' => $discountHistories->perPage(),
