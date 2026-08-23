@@ -1023,7 +1023,7 @@ final class EcomActivityFocus
                     ['label' => 'Matching sessions', 'value' => $sessionCount],
                     ['label' => 'At stake', 'value' => '£'.number_format($atStake, 2)],
                 ],
-                self::abandonmentSummaryExtras($focus, $request, $from, $to, $period),
+                self::abandonmentSummaryExtras($funnelMetrics),
             ),
             'payment_success' => array_merge(
                 [['label' => 'Matching sessions', 'value' => $sessionCount]],
@@ -1031,7 +1031,7 @@ final class EcomActivityFocus
             ),
             'conversion' => array_merge(
                 [['label' => 'Matching sessions', 'value' => $sessionCount]],
-                self::saleConversionSummaryMetrics($request, $from, $to, $period),
+                self::conversionSummaryMetrics($sessionCount, $funnelMetrics, $request, $from, $to, $period),
             ),
             'categories' => array_merge(
                 [['label' => 'Matching sessions', 'value' => $sessionCount]],
@@ -1237,33 +1237,18 @@ final class EcomActivityFocus
     }
 
     /**
+     * @param  array<string, array<string, mixed>>  $funnelMetrics
      * @return array<int, array{label: string, value: string}>
      */
-    private static function saleConversionSummaryMetrics(
+    private static function conversionSummaryMetrics(
+        int $sessionCount,
+        array $funnelMetrics,
         ?Request $request,
         ?Carbon $from,
         ?Carbon $to,
         ?string $period,
     ): array {
-        if ($request === null || $from === null || $to === null) {
-            return [];
-        }
-
-        $row = app(EcomTrackerDashboardService::class)->saleConversionSummaryForFilters(
-            $from,
-            $to,
-            self::sessionFiltersFromRequest($request),
-            $period,
-        );
-
-        if ($row === null) {
-            return [];
-        }
-
-        return [
-            ['label' => 'Sold qty', 'value' => number_format((int) ($row['qty'] ?? 0))],
-            ['label' => 'Sale', 'value' => '£'.number_format((float) ($row['revenue'] ?? 0), 2)],
-        ];
+        return self::saleTotalsSummaryMetrics(self::paymentSaleTotalsFromFunnelMetrics($funnelMetrics));
     }
 
     /**
@@ -1272,44 +1257,48 @@ final class EcomActivityFocus
      */
     private static function paymentSuccessSummaryMetrics(int $sessionCount, array $funnelMetrics): array
     {
-        $soldQty = (int) collect($funnelMetrics)->sum(fn (array $row) => (int) ($row['qty'] ?? 0));
-        $sale = round(collect($funnelMetrics)->sum(fn (array $row) => (float) ($row['value'] ?? 0)), 2);
+        $totals = self::paymentSaleTotalsFromFunnelMetrics($funnelMetrics);
 
+        return array_merge(
+            [['label' => 'Orders', 'value' => number_format($sessionCount)]],
+            self::saleTotalsSummaryMetrics($totals),
+        );
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $funnelMetrics
+     * @return array{qty: int, revenue: float}
+     */
+    private static function paymentSaleTotalsFromFunnelMetrics(array $funnelMetrics): array
+    {
         return [
-            ['label' => 'Orders', 'value' => number_format($sessionCount)],
-            ['label' => 'Sold qty', 'value' => number_format($soldQty)],
-            ['label' => 'Sale', 'value' => '£'.number_format($sale, 2)],
+            'qty' => (int) collect($funnelMetrics)->sum(fn (array $row) => (int) ($row['qty'] ?? 0)),
+            'revenue' => round(collect($funnelMetrics)->sum(fn (array $row) => (float) ($row['value'] ?? 0)), 2),
         ];
     }
 
     /**
+     * @param  array{qty: int, revenue: float}  $totals
      * @return array<int, array{label: string, value: string}>
      */
-    private static function abandonmentSummaryExtras(
-        ?string $focus,
-        ?Request $request,
-        ?Carbon $from,
-        ?Carbon $to,
-        ?string $period,
-    ): array {
-        if ($focus === null || $request === null || $from === null || $to === null) {
-            return [];
-        }
+    private static function saleTotalsSummaryMetrics(array $totals): array
+    {
+        return [
+            ['label' => 'Sold qty', 'value' => number_format((int) ($totals['qty'] ?? 0))],
+            ['label' => 'Sale', 'value' => '£'.number_format((float) ($totals['revenue'] ?? 0), 2)],
+        ];
+    }
 
-        $summary = app(EcomTrackerDashboardService::class)->abandonmentSummaryForFocus(
-            $focus,
-            $from,
-            $to,
-            self::sessionFiltersFromRequest($request),
-            $period,
-        );
-
-        if ($summary === null) {
-            return [];
-        }
+    /**
+     * @param  array<string, array<string, mixed>>  $funnelMetrics
+     * @return array<int, array{label: string, value: string}>
+     */
+    private static function abandonmentSummaryExtras(array $funnelMetrics): array
+    {
+        $itemsQty = (int) collect($funnelMetrics)->sum(fn (array $row) => (int) ($row['qty'] ?? 0));
 
         return [
-            ['label' => 'Items in cart', 'value' => number_format((int) ($summary['items_qty'] ?? 0))],
+            ['label' => 'Items in cart', 'value' => number_format($itemsQty)],
         ];
     }
 

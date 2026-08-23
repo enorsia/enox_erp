@@ -145,6 +145,13 @@ class EcomActivityFunnelSessions
     private function paymentActionItemQty(ActivityEcomUserAction $action): int
     {
         $payload = is_array($action->payment_success) ? $action->payment_success : [];
+        $items = $payload['checkout_info']['items'] ?? [];
+
+        if (is_array($items) && $items !== []) {
+            return max(0, (int) collect($items)
+                ->filter(fn ($item) => is_array($item))
+                ->sum(fn (array $item) => (int) ($item['qty'] ?? $item['quantity'] ?? 1)));
+        }
 
         return $this->resolvePayloadEventQty($payload);
     }

@@ -271,3 +271,66 @@ test('session and catalog filters exclude facet dimension when computing option 
         ->not->toHaveKey('category')
         ->toHaveKey('department');
 });
+
+test('conversion summary totals use matched payment funnel metrics', function () {
+    $request = Request::create('/', 'GET', [
+        'focus' => 'conversion',
+        'has_order' => '1',
+        'period' => '7d',
+    ]);
+
+    $metrics = EcomActivityFocus::summaryForFocus(
+        'conversion',
+        2,
+        [
+            'session-a' => ['qty' => 1, 'value' => 16.0],
+            'session-b' => ['qty' => 2, 'value' => 24.99],
+        ],
+        $request,
+        Carbon::parse('2026-08-17'),
+        Carbon::parse('2026-08-23'),
+        '7d',
+    );
+
+    $values = collect($metrics)->pluck('value', 'label');
+
+    expect($values['Matching sessions'])->toBe(2)
+        ->and($values['Sold qty'])->toBe('3')
+        ->and($values['Sale'])->toBe('£40.99');
+});
+
+test('payment success summary totals use matched payment funnel metrics', function () {
+    $metrics = EcomActivityFocus::summaryForFocus(
+        'payment_success',
+        2,
+        [
+            'session-a' => ['qty' => 1, 'value' => 10.0],
+            'session-b' => ['qty' => 3, 'value' => 30.5],
+        ],
+    );
+
+    $values = collect($metrics)->pluck('value', 'label');
+
+    expect($values['Matching sessions'])->toBe(2)
+        ->and($values['Orders'])->toBe('2')
+        ->and($values['Sold qty'])->toBe('4')
+        ->and($values['Sale'])->toBe('£40.50');
+});
+
+test('abandonment summary items in cart use matched funnel metrics', function () {
+    $metrics = EcomActivityFocus::summaryForFocus(
+        'cart_abandonment',
+        3,
+        [
+            'session-a' => ['qty' => 2, 'value' => 40.0],
+            'session-b' => ['qty' => 1, 'value' => 15.0],
+            'session-c' => ['qty' => 4, 'value' => 80.0],
+        ],
+    );
+
+    $values = collect($metrics)->pluck('value', 'label');
+
+    expect($values['Matching sessions'])->toBe(3)
+        ->and($values['At stake'])->toBe('£135.00')
+        ->and($values['Items in cart'])->toBe('7');
+});
