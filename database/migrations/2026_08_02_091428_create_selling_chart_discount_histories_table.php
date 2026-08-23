@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('basic_info_id')->constrained('selling_chart_basic_infos')->onDelete('cascade');
             $table->json('items')->nullable();
-            $table->tinyInteger('status')->default(0)->comment('0: Not applied, 1: applied');
+            $table->tinyInteger('status')->default(0)->comment('0: pending, 1: applied, 2: ignored');
             $table->string('created_by')->nullable();
             $table->string('updated_by')->nullable();
             $table->timestamps();

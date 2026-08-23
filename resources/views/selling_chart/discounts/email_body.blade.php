@@ -164,9 +164,9 @@
                         <tr>
                             <th>Design No</th>
                             <th>Ecom SKU</th>
+                            <th>Platform</th>
                             <th>Color</th>
                             <th>Range</th>
-                            <th>Platform</th>
                             <th style="text-align:right">Discount Price (£)</th>
                         </tr>
                     </thead>
@@ -187,11 +187,11 @@
                                     <td rowspan="{{ $discountCount }}">
                                         <strong>{{ $item['product_code'] }}</strong>
                                     </td>
+                                    <td rowspan="{{ $discountCount }}">{{ $item['platform'] }}</td>
                                     <td>
                                         {{ $discount['color'] }}
                                     </td>
                                     <td>{{ $discount['range'] ?: '—' }}</td>
-                                    <td rowspan="{{ $discountCount }}">{{ $item['platform'] }}</td>
                                     @if (!$hasRange)
                                         <td rowspan="{{ $discountCount }}" class="num discount-price">{{number_format($discount['discount'], 2)}}</td>
                                     @else

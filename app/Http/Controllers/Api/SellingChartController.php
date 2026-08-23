@@ -19,18 +19,7 @@ class SellingChartController extends Controller
             $status = $request->status;
             $perPage = $request->per_page ?? 30;
 
-            $all_histories = SellingChartDiscountHistory::get();
-            $platforms =  $all_histories->map(fn($item) => json_decode($item->items, true))
-                ->pluck('platform')
-                ->unique()
-                ->values();
-
-            $all_count = $all_histories->count() ?? 0;
-            $applied_count = $all_histories->where('status', 1)->count() ?? 0;
-            $pending_count = $all_histories->where('status', 0)->count() ?? 0;
-
             $query = SellingChartDiscountHistory::query();
-
             $query->when($search, function ($q) use ($search) {
                 $q->where(function ($query) use ($search) {
                     $query->where('items->style', 'like', "%{$search}%")
@@ -44,6 +33,28 @@ class SellingChartController extends Controller
                     $q->where('status', $status);
                 });
 
+            $platforms = SellingChartDiscountHistory::query()
+                ->select('items')
+                ->get()
+                ->map(fn($item) => json_decode($item->items, true)['platform'] ?? null)
+                ->filter()
+                ->unique()
+                ->values();
+
+            $allCount = (clone $query)->count();
+
+            $pendingCount = (clone $query)
+                ->where('status', 0)
+                ->count();
+
+            $appliedCount = (clone $query)
+                ->where('status', 1)
+                ->count();
+
+            $ignoreCount = (clone $query)
+                ->where('status', 2)
+                ->count();
+
             $discountHistories = $query->orderBy('id', 'desc')
                 ->paginate($perPage);
 
@@ -52,9 +63,10 @@ class SellingChartController extends Controller
                 'data' => $discountHistories->items(),
                 'platforms' => $platforms,
                 'total_count' => [
-                    'all' => $all_count,
-                    'applied' => $applied_count,
-                    'pending' => $pending_count,
+                    'all' => $allCount,
+                    'applied' => $appliedCount,
+                    'pending' => $pendingCount,
+                    'ignore' => $ignoreCount,
                 ],
                 'pagination' => [
                     'current_page' => $discountHistories->currentPage(),
@@ -78,7 +90,9 @@ class SellingChartController extends Controller
     public function updateDiscountHistory(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'ids' => 'required|array'
+            'ids' => 'required|array',
+            'user_name' => 'required|string',
+            'status' => 'required|in:1,2',
         ]);
 
         if ($validator->fails()) {
@@ -93,8 +107,8 @@ class SellingChartController extends Controller
         try {
             SellingChartDiscountHistory::whereIn('id', $request->ids)->update(
                 [
-                    'status' => 1,
-                    'updated_by' => $request->user_name ?? null
+                    'status' => $request->status,
+                    'updated_by' => $request->user_name
                 ]
             );
 

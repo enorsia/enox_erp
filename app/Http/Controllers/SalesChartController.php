@@ -1276,6 +1276,7 @@ class SalesChartController extends Controller
                     'ecom_product_id' => $ecom_product_id,
                     'ecom_discount_status' => $ecom_discount_status,
                     'discount_variants' => $discountVariants,
+                    'scdh_data' => $scdhData,
                     'no_of_pending_discounts' => $no_of_pending_discounts,
                 ];
                 Log::info('ENOX DISCOUNT UPDATE API - Request', $apiData);
