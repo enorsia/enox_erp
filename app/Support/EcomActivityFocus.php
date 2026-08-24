@@ -27,8 +27,15 @@ final class EcomActivityFocus
 
     /** @var list<string> */
     public const DASHBOARD_AUDIENCE_FILTER_KEYS = [
-        'country',
         'visitor_type',
+    ];
+
+    /** @var list<string> */
+    public const SIDEBAR_FUNNEL_FILTER_KEYS = [
+        'cart_abandonment',
+        'begin_checkout_abandonment',
+        'proceed_checkout_abandonment',
+        'payment_success',
     ];
 
     /** @var array<string, string> */
@@ -272,6 +279,83 @@ final class EcomActivityFocus
         ];
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public static function sidebarFunnelFilterOptions(): array
+    {
+        return [
+            '' => 'All',
+            'cart_abandonment' => self::label('cart_abandonment') ?? 'Cart abandoned',
+            'begin_checkout_abandonment' => self::label('begin_checkout_abandonment') ?? 'Begin checkout abandoned',
+            'proceed_checkout_abandonment' => self::label('proceed_checkout_abandonment') ?? 'Proceed checkout abandoned',
+            'payment_success' => self::label('payment_success') ?? 'Payment success',
+        ];
+    }
+
+    public static function isSidebarFunnelFilterKey(?string $key): bool
+    {
+        return filled($key) && in_array($key, self::SIDEBAR_FUNNEL_FILTER_KEYS, true);
+    }
+
+    public static function drawerFunnelSelectedValue(Request $request): string
+    {
+        if ($request->filled('funnel')) {
+            return (string) $request->input('funnel');
+        }
+
+        $focus = $request->input('focus');
+
+        if (self::isSidebarFunnelFilterKey($focus)) {
+            return (string) $focus;
+        }
+
+        return '';
+    }
+
+    public static function shouldApplyDrawerFunnelFilter(Request $request): bool
+    {
+        if (! $request->filled('funnel')) {
+            return false;
+        }
+
+        $funnel = (string) $request->input('funnel');
+
+        if (! self::isSidebarFunnelFilterKey($funnel)) {
+            return false;
+        }
+
+        $focus = $request->input('focus');
+
+        return ! (self::isValid($focus) && $focus === $funnel);
+    }
+
+    public static function applyDrawerFunnelFilter(
+        Builder $query,
+        Request $request,
+        Carbon $from,
+        Carbon $to,
+        EcomActivityFunnelSessions $funnelSessions,
+    ): void {
+        if (! self::shouldApplyDrawerFunnelFilter($request)) {
+            return;
+        }
+
+        $funnel = (string) $request->input('funnel');
+        $period = $request->input('period', '24h');
+        $sessionFilters = self::sessionFiltersFromRequest($request);
+        $context = self::resolveFunnelContext($funnel, $from, $to, $sessionFilters, $period, $funnelSessions);
+        $ids = $context['session_ids'];
+
+        if ($ids->isEmpty()) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        self::constrainToSessionIds($query, $ids);
+    }
+
     public static function applyFocusFilter(
         Builder $query,
         ?string $focus,
@@ -424,7 +508,11 @@ final class EcomActivityFocus
      */
     public static function sidebarFilterQueryKeys(?Request $request = null): array
     {
-        $keys = array_merge(['department', 'category'], self::SHARED_SESSION_FILTER_KEYS);
+        $keys = array_merge(
+            ['department', 'category', 'funnel'],
+            self::SHARED_SESSION_FILTER_KEYS,
+            self::DASHBOARD_AUDIENCE_FILTER_KEYS,
+        );
 
         if ($request === null || ! self::usesCatalogScopedSearch($request)) {
             array_unshift($keys, 'search');
@@ -438,7 +526,7 @@ final class EcomActivityFocus
      */
     public static function activitySidebarChipLabels(Request $request): array
     {
-        $labels = ['Department', 'Category', 'Device', 'Login', 'Orders', 'Source', 'Medium'];
+        $labels = ['Department', 'Category', 'Funnel', 'Device', 'Login', 'Orders', 'Visitor type', 'Source', 'Medium'];
 
         if (! self::usesCatalogScopedSearch($request)) {
             $labels[] = 'Product search';
@@ -486,7 +574,13 @@ final class EcomActivityFocus
     public static function activeFilterCount(Request $request): int
     {
         $count = collect(self::sidebarFilterQueryKeys($request))
-            ->filter(fn (string $key) => filled($request->input($key)))
+            ->filter(function (string $key) use ($request) {
+                if ($key === 'funnel' && ! self::shouldApplyDrawerFunnelFilter($request)) {
+                    return false;
+                }
+
+                return filled($request->input($key));
+            })
             ->count();
 
         if (! self::showCatalogFiltersInDrawer($request)) {
@@ -758,6 +852,11 @@ final class EcomActivityFocus
             $add('Orders', $request->has_order === '1' ? 'With order' : 'No order');
         }
 
+        if (self::shouldApplyDrawerFunnelFilter($request)) {
+            $funnel = (string) $request->input('funnel');
+            $add('Funnel', self::sidebarFunnelFilterOptions()[$funnel] ?? $funnel);
+        }
+
         if ($request->filled('visitor_type')) {
             $add('Visitor type', $visitorLabels[$request->visitor_type] ?? (string) $request->visitor_type);
         }
@@ -844,6 +943,7 @@ final class EcomActivityFocus
                 'Device' => 'device_type',
                 'Login' => 'logged_in',
                 'Orders' => 'has_order',
+                'Funnel' => 'funnel',
                 'Visitor type' => 'visitor_type',
                 'Country' => 'country',
                 'Source' => 'utm_source',
@@ -911,6 +1011,7 @@ final class EcomActivityFocus
             'Device' => 'device_type',
             'Login' => 'logged_in',
             'Orders' => 'has_order',
+            'Funnel' => 'funnel',
             'Visitor type' => 'visitor_type',
             'Country' => 'country',
             'Source' => 'utm_source',

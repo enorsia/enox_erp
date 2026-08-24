@@ -1,6 +1,7 @@
 @props([
     'filterOptions' => ['departments' => [], 'categories_by_department' => []],
     'sectionHeading' => null,
+    'layout' => 'stack',
 ])
 
 @php
@@ -15,7 +16,7 @@
     <p class="etd-kpi-section-label mb-2">{{ $sectionHeading }}</p>
 @endif
 
-<div class="etd-product-filters-compact"
+<div class="etd-product-filters-compact{{ ($layout ?? 'stack') === 'grid' ? ' etd-activity-filter-grid' : '' }}"
      data-etd-department-category
      data-categories-by-department='@json($categoriesByDepartment)'>
     <label class="etd-filter-compact-field" for="catalog-filter-department">
@@ -47,6 +48,5 @@
                 @endforeach
             @endif
         </select>
-        <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1 mb-0">Choose a department to narrow categories.</p>
     </label>
 </div>

@@ -19,7 +19,7 @@
     $showCatalogFilters = $showCatalogFilters ?? in_array(request('focus'), ['products', 'categories'], true);
 @endphp
 
-<div class="etd-page etd-page--activity" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
+<div class="etd-page etd-page--activity" id="ecom-activity-page-content" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
     @include('ecom_tracker.partials.filter-drawer', [
         'action' => route('admin.ecom-activity.index'),
         'resetUrl' => $filterResetUrl ?? route('admin.ecom-activity.index'),
@@ -29,10 +29,9 @@
         'period' => $period,
         'dateFrom' => $dateFrom,
         'dateTo' => $dateTo,
-        'includeVisitorTrust' => false,
-        'includeCountry' => false,
+        'drawerWide' => true,
+        'includeVisitorTrust' => true,
         'includeSessionSearch' => ! $showCatalogFilters,
-        'sessionFiltersHeading' => 'Session filters',
         'showProductFilters' => $showCatalogFilters,
         'productFiltersHeading' => $showCatalogFilters ? 'Additional product filters' : null,
         'productFilterOptions' => $productFilterOptions ?? ['categories' => [], 'colors' => [], 'sizes' => []],
@@ -184,6 +183,7 @@
     </header>
 
     <div class="etd-panel">
+        @include('ecom_activity.partials.activity-sort-toolbar')
         @include('ecom_activity.partials.sessions-table', [
             'sessions' => $sessions,
             'focusColumns' => $focusColumns ?? [],
@@ -194,6 +194,8 @@
         ])
     </div>
 
-    @include('layouts.pagination', ['paginator' => $sessions])
+    <div class="etd-activity-pagination">
+        @include('layouts.pagination', ['paginator' => $sessions])
+    </div>
 </div>
 @endsection

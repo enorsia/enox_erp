@@ -12,6 +12,7 @@ use App\Services\EcomActivityTimelinePresenter;
 use App\Services\EcomTrackerDashboardService;
 use App\Services\EcomTrackerFeatureGate;
 use App\Support\EcomActivityFocus;
+use App\Support\EcomActivitySessionSort;
 use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
 use App\Support\SessionTrafficAttribution;
@@ -76,7 +77,7 @@ class EcomActivityController extends EcomTrackerAdminController
             : ['session_ids' => collect(), 'metrics' => []];
 
         $query = $this->buildIndexQuery($request, $range);
-        $sessions = $this->paginateSessions($query, $request, $focus, $funnelContext['session_ids']);
+        $sessions = $this->paginateSessions($query, $request, $focus, $funnelContext['session_ids'], $range);
 
         $rowMetrics = $this->rowMetrics->forSessions(
             collect($sessions->items()),
@@ -173,6 +174,19 @@ class EcomActivityController extends EcomTrackerAdminController
             'focus' => $focus,
             'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
         ]);
+
+        $tableViewData = [
+            'sessions' => $sessions,
+            'focusColumns' => $focusColumns,
+            'rowMetrics' => $rowMetrics,
+            'emptyMessage' => $emptyMessage,
+            'clearFocusUrl' => $clearFocusUrl,
+            'hasFocus' => EcomActivityFocus::isValid($focus),
+        ];
+
+        if ($request->input('fragment') === 'table' && $request->ajax()) {
+            return view('ecom_activity.partials.table-fragment', $tableViewData);
+        }
 
         return view('ecom_activity.index', [
             'sessions' => $sessions,
@@ -375,6 +389,16 @@ class EcomActivityController extends EcomTrackerAdminController
             );
         }
 
+        if (! in_array('funnel', $except, true)) {
+            EcomActivityFocus::applyDrawerFunnelFilter(
+                $query,
+                $request,
+                $range['from'],
+                $range['to'],
+                $this->funnelSessions,
+            );
+        }
+
         if ($request->filled('search') && ! EcomActivityFocus::usesCatalogScopedSearch($request)) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -468,11 +492,22 @@ class EcomActivityController extends EcomTrackerAdminController
         Request $request,
         ?string $focus,
         Collection $funnelSessionIds,
+        array $range,
     ): LengthAwarePaginator {
         $perPage = 25;
         $page = max(1, (int) $request->input('page', 1));
+        $sortBy = EcomActivitySessionSort::resolveSortBy($request);
+        $sortDir = EcomActivitySessionSort::resolveSortDir(
+            $request,
+            $sortBy ?? EcomActivitySessionSort::DEFAULT_SORT_KEY,
+        );
 
-        if (EcomActivityFocus::isValid($focus) && EcomActivityFocus::sortMode($focus) === 'value_desc' && $funnelSessionIds->isNotEmpty()) {
+        $useValueDesc = ! $request->filled('sort_by')
+            && EcomActivityFocus::isValid($focus)
+            && EcomActivityFocus::sortMode($focus) === 'value_desc'
+            && $funnelSessionIds->isNotEmpty();
+
+        if ($useValueDesc) {
             $total = $funnelSessionIds->count();
             $pageIds = $funnelSessionIds->slice(($page - 1) * $perPage, $perPage)->values();
             $sessions = $query->whereIn('session_id', $pageIds->all())->get()->keyBy('session_id');
@@ -486,14 +521,73 @@ class EcomActivityController extends EcomTrackerAdminController
                 $total,
                 $perPage,
                 $page,
-                ['path' => $request->url(), 'query' => $request->query()],
+                ['path' => $request->url(), 'query' => $this->activityPaginationQuery($request)],
             );
         }
 
-        return $query
-            ->orderByLatestActivity()
+        $scope = $this->sessionSortScope($request, $range, $focus);
+        $effectiveSortBy = $sortBy ?? EcomActivitySessionSort::DEFAULT_SORT_KEY;
+
+        if (EcomActivitySessionSort::shouldRankCatalogSessionsInPhp($effectiveSortBy, $scope)) {
+            $sessionIds = (clone $query)->pluck('session_id');
+            $sortedIds = EcomActivitySessionSort::sortSessionIdsForCatalogScope(
+                $sessionIds,
+                $effectiveSortBy,
+                $sortDir,
+                $scope,
+                $this->dashboardService,
+            );
+            $total = $sortedIds->count();
+            $pageIds = $sortedIds->slice(($page - 1) * $perPage, $perPage)->values();
+            $sessions = $query->whereIn('session_id', $pageIds->all())->get()->keyBy('session_id');
+            $items = $pageIds
+                ->map(fn (string $id) => $sessions->get($id))
+                ->filter()
+                ->values();
+
+            return new LengthAwarePaginator(
+                $items,
+                $total,
+                $perPage,
+                $page,
+                ['path' => $request->url(), 'query' => $this->activityPaginationQuery($request)],
+            );
+        }
+
+        return EcomActivitySessionSort::apply(
+            $query,
+            $sortBy,
+            $sortDir,
+            $scope,
+        )
             ->paginate($perPage)
-            ->withQueryString();
+            ->appends($this->activityPaginationQuery($request));
+    }
+
+    /**
+     * @return array{from: Carbon, to: Carbon, catalog_options: array<string, mixed>}
+     */
+    private function sessionSortScope(Request $request, array $range, ?string $focus): array
+    {
+        $catalogOptions = in_array($focus, ['products', 'categories'], true)
+            ? EcomActivityFocus::productCatalogFiltersFromRequest($request)
+            : [];
+
+        return [
+            'from' => $range['from'],
+            'to' => $range['to'],
+            'catalog_options' => EcomActivitySessionSort::usesCatalogActionScope($catalogOptions)
+                ? $catalogOptions
+                : [],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function activityPaginationQuery(Request $request): array
+    {
+        return $request->except(['page', 'fragment']);
     }
 
     /**

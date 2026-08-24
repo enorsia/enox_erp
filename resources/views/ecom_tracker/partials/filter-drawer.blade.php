@@ -28,6 +28,7 @@
     'preservePeriodParams' => false,
     'sessionFiltersHeading' => null,
     'productFiltersHeading' => null,
+    'drawerWide' => false,
 ])
 
 <div x-show="drawerOpen"
@@ -49,7 +50,7 @@
      x-transition:leave-start="translate-x-0"
      x-transition:leave-end="translate-x-full"
      x-effect="if (drawerOpen) { $nextTick(() => window.refreshEtdFilterControls && window.refreshEtdFilterControls($el)) }"
-     class="fixed top-0 right-0 bottom-0 w-full sm:w-[340px] bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col z-[201] shadow-2xl etd-filter-drawer"
+     class="fixed top-0 right-0 bottom-0 w-full {{ ($drawerWide ?? false) ? 'etd-filter-drawer--wide sm:w-[520px]' : 'sm:w-[340px]' }} bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col z-[201] shadow-2xl etd-filter-drawer"
      style="display:none;">
     <div class="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
         <div class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 dark:text-slate-100">
@@ -141,7 +142,7 @@
                     @if ($productFiltersHeading)
                         <p class="etd-kpi-section-label mb-2">{{ $productFiltersHeading }}</p>
                     @endif
-                    <div class="etd-filter-product-wrap">
+                    <div class="etd-filter-product-wrap etd-activity-filter-product-extras">
                         @include('ecom_tracker.partials.product-catalog-filters', [
                             'filterOptions' => $productFilterOptions,
                             'eventScenarioOptions' => $eventScenarioOptions,
@@ -151,6 +152,11 @@
                             'showSort' => $productCatalogShowSort ?? true,
                         ])
                     </div>
+                @endif
+                @if ($includeVisitorTrust ?? true)
+                    @include('ecom_activity.partials.activity-visitor-filter', [
+                        'filterOptionCounts' => $filterOptionCounts ?? [],
+                    ])
                 @endif
             @elseif ($preservePeriodParams)
                 {{-- Period/compare controlled in page header; hidden fields preserve them on apply --}}
@@ -219,7 +225,7 @@
                     @if ($productFiltersHeading)
                         <p class="etd-kpi-section-label mb-2">{{ $productFiltersHeading }}</p>
                     @endif
-                    <div class="etd-filter-product-wrap">
+                    <div class="etd-filter-product-wrap etd-activity-filter-product-extras">
                     @include('ecom_tracker.partials.product-catalog-filters', [
                         'filterOptions' => $productFilterOptions,
                         'eventScenarioOptions' => $eventScenarioOptions,

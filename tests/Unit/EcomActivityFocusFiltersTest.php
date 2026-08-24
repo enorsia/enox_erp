@@ -200,16 +200,16 @@ test('activity list context is built for sidebar device filters without dashboar
         ->and(collect($context['metrics'])->pluck('label')->all())->toContain('Views', 'Adds', 'Sale');
 });
 
-test('activity sidebar filter keys exclude audience and date fields', function () {
+test('activity sidebar filter keys include visitor audience and funnel fields', function () {
     $request = Request::create('/', 'GET', ['focus' => 'traffic']);
 
     $keys = EcomActivityFocus::sidebarFilterQueryKeys($request);
 
-    expect($keys)->toContain('device_type', 'utm_source', 'logged_in')
-        ->and($keys)->not->toContain('visitor_type', 'country', 'date_from', 'date_to');
+    expect($keys)->toContain('device_type', 'utm_source', 'logged_in', 'funnel', 'visitor_type')
+        ->and($keys)->not->toContain('country', 'date_from', 'date_to');
 });
 
-test('drawer preserve params keep drill-down visitor type when not in activity sidebar', function () {
+test('drawer preserve params keep drill-down focus but expose visitor type in drawer', function () {
     $request = Request::create('/', 'GET', [
         'focus' => 'session_quality',
         'visitor_type' => 'human',
@@ -218,11 +218,11 @@ test('drawer preserve params keep drill-down visitor type when not in activity s
 
     $preserved = EcomActivityFocus::drawerPreserveQueryParams($request);
 
-    expect($preserved)->toHaveKeys(['focus', 'visitor_type', 'period'])
-        ->and($preserved['visitor_type'])->toBe('human');
+    expect($preserved)->toHaveKeys(['focus', 'period'])
+        ->and($preserved)->not->toHaveKey('visitor_type');
 });
 
-test('activity sidebar chips exclude visitor type and country', function () {
+test('activity sidebar chips include visitor type but not country', function () {
     $request = Request::create('/', 'GET', [
         'device_type' => 'mobile',
         'visitor_type' => 'human',
@@ -236,7 +236,8 @@ test('activity sidebar chips exclude visitor type and country', function () {
 
     expect($labels)->toContain('Device: Mobile')
         ->and(collect($labels)->contains(fn (string $label) => str_starts_with($label, 'Source:')))->toBeTrue()
-        ->and($labels)->not->toContain('Visitor type: Real visitors', 'Country: GB');
+        ->and($labels)->toContain('Visitor type: Real visitors')
+        ->and($labels)->not->toContain('Country: GB');
 });
 
 test('activity sidebar filter keys include department and category', function () {

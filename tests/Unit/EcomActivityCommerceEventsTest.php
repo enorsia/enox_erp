@@ -50,7 +50,7 @@ test('commerce events builds payment order with customer and line items', functi
     $events = EcomActivityCommerceEvents::fromActions($actions);
 
     expect($events)->toHaveCount(1)
-        ->and($events[0]['trigger_label'])->toBe('#1295775947')
+        ->and($events[0]['trigger_label'])->toBe('#1295775947 · £35.50')
         ->and($events[0]['stage'])->toBe('payment_success')
         ->and($events[0]['info_groups'][0]['title'])->toBe('Order info')
         ->and($events[0]['products'][0]['title'])->toContain('Cargo Shorts')
@@ -76,7 +76,7 @@ test('commerce events returns separate payment events for multiple orders', func
     $events = EcomActivityCommerceEvents::fromActions($actions);
 
     expect($events)->toHaveCount(2)
-        ->and(collect($events)->pluck('trigger_label')->all())->toBe(['#ORD-2', '#ORD-1']);
+        ->and(collect($events)->pluck('trigger_label')->all())->toBe(['#ORD-2 · £20.00', '#ORD-1 · £10.00']);
 });
 
 test('commerce events dedupes duplicate payment events for the same order id', function () {
@@ -159,7 +159,7 @@ test('commerce events shows orders only and hides earlier funnel actions', funct
 
     expect($events)->toHaveCount(1)
         ->and($events[0]['stage'])->toBe('payment_success')
-        ->and($events[0]['trigger_label'])->toBe('#ORD-1');
+        ->and($events[0]['trigger_label'])->toBe('#ORD-1 · £20.00');
 });
 
 test('commerce events builds compact cart totals row for multi-item carts', function () {

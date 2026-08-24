@@ -34,7 +34,7 @@ test('commerce summary prefers order value over earlier checkout stages', functi
 
     expect($summary['commerce_label'])->toBe('Order')
         ->and($summary['commerce_has_order'])->toBeTrue()
-        ->and($summary['commerce_display'])->toBe('Order · £15.49');
+        ->and($summary['commerce_display'])->toBe('#ORD-1 · £15.49');
 });
 
 test('commerce summary shows proceed checkout when payment is missing', function () {

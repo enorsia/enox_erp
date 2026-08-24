@@ -168,7 +168,7 @@ final class EcomActivityCommerceEvents
             'id' => 'payment:'.($orderId !== '' ? $orderId : (string) $action->id),
             'stage' => 'payment_success',
             'stage_label' => 'Order',
-            'trigger_label' => $orderId !== '' ? '#'.$orderId : 'Order',
+            'trigger_label' => self::orderTriggerLabel($orderId, $amount),
             'title' => 'Order details'.($orderId !== '' ? ': #'.$orderId : ''),
             'sort_at' => $action->created_at?->timestamp ?? 0,
             'occurred_at' => TrackerTime::formatFromStorage($action->created_at),
@@ -383,6 +383,17 @@ final class EcomActivityCommerceEvents
         $amount = round((float) $value, 2);
 
         return $amount > 0 ? $amount : null;
+    }
+
+    private static function orderTriggerLabel(string $orderId, ?float $amount): string
+    {
+        $label = $orderId !== '' ? '#'.$orderId : 'Order';
+
+        if ($amount !== null) {
+            return $label.' · '.self::formatMoney($amount);
+        }
+
+        return $label;
     }
 
     private static function formatMoney(float $amount): string

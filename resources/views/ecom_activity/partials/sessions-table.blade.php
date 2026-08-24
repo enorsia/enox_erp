@@ -24,7 +24,13 @@
     <table class="etd-table etd-table--activity w-full">
         <thead>
             <tr>
-                <th class="etd-col-session">Session</th>
+                <th class="etd-col-session">
+                    @include('ecom_activity.partials.sortable-column-header', [
+                        'sortKey' => 'session',
+                        'label' => 'Session',
+                        'tip' => 'When the session started',
+                    ])
+                </th>
                 <th class="etd-col-user">User</th>
                 <th class="etd-col-trust">
                     @include('ecom_tracker.partials.column-header-with-tip', [
@@ -33,13 +39,15 @@
                     ])
                 </th>
                 <th class="etd-col-commerce">
-                    @include('ecom_tracker.partials.column-header-with-tip', [
+                    @include('ecom_activity.partials.sortable-column-header', [
+                        'sortKey' => 'funnel_stage',
                         'label' => 'Commerce',
                         'tip' => 'Highest funnel stage reached in this period: Cart, Checkout, Proceed, or Order with value',
                     ])
                 </th>
                 <th class="etd-col-actions etd-num">
-                    @include('ecom_tracker.partials.column-header-with-tip', [
+                    @include('ecom_activity.partials.sortable-column-header', [
+                        'sortKey' => 'actions',
                         'label' => 'Actions',
                         'tip' => 'Total tracked events in this session',
                         'align' => 'center',
@@ -58,8 +66,18 @@
                         @endif
                     </th>
                 @endforeach
-                <th class="etd-col-duration etd-activity-col--optional">Duration</th>
-                <th class="etd-col-last-active etd-activity-col--optional">Last active</th>
+                <th class="etd-col-duration etd-activity-col--optional">
+                    @include('ecom_activity.partials.sortable-column-header', [
+                        'sortKey' => 'duration',
+                        'label' => 'Duration',
+                    ])
+                </th>
+                <th class="etd-col-last-active etd-activity-col--optional">
+                    @include('ecom_activity.partials.sortable-column-header', [
+                        'sortKey' => 'last_active',
+                        'label' => 'Last active',
+                    ])
+                </th>
                 <th class="etd-col-action">View</th>
             </tr>
         </thead>
@@ -118,8 +136,7 @@
                     @php $eventKey = $session->session_id.':'.($event['id'] ?? $loop->index); @endphp
                     <tr
                         class="etd-commerce-event-row"
-                        x-show="openEvent === @js($eventKey)"
-                        x-collapse
+                        :class="{ 'is-open': openEvent === @js($eventKey) }"
                         x-cloak
                     >
                         <td colspan="{{ $totalCols }}" class="etd-commerce-event-row__cell">

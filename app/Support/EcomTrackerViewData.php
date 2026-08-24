@@ -182,10 +182,11 @@ final class EcomTrackerViewData
     public static function activityQueryKeys(): array
     {
         return [
-            'period', 'date_from', 'date_to', 'focus', 'back',
+            'period', 'date_from', 'date_to', 'focus', 'back', 'funnel',
             'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
             'utm_source', 'utm_medium', 'search', 'category', 'department', 'color', 'size',
             'product_code', 'product_name', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
+            'sort_by', 'sort_dir',
         ];
     }
 

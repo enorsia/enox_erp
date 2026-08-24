@@ -1192,19 +1192,17 @@ test('activity index traffic focus shows traffic source performance totals in dr
         ->assertSee('Sale');
 });
 
-test('activity index filter drawer omits visitor trust and country fields', function () {
+test('activity index filter drawer includes sectioned funnel and visitor fields', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.activity.index');
 
     $this->actingAs($user)
         ->get(route('admin.ecom-activity.index', ['period' => 'all']))
         ->assertOk()
-        ->assertSee('Session filters')
+        ->assertSee('Funnel stage')
+        ->assertSee('Visitor trust')
         ->assertSee('Traffic source')
         ->assertSee('Device')
         ->assertSee('Logged in')
-        ->assertSee('Has order')
-        ->assertDontSee('Visitor trust')
-        ->assertDontSee('Filter by how we classified each session')
-        ->assertDontSee('>Country</label>', false);
+        ->assertSee('Has order');
 });

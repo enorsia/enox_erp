@@ -29,12 +29,15 @@ final class EcomActivityCommerceSummary
         [$stage, $action] = $latest;
         $value = self::amountForStage($stage, $action);
         $label = self::labelForStage($stage);
+        $commerceDisplay = $stage === 'payment_success'
+            ? self::formatOrderDisplay(self::orderIdFromPaymentAction($action), $value)
+            : self::formatDisplay($label, $value);
 
         return [
             'commerce_label' => $label,
             'commerce_value' => $value,
             'commerce_has_order' => $stage === 'payment_success',
-            'commerce_display' => self::formatDisplay($label, $value),
+            'commerce_display' => $commerceDisplay,
             'commerce_tip' => self::tipForStage($stage, $action, $value),
         ];
     }
@@ -88,12 +91,13 @@ final class EcomActivityCommerceSummary
 
         if ($totalRevenue > 0 && $latestPayment instanceof ActivityEcomUserAction) {
             $roundedTotal = round($totalRevenue, 2);
+            $orderId = self::orderIdFromPaymentAction($latestPayment);
 
             return [
                 'commerce_label' => 'Order',
                 'commerce_value' => $roundedTotal,
                 'commerce_has_order' => true,
-                'commerce_display' => self::formatDisplay('Order', $roundedTotal),
+                'commerce_display' => self::formatOrderDisplay($orderId, $roundedTotal),
                 'commerce_tip' => $matchingPayments > 1
                     ? 'Order · £'.number_format($roundedTotal, 2).' · '.$matchingPayments.' payments'
                     : self::tipForStage('payment_success', $latestPayment, $roundedTotal),
@@ -108,6 +112,25 @@ final class EcomActivityCommerceSummary
         if ($label === null) {
             return '—';
         }
+
+        if ($value !== null && $value > 0) {
+            return $label.' · £'.number_format($value, 2);
+        }
+
+        return $label;
+    }
+
+    public static function orderIdFromPaymentAction(ActivityEcomUserAction $action): string
+    {
+        $payload = is_array($action->payment_success) ? $action->payment_success : [];
+        $checkout = is_array($payload['checkout_info'] ?? null) ? $payload['checkout_info'] : [];
+
+        return trim((string) ($payload['order_id'] ?? $checkout['order_number'] ?? ''));
+    }
+
+    public static function formatOrderDisplay(string $orderId, ?float $value): string
+    {
+        $label = $orderId !== '' ? '#'.$orderId : 'Order';
 
         if ($value !== null && $value > 0) {
             return $label.' · £'.number_format($value, 2);
@@ -205,8 +228,7 @@ final class EcomActivityCommerceSummary
         }
 
         if ($stage === 'payment_success') {
-            $payload = is_array($action->payment_success) ? $action->payment_success : [];
-            $orderId = trim((string) ($payload['order_id'] ?? $payload['checkout_info']['order_number'] ?? ''));
+            $orderId = self::orderIdFromPaymentAction($action);
 
             if ($orderId !== '') {
                 $parts[] = 'Order #'.$orderId;

@@ -1,72 +1,146 @@
-@php($includeDateRange = $includeDateRange ?? true)
-@php($filterOptionCounts = $filterOptionCounts ?? [])
-@php($utmFilterState = $utmFilterState ?? null)
-@php($includeVisitorTrust = $includeVisitorTrust ?? true)
-@php($includeCountry = $includeCountry ?? true)
-@php($includeSessionSearch = $includeSessionSearch ?? true)
-@php($sessionFiltersHeading = $sessionFiltersHeading ?? null)
-@php($categoryFilterOptions = $categoryFilterOptions ?? ['departments' => [], 'categories_by_department' => []])
+@php
+    use App\Support\EcomActivityFocus;
 
-@if ($includeSessionSearch)
-<div>
-    <label class="block text-[12px] text-slate-500 dark:text-slate-400 mb-1">Search</label>
-    <input type="text" name="search" value="{{ request('search') }}" placeholder="Session, visitor, UTM, URL, name, email or IP…"
-           class="w-full px-3 py-2 text-[13px] border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-</div>
+    $includeDateRange = $includeDateRange ?? true;
+    $filterOptionCounts = $filterOptionCounts ?? [];
+    $utmFilterState = $utmFilterState ?? null;
+    $includeSessionSearch = $includeSessionSearch ?? true;
+    $categoryFilterOptions = $categoryFilterOptions ?? ['departments' => [], 'categories_by_department' => []];
+    $funnelOptions = EcomActivityFocus::sidebarFunnelFilterOptions();
+    $selectedFunnel = EcomActivityFocus::drawerFunnelSelectedValue(request());
+    $countLabel = static function (string $value, string $label, array $counts): string {
+        return isset($counts[$value]) ? "{$label} ({$counts[$value]})" : $label;
+    };
+    $tomSelectClass = 'tom-select etd-tom-select w-full';
+@endphp
 
-<hr class="border-slate-100 dark:border-slate-700"/>
-@endif
-
-@if ($includeDateRange)
-    <hr class="border-slate-100 dark:border-slate-700"/>
-
-    <div>
-        <p class="text-[10px] font-semibold tracking-[1.2px] uppercase text-slate-400 dark:text-slate-500 mb-2">Date range</p>
-        <div class="etd-date-range grid grid-cols-2 gap-2" data-etd-date-range>
-            <div>
-                <label class="etd-filter-compact-label" for="activity-date-from">From</label>
+<div class="etd-activity-filter-sections">
+    @if ($includeSessionSearch)
+        <section class="etd-activity-filter-section etd-activity-filter-section--full">
+            <p class="etd-activity-filter-section-title">Search</p>
+            <label class="etd-filter-compact-field">
+                <span class="etd-filter-compact-label">Session, visitor, UTM…</span>
                 <input type="text"
-                       id="activity-date-from"
-                       name="date_from"
-                       value="{{ request('date_from') }}"
-                       data-range="from"
-                       data-default="{{ request('date_from') }}"
-                       placeholder="Select date"
-                       readonly
-                       class="etd-flatpickr-date etd-filter-input etd-filter-input--sm w-full">
+                       name="search"
+                       value="{{ request('search') }}"
+                       placeholder="Session, visitor, UTM, URL, name, email or IP…"
+                       class="etd-filter-input etd-filter-input--sm w-full">
+            </label>
+        </section>
+    @endif
+
+    @if ($includeDateRange)
+        <section class="etd-activity-filter-section etd-activity-filter-section--full">
+            <p class="etd-activity-filter-section-title">Date range</p>
+            <div class="etd-activity-filter-grid">
+                <label class="etd-filter-compact-field" for="activity-date-from">
+                    <span class="etd-filter-compact-label">From</span>
+                    <input type="text"
+                           id="activity-date-from"
+                           name="date_from"
+                           value="{{ request('date_from') }}"
+                           data-range="from"
+                           data-default="{{ request('date_from') }}"
+                           placeholder="Select date"
+                           readonly
+                           class="etd-flatpickr-date etd-filter-input etd-filter-input--sm w-full">
+                </label>
+                <label class="etd-filter-compact-field" for="activity-date-to">
+                    <span class="etd-filter-compact-label">To</span>
+                    <input type="text"
+                           id="activity-date-to"
+                           name="date_to"
+                           value="{{ request('date_to') }}"
+                           data-range="to"
+                           data-default="{{ request('date_to') }}"
+                           placeholder="Select date"
+                           readonly
+                           class="etd-flatpickr-date etd-filter-input etd-filter-input--sm w-full">
+                </label>
             </div>
-            <div>
-                <label class="etd-filter-compact-label" for="activity-date-to">To</label>
-                <input type="text"
-                       id="activity-date-to"
-                       name="date_to"
-                       value="{{ request('date_to') }}"
-                       data-range="to"
-                       data-default="{{ request('date_to') }}"
-                       placeholder="Select date"
-                       readonly
-                       class="etd-flatpickr-date etd-filter-input etd-filter-input--sm w-full">
-            </div>
+        </section>
+    @endif
+
+    <section class="etd-activity-filter-section">
+        <p class="etd-activity-filter-section-title">Funnel</p>
+        <div class="etd-activity-filter-grid">
+            <label class="etd-filter-compact-field">
+                <span class="etd-filter-compact-label">Funnel stage</span>
+                <select name="funnel" class="{{ $tomSelectClass }}" data-placeholder="All">
+                    @foreach ($funnelOptions as $value => $label)
+                        <option value="{{ $value }}" @selected($selectedFunnel === $value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </label>
+            <label class="etd-filter-compact-field">
+                <span class="etd-filter-compact-label">Has order</span>
+                <select name="has_order" class="{{ $tomSelectClass }}" data-placeholder="All">
+                    <option value="" @selected(request('has_order', '') === '')>All</option>
+                    <option value="1" @selected(request('has_order') === '1')>{{ $countLabel('1', 'With order', $filterOptionCounts['has_order'] ?? []) }}</option>
+                    <option value="0" @selected(request('has_order') === '0')>{{ $countLabel('0', 'No order', $filterOptionCounts['has_order'] ?? []) }}</option>
+                </select>
+            </label>
         </div>
-    </div>
+    </section>
 
-    <hr class="border-slate-100 dark:border-slate-700"/>
-@endif
+    <section class="etd-activity-filter-section">
+        <p class="etd-activity-filter-section-title">Session</p>
+        <div class="etd-activity-filter-grid">
+            <label class="etd-filter-compact-field">
+                <span class="etd-filter-compact-label">Device</span>
+                <select name="device_type" class="{{ $tomSelectClass }}" data-placeholder="All">
+                    <option value="" @selected(request('device_type', '') === '')>All</option>
+                    @foreach (['desktop', 'mobile', 'tablet'] as $device)
+                        <option value="{{ $device }}" @selected(request('device_type') === $device)>{{ $countLabel($device, ucfirst($device), $filterOptionCounts['device_type'] ?? []) }}</option>
+                    @endforeach
+                </select>
+            </label>
+            <label class="etd-filter-compact-field">
+                <span class="etd-filter-compact-label">Logged in</span>
+                <select name="logged_in" class="{{ $tomSelectClass }}" data-placeholder="All">
+                    <option value="" @selected(request('logged_in', '') === '')>All</option>
+                    <option value="1" @selected(request('logged_in') === '1')>{{ $countLabel('1', 'Logged in', $filterOptionCounts['logged_in'] ?? []) }}</option>
+                    <option value="0" @selected(request('logged_in') === '0')>{{ $countLabel('0', 'Guest', $filterOptionCounts['logged_in'] ?? []) }}</option>
+                </select>
+            </label>
+        </div>
+    </section>
 
-@if ($sessionFiltersHeading)
-    <p class="etd-kpi-section-label mb-2">{{ $sessionFiltersHeading }}</p>
-@endif
+    <section class="etd-activity-filter-section">
+        <p class="etd-activity-filter-section-title">Traffic source</p>
+        @php
+            $sources = $utmFilterState['sources'] ?? [];
+            $mediums = $utmFilterState['mediums'] ?? [];
+            $selectedSource = $utmFilterState['selected_source'] ?? '';
+            $selectedMedium = $utmFilterState['selected_medium'] ?? '';
+        @endphp
+        <div class="etd-activity-filter-grid">
+            <label class="etd-filter-compact-field">
+                <span class="etd-filter-compact-label">UTM source</span>
+                <select name="utm_source" class="{{ $tomSelectClass }}" data-placeholder="All">
+                    <option value="" @selected($selectedSource === '')>All</option>
+                    @foreach ($sources as $value => $label)
+                        <option value="{{ $value }}" @selected($selectedSource === $value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </label>
+            <label class="etd-filter-compact-field">
+                <span class="etd-filter-compact-label">UTM medium</span>
+                <select name="utm_medium" class="{{ $tomSelectClass }}" data-placeholder="All">
+                    <option value="" @selected($selectedMedium === '')>All</option>
+                    @foreach ($mediums as $value => $label)
+                        <option value="{{ $value }}" @selected($selectedMedium === $value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </label>
+        </div>
+    </section>
 
-@include('ecom_tracker.partials.session-filters', [
-    'filterOptionCounts' => $filterOptionCounts,
-    'utmFilterState' => $utmFilterState,
-    'includeVisitorTrust' => $includeVisitorTrust,
-    'includeCountry' => $includeCountry,
-])
-
-<hr class="border-slate-100 dark:border-slate-700"/>
-
-@include('ecom_tracker.partials.catalog-department-category-filters', [
-    'filterOptions' => $categoryFilterOptions,
-    'sectionHeading' => 'Product / category',
-])
+    <section class="etd-activity-filter-section">
+        @include('ecom_tracker.partials.catalog-department-category-filters', [
+            'filterOptions' => $categoryFilterOptions,
+            'sectionHeading' => 'Product / category',
+            'layout' => 'grid',
+        ])
+    </section>
+</div>
