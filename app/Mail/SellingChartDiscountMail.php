@@ -23,6 +23,6 @@ class SellingChartDiscountMail extends Mailable implements ShouldQueue
         $subject = config('app.name') . ' - Discount Assigned for '. $this->item['platform'];
 
         return $this->subject($subject)
-            ->view('selling_chart.discounts.email_body');
+            ->view('mail.discount_history');
     }
 }
