@@ -246,11 +246,10 @@
                     @php $categoryTotals = $d['category_catalog_totals'] ?? null; @endphp
                     @if ($categoryTotals && ($categoryTotals['category_count'] ?? 0) > 0)
                         <p class="etd-panel-subtitle text-slate-500 text-sm mt-1 mb-0">
-                            {{ number_format($categoryTotals['views']) }} views across {{ number_format($categoryTotals['category_count']) }} categories
+                            {{ number_format($categoryTotals['category_views'] ?? 0) }} category views · {{ number_format($categoryTotals['product_views'] ?? 0) }} product views across {{ number_format($categoryTotals['category_count']) }} categories
                         </p>
                     @endif
                 </div>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('categories')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
                 @include('ecom_tracker.partials.category-performance-table', [
@@ -278,7 +277,6 @@
                         </p>
                     @endif
                 </div>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('products')])
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table etd-table--product-catalog etd-table--performance-metrics">
@@ -422,22 +420,9 @@
         ])
     </div>
 
-    @include('ecom_tracker.partials.session-quality', [
-        'visitorQuality' => $d['visitor_quality'] ?? [],
-        'activityFocusLink' => $activityFocusLink,
-        'botTrafficUrl' => route('admin.ecom-tracker.bot-traffic', array_filter([
-            'period' => $period,
-            'date_from' => $dateFrom,
-            'date_to' => $dateTo,
-        ], fn ($value) => filled($value))),
-        'gridClass' => 'etd-kpi-grid--3',
-    ])
-
     @include('ecom_tracker.partials.session-duration-distribution', [
         'distribution' => $d['duration_distribution'] ?? [],
-        'detailsUrl' => $page['visitorDetailLink']('duration'),
-        'chartId' => 'etdDurationDistChart',
-        'class' => 'mb-5',
+        'panelClass' => 'mt-5',
     ])
 </div>
 

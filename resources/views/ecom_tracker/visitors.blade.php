@@ -82,9 +82,6 @@
 
     @include('ecom_tracker.partials.session-duration-distribution', [
         'distribution' => $a['duration_distribution'] ?? [],
-        'detailsUrl' => $detailLink('duration'),
-        'chartId' => 'vaDurationDistChart',
-        'class' => 'mb-5',
     ])
 
     <div class="etd-panel">

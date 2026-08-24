@@ -271,6 +271,8 @@ test('ecom tracker dashboard category performance uses department and category l
 
     expect($data['categories'][0]['label'] ?? null)->toBe('Women -> Dresses');
     expect($data['categories'][0]['category_code'] ?? null)->toBe('DRS');
+    expect($data['categories'][0]['category_views'] ?? null)->toBe(1);
+    expect($data['categories'][0]['product_views'] ?? null)->toBe(0);
 });
 
 test('ecom tracker dashboard category performance counts product views with department and category', function () {
@@ -305,10 +307,63 @@ test('ecom tracker dashboard category performance counts product views with depa
         'date_to' => '2026-07-11',
     ]);
 
-    expect($data['categories'][0]['views'] ?? null)->toBe(1);
+    expect($data['categories'][0]['views'] ?? null)->toBe(1)
+        ->and($data['categories'][0]['category_views'] ?? null)->toBe(0)
+        ->and($data['categories'][0]['product_views'] ?? null)->toBe(1);
     expect($data['category_departments'][0]['name'] ?? null)->toBe('Women');
-    expect($data['category_departments'][0]['views'] ?? null)->toBe(1);
+    expect($data['category_departments'][0]['product_views'] ?? null)->toBe(1);
     expect($data['category_departments'][0]['categories'][0]['category_name'] ?? null)->toBe('Dresses');
+});
+
+test('ecom tracker dashboard category performance splits category and product views', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $sessionId = Str::uuid()->toString();
+    $from = Carbon::parse('2026-07-11 12:00:00');
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'department_name' => 'Women',
+        'category_name' => 'Dresses',
+        'category_code' => 'DRS',
+        'created_at' => $from,
+        'start_time' => $from,
+        'end_time' => $from->copy()->addSeconds(20),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'department_name' => 'Women',
+        'category_name' => 'Dresses',
+        'category_code' => 'DRS',
+        'product_name' => 'Summer Dress',
+        'created_at' => $from->copy()->addMinute(),
+        'start_time' => $from->copy()->addMinute(),
+        'end_time' => $from->copy()->addMinute()->addSeconds(20),
+    ]);
+
+    $data = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-11',
+        'date_to' => '2026-07-11',
+    ]);
+
+    expect($data['categories'][0]['category_views'] ?? null)->toBe(1)
+        ->and($data['categories'][0]['product_views'] ?? null)->toBe(1)
+        ->and($data['categories'][0]['views'] ?? null)->toBe(2)
+        ->and($data['category_catalog_totals']['category_views'] ?? null)->toBe(1)
+        ->and($data['category_catalog_totals']['product_views'] ?? null)->toBe(1);
 });
 
 test('ecom tracker dashboard category performance attributes purchases across visitor sessions', function () {
@@ -1227,7 +1282,7 @@ test('ecom tracker dashboard includes session duration distribution', function (
 
     $byLabel = collect($distribution['buckets'])->keyBy('label');
     expect($byLabel['0–1 min']['count'])->toBe(1)
-        ->and($byLabel['1–5 min']['count'])->toBe(1)
+        ->and($byLabel['9–11 min']['count'])->toBe(1)
         ->and($byLabel['0–1 min']['pct'])->toBe(50.0);
 
     $filtered = $service->getDashboardData(['period' => '24h', 'device_type' => 'mobile']);

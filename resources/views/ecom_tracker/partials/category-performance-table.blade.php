@@ -14,7 +14,20 @@
                 <tr>
                     <th class="etd-catalog-expand-col"></th>
                     <th class="etd-col-category">Department / Category</th>
-                    <th class="etd-num etd-col-metric">Views</th>
+                    <th class="etd-num etd-col-metric">
+                        @include('ecom_tracker.partials.column-header-with-tip', [
+                            'label' => 'C view',
+                            'tip' => 'Category view actions',
+                            'align' => 'center',
+                        ])
+                    </th>
+                    <th class="etd-num etd-col-metric">
+                        @include('ecom_tracker.partials.column-header-with-tip', [
+                            'label' => 'P view',
+                            'tip' => 'Product view actions in this category',
+                            'align' => 'center',
+                        ])
+                    </th>
                     <th class="etd-num etd-col-metric">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Adds',
@@ -52,22 +65,20 @@
                                 <button type="button"
                                         class="etd-catalog-expand-btn"
                                         @click="expanded = expanded === @js($departmentKey) ? null : @js($departmentKey)"
-                                        :aria-expanded="expanded === @js($departmentKey)">
+                                        :aria-expanded="expanded === @js($departmentKey)"
+                                        aria-label="Show categories in {{ $department['name'] }}">
                                     <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-90': expanded === @js($departmentKey) }" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg>
                                 </button>
                             @endif
                         </td>
                         <td class="etd-col-category">
-                            <button type="button"
-                                    class="etd-catalog-product-trigger"
-                                    @if ($categoryCount > 0) @click="expanded = expanded === @js($departmentKey) ? null : @js($departmentKey)" @endif>
-                                <span class="font-medium text-slate-800 dark:text-slate-100">{{ $department['name'] }}</span>
-                                @if ($categoryCount > 0)
-                                    <span class="etd-category-count-badge">{{ $categoryCount }}</span>
-                                @endif
-                            </button>
+                            <span class="font-medium text-slate-800 dark:text-slate-100">{{ $department['name'] }}</span>
+                            @if ($categoryCount > 0)
+                                <span class="etd-category-count-badge">{{ $categoryCount }}</span>
+                            @endif
                         </td>
-                        <td class="etd-num etd-col-metric">{{ number_format($department['views']) }}</td>
+                        <td class="etd-num etd-col-metric">{{ number_format($department['category_views'] ?? 0) }}</td>
+                        <td class="etd-num etd-col-metric">{{ number_format($department['product_views'] ?? 0) }}</td>
                         <td class="etd-num etd-col-metric">{{ number_format($department['adds']) }}</td>
                         <td class="etd-num etd-col-metric">{{ number_format($department['proceed_checkouts'] ?? 0) }}</td>
                         <td class="etd-num etd-col-metric">{{ number_format($department['sale_items']) }}</td>
@@ -83,19 +94,25 @@
                     @foreach ($department['categories'] as $category)
                         @php
                             $categorySaleBar = (int) round(((float) ($category['sale_amount'] ?? 0) / $maxSaleAmount) * 100);
+                            $categoryLink = is_callable($categoryActivityLink)
+                                ? $categoryActivityLink(array_merge($category, ['department_name' => $category['department_name'] ?? $department['name'] ?? '']))
+                                : null;
                         @endphp
-                        <tr class="etd-category-child-row" x-show="expanded === @js($departmentKey)" x-cloak>
+                        <tr class="etd-category-child-row"
+                            x-show="expanded === @js($departmentKey)"
+                            x-cloak>
                             <td class="etd-catalog-expand-col"></td>
                             <td class="etd-col-category etd-category-child-name">
-                                @if (is_callable($categoryActivityLink))
-                                    <a href="{{ $categoryActivityLink(array_merge($category, ['department_name' => $category['department_name'] ?? $department['name'] ?? ''])) }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
+                                @if ($categoryLink)
+                                    <a href="{{ $categoryLink }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
                                         {{ $category['category_name'] }}
                                     </a>
                                 @else
                                     {{ $category['category_name'] }}
                                 @endif
                             </td>
-                            <td class="etd-num etd-col-metric">{{ number_format($category['views']) }}</td>
+                            <td class="etd-num etd-col-metric">{{ number_format($category['category_views'] ?? 0) }}</td>
+                            <td class="etd-num etd-col-metric">{{ number_format($category['product_views'] ?? 0) }}</td>
                             <td class="etd-num etd-col-metric">{{ number_format($category['adds']) }}</td>
                             <td class="etd-num etd-col-metric">{{ number_format($category['proceed_checkouts'] ?? 0) }}</td>
                             <td class="etd-num etd-col-metric">{{ number_format($category['sale_items']) }}</td>

@@ -13,9 +13,14 @@
 
     $focusColspan = count($focusColumns);
     $totalCols = 8 + $focusColspan;
+    $isWideTable = $focusColspan > 0;
 @endphp
 
-<div class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity">
+<div
+    class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity{{ $isWideTable ? ' etd-table-scroll--activity-wide' : '' }}"
+    style="--etd-activity-focus-cols: {{ $focusColspan }}"
+    x-data="{ openEvent: null }"
+>
     <table class="etd-table etd-table--activity w-full">
         <thead>
             <tr>
@@ -53,8 +58,8 @@
                         @endif
                     </th>
                 @endforeach
-                <th>Duration</th>
-                <th>Last active</th>
+                <th class="etd-col-duration etd-activity-col--optional">Duration</th>
+                <th class="etd-col-last-active etd-activity-col--optional">Last active</th>
                 <th class="etd-col-action">View</th>
             </tr>
         </thead>
@@ -62,6 +67,7 @@
             @forelse ($sessions as $session)
                 @php
                     $metrics = $rowMetrics[$session->session_id] ?? [];
+                    $commerceEvents = $metrics['commerce_events'] ?? [];
                     $formatMetric = function (string $key, mixed $default = '—') use ($metrics) {
                         $value = $metrics[$key] ?? $default;
 
@@ -76,36 +82,53 @@
                         return $value;
                     };
                 @endphp
-                <tr>
-                    <td class="etd-col-session">
+                <tr class="etd-activity-session-row">
+                    <td class="etd-col-session" data-label="Session">
                         @include('ecom_tracker.partials.session-id-chip', ['sessionId' => $session->session_id])
                         <div class="etd-subtle mt-0.5">{{ TrackerTime::formatFromStorage($session->created_at) }}</div>
                     </td>
-                    <td class="etd-col-user">
+                    <td class="etd-col-user" data-label="User">
                         @include('ecom_tracker.partials.session-identity', ['session' => $session])
                     </td>
-                    <td class="etd-col-trust">
+                    <td class="etd-col-trust" data-label="Visitor trust">
                         @include('ecom_tracker.partials.visitor-classification-badge', ['session' => $session, 'mode' => 'compact'])
                     </td>
-                    <td class="etd-col-commerce">
-                        @include('ecom_activity.partials.commerce-cell', ['metrics' => $metrics])
+                    <td class="etd-col-commerce" data-label="Commerce">
+                        @include('ecom_activity.partials.commerce-cell', [
+                            'metrics' => $metrics,
+                            'events' => $commerceEvents,
+                            'sessionKey' => $session->session_id,
+                        ])
                     </td>
-                    <td class="etd-col-actions etd-num">{{ number_format((int) ($session->actions_count ?? $metrics['actions_count'] ?? 0)) }}</td>
+                    <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($session->actions_count ?? $metrics['actions_count'] ?? 0)) }}</td>
                     @foreach ($focusColumns as $column)
-                        <td @class([$column['class'] ?? null])>
+                        <td @class([$column['class'] ?? null]) data-label="{{ $column['label'] }}">
                             {{ $formatMetric($column['key']) }}
                         </td>
                     @endforeach
-                    <td>{{ format_duration((int) ($session->session_duration_seconds ?? 0)) }}</td>
-                    <td>{{ TrackerTime::diffForHumansLatestActivity($session->updated_at, $session->last_active_at, $session->created_at) ?? '—' }}</td>
-                    <td class="etd-col-action">
+                    <td class="etd-col-duration etd-activity-col--optional" data-label="Duration">{{ format_duration((int) ($session->session_duration_seconds ?? 0)) }}</td>
+                    <td class="etd-col-last-active etd-activity-col--optional" data-label="Last active">{{ TrackerTime::diffForHumansLatestActivity($session->updated_at, $session->last_active_at, $session->created_at) ?? '—' }}</td>
+                    <td class="etd-col-action" data-label="View">
                         @can('ecom_tracker.activity.show')
                             <a href="{{ EcomTrackerViewData::activityShowUrlFromRequest(request(), $session->session_id) }}" class="etd-link">View session</a>
                         @endcan
                     </td>
                 </tr>
+                @foreach ($commerceEvents as $event)
+                    @php $eventKey = $session->session_id.':'.($event['id'] ?? $loop->index); @endphp
+                    <tr
+                        class="etd-commerce-event-row"
+                        x-show="openEvent === @js($eventKey)"
+                        x-collapse
+                        x-cloak
+                    >
+                        <td colspan="{{ $totalCols }}" class="etd-commerce-event-row__cell">
+                            @include('ecom_activity.partials.commerce-event-detail', ['event' => $event])
+                        </td>
+                    </tr>
+                @endforeach
             @empty
-                <tr>
+                <tr class="etd-activity-empty-row">
                     <td colspan="{{ $totalCols }}" class="text-center text-slate-500 py-10">
                         {{ $emptyMessage }}
                         @if ($hasFocus && filled($clearFocusUrl))

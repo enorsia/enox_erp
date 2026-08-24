@@ -19,7 +19,7 @@
     $showCatalogFilters = $showCatalogFilters ?? in_array(request('focus'), ['products', 'categories'], true);
 @endphp
 
-<div class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
+<div class="etd-page etd-page--activity" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
     @include('ecom_tracker.partials.filter-drawer', [
         'action' => route('admin.ecom-activity.index'),
         'resetUrl' => $filterResetUrl ?? route('admin.ecom-activity.index'),

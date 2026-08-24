@@ -220,7 +220,8 @@ function runDashboardActivityParityAudit(array $filters): int
                 ->orWhereNotNull('category_code')->where('category_code', '!=', '');
         })
         ->count();
-    $check('D1.1', 'Category views (dashboard sum)', (int) collect($data['category_catalog_totals'] ?? [])->get('views', collect($data['categories'])->sum('views')), $activityCategoryViewEvents + $activityProductViewWithCategory);
+    $check('D1.1', 'Category view actions (C view total)', (int) ($data['category_catalog_totals']['category_views'] ?? 0), $activityCategoryViewEvents);
+    $check('D1.2', 'Product view actions with category (P view total)', (int) ($data['category_catalog_totals']['product_views'] ?? 0), $activityProductViewWithCategory);
 
     // D2 Product views total (full catalog, session-scoped)
     $fullCatalog = $dashboard->buildProductCatalogPerformance($from, $to, null, [], ['period' => $period]);

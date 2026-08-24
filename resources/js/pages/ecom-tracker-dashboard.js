@@ -13,7 +13,6 @@ import {
     LineController,
     DoughnutController,
 } from 'chart.js';
-import { initSessionDurationDistributionChart } from '../shared/session-duration-distribution-chart';
 
 Chart.register(
     CategoryScale,
@@ -548,5 +547,3 @@ if (kpiPanel) {
         kpiPanel.querySelectorAll('.etd-kpi-group').forEach((group) => kpiResizeObserver.observe(group));
     }
 }
-
-initSessionDurationDistributionChart('etdDurationDistChart', D.duration_distribution);

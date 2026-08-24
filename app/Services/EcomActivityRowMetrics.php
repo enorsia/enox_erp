@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Support\EcomActivityCommerceEvents;
 use App\Support\EcomActivityCommerceSummary;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
@@ -150,7 +151,13 @@ class EcomActivityRowMetrics
             $summary = $useCatalogScope
                 ? EcomActivityCommerceSummary::summarizeCatalogActions($sessionActions, $catalogOptions, $this->dashboardService)
                 : EcomActivityCommerceSummary::summarizeActions($sessionActions);
-            $metrics[$sessionId] = array_merge($metrics[$sessionId] ?? [], $summary);
+            $metrics[$sessionId] = array_merge($metrics[$sessionId] ?? [], $summary, [
+                'commerce_events' => EcomActivityCommerceEvents::fromActions(
+                    $sessionActions,
+                    $useCatalogScope ? $catalogOptions : [],
+                    $this->dashboardService,
+                ),
+            ]);
         }
     }
 

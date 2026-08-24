@@ -1,5 +1,4 @@
 import { Chart, CategoryScale, LinearScale, LineElement, PointElement, ArcElement, Tooltip, Legend, LineController, DoughnutController } from 'chart.js';
-import { initSessionDurationDistributionChart } from '../shared/session-duration-distribution-chart';
 
 Chart.register(CategoryScale, LinearScale, LineElement, PointElement, ArcElement, Tooltip, Legend, LineController, DoughnutController);
 
@@ -103,4 +102,3 @@ if (donutCtx && D.new_returning) {
     });
 }
 
-initSessionDurationDistributionChart('vaDurationDistChart', D.duration_distribution);

@@ -11,8 +11,13 @@ final class SessionDurationBuckets
     {
         return [
             ['label' => '0–1 min', 'min' => 0, 'max' => 60],
-            ['label' => '1–5 min', 'min' => 61, 'max' => 300],
-            ['label' => '5–15 min', 'min' => 301, 'max' => 900],
+            ['label' => '1–3 min', 'min' => 61, 'max' => 180],
+            ['label' => '3–5 min', 'min' => 181, 'max' => 300],
+            ['label' => '5–7 min', 'min' => 301, 'max' => 420],
+            ['label' => '7–9 min', 'min' => 421, 'max' => 540],
+            ['label' => '9–11 min', 'min' => 541, 'max' => 660],
+            ['label' => '11–13 min', 'min' => 661, 'max' => 780],
+            ['label' => '13–15 min', 'min' => 781, 'max' => 900],
             ['label' => '15–30 min', 'min' => 901, 'max' => 1800],
             ['label' => '30+ min', 'min' => 1801, 'max' => PHP_INT_MAX],
         ];

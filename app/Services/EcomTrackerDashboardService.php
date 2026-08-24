@@ -124,6 +124,8 @@ class EcomTrackerDashboardService
             'categories' => array_slice($categories, 0, self::TABLE_DISPLAY_LIMIT),
             'category_catalog_totals' => [
                 'category_count' => count($categories),
+                'category_views' => (int) collect($categories)->sum('category_views'),
+                'product_views' => (int) collect($categories)->sum('product_views'),
                 'views' => (int) collect($categories)->sum('views'),
                 'adds' => (int) collect($categories)->sum('adds'),
                 'sale_items' => (int) collect($categories)->sum('sale_items'),
@@ -2947,7 +2949,10 @@ class EcomTrackerDashboardService
         $categoryViewsInRange = ActivityEcomUserAction::query()
             ->select($this->categoryViewColumns())
             ->where('action_type', 'category_view')
-            ->whereNotNull('category_name')
+            ->where(function ($query) {
+                $query->where(fn ($inner) => $inner->whereNotNull('category_name')->where('category_name', '!=', ''))
+                    ->orWhere(fn ($inner) => $inner->whereNotNull('category_code')->where('category_code', '!=', ''));
+            })
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->tap(fn ($query) => $this->constrainToSessionIds($query, $sessionIds))
             ->orderBy('created_at')
@@ -2961,7 +2966,10 @@ class EcomTrackerDashboardService
             $categoryViewsForAttribution = ActivityEcomUserAction::query()
                 ->select($this->categoryViewColumns())
                 ->where('action_type', 'category_view')
-                ->whereNotNull('category_name')
+                ->where(function ($query) {
+                    $query->where(fn ($inner) => $inner->whereNotNull('category_name')->where('category_name', '!=', ''))
+                        ->orWhere(fn ($inner) => $inner->whereNotNull('category_code')->where('category_code', '!=', ''));
+                })
                 ->where(function ($query) use ($from, $to, $conversionSessionIds) {
                     $query->whereBetween('created_at', TrackerTime::storageRange($from, $to))
                         ->orWhereIn('session_id', $conversionSessionIds);
@@ -2977,14 +2985,21 @@ class EcomTrackerDashboardService
 
         /** @var array<string, array<string, mixed>> $rows */
         $rows = [];
-        /** @var array<string, int> $viewCounts */
-        $viewCounts = [];
+        /** @var array<string, int> $categoryViewCounts */
+        $categoryViewCounts = [];
+        /** @var array<string, int> $productViewCounts */
+        $productViewCounts = [];
 
         foreach ($categoryViewsInRange as $action) {
             $meta = $this->categoryPerformanceMeta($action);
+
+            if (! $this->categoryPerformanceMetaHasIdentity($meta)) {
+                continue;
+            }
+
             $key = $meta['key'];
             $rows[$key] ??= $this->emptyCategoryPerformanceRow($meta);
-            $viewCounts[$key] = ($viewCounts[$key] ?? 0) + 1;
+            $categoryViewCounts[$key] = ($categoryViewCounts[$key] ?? 0) + 1;
         }
 
         foreach ($productViews as $action) {
@@ -2996,11 +3011,19 @@ class EcomTrackerDashboardService
 
             $key = $meta['key'];
             $rows[$key] ??= $this->emptyCategoryPerformanceRow($meta);
-            $viewCounts[$key] = ($viewCounts[$key] ?? 0) + 1;
+            $productViewCounts[$key] = ($productViewCounts[$key] ?? 0) + 1;
         }
 
-        foreach ($viewCounts as $key => $count) {
-            $rows[$key]['views'] = $count;
+        foreach ($categoryViewCounts as $key => $count) {
+            $rows[$key]['category_views'] = $count;
+        }
+
+        foreach ($productViewCounts as $key => $count) {
+            $rows[$key]['product_views'] = $count;
+        }
+
+        foreach ($rows as $key => $row) {
+            $rows[$key]['views'] = (int) ($row['category_views'] ?? 0) + (int) ($row['product_views'] ?? 0);
         }
 
         foreach ($conversionActions as $action) {
@@ -3116,6 +3139,8 @@ class EcomTrackerDashboardService
                 'department_name' => $target,
                 'category_name' => $categoryName,
                 'category_code' => (string) ($row['category_code'] ?? ''),
+                'category_views' => (int) ($row['category_views'] ?? 0),
+                'product_views' => (int) ($row['product_views'] ?? 0),
                 'views' => (int) ($row['views'] ?? 0),
                 'adds' => (int) ($row['adds'] ?? 0),
                 'proceed_checkouts' => (int) ($row['proceed_checkouts'] ?? 0),
@@ -3128,6 +3153,8 @@ class EcomTrackerDashboardService
             ->map(function (array $department) {
                 $department['categories'] = $this->sortCategoryPerformanceRows(collect($department['categories'] ?? []))->values()->all();
                 $department['category_count'] = count($department['categories']);
+                $department['category_views'] = (int) collect($department['categories'])->sum('category_views');
+                $department['product_views'] = (int) collect($department['categories'])->sum('product_views');
                 $department['views'] = (int) collect($department['categories'])->sum('views');
                 $department['adds'] = (int) collect($department['categories'])->sum('adds');
                 $department['proceed_checkouts'] = (int) collect($department['categories'])->sum('proceed_checkouts');
@@ -3164,6 +3191,8 @@ class EcomTrackerDashboardService
         return [
             'name' => $name,
             'key' => strtolower($name),
+            'category_views' => 0,
+            'product_views' => 0,
             'views' => 0,
             'adds' => 0,
             'proceed_checkouts' => 0,
@@ -3475,6 +3504,8 @@ class EcomTrackerDashboardService
             'category_id' => $meta['category_id'],
             'label' => $meta['label'],
             'name' => $meta['label'],
+            'category_views' => 0,
+            'product_views' => 0,
             'views' => 0,
             'adds' => 0,
             'proceed_checkouts' => 0,

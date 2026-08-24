@@ -314,7 +314,7 @@ test('duration buckets include percentage and distribution summary', function ()
     $buckets = $service->buildDurationBuckets($since);
     $distribution = $service->buildDurationDistribution($since);
 
-    expect($buckets)->toHaveCount(5)
+    expect($buckets)->toHaveCount(10)
         ->and($buckets[0])->toHaveKeys(['label', 'count', 'pct', 'min', 'max'])
         ->and(collect($buckets)->sum('count'))->toBe(2)
         ->and($distribution['total_sessions'])->toBe(2)

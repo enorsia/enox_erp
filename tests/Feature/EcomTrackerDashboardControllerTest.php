@@ -52,9 +52,10 @@ test('store dashboard shows custom date picker only when period is custom', func
         ->assertSee('presetKey: \'custom\'', false)
         ->assertSee('value="2026-07-01"', false)
         ->assertSee('value="2026-07-15"', false)
-        ->assertSee('Session quality', false)
+        ->assertDontSee('Session quality', false)
         ->assertSee('Session duration distribution', false)
-        ->assertSee('etdDurationDistChart', false)
+        ->assertSee('etd-duration-buckets', false)
+        ->assertDontSee('etdDurationDistChart', false)
         ->assertDontSee('Total time on site', false);
 });
 
@@ -73,8 +74,6 @@ test('store dashboard kpi cards link to user activity drill down', function () {
         ->toContain('focus=begin_checkout_abandonment')
         ->toContain('focus=proceed_checkout_abandonment')
         ->toContain('focus=payment_success')
-        ->toContain('focus=session_quality')
-        ->toContain('visitor_type=human')
         ->toContain('focus=categories')
         ->toContain('etd-kpi-drilldown-link');
 });

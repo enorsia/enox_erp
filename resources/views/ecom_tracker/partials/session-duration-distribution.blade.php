@@ -1,8 +1,7 @@
 @props([
     'distribution' => [],
-    'detailsUrl' => null,
-    'chartId' => 'etdDurationDistChart',
     'showPanel' => true,
+    'panelClass' => '',
 ])
 
 @php
@@ -12,12 +11,9 @@
 @endphp
 
 @if ($showPanel)
-    <div {{ $attributes->merge(['class' => 'etd-panel mb-5']) }}>
+    <div @class(['etd-panel mb-5', $panelClass => filled($panelClass)])>
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Session duration distribution</h2>
-            @if ($detailsUrl)
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailsUrl])
-            @endif
         </div>
         <div class="etd-panel-body">
 @endif
@@ -30,10 +26,6 @@
             </p>
 
             @if ($totalSessions > 0)
-                <div class="etd-chart-wrap etd-chart-wrap--duration-dist mb-4">
-                    <canvas id="{{ $chartId }}"></canvas>
-                </div>
-
                 <div class="etd-duration-buckets" role="list">
                     @foreach ($buckets as $bucket)
                         <div class="etd-duration-bucket" role="listitem">
