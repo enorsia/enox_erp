@@ -17,6 +17,7 @@ class SellingChartController extends Controller
             $search = $request->search;
             $platform = $request->platform;
             $status = $request->status;
+            $action = $request->action;
             $perPage = $request->per_page ?? 30;
 
             $query = SellingChartDiscountHistory::query();
@@ -32,6 +33,15 @@ class SellingChartController extends Controller
                 ->when($status !== null && $status !== '', function ($q) use ($status) {
                     $q->where('status', $status);
                 });
+
+            if ($action == 'export') {
+                $response = [
+                    'status' => true,
+                    'message' => 'Selling chart discount histories fetch successfully.',
+                    'data' => $query->get()
+                ];
+                return response()->json($response);
+            }
 
             $platforms = SellingChartDiscountHistory::query()
                 ->select('items')
@@ -60,6 +70,7 @@ class SellingChartController extends Controller
 
             $response = [
                 'status' => true,
+                'message' => 'Selling chart discount histories fetch successfully.',
                 'data' => $discountHistories->items(),
                 'platforms' => $platforms,
                 'total_count' => [
