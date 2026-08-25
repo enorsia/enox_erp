@@ -90,6 +90,19 @@ class TrackIngestService
 
             $this->validatePaymentSuccessPayload($event);
 
+            if (! $this->hasMeaningfulCheckoutPayload($event)) {
+                $acceptedIds[] = $eventId;
+
+                $this->logWarning('ingest.skip_empty_checkout', 'Skipped checkout action without cart data', [
+                    'session_id' => $sessionId,
+                    'event_id' => $eventId,
+                    'action_type' => $event['action_type'] ?? null,
+                    'page_url' => $event['page_url'] ?? null,
+                ]);
+
+                continue;
+            }
+
             if ($this->isDuplicatePaymentSuccess($event)) {
                 $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
 
@@ -806,6 +819,52 @@ class TrackIngestService
                     ->orWhere('payment_success->checkout_info->order_pk', $orderId);
             })
             ->exists();
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function hasMeaningfulCheckoutPayload(array $event): bool
+    {
+        $actionType = (string) ($event['action_type'] ?? '');
+
+        if (! in_array($actionType, ['begin_checkout', 'proceed_checkout'], true)) {
+            return true;
+        }
+
+        $payloadKey = $actionType === 'begin_checkout' ? 'begin_checkout' : 'proceed_to_checkout';
+        $payload = $event[$payloadKey] ?? null;
+
+        if (! is_array($payload)) {
+            return false;
+        }
+
+        $total = (float) ($payload['cart_total'] ?? 0);
+
+        if ($total > 0) {
+            return true;
+        }
+
+        $items = $payload['cart_items'] ?? $payload['items'] ?? [];
+
+        if (! is_array($items) || $items === []) {
+            return false;
+        }
+
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $qty = (float) ($item['qty'] ?? $item['quantity'] ?? 0);
+            $identity = trim((string) ($item['product_code'] ?? $item['sku'] ?? $item['product_name'] ?? $item['name'] ?? ''));
+
+            if ($qty > 0 || $identity !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

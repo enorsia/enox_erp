@@ -412,6 +412,32 @@ test('track endpoint accepts proceed checkout with product line details', functi
     expect($session->user_phone)->toBe('07123456789');
 });
 
+test('track endpoint skips empty proceed checkout without cart data', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'proceed_checkout',
+        'page_url' => 'https://enorsia.com/klarna/checkout/2726451663',
+        'proceed_to_checkout' => [
+            'cart_total' => 0,
+            'cart_items' => [],
+            'customer' => [
+                'shipping' => ['country' => 'United Kingdom'],
+            ],
+        ],
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk()
+        ->assertJson(['accepted_ids' => [$eventId]]);
+
+    expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeFalse();
+});
+
 test('track endpoint accepts payment success with checkout info', function () {
     $sessionId = Str::uuid()->toString();
     $eventId = Str::uuid()->toString();
