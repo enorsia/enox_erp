@@ -412,6 +412,48 @@ test('track endpoint accepts proceed checkout with product line details', functi
     expect($session->user_phone)->toBe('07123456789');
 });
 
+test('track endpoint accepts proceed checkout with shipping discount and grand total', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'proceed_checkout',
+        'proceed_to_checkout' => [
+            'cart_total' => 54.98,
+            'coupon_code' => 'SAVE10',
+            'delivery_type' => 'next_day',
+            'totals' => [
+                'subtotal' => 50,
+                'coupon_discount' => 5,
+                'shipping_cost' => 4.99,
+                'extra_handling_cost' => 4.99,
+                'service_charge' => 0,
+                'priority_charge' => 0,
+                'grand_total' => 54.98,
+            ],
+            'cart_items' => [[
+                'product_id' => '101',
+                'product_code' => 'GS123-M',
+                'product_name' => 'Dress',
+                'qty' => 1,
+                'price' => 50,
+            ]],
+        ],
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk();
+
+    $action = ActivityEcomUserAction::where('event_id', $eventId)->first();
+
+    expect($action->proceed_to_checkout['totals']['grand_total'])->toBe(54.98)
+        ->and($action->proceed_to_checkout['totals']['shipping_cost'])->toBe(4.99)
+        ->and($action->proceed_to_checkout['delivery_type'])->toBe('next_day');
+});
+
 test('track endpoint skips empty proceed checkout without cart data', function () {
     $sessionId = Str::uuid()->toString();
     $eventId = Str::uuid()->toString();

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\CheckoutPayloadTotals;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
@@ -5758,7 +5759,7 @@ class EcomTrackerDashboardService
 
             $rows->push($this->formatRecoverableSessionRow(
                 (string) $sessionId,
-                (float) ($payload['cart_total'] ?? $payload['amount_paid'] ?? 0),
+                (float) (CheckoutPayloadTotals::commerceAmount($payload) ?? $payload['cart_total'] ?? $payload['amount_paid'] ?? 0),
                 $latest->created_at,
                 $this->resolvePayloadEventQty($payload),
             ));

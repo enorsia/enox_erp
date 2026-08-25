@@ -42,7 +42,14 @@ test('commerce summary shows proceed checkout when payment is missing', function
         new ActivityEcomUserAction([
             'id' => 10,
             'action_type' => 'proceed_checkout',
-            'proceed_to_checkout' => ['cart_total' => 44.50],
+            'proceed_to_checkout' => [
+                'cart_total' => 44.50,
+                'totals' => [
+                    'subtotal' => 40,
+                    'shipping_cost' => 4.50,
+                    'grand_total' => 44.50,
+                ],
+            ],
             'created_at' => now(),
         ]),
     ]);

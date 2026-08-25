@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\CheckoutPayloadTotals;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Support\EcomTrackerLogger;
@@ -839,7 +840,7 @@ class TrackIngestService
             return false;
         }
 
-        $total = (float) ($payload['cart_total'] ?? 0);
+        $total = (float) (CheckoutPayloadTotals::commerceAmount($payload) ?? 0);
 
         if ($total > 0) {
             return true;

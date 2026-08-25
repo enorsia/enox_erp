@@ -214,9 +214,9 @@ final class EcomActivityCommerceSummary
         }
 
         $payload = is_array($action->{$payloadKey} ?? null) ? $action->{$payloadKey} : [];
-        $amount = (float) ($payload['cart_total'] ?? $payload['amount_paid'] ?? 0);
+        $amount = CheckoutPayloadTotals::commerceAmount($payload);
 
-        return $amount > 0 ? round($amount, 2) : null;
+        return $amount !== null && $amount > 0 ? round($amount, 2) : null;
     }
 
     private static function tipForStage(string $stage, ActivityEcomUserAction $action, ?float $value): ?string

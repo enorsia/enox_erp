@@ -223,7 +223,7 @@ final class EcomActivityCommerceEvents
         $payloadKey = $stage === 'proceed_checkout' ? 'proceed_to_checkout' : 'begin_checkout';
         $payload = is_array($action->{$payloadKey} ?? null) ? $action->{$payloadKey} : [];
         $items = self::normalizeItems($payload);
-        $amount = self::moneyAmount($payload['cart_total'] ?? null);
+        $amount = self::moneyAmount(CheckoutPayloadTotals::commerceAmount($payload));
 
         if ($amount === null && $items === []) {
             return null;
@@ -233,6 +233,11 @@ final class EcomActivityCommerceEvents
         $customerName = trim((string) ($customer['full_name'] ?? ''));
         $coupon = trim((string) ($payload['coupon_code'] ?? ''));
         $itemQty = self::sumItemQty($items);
+        $totals = CheckoutPayloadTotals::totals($payload);
+        $discountTotal = (self::moneyAmount($totals['coupon_discount'] ?? null) ?? 0)
+            + (self::moneyAmount($totals['scs_discount'] ?? null) ?? 0)
+            + (self::moneyAmount($totals['sms_discount'] ?? null) ?? 0);
+        $shippingCost = self::moneyAmount($totals['shipping_cost'] ?? $totals['delivery_charge'] ?? null) ?? 0;
 
         return [
             'id' => $stage.':'.$action->id,
@@ -247,6 +252,8 @@ final class EcomActivityCommerceEvents
             'cart_total' => $amount !== null ? self::formatMoney($amount) : null,
             'footer_note' => self::joinSummaryParts(array_filter([
                 $coupon !== '' ? 'Coupon '.$coupon : null,
+                $discountTotal > 0 ? 'Discount '.self::formatMoney($discountTotal) : null,
+                $shippingCost > 0 ? 'Shipping '.self::formatMoney($shippingCost) : null,
                 $customerName !== '' ? $customerName : null,
             ])) ?: null,
             'products' => self::mapLineItems($items),

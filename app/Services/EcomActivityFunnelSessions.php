@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ActivityEcomUserAction;
+use App\Support\CheckoutPayloadTotals;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -61,7 +62,7 @@ class EcomActivityFunnelSessions
             $rows[] = [
                 'session_id' => (string) $sessionId,
                 'qty' => $this->resolvePayloadEventQty($payload),
-                'value' => round((float) ($payload['cart_total'] ?? $payload['amount_paid'] ?? 0), 2),
+                'value' => round((float) (CheckoutPayloadTotals::commerceAmount($payload) ?? $payload['cart_total'] ?? $payload['amount_paid'] ?? 0), 2),
                 'occurred_at' => $latest->created_at,
             ];
         }
