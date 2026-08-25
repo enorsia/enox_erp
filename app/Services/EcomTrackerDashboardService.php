@@ -7,6 +7,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Support\EcomActivityFocus;
+use App\Support\EcomActivityKeywordSearch;
 use App\Support\EcomTrackerViewData;
 use App\Support\SessionDurationBuckets;
 use App\Support\SessionTrafficAttribution;
@@ -461,6 +462,19 @@ class EcomTrackerDashboardService
      */
     public function activitySessionIds(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): Collection
     {
+        $keyword = trim((string) ($filters['keyword_search'] ?? ''));
+        unset($filters['keyword_search']);
+
+        if ($keyword !== '') {
+            return $this->keywordActivitySessionIds(
+                $from,
+                $to,
+                $keyword,
+                $this->extractSessionFilters($filters),
+                $period,
+            );
+        }
+
         if ($filters === []) {
             return $this->sessionsInRange($from, $to, $period)->keys()->values();
         }
@@ -1270,19 +1284,14 @@ class EcomTrackerDashboardService
         array $filters = [],
         ?string $period = null,
     ): ?array {
-        $sessionFilters = $this->extractSessionFilters($filters);
+        $keyword = trim((string) ($filters['keyword_search'] ?? ''));
         $catalogOptions = $this->extractProductCatalogOptions($filters);
 
-        if ($catalogOptions !== []) {
-            $sessionIds = $this->activitySessionIds(
-                $from,
-                $to,
-                array_merge($sessionFilters, $catalogOptions),
-                $period,
-            );
+        if ($keyword !== '' || $catalogOptions !== []) {
+            $sessionIds = $this->activitySessionIds($from, $to, $filters, $period);
             $sessions = $this->sessionsInRange($from, $to, $period)->only($sessionIds->all());
         } else {
-            $sessions = $this->filteredSessionsForRange($from, $to, $sessionFilters, $period);
+            $sessions = $this->filteredSessionsForRange($from, $to, $this->extractSessionFilters($filters), $period);
         }
 
         $kpis = $this->buildKpis($from, $to, $sessions);
@@ -1307,7 +1316,7 @@ class EcomTrackerDashboardService
     ): ?array {
         $sessionFilters = $this->extractSessionFilters($filters);
         $catalogOptions = $this->extractProductCatalogOptions($filters);
-        $sessionIds = $this->activitySessionIds($from, $to, $sessionFilters, $period);
+        $sessionIds = $this->activitySessionIds($from, $to, $filters, $period);
 
         if ($catalogOptions !== []) {
             $catalogSessionIds = $this->productCatalogSessionIds(
@@ -1737,7 +1746,41 @@ class EcomTrackerDashboardService
     {
         $query = ActivityEcomUser::query()->select('session_id');
         TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period);
+        $this->applyActivitySessionFilters($query, $filters);
 
+        return $query->pluck('session_id');
+    }
+
+    /**
+     * @param  array<string, mixed>  $sessionFilters
+     * @return Collection<int, string>
+     */
+    private function keywordActivitySessionIds(
+        Carbon $from,
+        Carbon $to,
+        string $keyword,
+        array $sessionFilters = [],
+        ?string $period = null,
+    ): Collection {
+        return $this->rememberQuery(
+            $this->queryCacheKey('keywordActivitySessionIds', $from, $to, $period, array_merge($sessionFilters, ['keyword_search' => $keyword])),
+            function () use ($from, $to, $keyword, $sessionFilters, $period) {
+                $query = ActivityEcomUser::query()->select('session_id');
+                TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period);
+                $this->applyActivitySessionFilters($query, $sessionFilters);
+                EcomActivityKeywordSearch::apply($query, $keyword, $this, $from, $to, $period);
+
+                return $query->pluck('session_id')->values();
+            },
+        );
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\ActivityEcomUser>  $query
+     * @param  array<string, mixed>  $filters
+     */
+    private function applyActivitySessionFilters($query, array $filters): void
+    {
         if (! empty($filters['device_type'])) {
             $query->where('device_type', $filters['device_type']);
         }
@@ -1777,8 +1820,6 @@ class EcomTrackerDashboardService
                 $query->whereNotIn('session_id', $orderSessionIds);
             }
         }
-
-        return $query->pluck('session_id');
     }
 
     /**

@@ -17,7 +17,7 @@
 
     $sidebarFilterCount = $sidebarFilterCount ?? \App\Support\EcomActivityFocus::activeFilterCount(request());
     $showCatalogFilters = $showCatalogFilters ?? in_array(request('focus'), ['products', 'categories'], true);
-    $hasProductDrill = filled(\App\Support\EcomActivityFocus::resolvedProductDrillLabel(request()));
+    $showProductCatalogExtras = \App\Support\EcomActivityFocus::showProductCatalogExtrasInDrawer(request());
 @endphp
 
 <div class="etd-page etd-page--activity" id="ecom-activity-page-content" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
@@ -32,9 +32,9 @@
         'dateTo' => $dateTo,
         'drawerWide' => true,
         'includeVisitorTrust' => true,
-        'includeSessionSearch' => \App\Support\EcomActivityFocus::showSessionKeywordSearchInDrawer(request()),
-        'showProductFilters' => $showCatalogFilters && ! $hasProductDrill,
-        'productFiltersHeading' => ($showCatalogFilters && ! $hasProductDrill) ? 'Additional product filters' : null,
+        'includeSessionSearch' => \App\Support\EcomActivityFocus::showActivitySearchInDrawer(request()),
+        'showProductFilters' => $showProductCatalogExtras,
+        'productFiltersHeading' => $showProductCatalogExtras ? 'Additional product filters' : null,
         'productFilterOptions' => $productFilterOptions ?? ['categories' => [], 'colors' => [], 'sizes' => []],
         'eventScenarioOptions' => $eventScenarioOptions ?? [],
         'productSortGroups' => $productSortGroups ?? [],
@@ -155,9 +155,7 @@
 
         @if (! empty($activityListContext ?? $drillDownContext ?? null))
             @include('ecom_activity.partials.drill-down-context', ['context' => $activityListContext ?? $drillDownContext])
-        @endif
-
-        @if (! empty($filterChips))
+        @elseif (! empty($filterChips))
             @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
         @endif
 

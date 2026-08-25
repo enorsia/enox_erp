@@ -448,10 +448,27 @@ final class EcomActivityFocus
             'event_scenario',
         ];
 
-        return array_filter(
+        $filters = array_filter(
             array_intersect_key($request->only($keys), array_flip($keys)),
             fn ($value) => filled($value),
         );
+
+        if (self::shouldApplySessionKeywordSearch($request)) {
+            unset($filters['search']);
+        }
+
+        return $filters;
+    }
+
+    public static function activitySummaryKeywordSearch(Request $request): ?string
+    {
+        if (! self::shouldApplySessionKeywordSearch($request)) {
+            return null;
+        }
+
+        $search = trim((string) $request->input('search', ''));
+
+        return $search !== '' ? $search : null;
     }
 
     /**
@@ -459,10 +476,16 @@ final class EcomActivityFocus
      */
     public static function activitySummaryFiltersFromRequest(Request $request): array
     {
-        return array_merge(
+        $filters = array_merge(
             self::sessionFiltersFromRequest($request),
             self::activitySummaryCatalogFiltersFromRequest($request),
         );
+
+        if ($keyword = self::activitySummaryKeywordSearch($request)) {
+            $filters['keyword_search'] = $keyword;
+        }
+
+        return $filters;
     }
 
     /**
@@ -563,6 +586,28 @@ final class EcomActivityFocus
         return in_array($request->input('focus'), ['products', 'categories'], true);
     }
 
+    public static function isDashboardSectionFocus(?string $focus): bool
+    {
+        return self::isValid($focus);
+    }
+
+    /**
+     * Extra catalog controls (color, size, activity, etc.) belong on the dashboard,
+     * not in activity drill-down drawers — keep those aligned with payment success.
+     */
+    public static function showProductCatalogExtrasInDrawer(Request $request): bool
+    {
+        return false;
+    }
+
+    /**
+     * Keyword search field in the activity filter drawer.
+     */
+    public static function showActivitySearchInDrawer(Request $request): bool
+    {
+        return true;
+    }
+
     public static function usesCatalogScopedSearch(Request $request): bool
     {
         return self::showCatalogFiltersInDrawer($request);
@@ -603,17 +648,11 @@ final class EcomActivityFocus
      */
     public static function sidebarFilterQueryKeys(?Request $request = null): array
     {
-        $keys = array_merge(
-            ['department', 'category', 'funnel'],
+        return array_merge(
+            ['search', 'department', 'category', 'funnel'],
             self::SHARED_SESSION_FILTER_KEYS,
             self::DASHBOARD_AUDIENCE_FILTER_KEYS,
         );
-
-        if ($request === null || ! self::usesCatalogScopedSearch($request) || self::resolvedProductDrillLabel($request) !== null) {
-            array_unshift($keys, 'search');
-        }
-
-        return $keys;
     }
 
     /**
@@ -623,21 +662,18 @@ final class EcomActivityFocus
     {
         $labels = ['Department', 'Category', 'Funnel', 'Device', 'Login', 'Orders', 'Visitor type', 'Source', 'Medium'];
 
-        if (! self::usesCatalogScopedSearch($request)) {
+        if (self::showActivitySearchInDrawer($request) && ! self::usesCatalogScopedSearch($request)) {
             $labels[] = self::searchFilterLabel($request);
         }
 
         if (self::showCatalogFiltersInDrawer($request)) {
-            $catalogLabels = [
-                'Product', 'Product search', 'Color', 'Size',
-                'Activity', 'Funnel step', 'Has purchases', 'Has views', 'Has cart adds',
-            ];
+            $labels[] = 'Product';
 
-            if (self::showSessionKeywordSearchInDrawer($request)) {
-                $catalogLabels[] = 'Search';
+            if (self::shouldApplySessionKeywordSearch($request)) {
+                $labels[] = 'Search';
+            } elseif ($request->filled('search')) {
+                $labels[] = 'Product search';
             }
-
-            return array_merge($labels, $catalogLabels);
         }
 
         return $labels;
@@ -651,10 +687,6 @@ final class EcomActivityFocus
     public static function drawerPreserveQueryParams(Request $request): array
     {
         $editableKeys = self::sidebarFilterQueryKeys($request);
-
-        if (self::showCatalogFiltersInDrawer($request)) {
-            $editableKeys = array_merge($editableKeys, self::catalogFilterQueryKeys());
-        }
 
         $preserveKeys = array_values(array_diff(
             EcomTrackerViewData::activityQueryKeys(),
@@ -677,20 +709,6 @@ final class EcomActivityFocus
         $count = collect(self::sidebarFilterQueryKeys($request))
             ->filter(function (string $key) use ($request) {
                 if ($key === 'funnel' && ! self::shouldApplyDrawerFunnelFilter($request)) {
-                    return false;
-                }
-
-                return filled($request->input($key));
-            })
-            ->count();
-
-        if (! self::showCatalogFiltersInDrawer($request)) {
-            return $count;
-        }
-
-        $count += collect(self::catalogFilterQueryKeys())
-            ->filter(function (string $key) use ($request) {
-                if ($key === 'search' && self::shouldApplySessionKeywordSearch($request)) {
                     return false;
                 }
 

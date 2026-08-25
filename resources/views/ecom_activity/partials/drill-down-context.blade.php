@@ -7,10 +7,24 @@
             fn (array $metric) => ($metric['label'] ?? '') === 'Matching sessions'
         );
         $sessionCount = (int) ($sessionMetric['value'] ?? 0);
-        $filterValues = collect($context['criteria'] ?? [])->pluck('value')->filter()->values();
-        $tooltip = trim(($context['description'] ?? '').' '.collect($context['criteria'] ?? [])->map(
-            fn (array $criterion) => $criterion['label'].': '.$criterion['value']
-        )->implode(' · '));
+        $filterSegments = collect($context['criteria'] ?? [])
+            ->map(function (array $criterion): ?string {
+                $label = trim((string) ($criterion['label'] ?? ''));
+                $value = trim((string) ($criterion['value'] ?? ''));
+
+                if ($value === '') {
+                    return null;
+                }
+
+                return match ($label) {
+                    'Product' => $value,
+                    'Search', 'Product search' => $value,
+                    default => $label !== '' ? "{$label}: {$value}" : $value,
+                };
+            })
+            ->filter()
+            ->values();
+        $tooltip = trim(($context['description'] ?? '').' '.$filterSegments->implode(' · '));
     @endphp
 
     <div
@@ -22,9 +36,9 @@
         <p class="etd-activity-context__line">
             <span class="etd-activity-context__section">{{ $context['section'] }}</span>
 
-            @foreach ($filterValues as $value)
+            @foreach ($filterSegments as $segment)
                 <span class="etd-activity-context__sep" aria-hidden="true">·</span>
-                <span class="etd-activity-context__filter">{{ $value }}</span>
+                <span class="etd-activity-context__filter">{{ $segment }}</span>
             @endforeach
 
             <span class="etd-activity-context__sep" aria-hidden="true">·</span>

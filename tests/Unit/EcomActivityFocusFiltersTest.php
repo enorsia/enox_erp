@@ -25,7 +25,7 @@ test('catalog scoped search is enabled for products and categories focus', funct
         ->and(EcomActivityFocus::indexCatalogFiltersFromRequest($productCodeRequest))->toBe(['search' => 'MS31262181']);
 });
 
-test('drawer preserve params keep drill-down context but expose catalog filters in drawer', function () {
+test('drawer preserve params keep drill-down context and preserve dashboard catalog params', function () {
     $request = Request::create('/', 'GET', [
         'focus' => 'categories',
         'back' => 'http://example.test/dashboard',
@@ -39,15 +39,13 @@ test('drawer preserve params keep drill-down context but expose catalog filters 
 
     $preserved = EcomActivityFocus::drawerPreserveQueryParams($request);
 
-    expect($preserved)->toHaveKeys(['focus', 'back'])
+    expect($preserved)->toHaveKeys(['focus', 'back', 'color', 'activity'])
         ->and($preserved)->not->toHaveKey('category')
-        ->and($preserved)->not->toHaveKey('color')
-        ->and($preserved)->not->toHaveKey('activity')
         ->and($preserved)->not->toHaveKey('search')
         ->and($preserved)->not->toHaveKey('device_type');
 });
 
-test('active filter count includes session and catalog filters on catalog focus', function () {
+test('active filter count includes session and sidebar filters on catalog focus', function () {
     $request = Request::create('/', 'GET', [
         'focus' => 'products',
         'device_type' => 'mobile',
@@ -56,7 +54,7 @@ test('active filter count includes session and catalog filters on catalog focus'
         'product_code' => 'TEE-1',
     ]);
 
-    expect(EcomActivityFocus::activeFilterCount($request))->toBe(4);
+    expect(EcomActivityFocus::activeFilterCount($request))->toBe(3);
 });
 
 test('product drill-down filters use a single short product chip', function () {
@@ -97,7 +95,7 @@ test('product drill-down shows session keyword search in drawer and applies sear
     expect($labels)->toContain('Product', 'Search');
 });
 
-test('active filter chips include catalog filters on catalog focus', function () {
+test('active filter chips include sidebar filters on catalog focus', function () {
     $request = Request::create('/', 'GET', [
         'focus' => 'products',
         'category' => 'Tops',
@@ -110,8 +108,8 @@ test('active filter chips include catalog filters on catalog focus', function ()
         ->all();
 
     expect($labels)->toContain('Category: Tops')
-        ->and($labels)->toContain('Activity: Views')
-        ->and($labels)->toContain('Device: Mobile');
+        ->and($labels)->toContain('Device: Mobile')
+        ->and($labels)->not->toContain('Activity: Views');
 });
 
 test('format funnel summary metrics from normalized acquisition row', function () {
@@ -212,6 +210,59 @@ test('resolve filter summary focus infers devices and traffic from sidebar filte
     expect(EcomActivityFocus::resolveFilterSummaryFocus($deviceRequest))->toBe('devices')
         ->and(EcomActivityFocus::resolveFilterSummaryFocus($trafficRequest))->toBe('traffic')
         ->and(EcomActivityFocus::resolveFilterSummaryFocus($plainRequest))->toBeNull();
+});
+
+test('activity list context includes funnel metrics for visitor keyword search filters', function () {
+    $request = Request::create('/', 'GET', [
+        'search' => 'Michael Corbett',
+        'period' => '30d',
+    ]);
+
+    $dashboard = Mockery::mock(EcomTrackerDashboardService::class);
+    $dashboard->shouldReceive('productCatalogEventScenarioOptions')->andReturn([]);
+    $dashboard->shouldReceive('productCatalogActivityFilterOptions')->andReturn([]);
+    $dashboard->shouldReceive('activityFunnelSummaryForFilters')
+        ->once()
+        ->withArgs(function ($from, $to, array $filters) {
+            return ($filters['keyword_search'] ?? null) === 'Michael Corbett'
+                && ! array_key_exists('search', $filters);
+        })
+        ->andReturn([
+            'views' => 4,
+            'adds' => 2,
+            'begin_checkouts' => 1,
+            'proceed_checkouts' => 1,
+            'purchases' => 1,
+            'qty' => 2,
+            'revenue' => 45.50,
+        ]);
+    $dashboard->shouldReceive('audienceSummaryForFilters')
+        ->once()
+        ->andReturn([
+            'unique_visitors' => 1,
+            'avg_stay_seconds' => 291,
+        ]);
+
+    app()->instance(EcomTrackerDashboardService::class, $dashboard);
+
+    $context = EcomActivityFocus::activityListContext(
+        $request,
+        'Last 30 days',
+        1,
+        [],
+        Carbon::parse('2026-07-26'),
+        Carbon::parse('2026-08-25'),
+        '30d',
+    );
+
+    $values = collect($context['metrics'] ?? [])->pluck('value', 'label')->all();
+
+    expect(EcomActivityFocus::activitySummaryFiltersFromRequest($request))
+        ->toMatchArray(['keyword_search' => 'Michael Corbett'])
+        ->and($context['section'])->toBe('Audience & engagement')
+        ->and($values['Views'] ?? null)->toBe('4')
+        ->and($values['Sold qty'] ?? null)->toBe('2')
+        ->and($values['Sale'] ?? null)->toBe('£45.50');
 });
 
 test('activity list context includes funnel metrics for keyword search filters', function () {
