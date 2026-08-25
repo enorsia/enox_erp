@@ -11,10 +11,13 @@ test('catalog scoped search is enabled for products and categories focus', funct
     $productsRequest = Request::create('/', 'GET', ['focus' => 'products']);
     $categoriesRequest = Request::create('/', 'GET', ['focus' => 'categories']);
     $audienceRequest = Request::create('/', 'GET', ['focus' => 'audience']);
+    $keywordRequest = Request::create('/', 'GET', ['search' => 'hoodie']);
 
     expect(EcomActivityFocus::usesCatalogScopedSearch($productsRequest))->toBeTrue()
         ->and(EcomActivityFocus::usesCatalogScopedSearch($categoriesRequest))->toBeTrue()
-        ->and(EcomActivityFocus::usesCatalogScopedSearch($audienceRequest))->toBeFalse();
+        ->and(EcomActivityFocus::usesCatalogScopedSearch($audienceRequest))->toBeFalse()
+        ->and(EcomActivityFocus::productCatalogFiltersFromRequest($keywordRequest))->toBe([])
+        ->and(EcomActivityFocus::searchFilterLabel($keywordRequest))->toBe('Search');
 });
 
 test('drawer preserve params keep drill-down context but expose catalog filters in drawer', function () {

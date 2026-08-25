@@ -457,10 +457,19 @@ final class EcomActivityFocus
             'event_scenario',
         ], $except));
 
+        if (! self::usesCatalogScopedSearch($request)) {
+            $keys = array_values(array_diff($keys, ['search']));
+        }
+
         return array_filter(
             array_intersect_key($request->only($keys), array_flip($keys)),
             fn ($value) => filled($value),
         );
+    }
+
+    public static function searchFilterLabel(Request $request): string
+    {
+        return self::usesCatalogScopedSearch($request) ? 'Product search' : 'Search';
     }
 
     public static function showCatalogFiltersInDrawer(Request $request): bool
@@ -529,7 +538,7 @@ final class EcomActivityFocus
         $labels = ['Department', 'Category', 'Funnel', 'Device', 'Login', 'Orders', 'Visitor type', 'Source', 'Medium'];
 
         if (! self::usesCatalogScopedSearch($request)) {
-            $labels[] = 'Product search';
+            $labels[] = self::searchFilterLabel($request);
         }
 
         if (self::showCatalogFiltersInDrawer($request)) {
@@ -822,7 +831,7 @@ final class EcomActivityFocus
         $add('Product', $request->input('product_name'));
 
         if ($request->filled('search') && ! $request->filled('product_code') && ! $request->filled('product_name')) {
-            $add('Product search', '"'.$request->search.'"');
+            $add(self::searchFilterLabel($request), '"'.$request->search.'"');
         }
 
         if ($request->filled('category')) {
@@ -936,6 +945,7 @@ final class EcomActivityFocus
                 'Product code' => 'product_code',
                 'Product' => 'product_name',
                 'Product search' => 'search',
+                'Search' => 'search',
                 'Category' => 'category',
                 'Department' => 'department',
                 'Color' => 'color',
@@ -1004,6 +1014,7 @@ final class EcomActivityFocus
             'Product code' => 'product_code',
             'Product' => 'product_name',
             'Product search' => 'search',
+            'Search' => 'search',
             'Category' => 'category',
             'Department' => 'department',
             'Color' => 'color',

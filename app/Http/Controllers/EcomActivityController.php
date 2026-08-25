@@ -12,6 +12,7 @@ use App\Services\EcomActivityTimelinePresenter;
 use App\Services\EcomTrackerDashboardService;
 use App\Services\EcomTrackerFeatureGate;
 use App\Support\EcomActivityFocus;
+use App\Support\EcomActivityKeywordSearch;
 use App\Support\EcomActivitySessionSort;
 use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
@@ -400,27 +401,14 @@ class EcomActivityController extends EcomTrackerAdminController
         }
 
         if ($request->filled('search') && ! EcomActivityFocus::usesCatalogScopedSearch($request)) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('session_id', 'like', "%{$search}%")
-                    ->orWhere('visitor_id', 'like', "%{$search}%")
-                    ->orWhere('ip', 'like', "%{$search}%")
-                    ->orWhere('user_name', 'like', "%{$search}%")
-                    ->orWhere('user_email', 'like', "%{$search}%")
-                    ->orWhere('user_phone', 'like', "%{$search}%")
-                    ->orWhere('utm_source', 'like', "%{$search}%")
-                    ->orWhere('utm_medium', 'like', "%{$search}%")
-                    ->orWhere('utm_campaign', 'like', "%{$search}%")
-                    ->orWhere('landing_page', 'like', "%{$search}%")
-                    ->orWhereHas('botContext', fn ($b) => $b
-                        ->where('client_ip', 'like', "%{$search}%")
-                        ->orWhere('ip_country', 'like', "%{$search}%")
-                        ->orWhere('cf_ray', 'like', "%{$search}%")
-                        ->orWhere('bot_reason', 'like', "%{$search}%"))
-                    ->orWhereHas('actions', fn ($actions) => $actions
-                        ->where('page_url', 'like', "%{$search}%")
-                        ->orWhere('referer', 'like', "%{$search}%"));
-            });
+            EcomActivityKeywordSearch::apply(
+                $query,
+                trim((string) $request->search),
+                $this->dashboardService,
+                $range['from'],
+                $range['to'],
+                $range['period'] ?? $request->input('period', '24h'),
+            );
         }
 
         if (! in_array('country', $except, true) && $request->filled('country')) {

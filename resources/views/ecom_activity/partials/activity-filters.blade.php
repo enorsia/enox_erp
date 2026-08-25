@@ -19,11 +19,11 @@
         <section class="etd-activity-filter-section etd-activity-filter-section--full">
             <p class="etd-activity-filter-section-title">Search</p>
             <label class="etd-filter-compact-field">
-                <span class="etd-filter-compact-label">Session, visitor, UTM…</span>
+                <span class="etd-filter-compact-label">Keyword</span>
                 <input type="text"
                        name="search"
                        value="{{ request('search') }}"
-                       placeholder="Session, visitor, UTM, URL, name, email or IP…"
+                       placeholder="Session, visitor, email, phone, IP, product, SKU, category, department, UTM…"
                        class="etd-filter-input etd-filter-input--sm w-full">
             </label>
         </section>
