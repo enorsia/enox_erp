@@ -229,8 +229,6 @@ final class EcomActivityCommerceEvents
             return null;
         }
 
-        $customer = is_array($payload['customer'] ?? null) ? $payload['customer'] : [];
-        $customerName = trim((string) ($customer['full_name'] ?? ''));
         $coupon = trim((string) ($payload['coupon_code'] ?? ''));
         $itemQty = self::sumItemQty($items);
         $totals = CheckoutPayloadTotals::totals($payload);
@@ -254,7 +252,6 @@ final class EcomActivityCommerceEvents
                 $coupon !== '' ? 'Coupon '.$coupon : null,
                 $discountTotal > 0 ? 'Discount '.self::formatMoney($discountTotal) : null,
                 $shippingCost > 0 ? 'Shipping '.self::formatMoney($shippingCost) : null,
-                $customerName !== '' ? $customerName : null,
             ])) ?: null,
             'products' => self::mapLineItems($items),
         ];
