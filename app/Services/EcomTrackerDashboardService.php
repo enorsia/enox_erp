@@ -13,6 +13,7 @@ use App\Support\SessionDurationBuckets;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerPaymentCheckoutEnricher;
+use App\Support\TrackerRedisCache;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -65,15 +66,33 @@ class EcomTrackerDashboardService
      */
     public function getDashboardData(array $filters): array
     {
-        $data = $this->buildDashboardData($filters);
+        $cache = app(TrackerRedisCache::class);
+        $ttl = (int) config('tracker.analytics_cache_ttl_seconds', 300);
+        $cacheKey = 'dashboard:'.hash('sha256', json_encode($this->dashboardCacheIdentity($filters)));
+
+        $cached = $cache->remember($cacheKey, $ttl, fn () => $this->buildDashboardData($filters));
+        $data = $cache->payload($cached);
+        $data = is_array($data) ? $data : $this->buildDashboardData($filters);
         $data['live'] = $this->buildLiveStatus();
         $data['analytics_cache'] = [
-            'enabled' => false,
-            'cached_at' => null,
-            'ttl_seconds' => 0,
+            'enabled' => (bool) config('tracker.analytics_cache_enabled', true),
+            'cached_at' => $cache->cachedAt($cached),
+            'ttl_seconds' => $ttl,
         ];
 
         return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    private function dashboardCacheIdentity(array $filters): array
+    {
+        $identity = $filters;
+        ksort($identity);
+
+        return $identity;
     }
 
     /**
@@ -93,6 +112,8 @@ class EcomTrackerDashboardService
             $currentIds = $this->filteredSessionIds($range['from'], $range['to'], $extraFilters, $period);
             $currentSessions = $currentSessions->only($currentIds->all());
         }
+
+        $scopedSessionIds = $currentSessions->keys()->values();
 
         $currentKpis = $this->buildKpis($range['from'], $range['to'], $currentSessions);
         $productCatalog = $this->buildProductCatalogPerformance(
@@ -150,9 +171,9 @@ class EcomTrackerDashboardService
             'begin_checkout_abandonment' => $this->buildBeginCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters, period: $period),
             'proceed_checkout_abandonment' => $this->buildProceedCheckoutAbandonment($range['from'], $range['to'], filters: $extraFilters, period: $period),
             'payment_success_events' => $this->buildPaymentSuccessEvents($range['from'], $range['to'], filters: $extraFilters, period: $period),
-            'devices' => $this->buildDeviceBreakdown($range['from'], $range['to'], $extraFilters, $period),
-            'traffic_sources' => $this->buildTrafficSources($range['from'], $range['to'], filters: $extraFilters, period: $period),
-            'geography' => $this->buildGeography($range['from'], $range['to'], filters: $extraFilters),
+            'devices' => $this->buildDeviceBreakdown($range['from'], $range['to'], $extraFilters, $period, $scopedSessionIds),
+            'traffic_sources' => $this->buildTrafficSources($range['from'], $range['to'], filters: $extraFilters, period: $period, scopedSessionIds: $scopedSessionIds),
+            'geography' => $this->buildGeography($range['from'], $range['to'], filters: $extraFilters, scopedSessionIds: $scopedSessionIds),
             'engagement' => $this->buildEngagement($range['from'], $range['to'], $extraFilters),
             'has_session_filters' => $extraFilters !== [],
             'visitor_quality' => app(BotTrafficAnalyticsService::class)->summaryOnly($filters),
@@ -1081,34 +1102,90 @@ class EcomTrackerDashboardService
         ?string $period = null,
     ): array {
         $sessionFilters = $this->extractSessionFilters($filters);
-        $categories = $this->buildCategoryPerformance($from, $to, null, $sessionFilters, $period);
-        $grouped = $this->groupCategoryPerformanceByDepartment($categories);
+        $catalogOptions = $this->extractProductCatalogOptions($filters);
 
-        $departments = [];
-        $categoriesByDepartment = [];
+        return $this->rememberQuery(
+            $this->queryCacheKey('categoryFilterOptionsForRange', $from, $to, $period, array_merge($sessionFilters, $catalogOptions)),
+            function () use ($from, $to, $period, $sessionFilters, $catalogOptions) {
+                $sessionIds = null;
 
-        foreach ($grouped as $department) {
-            $departmentName = trim((string) ($department['name'] ?? ''));
+                if ($sessionFilters !== [] || $catalogOptions !== []) {
+                    $sessionIds = $this->activitySessionIds(
+                        $from,
+                        $to,
+                        array_merge($sessionFilters, $catalogOptions),
+                        $period,
+                    );
 
-            if ($departmentName === '') {
-                continue;
-            }
+                    if ($sessionIds->isEmpty()) {
+                        return [
+                            'departments' => [],
+                            'categories_by_department' => [],
+                        ];
+                    }
+                }
 
-            $departments[] = $departmentName;
-            $categoriesByDepartment[$departmentName] = collect($department['categories'] ?? [])
-                ->pluck('category_name')
-                ->map(fn ($name) => trim((string) $name))
-                ->filter()
-                ->unique(fn (string $name) => strtolower($name))
-                ->sort(fn (string $a, string $b) => strcasecmp($a, $b))
-                ->values()
-                ->all();
-        }
+                $query = DB::table('activity_ecom_user_actions')
+                    ->select('department_name', 'category_name')
+                    ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+                    ->whereNotNull('category_name')
+                    ->where('category_name', '!=', '');
 
-        return [
-            'departments' => $departments,
-            'categories_by_department' => $categoriesByDepartment,
-        ];
+                if ($sessionIds !== null) {
+                    $this->constrainToSessionIds($query, $sessionIds);
+                } elseif ($period !== null) {
+                    $query->whereIn('session_id', function ($sub) use ($from, $to, $period) {
+                        $sub->from('activity_ecom_user')->select('session_id');
+                        TrackerTime::applyEcomActivitySessionScope($sub, $from, $to, $period);
+                    });
+                }
+
+                $pairs = $query
+                    ->distinct()
+                    ->orderBy('department_name')
+                    ->orderBy('category_name')
+                    ->get();
+
+                $departments = [];
+                $categoriesByDepartment = [];
+
+                foreach ($pairs as $row) {
+                    $categoryName = trim((string) ($row->category_name ?? ''));
+
+                    if ($categoryName === '') {
+                        continue;
+                    }
+
+                    $departmentName = trim((string) ($row->department_name ?? ''));
+
+                    if ($departmentName === '') {
+                        $departmentName = 'Uncategorized';
+                    }
+
+                    if (! in_array($departmentName, $departments, true)) {
+                        $departments[] = $departmentName;
+                    }
+
+                    $categoriesByDepartment[$departmentName] ??= [];
+
+                    if (! in_array($categoryName, $categoriesByDepartment[$departmentName], true)) {
+                        $categoriesByDepartment[$departmentName][] = $categoryName;
+                    }
+                }
+
+                sort($departments, SORT_NATURAL | SORT_FLAG_CASE);
+
+                foreach ($categoriesByDepartment as $departmentName => $categories) {
+                    sort($categories, SORT_NATURAL | SORT_FLAG_CASE);
+                    $categoriesByDepartment[$departmentName] = array_values($categories);
+                }
+
+                return [
+                    'departments' => $departments,
+                    'categories_by_department' => $categoriesByDepartment,
+                ];
+            },
+        );
     }
 
     /**
@@ -1992,7 +2069,7 @@ class EcomTrackerDashboardService
                     ->whereIn('session_id', $scopedSessionIds->values()->all())
                     ->get();
 
-                $payments = ActivityEcomUserAction::query()
+                $payments = DB::table('activity_ecom_user_actions')
                     ->select('session_id', 'payment_success')
                     ->whereBetween('created_at', $range)
                     ->where('action_type', 'payment_success');
@@ -6144,9 +6221,14 @@ class EcomTrackerDashboardService
     /**
      * @return array{by_device: array<int, array<string, mixed>>, by_browser: array<int, array<string, mixed>>}
      */
-    private function buildDeviceBreakdown(Carbon $from, Carbon $to, array $filters = [], ?string $period = null): array
-    {
-        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters, $period) : null;
+    private function buildDeviceBreakdown(
+        Carbon $from,
+        Carbon $to,
+        array $filters = [],
+        ?string $period = null,
+        ?Collection $scopedSessionIds = null,
+    ): array {
+        $sessionIds = $scopedSessionIds ?? ($filters !== [] ? $this->filteredSessionIds($from, $to, $filters, $period) : null);
 
         $sessionsQuery = ActivityEcomUser::query()
             ->select('session_id', 'device_type', 'browser');
@@ -6161,7 +6243,7 @@ class EcomTrackerDashboardService
             TrackerTime::applyEcomActivitySessionScope($sessionsQuery, $from, $to, $period);
         }
 
-        $sessions = $sessionsQuery->get();
+        $sessions = $sessionsQuery->toBase()->get();
 
         if ($sessions->isEmpty()) {
             return ['by_device' => [], 'by_browser' => []];
@@ -6248,7 +6330,7 @@ class EcomTrackerDashboardService
             $deviceLabel = $sessionDeviceMap[$sessionId] ?? null;
             $browserLabel = $sessionBrowserMap[$sessionId] ?? null;
             $soldQty = $this->paymentActionItemQty($action);
-            $revenue = $this->paymentAmountPaid($action->payment_success ?? []);
+            $revenue = $this->paymentAmountPaid($this->decodePaymentSuccessPayload($action->payment_success ?? null));
 
             if ($deviceLabel) {
                 if (! isset($devicePurchaseSeen[$sessionId])) {
@@ -6395,9 +6477,15 @@ class EcomTrackerDashboardService
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function buildTrafficSources(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
-    {
-        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters, $period) : null;
+    private function buildTrafficSources(
+        Carbon $from,
+        Carbon $to,
+        ?int $limit = self::TABLE_DISPLAY_LIMIT,
+        array $filters = [],
+        ?string $period = null,
+        ?Collection $scopedSessionIds = null,
+    ): array {
+        $sessionIds = $scopedSessionIds ?? ($filters !== [] ? $this->filteredSessionIds($from, $to, $filters, $period) : null);
 
         $sessionsQuery = ActivityEcomUser::query()
             ->select('id', 'session_id', 'utm_source', 'utm_medium', 'utm_campaign', 'landing_page');
@@ -6513,7 +6601,7 @@ class EcomTrackerDashboardService
                 $buckets,
                 $bucketKey,
                 field: 'revenue',
-                amount: $this->paymentAmountPaid($action->payment_success ?? []),
+                amount: $this->paymentAmountPaid($this->decodePaymentSuccessPayload($action->payment_success ?? null)),
             );
         }
 
@@ -6667,9 +6755,14 @@ class EcomTrackerDashboardService
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function buildGeography(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = []): array
-    {
-        $sessionIds = $filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null;
+    private function buildGeography(
+        Carbon $from,
+        Carbon $to,
+        ?int $limit = self::TABLE_DISPLAY_LIMIT,
+        array $filters = [],
+        ?Collection $scopedSessionIds = null,
+    ): array {
+        $sessionIds = $scopedSessionIds ?? ($filters !== [] ? $this->filteredSessionIds($from, $to, $filters) : null);
 
         $locationsQuery = ActivityEcomUser::query()
             ->select(
@@ -6689,7 +6782,7 @@ class EcomTrackerDashboardService
             $locationsQuery->limit($limit);
         }
 
-        $locations = $locationsQuery->get();
+        $locations = $locationsQuery->toBase()->get();
 
         if ($locations->isEmpty()) {
             return [];
@@ -6700,7 +6793,7 @@ class EcomTrackerDashboardService
 
         foreach ($payments as $action) {
             $revenueBySession[$action->session_id] = ($revenueBySession[$action->session_id] ?? 0)
-                + $this->paymentAmountPaid($action->payment_success ?? []);
+                + $this->paymentAmountPaid($this->decodePaymentSuccessPayload($action->payment_success ?? null));
         }
 
         $sessionsQuery = ActivityEcomUser::query()
@@ -6713,7 +6806,7 @@ class EcomTrackerDashboardService
 
         $revenueByLocation = [];
 
-        foreach ($sessionsQuery->get() as $session) {
+        foreach ($sessionsQuery->toBase()->get() as $session) {
             $city = $session->city !== null && $session->city !== '' ? $session->city : 'Unknown';
             $country = $session->country !== null && $session->country !== '' ? $session->country : 'Unknown';
             $key = $city."\0".$country;
@@ -6916,6 +7009,24 @@ class EcomTrackerDashboardService
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    private function decodePaymentSuccessPayload(mixed $paymentSuccess): array
+    {
+        if (is_array($paymentSuccess)) {
+            return $paymentSuccess;
+        }
+
+        if (is_string($paymentSuccess) && $paymentSuccess !== '') {
+            $decoded = json_decode($paymentSuccess, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     private function paymentAmountPaid(array $payload): float
@@ -6946,9 +7057,9 @@ class EcomTrackerDashboardService
             ->sum(fn (ActivityEcomUserAction $action) => $this->paymentActionItemQty($action));
     }
 
-    private function paymentActionItemQty(ActivityEcomUserAction $action): int
+    private function paymentActionItemQty(object $action): int
     {
-        $checkoutInfo = $action->payment_success['checkout_info'] ?? [];
+        $checkoutInfo = $this->decodePaymentSuccessPayload($action->payment_success ?? null)['checkout_info'] ?? [];
         $items = is_array($checkoutInfo) ? ($checkoutInfo['items'] ?? []) : [];
 
         if (! is_array($items) || $items === []) {
