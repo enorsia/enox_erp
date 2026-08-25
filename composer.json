@@ -20,7 +20,7 @@
         "spatie/laravel-permission": "*"
     },
     "require-dev": {
-        "barryvdh/laravel-debugbar": "*",
+        "barryvdh/laravel-debugbar": "^4.1",
         "fakerphp/faker": "^1.23",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.24",
@@ -91,6 +91,9 @@
         "optimize-autoloader": true,
         "preferred-install": "dist",
         "sort-packages": true,
+        "platform": {
+            "php": "8.2.28"
+        },
         "allow-plugins": {
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
