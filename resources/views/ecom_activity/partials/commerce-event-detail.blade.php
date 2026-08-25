@@ -91,8 +91,7 @@
                             <tr>
                                 <th class="etd-commerce-event-detail__product-col-title">Title</th>
                                 <th class="etd-commerce-event-detail__product-col-size">Size</th>
-                                <th class="etd-commerce-event-detail__product-col-color">Color (PO)</th>
-                                <th class="etd-commerce-event-detail__product-col-color-ecom">Color</th>
+                                <th class="etd-commerce-event-detail__product-col-color">Color</th>
                                 <th class="etd-commerce-event-detail__product-col-qty etd-num">Qty</th>
                                 <th class="etd-commerce-event-detail__product-col-price etd-num">Price</th>
                             </tr>
@@ -102,8 +101,7 @@
                                 <tr>
                                     <td class="etd-commerce-event-detail__product-col-title" data-label="Title">{{ $product['title'] ?? '—' }}</td>
                                     <td class="etd-commerce-event-detail__product-col-size" data-label="Size">{{ $product['size'] ?? '—' }}</td>
-                                    <td class="etd-commerce-event-detail__product-col-color" data-label="Color (PO)">{{ $product['color_po'] ?? '—' }}</td>
-                                    <td class="etd-commerce-event-detail__product-col-color-ecom" data-label="Color">{{ $product['color_ecommerce'] ?? '—' }}</td>
+                                    <td class="etd-commerce-event-detail__product-col-color" data-label="Color">{{ $product['color_po'] ?? ($product['color_ecommerce'] ?? '—') }}</td>
                                     <td class="etd-commerce-event-detail__product-col-qty etd-num" data-label="Qty">{{ $product['qty'] ?? '—' }}</td>
                                     <td class="etd-num etd-commerce-event-detail__product-col-price etd-commerce-event-detail__value--emphasis" data-label="Price">{{ $product['price'] ?? '—' }}</td>
                                 </tr>

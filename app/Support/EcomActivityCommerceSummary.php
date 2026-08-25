@@ -55,7 +55,7 @@ final class EcomActivityCommerceSummary
     ): array {
         $filtered = $actions->filter(function (ActivityEcomUserAction $action) use ($dashboard, $options) {
             if ($action->action_type === 'payment_success') {
-                return $dashboard->paymentActionMatchesCategoryCatalog($action, $options);
+                return $dashboard->catalogPaymentHasMatchingLines($action, $options);
             }
 
             return $dashboard->actionMatchesCatalogOptions($action, $options);
@@ -104,7 +104,101 @@ final class EcomActivityCommerceSummary
             ];
         }
 
-        return self::summarizeActions($filtered);
+        $commerceActions = $filtered->whereIn('action_type', [
+            'add_to_cart',
+            'begin_checkout',
+            'proceed_checkout',
+            'payment_success',
+        ]);
+
+        if ($commerceActions->isNotEmpty()) {
+            return self::summarizeLatestCommerceAction($commerceActions);
+        }
+
+        $latestView = $filtered
+            ->whereIn('action_type', ['product_view', 'product_view_popup'])
+            ->sortByDesc(fn (ActivityEcomUserAction $action) => [
+                $action->created_at?->timestamp ?? 0,
+                $action->id,
+            ])
+            ->first();
+
+        if ($latestView instanceof ActivityEcomUserAction) {
+            return self::productViewSummary($latestView);
+        }
+
+        return self::emptySummary();
+    }
+
+    public static function funnelStageRankFromSummary(array $summary): int
+    {
+        return match ($summary['commerce_label'] ?? null) {
+            'Order' => 5,
+            'Proceed' => 4,
+            'Checkout' => 3,
+            'Cart' => 2,
+            'View' => 1,
+            default => 0,
+        };
+    }
+
+    /**
+     * @param  Collection<int, ActivityEcomUserAction>  $actions
+     * @return array{
+     *     commerce_label: ?string,
+     *     commerce_value: ?float,
+     *     commerce_has_order: bool,
+     *     commerce_display: string,
+     *     commerce_tip: ?string,
+     * }
+     */
+    private static function summarizeLatestCommerceAction(Collection $actions): array
+    {
+        $latest = $actions
+            ->sortByDesc(fn (ActivityEcomUserAction $action) => [
+                $action->created_at?->timestamp ?? 0,
+                $action->id,
+            ])
+            ->first();
+
+        if (! $latest instanceof ActivityEcomUserAction) {
+            return self::emptySummary();
+        }
+
+        $stage = (string) $latest->action_type;
+        $value = self::amountForStage($stage, $latest);
+        $label = self::labelForStage($stage);
+        $commerceDisplay = $stage === 'payment_success'
+            ? self::formatOrderDisplay(self::orderIdFromPaymentAction($latest), $value)
+            : self::formatDisplay($label, $value);
+
+        return [
+            'commerce_label' => $label,
+            'commerce_value' => $value,
+            'commerce_has_order' => $stage === 'payment_success',
+            'commerce_display' => $commerceDisplay,
+            'commerce_tip' => self::tipForStage($stage, $latest, $value),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     commerce_label: string,
+     *     commerce_value: null,
+     *     commerce_has_order: false,
+     *     commerce_display: string,
+     *     commerce_tip: ?string,
+     * }
+     */
+    private static function productViewSummary(ActivityEcomUserAction $action): array
+    {
+        return [
+            'commerce_label' => 'View',
+            'commerce_value' => null,
+            'commerce_has_order' => false,
+            'commerce_display' => 'View',
+            'commerce_tip' => null,
+        ];
     }
 
     public static function formatDisplay(?string $label, ?float $value): string

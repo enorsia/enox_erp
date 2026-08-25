@@ -88,7 +88,7 @@ class EcomActivityController extends EcomTrackerAdminController
             $funnelContext['metrics'],
             in_array($focus, ['products', 'categories'], true)
                 ? EcomActivityFocus::productCatalogFiltersFromRequest($request)
-                : [],
+                : EcomActivityFocus::indexCatalogFiltersFromRequest($request),
         );
 
         $visitorQualitySummary = $this->visitorQualityCounts($request, $range);
@@ -400,7 +400,10 @@ class EcomActivityController extends EcomTrackerAdminController
             );
         }
 
-        if ($request->filled('search') && ! EcomActivityFocus::usesCatalogScopedSearch($request)) {
+        if (
+            $request->filled('search')
+            && EcomActivityFocus::shouldApplySessionKeywordSearch($request)
+        ) {
             EcomActivityKeywordSearch::apply(
                 $query,
                 trim((string) $request->search),
@@ -559,7 +562,7 @@ class EcomActivityController extends EcomTrackerAdminController
     {
         $catalogOptions = in_array($focus, ['products', 'categories'], true)
             ? EcomActivityFocus::productCatalogFiltersFromRequest($request)
-            : [];
+            : EcomActivityFocus::indexCatalogFiltersFromRequest($request);
 
         return [
             'from' => $range['from'],
@@ -587,7 +590,7 @@ class EcomActivityController extends EcomTrackerAdminController
         $range = $this->resolveActivityRange($request);
         $baseFilters = array_merge(
             EcomActivityFocus::sessionFiltersFromRequest($request, $except),
-            EcomActivityFocus::productCatalogFiltersFromRequest($request, $except),
+            EcomActivityFocus::indexCatalogFiltersFromRequest($request, $except),
         );
 
         return [

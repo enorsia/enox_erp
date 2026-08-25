@@ -6,6 +6,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Support\EcomActivityCommerceEvents;
 use App\Support\EcomActivityCommerceSummary;
+use App\Support\EcomActivitySessionSort;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -111,7 +112,7 @@ class EcomActivityRowMetrics
             $sessionIds,
             $from,
             $to,
-            in_array($focus, ['products', 'categories'], true) ? $productCatalogOptions : [],
+            $productCatalogOptions,
         );
 
         foreach ($metrics as $sessionId => $row) {
@@ -134,17 +135,20 @@ class EcomActivityRowMetrics
         Carbon $to,
         array $catalogOptions = [],
     ): void {
+        $useCatalogScope = EcomActivitySessionSort::usesCatalogActionScope($catalogOptions);
+        $actionTypes = ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'];
+
+        if ($useCatalogScope) {
+            $actionTypes = array_merge(['product_view', 'product_view_popup'], $actionTypes);
+        }
+
         $actions = ActivityEcomUserAction::query()
             ->select('id', 'session_id', 'action_type', 'add_to_cart', 'begin_checkout', 'proceed_to_checkout', 'payment_success', 'created_at', 'category_name', 'department_name', 'product_name', 'product_code', 'sku', 'general_color_name', 'page_url')
             ->whereIn('session_id', $sessionIds)
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-            ->whereIn('action_type', ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'])
+            ->whereIn('action_type', $actionTypes)
             ->get()
             ->groupBy('session_id');
-
-        $useCatalogScope = filled($catalogOptions['category'] ?? null)
-            || filled($catalogOptions['product_code'] ?? null)
-            || filled($catalogOptions['product_name'] ?? null);
 
         foreach ($sessionIds as $sessionId) {
             $sessionActions = $actions->get($sessionId, collect());

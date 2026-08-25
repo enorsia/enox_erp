@@ -200,3 +200,113 @@ test('activity filter drawer includes visitor trust and country fields', functio
         ->assertSee('Funnel stage')
         ->assertSee('etd-filter-drawer--wide', false);
 });
+
+test('activity index product drill-down sorts by funnel stage sold proceed checkout cart view', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $viewOnly = Str::uuid()->toString();
+    $cartOnly = Str::uuid()->toString();
+    $checkoutOnly = Str::uuid()->toString();
+    $proceedOnly = Str::uuid()->toString();
+    $sold = Str::uuid()->toString();
+
+    foreach ([$viewOnly, $cartOnly, $checkoutOnly, $proceedOnly, $sold] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => now(),
+            'last_active_at' => now(),
+        ]);
+    }
+
+    $productCode = 'WS333217';
+    $productName = 'White Cotton Stretch Jersey Shorts';
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $viewOnly,
+        'action_type' => 'product_view',
+        'product_code' => $productCode,
+        'product_name' => $productName,
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $cartOnly,
+        'action_type' => 'add_to_cart',
+        'product_code' => $productCode,
+        'product_name' => $productName,
+        'add_to_cart' => ['items' => [['product_code' => $productCode, 'product_name' => $productName, 'qty' => 1]], 'cart_total' => 25],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $checkoutOnly,
+        'action_type' => 'begin_checkout',
+        'product_code' => $productCode,
+        'product_name' => $productName,
+        'begin_checkout' => ['items' => [['product_code' => $productCode, 'product_name' => $productName, 'qty' => 1]], 'cart_total' => 25],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $proceedOnly,
+        'action_type' => 'proceed_checkout',
+        'product_code' => $productCode,
+        'product_name' => $productName,
+        'proceed_to_checkout' => ['items' => [['product_code' => $productCode, 'product_name' => $productName, 'qty' => 1]], 'cart_total' => 25],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sold,
+        'action_type' => 'payment_success',
+        'product_code' => $productCode,
+        'product_name' => $productName,
+        'payment_success' => [
+            'amount_paid' => 25,
+            'qty' => 1,
+            'items' => [['product_code' => $productCode, 'product_name' => $productName, 'qty' => 1, 'line_total' => 25]],
+        ],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $response = $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'products',
+            'product_code' => $productCode,
+            'product_name' => $productName,
+        ]))
+        ->assertOk();
+
+    $content = $response->getContent();
+    $positions = collect([$sold, $proceedOnly, $checkoutOnly, $cartOnly, $viewOnly])
+        ->mapWithKeys(fn (string $sessionId) => [$sessionId => strpos($content, substr($sessionId, 0, 8))])
+        ->all();
+
+    expect($positions[$sold])->not->toBeFalse()
+        ->and($positions[$proceedOnly])->not->toBeFalse()
+        ->and($positions[$checkoutOnly])->not->toBeFalse()
+        ->and($positions[$cartOnly])->not->toBeFalse()
+        ->and($positions[$viewOnly])->not->toBeFalse()
+        ->and($positions[$sold])->toBeLessThan($positions[$proceedOnly])
+        ->and($positions[$proceedOnly])->toBeLessThan($positions[$checkoutOnly])
+        ->and($positions[$checkoutOnly])->toBeLessThan($positions[$cartOnly])
+        ->and($positions[$cartOnly])->toBeLessThan($positions[$viewOnly]);
+});

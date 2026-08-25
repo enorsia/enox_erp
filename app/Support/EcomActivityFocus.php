@@ -427,6 +427,45 @@ final class EcomActivityFocus
     }
 
     /**
+     * Catalog / keyword filters used for activity summary funnel totals.
+     *
+     * @return array<string, mixed>
+     */
+    public static function activitySummaryCatalogFiltersFromRequest(Request $request): array
+    {
+        $keys = [
+            'search',
+            'product_code',
+            'product_name',
+            'category',
+            'department',
+            'color',
+            'size',
+            'activity',
+            'has_purchases',
+            'has_views',
+            'has_adds',
+            'event_scenario',
+        ];
+
+        return array_filter(
+            array_intersect_key($request->only($keys), array_flip($keys)),
+            fn ($value) => filled($value),
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function activitySummaryFiltersFromRequest(Request $request): array
+    {
+        return array_merge(
+            self::sessionFiltersFromRequest($request),
+            self::activitySummaryCatalogFiltersFromRequest($request),
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function usesActionScopedSessionDate(Request $request): bool
@@ -459,12 +498,59 @@ final class EcomActivityFocus
 
         if (! self::usesCatalogScopedSearch($request)) {
             $keys = array_values(array_diff($keys, ['search']));
+        } elseif (self::resolvedProductDrillLabel($request) !== null) {
+            $keys = array_values(array_diff($keys, ['search']));
         }
 
         return array_filter(
             array_intersect_key($request->only($keys), array_flip($keys)),
             fn ($value) => filled($value),
         );
+    }
+
+    /**
+     * Catalog filters for the activity index, including strict product-code search.
+     *
+     * @return array<string, mixed>
+     */
+    public static function indexCatalogFiltersFromRequest(Request $request, array $except = []): array
+    {
+        $filters = self::productCatalogFiltersFromRequest($request, $except);
+
+        if (
+            $request->filled('search')
+            && ! self::usesCatalogScopedSearch($request)
+            && self::shouldUseProductScopedSearchInIndex($request)
+        ) {
+            $filters['search'] = trim((string) $request->search);
+        }
+
+        return $filters;
+    }
+
+    public static function looksLikeIdentitySearch(string $search): bool
+    {
+        return str_contains(trim($search), '@');
+    }
+
+    public static function looksLikeProductCodeSearch(string $search): bool
+    {
+        $search = trim($search);
+
+        if ($search === '' || self::looksLikeIdentitySearch($search)) {
+            return false;
+        }
+
+        return (bool) preg_match('/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9\-_.]+$/', $search);
+    }
+
+    public static function shouldUseProductScopedSearchInIndex(Request $request): bool
+    {
+        if (! $request->filled('search') || self::usesCatalogScopedSearch($request)) {
+            return false;
+        }
+
+        return self::looksLikeProductCodeSearch((string) $request->search);
     }
 
     public static function searchFilterLabel(Request $request): string
@@ -501,7 +587,7 @@ final class EcomActivityFocus
 
     public static function shouldApplyCatalogConstraintsInIndexQuery(?string $focus, Request $request): bool
     {
-        if (self::productCatalogFiltersFromRequest($request) === []) {
+        if (self::indexCatalogFiltersFromRequest($request) === []) {
             return false;
         }
 
@@ -523,7 +609,7 @@ final class EcomActivityFocus
             self::DASHBOARD_AUDIENCE_FILTER_KEYS,
         );
 
-        if ($request === null || ! self::usesCatalogScopedSearch($request)) {
+        if ($request === null || ! self::usesCatalogScopedSearch($request) || self::resolvedProductDrillLabel($request) !== null) {
             array_unshift($keys, 'search');
         }
 
@@ -542,10 +628,16 @@ final class EcomActivityFocus
         }
 
         if (self::showCatalogFiltersInDrawer($request)) {
-            return array_merge($labels, [
-                'Product code', 'Product', 'Product search', 'Category', 'Color', 'Size',
+            $catalogLabels = [
+                'Product', 'Product search', 'Color', 'Size',
                 'Activity', 'Funnel step', 'Has purchases', 'Has views', 'Has cart adds',
-            ]);
+            ];
+
+            if (self::showSessionKeywordSearchInDrawer($request)) {
+                $catalogLabels[] = 'Search';
+            }
+
+            return array_merge($labels, $catalogLabels);
         }
 
         return $labels;
@@ -597,13 +689,17 @@ final class EcomActivityFocus
         }
 
         $count += collect(self::catalogFilterQueryKeys())
-            ->filter(fn (string $key) => filled($request->input($key)))
+            ->filter(function (string $key) use ($request) {
+                if ($key === 'search' && self::shouldApplySessionKeywordSearch($request)) {
+                    return false;
+                }
+
+                return filled($request->input($key));
+            })
             ->count();
 
-        foreach (['product_code', 'product_name'] as $key) {
-            if (filled($request->input($key))) {
-                $count++;
-            }
+        if (self::resolvedProductDrillLabel($request) !== null) {
+            $count++;
         }
 
         return $count;
@@ -663,7 +759,7 @@ final class EcomActivityFocus
     ): void {
         $productFilters = array_merge(
             self::sessionFiltersFromRequest($request, $except),
-            self::productCatalogFiltersFromRequest($request, $except),
+            self::indexCatalogFiltersFromRequest($request, $except),
         );
 
         if ($productFilters === []) {
@@ -827,11 +923,18 @@ final class EcomActivityFocus
             }
         };
 
-        $add('Product code', $request->input('product_code'));
-        $add('Product', $request->input('product_name'));
+        if ($productLabel = self::resolvedProductDrillLabel($request)) {
+            $add('Product', $productLabel);
+        }
 
-        if ($request->filled('search') && ! $request->filled('product_code') && ! $request->filled('product_name')) {
-            $add(self::searchFilterLabel($request), '"'.$request->search.'"');
+        if ($request->filled('search')) {
+            if (self::shouldApplySessionKeywordSearch($request)) {
+                $add('Search', '"'.$request->search.'"');
+            } elseif (self::usesCatalogScopedSearch($request)) {
+                $add('Product search', '"'.$request->search.'"');
+            } else {
+                $add(self::searchFilterLabel($request), '"'.$request->search.'"');
+            }
         }
 
         if ($request->filled('category')) {
@@ -942,8 +1045,8 @@ final class EcomActivityFocus
 
         foreach (self::filterCriteriaFromRequest($request) as $criterion) {
             $key = match ($criterion['label']) {
-                'Product code' => 'product_code',
-                'Product' => 'product_name',
+                'Product' => 'product',
+                'Product code' => 'product',
                 'Product search' => 'search',
                 'Search' => 'search',
                 'Category' => 'category',
@@ -988,6 +1091,15 @@ final class EcomActivityFocus
                 continue;
             }
 
+            if ($key === 'product') {
+                $chips[] = [
+                    'label' => 'Product: '.$criterion['value'],
+                    'remove_url' => $request->fullUrlWithQuery(['product_code' => null, 'product_name' => null, 'page' => null]),
+                ];
+
+                continue;
+            }
+
             $chips[] = [
                 'label' => $criterion['label'].': '.$criterion['value'],
                 'remove_url' => $request->fullUrlWithQuery([$key => null, 'page' => null]),
@@ -995,6 +1107,50 @@ final class EcomActivityFocus
         }
 
         return $chips;
+    }
+
+    /**
+     * Short product drill-down label for filters and summary chips.
+     */
+    public static function resolvedProductDrillLabel(Request $request): ?string
+    {
+        $code = trim((string) $request->input('product_code', ''));
+
+        if ($code !== '') {
+            return $code;
+        }
+
+        $name = trim((string) $request->input('product_name', ''));
+
+        return $name !== '' ? $name : null;
+    }
+
+    /**
+     * Session keyword search in the filter drawer (email, session id, phone, etc.).
+     */
+    public static function showSessionKeywordSearchInDrawer(Request $request): bool
+    {
+        if (! self::showCatalogFiltersInDrawer($request)) {
+            return true;
+        }
+
+        return self::resolvedProductDrillLabel($request) !== null;
+    }
+
+    /**
+     * Apply session keyword search on the activity index (not catalog product search).
+     */
+    public static function shouldApplySessionKeywordSearch(Request $request): bool
+    {
+        if (! $request->filled('search')) {
+            return false;
+        }
+
+        if (! self::usesCatalogScopedSearch($request)) {
+            return ! self::shouldUseProductScopedSearchInIndex($request);
+        }
+
+        return self::resolvedProductDrillLabel($request) !== null;
     }
 
     /**
@@ -1011,8 +1167,7 @@ final class EcomActivityFocus
     public static function activeFilterChipsFromRequest(Request $request): array
     {
         $chipKeyMap = [
-            'Product code' => 'product_code',
-            'Product' => 'product_name',
+            'Product' => 'product',
             'Product search' => 'search',
             'Search' => 'search',
             'Category' => 'category',
@@ -1066,6 +1221,15 @@ final class EcomActivityFocus
                 $chips[] = [
                     'label' => $label.': '.$criterion['value'],
                     'remove_url' => $request->fullUrlWithQuery(['department' => null, 'category' => null, 'page' => null]),
+                ];
+
+                continue;
+            }
+
+            if ($key === 'product') {
+                $chips[] = [
+                    'label' => 'Product: '.$criterion['value'],
+                    'remove_url' => $request->fullUrlWithQuery(['product_code' => null, 'product_name' => null, 'page' => null]),
                 ];
 
                 continue;
@@ -1173,13 +1337,14 @@ final class EcomActivityFocus
 
     /**
      * @param  array<string, mixed>  $row
-     * @return array{views: int, adds: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}
+     * @return array{views: int, adds: int, begin_checkouts: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}
      */
     private static function normalizeAcquisitionRow(array $row): array
     {
         return [
             'views' => (int) ($row['views'] ?? 0),
             'adds' => (int) ($row['adds'] ?? $row['add_to_cart'] ?? 0),
+            'begin_checkouts' => (int) ($row['begin_checkouts'] ?? $row['begin_checkout'] ?? 0),
             'proceed_checkouts' => (int) ($row['proceed_checkouts'] ?? $row['proceed_checkout'] ?? 0),
             'purchases' => (int) ($row['purchases'] ?? $row['payment_success'] ?? 0),
             'qty' => (int) ($row['qty'] ?? $row['sold_qty'] ?? $row['sale_items'] ?? 0),
@@ -1188,7 +1353,7 @@ final class EcomActivityFocus
     }
 
     /**
-     * @param  array{views: int, adds: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}  $normalized
+     * @param  array{views: int, adds: int, begin_checkouts: int, proceed_checkouts: int, purchases: int, qty: int, revenue: float}  $normalized
      * @return array<int, array{label: string, value: string}>
      */
     private static function formatFunnelSummaryMetrics(array $normalized): array
@@ -1198,6 +1363,7 @@ final class EcomActivityFocus
         return [
             ['label' => 'Views', 'value' => number_format($normalized['views'])],
             ['label' => 'Adds', 'value' => number_format($normalized['adds'])],
+            ['label' => 'Checkout', 'value' => number_format($normalized['begin_checkouts'])],
             ['label' => 'Proceed', 'value' => number_format($normalized['proceed_checkouts'])],
             ['label' => 'Cart abandoned', 'value' => number_format($cartAbandonment)],
             ['label' => 'Sold', 'value' => number_format($normalized['purchases'])],
@@ -1288,10 +1454,7 @@ final class EcomActivityFocus
         $row = app(EcomTrackerDashboardService::class)->productPerformanceSummaryForFilters(
             $from,
             $to,
-            array_merge(
-                self::sessionFiltersFromRequest($request),
-                self::productCatalogFiltersFromRequest($request),
-            ),
+            self::activitySummaryFiltersFromRequest($request),
             $period,
         );
 
@@ -1427,31 +1590,41 @@ final class EcomActivityFocus
             return [];
         }
 
-        $summary = app(EcomTrackerDashboardService::class)->audienceSummaryForFilters(
+        $dashboard = app(EcomTrackerDashboardService::class);
+        $filters = self::activitySummaryFiltersFromRequest($request);
+        $metrics = [];
+
+        $funnelRow = $dashboard->activityFunnelSummaryForFilters($from, $to, $filters, $period);
+
+        if ($funnelRow !== null) {
+            $metrics = self::funnelSummaryMetricsFromRow($funnelRow);
+        }
+
+        $summary = $dashboard->audienceSummaryForFilters(
             $from,
             $to,
-            self::sessionFiltersFromRequest($request),
+            $filters,
             $period,
         );
 
         if ($summary === null) {
-            return [];
+            return $metrics;
         }
 
         $avgStayLabel = app(VisitorAnalyticsService::class)->formatDuration((int) ($summary['avg_stay_seconds'] ?? 0));
 
-        return [
+        return array_merge($metrics, [
             ['label' => 'Unique visitors', 'value' => number_format((int) ($summary['unique_visitors'] ?? 0))],
             ['label' => 'Avg stay', 'value' => $avgStayLabel],
-        ];
+        ]);
     }
 
     private static function hasProductPerformanceSummaryScope(Request $request): bool
     {
-        if ($request->filled('product_code') || $request->filled('product_name')) {
+        if ($request->filled('product_code') || $request->filled('product_name') || $request->filled('search')) {
             return true;
         }
 
-        return self::productCatalogFiltersFromRequest($request) !== [];
+        return self::activitySummaryCatalogFiltersFromRequest($request) !== [];
     }
 }

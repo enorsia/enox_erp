@@ -14,6 +14,26 @@ final class EcomActivitySessionSort
 {
     public const DEFAULT_SORT_KEY = 'funnel_stage';
 
+    /** @var list<string> */
+    private const FUNNEL_STAGE_ACTION_TYPES = [
+        'product_view',
+        'product_view_popup',
+        'add_to_cart',
+        'begin_checkout',
+        'proceed_checkout',
+        'payment_success',
+    ];
+
+    /** @var array<string, int> */
+    private const FUNNEL_STAGE_RANKS = [
+        'payment_success' => 5,
+        'proceed_checkout' => 4,
+        'begin_checkout' => 3,
+        'add_to_cart' => 2,
+        'product_view' => 1,
+        'product_view_popup' => 1,
+    ];
+
   /** @var list<string> */
     public const SORT_KEYS = [
         'funnel_stage',
@@ -215,7 +235,7 @@ final class EcomActivitySessionSort
                 'payment_success',
             ])
             ->whereIn('session_id', $sessionIds->all())
-            ->whereIn('action_type', ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success']);
+            ->whereIn('action_type', self::FUNNEL_STAGE_ACTION_TYPES);
 
         if ($from instanceof Carbon && $to instanceof Carbon) {
             $actionsQuery->whereBetween('created_at', TrackerTime::storageRange($from, $to));
@@ -225,25 +245,19 @@ final class EcomActivitySessionSort
 
         foreach ($sessionIds as $sessionId) {
             $sessionActions = $actionsBySession->get($sessionId, collect());
-            $funnelRank = 0;
-            $orderValue = 0.0;
+            $summary = EcomActivityCommerceSummary::summarizeCatalogActions(
+                $sessionActions,
+                $catalogOptions,
+                $dashboard,
+            );
+            $funnelRank = EcomActivityCommerceSummary::funnelStageRankFromSummary($summary);
+            $orderValue = (float) ($summary['commerce_value'] ?? 0.0);
             $latestAt = 0;
             $latestId = 0;
 
             foreach ($sessionActions as $action) {
                 if (! self::actionMatchesCatalogScope($action, $catalogOptions, $dashboard)) {
                     continue;
-                }
-
-                $rank = self::funnelStageRankForActionType((string) $action->action_type);
-
-                if ($rank > $funnelRank) {
-                    $funnelRank = $rank;
-                }
-
-                if ($action->action_type === 'payment_success') {
-                    $lines = $dashboard->sumCatalogPaymentLines($action, $catalogOptions);
-                    $orderValue = max($orderValue, $lines['revenue']);
                 }
 
                 $timestamp = $action->created_at?->timestamp ?? 0;
@@ -267,13 +281,7 @@ final class EcomActivitySessionSort
 
     private static function funnelStageRankForActionType(string $actionType): int
     {
-        return match ($actionType) {
-            'payment_success' => 4,
-            'proceed_checkout' => 3,
-            'begin_checkout' => 2,
-            'add_to_cart' => 1,
-            default => 0,
-        };
+        return self::FUNNEL_STAGE_RANKS[$actionType] ?? 0;
     }
 
   /**
@@ -324,7 +332,11 @@ final class EcomActivitySessionSort
     {
         return filled($catalogOptions['category'] ?? null)
             || filled($catalogOptions['product_code'] ?? null)
-            || filled($catalogOptions['product_name'] ?? null);
+            || filled($catalogOptions['product_name'] ?? null)
+            || (
+                filled($catalogOptions['search'] ?? null)
+                && EcomActivityFocus::looksLikeProductCodeSearch((string) $catalogOptions['search'])
+            );
     }
 
     /**
@@ -370,9 +382,10 @@ final class EcomActivitySessionSort
     private static function funnelStageRankSubquery(string $table, array $scope = []): array
     {
         $actionsTable = 'activity_ecom_user_actions';
+        $actionTypeList = "'".implode("', '", self::FUNNEL_STAGE_ACTION_TYPES)."'";
         $conditions = [
             "{$actionsTable}.session_id = {$table}.session_id",
-            "{$actionsTable}.action_type IN ('add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success')",
+            "{$actionsTable}.action_type IN ({$actionTypeList})",
         ];
         $bindings = [];
 
@@ -392,13 +405,13 @@ final class EcomActivitySessionSort
         }
 
         $where = implode(' AND ', $conditions);
+        $caseWhen = collect(self::FUNNEL_STAGE_RANKS)
+            ->map(fn (int $rank, string $actionType) => "WHEN '{$actionType}' THEN {$rank}")
+            ->implode("\n        ");
         $sql = <<<SQL
 (
     SELECT MAX(CASE {$actionsTable}.action_type
-        WHEN 'payment_success' THEN 4
-        WHEN 'proceed_checkout' THEN 3
-        WHEN 'begin_checkout' THEN 2
-        WHEN 'add_to_cart' THEN 1
+        {$caseWhen}
         ELSE 0
     END)
     FROM {$actionsTable}
@@ -435,18 +448,29 @@ SQL;
             ];
         }
 
-        if (filled($catalogOptions['product_code'] ?? null)) {
-            $fragments[] = [
-                'sql' => "LOWER(TRIM({$actionsTable}.product_code)) = ?",
-                'bindings' => [mb_strtolower(trim((string) $catalogOptions['product_code']))],
-            ];
-        }
+        if (filled($catalogOptions['product_code'] ?? null) || filled($catalogOptions['product_name'] ?? null)) {
+            $identityConditions = [];
+            $bindings = [];
 
-        if (filled($catalogOptions['product_name'] ?? null)) {
-            $fragments[] = [
-                'sql' => "LOWER(TRIM({$actionsTable}.product_name)) = ?",
-                'bindings' => [mb_strtolower(trim((string) $catalogOptions['product_name']))],
-            ];
+            if (filled($catalogOptions['product_code'] ?? null)) {
+                $code = mb_strtolower(trim((string) $catalogOptions['product_code']));
+                $identityConditions[] = "LOWER(TRIM({$actionsTable}.product_code)) = ?";
+                $identityConditions[] = "LOWER(TRIM({$actionsTable}.sku)) = ?";
+                $bindings[] = $code;
+                $bindings[] = $code;
+            }
+
+            if (filled($catalogOptions['product_name'] ?? null)) {
+                $identityConditions[] = "LOWER(TRIM({$actionsTable}.product_name)) = ?";
+                $bindings[] = mb_strtolower(trim((string) $catalogOptions['product_name']));
+            }
+
+            if ($identityConditions !== []) {
+                $fragments[] = [
+                    'sql' => '('.implode(' OR ', $identityConditions).')',
+                    'bindings' => $bindings,
+                ];
+            }
         }
 
         return $fragments;

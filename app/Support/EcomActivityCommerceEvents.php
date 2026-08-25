@@ -108,9 +108,7 @@ final class EcomActivityCommerceEvents
      */
     private static function usesCatalogScope(array $catalogOptions): bool
     {
-        return filled($catalogOptions['category'] ?? null)
-            || filled($catalogOptions['product_code'] ?? null)
-            || filled($catalogOptions['product_name'] ?? null);
+        return EcomActivitySessionSort::usesCatalogActionScope($catalogOptions);
     }
 
     /**
@@ -122,7 +120,7 @@ final class EcomActivityCommerceEvents
         EcomTrackerDashboardService $dashboard,
     ): bool {
         if ($action->action_type === 'payment_success') {
-            return $dashboard->paymentActionMatchesCategoryCatalog($action, $catalogOptions);
+            return $dashboard->catalogPaymentHasMatchingLines($action, $catalogOptions);
         }
 
         return $dashboard->actionMatchesCatalogOptions($action, $catalogOptions);

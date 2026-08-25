@@ -315,7 +315,6 @@
                                 @php
                                     $productDrillQuery = array_filter([
                                         'product_code' => $product['code'] ?? ($product['product_code'] ?? null),
-                                        'product_name' => $product['name'] ?? null,
                                     ]);
                                 @endphp
                                 <a href="{{ $activityFocusLink('products', $productDrillQuery) }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">

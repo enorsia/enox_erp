@@ -482,3 +482,100 @@ test('ecom activity index shows visitor quality summary strip', function () {
         ->assertSee('automated')
         ->assertSee('not classified');
 });
+
+test('ecom activity product code search only shows sessions with matching product activity', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    $viewedSession = Str::uuid()->toString();
+    $crossSellSession = Str::uuid()->toString();
+    $otherOrderSession = Str::uuid()->toString();
+    $decoySession = Str::uuid()->toString();
+
+    foreach ([$viewedSession, $crossSellSession, $otherOrderSession, $decoySession] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'last_active_at' => now(),
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $viewedSession,
+        'action_type' => 'product_view',
+        'product_name' => 'Target Tee',
+        'product_code' => 'MS31262181',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $crossSellSession,
+        'action_type' => 'product_view',
+        'product_name' => 'Target Tee',
+        'product_code' => 'MS31262181',
+        'created_at' => now()->subMinutes(2),
+        'start_time' => now()->subMinutes(2),
+        'end_time' => now()->subMinutes(2),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $crossSellSession,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'amount_paid' => 45.0,
+            'checkout_info' => [
+                'items' => [[
+                    'product_name' => 'Other Tee',
+                    'product_code' => 'MS99999999',
+                    'qty' => 1,
+                    'price' => 45.0,
+                ]],
+            ],
+        ],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $otherOrderSession,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'amount_paid' => 30.0,
+            'checkout_info' => [
+                'items' => [[
+                    'product_name' => 'Other Tee',
+                    'product_code' => 'MS99999999',
+                    'qty' => 1,
+                    'price' => 30.0,
+                ]],
+            ],
+        ],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $response = $this->get(route('admin.ecom-activity.index', [
+        'search' => 'MS31262181',
+        'period' => 'all',
+    ]));
+
+    $response->assertOk()
+        ->assertSee($viewedSession)
+        ->assertSee($crossSellSession)
+        ->assertDontSee($otherOrderSession)
+        ->assertDontSee($decoySession);
+
+    $html = $response->getContent();
+
+    expect($html)->not->toContain('MS99999999');
+});

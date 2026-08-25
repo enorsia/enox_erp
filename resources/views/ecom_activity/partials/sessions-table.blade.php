@@ -16,12 +16,22 @@
     $isWideTable = $focusColspan > 0;
 @endphp
 
-<div
-    class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity{{ $isWideTable ? ' etd-table-scroll--activity-wide' : '' }}"
-    style="--etd-activity-focus-cols: {{ $focusColspan }}"
-    x-data="{ openEvent: null }"
->
-    <table class="etd-table etd-table--activity w-full">
+<div class="etd-activity-table-shell" data-etd-activity-table-shell>
+    <div class="etd-activity-table-loading" data-etd-activity-table-loading aria-hidden="true">
+        <svg class="etd-activity-table-loading__spinner" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+            <circle class="etd-activity-table-loading__track" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+            <path class="etd-activity-table-loading__head" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="etd-activity-table-loading__label">Loading sessions…</span>
+    </div>
+
+    <div
+        class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity{{ $isWideTable ? ' etd-table-scroll--activity-wide' : '' }}"
+        style="--etd-activity-focus-cols: {{ $focusColspan }}"
+        data-etd-activity-table-viewport
+        x-data="{ openEvent: null }"
+    >
+        <table class="etd-table etd-table--activity w-full">
         <thead>
             <tr>
                 <th class="etd-col-session">
@@ -42,7 +52,7 @@
                     @include('ecom_activity.partials.sortable-column-header', [
                         'sortKey' => 'funnel_stage',
                         'label' => 'Commerce',
-                        'tip' => 'Highest funnel stage reached in this period: Cart, Checkout, Proceed, or Order with value',
+                        'tip' => 'Highest funnel stage reached in this period: Order, Proceed, Checkout, Cart, or View',
                     ])
                 </th>
                 <th class="etd-col-actions etd-num">
@@ -158,4 +168,5 @@
             @endforelse
         </tbody>
     </table>
+    </div>
 </div>

@@ -149,3 +149,69 @@ test('catalog commerce summary sums all category-scoped payments in a session', 
     expect($summary['commerce_display'])->toBe('Order · £40.99')
         ->and($summary['commerce_value'])->toBe(40.99);
 });
+
+test('catalog commerce summary uses latest commerce action when shopper returns to cart', function () {
+    $dashboard = app(\App\Services\EcomTrackerDashboardService::class);
+    $actions = collect([
+        new ActivityEcomUserAction([
+            'id' => 40,
+            'action_type' => 'begin_checkout',
+            'product_code' => 'WS333217',
+            'begin_checkout' => ['cart_total' => 93.5],
+            'created_at' => now()->subMinutes(20),
+        ]),
+        new ActivityEcomUserAction([
+            'id' => 41,
+            'action_type' => 'add_to_cart',
+            'product_code' => 'WS333217',
+            'add_to_cart' => ['cart_total' => 111.5],
+            'created_at' => now()->subMinutes(5),
+        ]),
+    ]);
+
+    $summary = EcomActivityCommerceSummary::summarizeCatalogActions($actions, [
+        'product_code' => 'WS333217',
+    ], $dashboard);
+
+    expect($summary['commerce_display'])->toBe('Cart · £111.50')
+        ->and(EcomActivityCommerceSummary::funnelStageRankFromSummary($summary))->toBe(2);
+});
+
+test('catalog commerce summary shows view when payment is for a different product', function () {
+    $dashboard = app(\App\Services\EcomTrackerDashboardService::class);
+    $actions = collect([
+        new ActivityEcomUserAction([
+            'id' => 30,
+            'action_type' => 'product_view',
+            'product_name' => 'Target Tee',
+            'product_code' => 'MS31262181',
+            'created_at' => now()->subMinutes(10),
+        ]),
+        new ActivityEcomUserAction([
+            'id' => 31,
+            'action_type' => 'payment_success',
+            'payment_success' => [
+                'amount_paid' => 45.0,
+                'order_id' => 'ORD-999',
+                'checkout_info' => [
+                    'items' => [[
+                        'product_name' => 'Other Tee',
+                        'product_code' => 'MS99999999',
+                        'qty' => 1,
+                        'price' => 45.0,
+                    ]],
+                ],
+            ],
+            'product_code' => 'MS31262181',
+            'created_at' => now(),
+        ]),
+    ]);
+
+    $summary = EcomActivityCommerceSummary::summarizeCatalogActions($actions, [
+        'search' => 'MS31262181',
+    ], $dashboard);
+
+    expect($summary['commerce_display'])->toBe('View')
+        ->and($summary['commerce_has_order'])->toBeFalse()
+        ->and($summary['commerce_label'])->toBe('View');
+});
