@@ -14,6 +14,7 @@ use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -24,6 +25,7 @@ class TrackIngestService
         private TrackerClientContextResolver $clientContextResolver,
         private BotContextPersister $botContextPersister,
         private TrackerPaymentCheckoutEnricher $paymentCheckoutEnricher,
+        private CommerceIngestWriter $commerceIngestWriter,
     ) {}
 
     /**
@@ -106,6 +108,7 @@ class TrackIngestService
 
             if ($this->isDuplicatePaymentSuccess($event)) {
                 $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
+                $this->ensureCanonicalCommerceOrder($event);
 
                 $acceptedIds[] = $eventId;
 
@@ -120,10 +123,35 @@ class TrackIngestService
 
             $row = $this->mapEventToRow($sessionId, $event);
 
-            ActivityEcomUserAction::query()->updateOrInsert(
-                ['event_id' => $eventId],
-                $row
-            );
+            try {
+                if (in_array($event['action_type'] ?? '', CommerceIngestWriter::COMMERCE_ACTION_TYPES, true)) {
+                    DB::transaction(function () use ($eventId, $row, $event) {
+                        ActivityEcomUserAction::query()->updateOrInsert(
+                            ['event_id' => $eventId],
+                            $row
+                        );
+
+                        $action = ActivityEcomUserAction::query()->where('event_id', $eventId)->first();
+                        if ($action !== null) {
+                            $this->commerceIngestWriter->syncFromAction($action);
+                        }
+                    });
+                } else {
+                    ActivityEcomUserAction::query()->updateOrInsert(
+                        ['event_id' => $eventId],
+                        $row
+                    );
+                }
+            } catch (Throwable $e) {
+                EcomTrackerLogger::frontend()->error('commerce.ingest.failed', 'Commerce ingest failed', [
+                    'session_id' => $sessionId,
+                    'event_id' => $eventId,
+                    'action_type' => $event['action_type'] ?? null,
+                    'message' => $e->getMessage(),
+                ]);
+
+                throw $e;
+            }
 
             $this->backfillSessionAttribution(
                 $sessionId,
@@ -800,6 +828,40 @@ class TrackIngestService
     /**
      * @param  array<string, mixed>  $event
      */
+    private function ensureCanonicalCommerceOrder(array $event): void
+    {
+        $orderId = $this->paymentSuccessOrderId($event);
+
+        if ($orderId === '' || DB::table('activity_ecom_orders')->where('order_id', $orderId)->exists()) {
+            return;
+        }
+
+        $canonicalId = $this->findCanonicalPaymentSuccessActionId($orderId);
+
+        if ($canonicalId === null) {
+            return;
+        }
+
+        $canonical = ActivityEcomUserAction::query()->find($canonicalId);
+
+        if ($canonical === null) {
+            return;
+        }
+
+        try {
+            $this->commerceIngestWriter->syncFromAction($canonical);
+        } catch (Throwable $e) {
+            $this->logWarning('commerce.ingest.canonical_backfill_failed', 'Failed to backfill canonical order row', [
+                'order_id' => $orderId,
+                'event_id' => $canonical->event_id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
     private function isDuplicatePaymentSuccess(array $event): bool
     {
         if (($event['action_type'] ?? '') !== 'payment_success') {
@@ -812,14 +874,31 @@ class TrackIngestService
             return false;
         }
 
-        return ActivityEcomUserAction::query()
+        return $this->paymentSuccessExistsForOrder($orderId);
+    }
+
+    private function paymentSuccessExistsForOrder(string $orderId): bool
+    {
+        if (DB::table('activity_ecom_orders')->where('order_id', $orderId)->exists()) {
+            return true;
+        }
+
+        return DB::table('activity_ecom_user_actions')
             ->where('action_type', 'payment_success')
-            ->where(function ($query) use ($orderId) {
-                $query->where('payment_success->order_id', $orderId)
-                    ->orWhere('payment_success->checkout_info->order_number', $orderId)
-                    ->orWhere('payment_success->checkout_info->order_pk', $orderId);
-            })
+            ->where('order_id', $orderId)
             ->exists();
+    }
+
+    private function findCanonicalPaymentSuccessActionId(string $orderId): ?int
+    {
+        $id = DB::table('activity_ecom_user_actions')
+            ->where('action_type', 'payment_success')
+            ->where('order_id', $orderId)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->value('id');
+
+        return $id !== null ? (int) $id : null;
     }
 
     /**

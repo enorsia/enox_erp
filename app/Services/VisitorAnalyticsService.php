@@ -482,14 +482,17 @@ class VisitorAnalyticsService
         }
 
         if (isset($filters['has_order']) && $filters['has_order'] !== '' && $filters['has_order'] !== null) {
-            $orderSessionIds = ActivityEcomUserAction::query()
-                ->where('action_type', 'payment_success')
-                ->pluck('session_id');
+            $hasOrder = (bool) $filters['has_order'];
+            $exists = fn ($sub) => $sub->selectRaw('1')
+                ->from('activity_ecom_user as purchase_sessions')
+                ->whereColumn('purchase_sessions.visitor_id', 'activity_ecom_user.visitor_id')
+                ->where('purchase_sessions.has_payment_success', true)
+                ->whereBetween('purchase_sessions.first_payment_at', TrackerTime::storageRange($from, $to));
 
-            if ((bool) $filters['has_order']) {
-                $query->whereIn('session_id', $orderSessionIds);
+            if ($hasOrder) {
+                $query->whereExists($exists);
             } else {
-                $query->whereNotIn('session_id', $orderSessionIds);
+                $query->whereNotExists($exists);
             }
         }
 

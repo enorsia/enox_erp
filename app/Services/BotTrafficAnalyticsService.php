@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserBotContext;
 use App\Models\TrackerUtmFilter;
+use App\Support\CommerceHasOrderFilter;
 use App\Support\EcomTrackerLogger;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
@@ -524,7 +525,7 @@ class BotTrafficAnalyticsService
         $query = ActivityEcomUser::query()
             ->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
         $this->applySessionWindow($query, $from, $to, $filters['period'] ?? null);
-        $this->applySessionFilters($query, $filters);
+        $this->applySessionFilters($query, $filters, $from, $to);
 
         return $query;
     }
@@ -536,7 +537,7 @@ class BotTrafficAnalyticsService
     {
         $query = ActivityEcomUser::query();
         $this->applySessionWindow($query, $from, $to, $filters['period'] ?? null);
-        $this->applySessionFilters($query, $filters);
+        $this->applySessionFilters($query, $filters, $from, $to);
 
         return $query;
     }
@@ -550,7 +551,7 @@ class BotTrafficAnalyticsService
     /**
      * @param  array<string, mixed>  $filters
      */
-    private function applySessionFilters(Builder $query, array $filters): void
+    private function applySessionFilters(Builder $query, array $filters, ?Carbon $from = null, ?Carbon $to = null): void
     {
         if (! empty($filters['search'])) {
             $search = $filters['search'];
@@ -585,10 +586,12 @@ class BotTrafficAnalyticsService
         }
 
         if (array_key_exists('has_order', $filters) && $filters['has_order'] !== '' && $filters['has_order'] !== null) {
-            if ($filters['has_order'] === '1') {
-                $query->whereHas('actions', fn ($q) => $q->where('action_type', 'payment_success'));
-            } elseif ($filters['has_order'] === '0') {
-                $query->whereDoesntHave('actions', fn ($q) => $q->where('action_type', 'payment_success'));
+            $hasOrder = $filters['has_order'] === '1';
+
+            if ($from instanceof Carbon && $to instanceof Carbon) {
+                CommerceHasOrderFilter::apply($query, $hasOrder, $from, $to);
+            } else {
+                CommerceHasOrderFilter::apply($query, $hasOrder);
             }
         }
 

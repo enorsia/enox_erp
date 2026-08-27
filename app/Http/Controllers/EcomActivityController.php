@@ -11,6 +11,7 @@ use App\Services\EcomActivityRowMetrics;
 use App\Services\EcomActivityTimelinePresenter;
 use App\Services\EcomTrackerDashboardService;
 use App\Services\EcomTrackerFeatureGate;
+use App\Support\CommerceHasOrderFilter;
 use App\Support\EcomActivityFocus;
 use App\Support\EcomActivityKeywordSearch;
 use App\Support\EcomActivitySessionSort;
@@ -442,11 +443,12 @@ class EcomActivityController extends EcomTrackerAdminController
         }
 
         if (! in_array('has_order', $except, true) && $request->filled('has_order') && ! EcomActivityFocus::shouldDeferHasOrderFilter($request)) {
-            if ($request->has_order === '1') {
-                $query->whereHas('actions', fn ($q) => $q->where('action_type', 'payment_success'));
-            } elseif ($request->has_order === '0') {
-                $query->whereDoesntHave('actions', fn ($q) => $q->where('action_type', 'payment_success'));
-            }
+            CommerceHasOrderFilter::apply(
+                $query,
+                $request->has_order === '1',
+                $range['from'],
+                $range['to'],
+            );
         }
 
         if (! in_array('utm_source', $except, true)) {

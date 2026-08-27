@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Support\CommerceReadSupport;
 use App\Support\EcomActivityCommerceEvents;
 use App\Support\EcomActivityCommerceSummary;
 use App\Support\EcomActivitySessionSort;
@@ -143,7 +144,7 @@ class EcomActivityRowMetrics
         }
 
         $actions = ActivityEcomUserAction::query()
-            ->select('id', 'session_id', 'action_type', 'add_to_cart', 'begin_checkout', 'proceed_to_checkout', 'payment_success', 'created_at', 'category_name', 'department_name', 'product_name', 'product_code', 'sku', 'general_color_name', 'page_url')
+            ->select(CommerceReadSupport::scalarActionColumns())
             ->whereIn('session_id', $sessionIds)
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->whereIn('action_type', $actionTypes)
@@ -231,27 +232,11 @@ class EcomActivityRowMetrics
      */
     private function attachPaymentMetrics(array &$metrics, Collection $sessionIds, Carbon $from, Carbon $to): void
     {
-        $payments = ActivityEcomUserAction::query()
-            ->select('session_id', 'payment_success', 'created_at')
-            ->whereIn('session_id', $sessionIds)
-            ->where('action_type', 'payment_success')
-            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-            ->orderByDesc('created_at')
-            ->get()
-            ->groupBy('session_id');
+        $payments = CommerceReadSupport::sumPaymentMetricsForSessions($sessionIds, $from, $to);
 
-        foreach ($payments as $sessionId => $actions) {
-            $qty = 0;
-            $value = 0.0;
-
-            foreach ($actions as $action) {
-                $payload = is_array($action->payment_success) ? $action->payment_success : [];
-                $value += (float) ($payload['amount_paid'] ?? 0);
-                $qty += max(1, (int) ($payload['qty'] ?? $payload['quantity'] ?? 1));
-            }
-
-            $metrics[$sessionId]['order_qty'] = $qty;
-            $metrics[$sessionId]['order_value'] = round($value, 2);
+        foreach ($payments as $sessionId => $row) {
+            $metrics[$sessionId]['order_qty'] = (int) ($row->order_qty ?? 0);
+            $metrics[$sessionId]['order_value'] = round((float) ($row->order_value ?? 0), 2);
         }
     }
 
@@ -282,7 +267,7 @@ class EcomActivityRowMetrics
         }
 
         $actions = ActivityEcomUserAction::query()
-            ->select('session_id', 'action_type', 'category_name', 'payment_success')
+            ->select('session_id', 'action_type', 'category_name')
             ->whereIn('session_id', $sessionIds)
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->whereIn('action_type', ['category_view', 'payment_success'])

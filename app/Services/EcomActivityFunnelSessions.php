@@ -3,7 +3,8 @@
 namespace App\Services;
 
 use App\Models\ActivityEcomUserAction;
-use App\Support\CheckoutPayloadTotals;
+use App\Support\CommerceLineItemQuery;
+use App\Support\CommerceReadSupport;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -35,20 +36,41 @@ class EcomActivityFunnelSessions
     ): array {
         $allowedSessionIds = $this->dashboardService->activitySessionIds($from, $to, $sessionFilters, $period);
 
-        $candidatesQuery = ActivityEcomUserAction::query()
-            ->select('session_id', 'created_at', $payloadKey)
+        if ($allowedSessionIds !== null && $allowedSessionIds->isEmpty()) {
+            return ['session_ids' => collect(), 'rows' => []];
+        }
+
+        $candidatesQuery = DB::table('activity_ecom_user_actions')
+            ->select('session_id', 'created_at', 'commerce_total', 'amount_paid', 'item_qty', 'line_count')
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->where('action_type', $stage)
             ->orderByDesc('created_at');
 
-        if ($allowedSessionIds->isEmpty()) {
-            return ['session_ids' => collect(), 'rows' => []];
+        if ($allowedSessionIds !== null) {
+            $this->constrainToSessionIds($candidatesQuery, $allowedSessionIds);
+        } else {
+            $candidatesQuery->whereIn('session_id', function ($sub) use ($from, $to, $period) {
+                $sub->from('activity_ecom_user')->select('session_id');
+                TrackerTime::applyEcomActivitySessionScope($sub, $from, $to, $period);
+            });
         }
 
-        $this->constrainToSessionIds($candidatesQuery, $allowedSessionIds);
-
         $candidates = $candidatesQuery->get()->groupBy('session_id');
-        $excludedSessionIds = $this->sessionIdsHavingActionType($candidates->keys(), $excludeActionType);
+        $excludeStage = match ($excludeActionType) {
+            'begin_checkout' => 'begin_checkout',
+            'proceed_checkout' => 'proceed_checkout',
+            'payment_success' => 'payment_success',
+            default => $excludeActionType,
+        };
+        $excludedSessionIds = CommerceLineItemQuery::sessionIdsHavingFunnelStage(
+            $candidates->keys(),
+            $excludeStage,
+            $from,
+            $to,
+        );
+        if ($excludedSessionIds === []) {
+            $excludedSessionIds = $this->sessionIdsHavingActionType($candidates->keys(), $excludeActionType);
+        }
         $rows = [];
 
         foreach ($candidates as $sessionId => $stageActions) {
@@ -57,12 +79,11 @@ class EcomActivityFunnelSessions
             }
 
             $latest = $stageActions->first();
-            $payload = is_array($latest->{$payloadKey} ?? null) ? $latest->{$payloadKey} : [];
 
             $rows[] = [
                 'session_id' => (string) $sessionId,
-                'qty' => $this->resolvePayloadEventQty($payload),
-                'value' => round((float) (CheckoutPayloadTotals::commerceAmount($payload) ?? $payload['cart_total'] ?? $payload['amount_paid'] ?? 0), 2),
+                'qty' => CommerceReadSupport::itemQtyForAction($latest),
+                'value' => round((float) (CommerceReadSupport::amountForAction($latest) ?? 0), 2),
                 'occurred_at' => $latest->created_at,
             ];
         }
@@ -87,25 +108,31 @@ class EcomActivityFunnelSessions
     ): array {
         $allowedSessionIds = $this->dashboardService->activitySessionIds($from, $to, $sessionFilters, $period);
 
-        $actionsQuery = ActivityEcomUserAction::query()
-            ->select('event_id', 'session_id', 'created_at', 'payment_success')
+        if ($allowedSessionIds !== null && $allowedSessionIds->isEmpty()) {
+            return ['session_ids' => collect(), 'rows' => []];
+        }
+
+        $actionsQuery = DB::table('activity_ecom_user_actions')
+            ->select('event_id', 'session_id', 'created_at', 'order_id', 'amount_paid', 'commerce_total', 'item_qty', 'line_count')
             ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
             ->where('action_type', 'payment_success')
             ->orderByDesc('created_at');
 
-        if ($allowedSessionIds->isEmpty()) {
-            return ['session_ids' => collect(), 'rows' => []];
+        if ($allowedSessionIds !== null) {
+            $this->constrainToSessionIds($actionsQuery, $allowedSessionIds);
+        } else {
+            $actionsQuery->whereIn('session_id', function ($sub) use ($from, $to, $period) {
+                $sub->from('activity_ecom_user')->select('session_id');
+                TrackerTime::applyEcomActivitySessionScope($sub, $from, $to, $period);
+            });
         }
-
-        $this->constrainToSessionIds($actionsQuery, $allowedSessionIds);
 
         $rows = [];
         $seen = [];
 
         foreach ($actionsQuery->get() as $action) {
-            $payload = is_array($action->payment_success) ? $action->payment_success : [];
-            $orderId = $payload['order_id'] ?? null;
-            $dedupeKey = filled($orderId) ? (string) $orderId : (string) ($action->event_id ?? '');
+            $orderId = CommerceReadSupport::orderIdForAction($action);
+            $dedupeKey = filled($orderId) ? $orderId : (string) ($action->event_id ?? '');
 
             if ($dedupeKey !== '' && isset($seen[$dedupeKey])) {
                 continue;
@@ -117,8 +144,8 @@ class EcomActivityFunnelSessions
 
             $rows[] = [
                 'session_id' => (string) $action->session_id,
-                'qty' => $this->paymentActionItemQty($action),
-                'value' => round((float) ($payload['amount_paid'] ?? 0), 2),
+                'qty' => CommerceReadSupport::itemQtyForAction($action),
+                'value' => round((float) (CommerceReadSupport::amountForAction($action) ?? 0), 2),
                 'occurred_at' => $action->created_at,
             ];
         }
@@ -142,21 +169,6 @@ class EcomActivityFunnelSessions
 
         return max(0, (int) ($payload['qty'] ?? $payload['quantity'] ?? 1));
     }
-
-    private function paymentActionItemQty(ActivityEcomUserAction $action): int
-    {
-        $payload = is_array($action->payment_success) ? $action->payment_success : [];
-        $items = $payload['checkout_info']['items'] ?? [];
-
-        if (is_array($items) && $items !== []) {
-            return max(0, (int) collect($items)
-                ->filter(fn ($item) => is_array($item))
-                ->sum(fn (array $item) => (int) ($item['qty'] ?? $item['quantity'] ?? 1)));
-        }
-
-        return $this->resolvePayloadEventQty($payload);
-    }
-
     /**
      * @param  Collection<int|string, mixed>  $sessionIds
      * @return array<string, true>

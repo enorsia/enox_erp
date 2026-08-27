@@ -3,7 +3,10 @@
 namespace App\Services;
 
 use App\Models\TrackerUtmFilter;
+use App\Services\EcomTrackerDashboardService;
+use App\Support\CommerceHasOrderFilter;
 use App\Support\EcomActivityFocus;
+use App\Support\TrackerTime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -75,9 +78,19 @@ class EcomActivityFilterCounts
             return $deferredHasOrderCounter($request, ['has_order']);
         }
 
+        $range = app(EcomTrackerDashboardService::class)->resolveDateRange(
+            $request->only(['period', 'date_from', 'date_to']),
+        );
+
+        $withOrder = clone $query;
+        CommerceHasOrderFilter::apply($withOrder, true, $range['from'], $range['to']);
+
+        $withoutOrder = clone $query;
+        CommerceHasOrderFilter::apply($withoutOrder, false, $range['from'], $range['to']);
+
         return [
-            '1' => (clone $query)->whereHas('actions', fn (Builder $actions) => $actions->where('action_type', 'payment_success'))->count(),
-            '0' => (clone $query)->whereDoesntHave('actions', fn (Builder $actions) => $actions->where('action_type', 'payment_success'))->count(),
+            '1' => $withOrder->count(),
+            '0' => $withoutOrder->count(),
         ];
     }
 

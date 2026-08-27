@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\ActivityEcomUserAction;
 use App\Services\EcomTrackerDashboardService;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 final class EcomActivityCommerceEvents
 {
@@ -131,36 +132,14 @@ final class EcomActivityCommerceEvents
      */
     private static function paymentEvent(ActivityEcomUserAction $action): ?array
     {
-        $payload = is_array($action->payment_success) ? $action->payment_success : [];
-        $checkout = is_array($payload['checkout_info'] ?? null) ? $payload['checkout_info'] : [];
-        $customer = is_array($checkout['customer'] ?? null) ? $checkout['customer'] : [];
-        $shipping = is_array($checkout['shipping'] ?? null) ? $checkout['shipping'] : [];
-        $totals = is_array($checkout['totals'] ?? null) ? $checkout['totals'] : [];
-        $items = is_array($checkout['items'] ?? null) ? $checkout['items'] : [];
+        $order = CommerceReadSupport::orderForEvent((string) $action->event_id);
+        $orderId = CommerceReadSupport::orderIdForAction($action) ?: trim((string) ($order->order_id ?? ''));
+        $amount = CommerceReadSupport::amountForAction($action);
+        $qty = CommerceReadSupport::itemQtyForAction($action);
 
-        $orderId = trim((string) ($payload['order_id'] ?? $checkout['order_number'] ?? ''));
-        $amount = self::moneyAmount($payload['amount_paid'] ?? $totals['grand_total'] ?? null);
-        $qty = self::sumItemQty($items);
-
-        if ($orderId === '' && $amount === null && $items === []) {
+        if ($orderId === '' && $amount === null && $qty === 0) {
             return null;
         }
-
-        $customerName = trim(implode(' ', array_filter([
-            trim((string) ($customer['first_name'] ?? '')),
-            trim((string) ($customer['last_name'] ?? '')),
-        ])));
-
-        if ($customerName === '') {
-            $customerName = trim((string) ($customer['full_name'] ?? ''));
-        }
-
-        $addressParts = array_filter([
-            trim((string) ($shipping['line_1'] ?? '')),
-            trim((string) ($shipping['line_2'] ?? '')),
-            trim((string) ($shipping['town_city'] ?? '')),
-            trim((string) ($shipping['postcode'] ?? '')),
-        ]);
 
         return [
             'id' => 'payment:'.($orderId !== '' ? $orderId : (string) $action->id),
@@ -177,38 +156,30 @@ final class EcomActivityCommerceEvents
                         $orderId !== '' ? ['label' => 'Order ID', 'value' => $orderId] : null,
                         $amount !== null ? ['label' => 'Total', 'value' => self::formatMoney($amount), 'emphasis' => true] : null,
                         $qty > 0 ? ['label' => 'Quantity', 'value' => (string) $qty] : null,
-                        filled($payload['payment_method'] ?? null) ? ['label' => 'Payment', 'value' => (string) $payload['payment_method']] : null,
+                        filled($order?->payment_method ?? null) ? ['label' => 'Payment', 'value' => (string) $order->payment_method] : null,
                         ['label' => 'Ordered', 'value' => TrackerTime::formatFromStorage($action->created_at, 'Y-m-d h:i A') ?? '—'],
                     ])),
                 ],
-                ($customerName !== '' || filled($customer['email'] ?? null) || filled($customer['phone'] ?? null) || $addressParts !== [])
+                (filled($order?->customer_email ?? null) || filled($order?->customer_phone ?? null))
                     ? [
                         'title' => 'Customer',
                         'fields' => array_values(array_filter([
-                            $customerName !== '' ? ['label' => 'Name', 'value' => $customerName] : null,
-                            filled($customer['phone'] ?? null) ? ['label' => 'Phone', 'value' => (string) $customer['phone']] : null,
-                            filled($customer['email'] ?? null) ? ['label' => 'Email', 'value' => (string) $customer['email']] : null,
-                            $addressParts !== [] ? ['label' => 'Address', 'value' => implode(', ', $addressParts)] : null,
-                            filled($shipping['town_city'] ?? null) || filled($shipping['postcode'] ?? null)
-                                ? ['label' => 'City & zip', 'value' => trim(implode(', ', array_filter([
-                                    (string) ($shipping['town_city'] ?? ''),
-                                    (string) ($shipping['postcode'] ?? ''),
-                                ])))]
-                                : null,
+                            filled($order?->customer_phone ?? null) ? ['label' => 'Phone', 'value' => (string) $order->customer_phone] : null,
+                            filled($order?->customer_email ?? null) ? ['label' => 'Email', 'value' => (string) $order->customer_email] : null,
                         ])),
                     ]
                     : null,
                 [
                     'title' => 'Prices',
                     'fields' => array_values(array_filter([
-                        self::moneyField('Delivery charge', $totals['delivery_charge'] ?? $totals['shipping_cost'] ?? null),
-                        self::moneyField('Smart cart saver', $totals['service_charge'] ?? null, true),
-                        self::moneyField('Sub total', $totals['subtotal'] ?? null),
+                        self::moneyField('Sub total', $order?->subtotal ?? $action->commerce_subtotal ?? null),
+                        self::moneyField('Delivery charge', $order?->shipping_charge ?? $action->commerce_shipping ?? null),
+                        self::moneyField('Discount', $action->commerce_discount ?? null, true),
                         $amount !== null ? ['label' => 'Grand total', 'value' => self::formatMoney($amount), 'emphasis' => true] : null,
                     ])),
                 ],
             ])),
-            'products' => self::mapLineItems($items),
+            'products' => CommerceReadSupport::displayProductsForAction($action),
             'layout' => 'detail',
         ];
     }
@@ -218,22 +189,17 @@ final class EcomActivityCommerceEvents
      */
     private static function checkoutEvent(ActivityEcomUserAction $action, string $stage, string $title): ?array
     {
-        $payloadKey = $stage === 'proceed_checkout' ? 'proceed_to_checkout' : 'begin_checkout';
-        $payload = is_array($action->{$payloadKey} ?? null) ? $action->{$payloadKey} : [];
-        $items = self::normalizeItems($payload);
-        $amount = self::moneyAmount(CheckoutPayloadTotals::commerceAmount($payload));
+        $amount = CommerceReadSupport::amountForAction($action);
+        $itemQty = CommerceReadSupport::itemQtyForAction($action);
+        $products = CommerceReadSupport::displayProductsForAction($action);
 
-        if ($amount === null && $items === []) {
+        if ($amount === null && $products === [] && $itemQty === 0) {
             return null;
         }
 
-        $coupon = trim((string) ($payload['coupon_code'] ?? ''));
-        $itemQty = self::sumItemQty($items);
-        $totals = CheckoutPayloadTotals::totals($payload);
-        $discountTotal = (self::moneyAmount($totals['coupon_discount'] ?? null) ?? 0)
-            + (self::moneyAmount($totals['scs_discount'] ?? null) ?? 0)
-            + (self::moneyAmount($totals['sms_discount'] ?? null) ?? 0);
-        $shippingCost = self::moneyAmount($totals['shipping_cost'] ?? $totals['delivery_charge'] ?? null) ?? 0;
+        $coupon = trim((string) ($action->coupon_code ?? ''));
+        $discountTotal = is_numeric($action->commerce_discount ?? null) ? (float) $action->commerce_discount : 0.0;
+        $shippingCost = is_numeric($action->commerce_shipping ?? null) ? (float) $action->commerce_shipping : 0.0;
 
         return [
             'id' => $stage.':'.$action->id,
@@ -251,7 +217,7 @@ final class EcomActivityCommerceEvents
                 $discountTotal > 0 ? 'Discount '.self::formatMoney($discountTotal) : null,
                 $shippingCost > 0 ? 'Shipping '.self::formatMoney($shippingCost) : null,
             ])) ?: null,
-            'products' => self::mapLineItems($items),
+            'products' => $products,
         ];
     }
 
@@ -260,12 +226,11 @@ final class EcomActivityCommerceEvents
      */
     private static function cartEvent(ActivityEcomUserAction $action): ?array
     {
-        $payload = is_array($action->add_to_cart) ? $action->add_to_cart : [];
-        $items = self::normalizeItems($payload);
-        $amount = self::moneyAmount($payload['cart_total'] ?? null);
-        $qty = max((int) ($payload['qty'] ?? 0), self::sumItemQty($items));
+        $amount = CommerceReadSupport::amountForAction($action);
+        $qty = CommerceReadSupport::itemQtyForAction($action);
+        $products = CommerceReadSupport::displayProductsForAction($action);
 
-        if ($amount === null && $items === [] && $qty === 0) {
+        if ($amount === null && $products === [] && $qty === 0) {
             return null;
         }
 
@@ -280,50 +245,9 @@ final class EcomActivityCommerceEvents
             'layout' => 'compact',
             'cart_qty' => $qty,
             'cart_total' => $amount !== null ? self::formatMoney($amount) : null,
-            'footer_note' => filled($payload['source'] ?? null) ? (string) $payload['source'] : null,
-            'products' => self::mapLineItems($items),
+            'footer_note' => null,
+            'products' => $products,
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     * @return list<array<string, mixed>>
-     */
-    private static function normalizeItems(array $payload): array
-    {
-        $items = $payload['items'] ?? $payload['cart_items'] ?? [];
-
-        return is_array($items) ? array_values(array_filter($items, 'is_array')) : [];
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $items
-     * @return list<array<string, mixed>>
-     */
-    private static function mapLineItems(array $items): array
-    {
-        return array_values(array_map(function (array $item) {
-            $qty = (int) ($item['qty'] ?? $item['quantity'] ?? 1);
-            $price = self::moneyAmount($item['price'] ?? $item['line_total'] ?? null);
-            $title = trim((string) ($item['product_name'] ?? $item['name'] ?? ''));
-            $code = trim((string) ($item['product_code'] ?? $item['sku'] ?? ''));
-
-            if ($title !== '' && $code !== '') {
-                $title .= ' ('.$code.')';
-            } elseif ($title === '' && $code !== '') {
-                $title = $code;
-            }
-
-            return array_filter([
-                'title' => $title !== '' ? $title : 'Product',
-                'size' => trim((string) ($item['size_name'] ?? '')),
-                'color_po' => trim((string) ($item['color_name'] ?? $item['general_color_name'] ?? '')),
-                'color_ecommerce' => trim((string) ($item['color_name'] ?? $item['general_color_name'] ?? '')),
-                'qty' => $qty > 0 ? (string) $qty : '1',
-                'price' => $price !== null ? self::formatMoney($price) : '—',
-                'image_url' => trim((string) ($item['image_url'] ?? $item['product_image'] ?? '')),
-            ], fn ($value) => $value !== '' && $value !== null);
-        }, $items));
     }
 
     /**
@@ -356,24 +280,6 @@ final class EcomActivityCommerceEvents
         }
 
         return $result;
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $items
-     */
-    private static function sumItemQty(array $items): int
-    {
-        $qty = 0;
-
-        foreach ($items as $item) {
-            if (! is_array($item)) {
-                continue;
-            }
-
-            $qty += max(1, (int) ($item['qty'] ?? $item['quantity'] ?? 1));
-        }
-
-        return $qty;
     }
 
     private static function moneyAmount(mixed $value): ?float

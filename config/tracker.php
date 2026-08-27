@@ -89,6 +89,10 @@ return [
 
     'analytics_cache_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_SECONDS', 300),
 
+    'commerce_sync_batch_size' => (int) env('TRACKER_COMMERCE_SYNC_BATCH_SIZE', 100),
+
+    'commerce_sync_chunk_days' => (int) env('TRACKER_COMMERCE_SYNC_CHUNK_DAYS', 7),
+
     'analytics_windows' => [
         'hours' => [1, 3, 6, 12, 24],
         'days' => [1, 7, 14, 30, 90],

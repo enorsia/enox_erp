@@ -6,6 +6,7 @@ use App\Services\EcomTrackerDashboardService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class EcomActivityKeywordSearch
 {
@@ -50,8 +51,11 @@ class EcomActivityKeywordSearch
                             ->orWhere('category_code', 'like', $like)
                             ->orWhere('department_name', 'like', $like)
                             ->orWhere('general_color_name', 'like', $like)
-                            ->orWhere('product_color_code', 'like', $like);
+                            ->orWhere('product_color_code', 'like', $like)
+                            ->orWhere('coupon_code', 'like', $like);
                     }));
+
+            self::applyCommerceKeywordMatches($keywordQuery, $search, $like);
 
             $catalogSessionIds = $dashboardService->productCatalogSessionIds(
                 $from,
@@ -61,6 +65,42 @@ class EcomActivityKeywordSearch
             );
 
             self::orWhereSessionIds($keywordQuery, $catalogSessionIds);
+        });
+    }
+
+    /**
+     * @param  Builder<\App\Models\ActivityEcomUser>  $query
+     */
+    private static function applyCommerceKeywordMatches(Builder $query, string $search, string $like): void
+    {
+        $query->orWhereExists(function ($orderQuery) use ($search, $like) {
+            $orderQuery->selectRaw('1')
+                ->from('activity_ecom_orders as o')
+                ->whereColumn('o.session_id', 'activity_ecom_user.session_id')
+                ->where(function ($inner) use ($search, $like) {
+                    $inner->where('o.order_id', 'like', $like)
+                        ->orWhere('o.customer_email', 'like', $like)
+                        ->orWhere('o.customer_phone', 'like', $like)
+                        ->orWhere('o.coupon_code', 'like', $like);
+                });
+        });
+
+        $query->orWhereExists(function ($lineQuery) use ($search, $like) {
+            $lineQuery->selectRaw('1')
+                ->from('activity_ecom_commerce_line_items as li')
+                ->whereColumn('li.session_id', 'activity_ecom_user.session_id')
+                ->where(function ($inner) use ($search, $like) {
+                    $inner->where('li.product_code', 'like', $like)
+                        ->orWhere('li.sku', 'like', $like)
+                        ->orWhere('li.department_name', 'like', $like)
+                        ->orWhere('li.category_name', 'like', $like);
+
+                    if (DB::connection()->getDriverName() === 'mysql' && strlen($search) >= 3) {
+                        $inner->orWhereRaw('MATCH(li.product_name) AGAINST (? IN BOOLEAN MODE)', [$search.'*']);
+                    } else {
+                        $inner->orWhere('li.product_name', 'like', $like);
+                    }
+                });
         });
     }
 

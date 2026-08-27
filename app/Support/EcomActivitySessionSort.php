@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Services\EcomTrackerDashboardService;
+use App\Support\CommerceReadSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -218,22 +219,7 @@ final class EcomActivitySessionSort
         }
 
         $actionsQuery = ActivityEcomUserAction::query()
-            ->select([
-                'id',
-                'session_id',
-                'action_type',
-                'created_at',
-                'product_name',
-                'product_code',
-                'sku',
-                'category_name',
-                'department_name',
-                'general_color_name',
-                'add_to_cart',
-                'begin_checkout',
-                'proceed_to_checkout',
-                'payment_success',
-            ])
+            ->select(CommerceReadSupport::scalarActionColumns())
             ->whereIn('session_id', $sessionIds->all())
             ->whereIn('action_type', self::FUNNEL_STAGE_ACTION_TYPES);
 
@@ -484,64 +470,58 @@ SQL;
     private static function orderByOrderValue(Builder $query, string $direction, array $scope = []): Builder
     {
         $table = $query->getModel()->getTable();
+        $from = $scope['from'] ?? null;
+        $to = $scope['to'] ?? null;
+        $catalogOptions = $scope['catalog_options'] ?? [];
+
+        if (($from === null || $to === null) && $catalogOptions === []) {
+            return $query
+                ->orderBy('max_order_value', $direction)
+                ->orderByDesc('id');
+        }
+
         $actionsTable = 'activity_ecom_user_actions';
+        $ordersTable = 'activity_ecom_orders';
         $driver = $query->getConnection()->getDriverName();
+        $bindings = [];
+
+        if ($from instanceof Carbon && $to instanceof Carbon) {
+            [$start, $end] = TrackerTime::storageRange($from, $to);
+            $bindings = [$start, $end];
+
+            $valueSql = <<<SQL
+(
+    SELECT MAX(CAST({$ordersTable}.amount_paid AS DECIMAL(12,2)))
+    FROM {$ordersTable}
+    WHERE {$ordersTable}.session_id = {$table}.session_id
+      AND {$ordersTable}.ordered_at BETWEEN ? AND ?
+)
+SQL;
+
+            return $query
+                ->orderByRaw($valueSql.' '.$direction, $bindings)
+                ->orderByDesc('id');
+        }
+
         $conditions = [
             "{$actionsTable}.session_id = {$table}.session_id",
             "{$actionsTable}.action_type = 'payment_success'",
         ];
-        $bindings = [];
 
-        $from = $scope['from'] ?? null;
-        $to = $scope['to'] ?? null;
-
-        if ($from instanceof Carbon && $to instanceof Carbon) {
-            [$start, $end] = TrackerTime::storageRange($from, $to);
-            $conditions[] = "{$actionsTable}.created_at BETWEEN ? AND ?";
-            $bindings[] = $start;
-            $bindings[] = $end;
-        }
-
-        foreach (self::catalogScopeSql($actionsTable, $scope['catalog_options'] ?? []) as $fragment) {
+        foreach (self::catalogScopeSql($actionsTable, $catalogOptions) as $fragment) {
             $conditions[] = $fragment['sql'];
             array_push($bindings, ...$fragment['bindings']);
         }
 
         $where = implode(' AND ', $conditions);
 
-        if ($driver === 'sqlite') {
-            $valueSql = <<<SQL
+        $valueSql = <<<SQL
 (
-    SELECT MAX(
-        CAST(
-            COALESCE(
-                json_extract(payment_success, '$.amount_paid'),
-                json_extract(payment_success, '$.checkout_info.totals.grand_total'),
-                0
-            ) AS REAL
-        )
-    )
+    SELECT MAX(CAST(COALESCE({$actionsTable}.amount_paid, {$actionsTable}.commerce_total, 0) AS DECIMAL(12,2)))
     FROM {$actionsTable}
     WHERE {$where}
 )
 SQL;
-        } else {
-            $valueSql = <<<SQL
-(
-    SELECT MAX(
-        CAST(
-            COALESCE(
-                JSON_UNQUOTE(JSON_EXTRACT(payment_success, '$.amount_paid')),
-                JSON_UNQUOTE(JSON_EXTRACT(payment_success, '$.checkout_info.totals.grand_total')),
-                0
-            ) AS DECIMAL(12,2)
-        )
-    )
-    FROM {$actionsTable}
-    WHERE {$where}
-)
-SQL;
-        }
 
         return $query
             ->orderByRaw($valueSql.' '.$direction, $bindings)

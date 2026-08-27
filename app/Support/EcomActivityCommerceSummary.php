@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\ActivityEcomUserAction;
 use App\Services\EcomTrackerDashboardService;
+use App\Support\CommerceReadSupport;
 use Illuminate\Support\Collection;
 
 final class EcomActivityCommerceSummary
@@ -216,10 +217,7 @@ final class EcomActivityCommerceSummary
 
     public static function orderIdFromPaymentAction(ActivityEcomUserAction $action): string
     {
-        $payload = is_array($action->payment_success) ? $action->payment_success : [];
-        $checkout = is_array($payload['checkout_info'] ?? null) ? $payload['checkout_info'] : [];
-
-        return trim((string) ($payload['order_id'] ?? $checkout['order_number'] ?? ''));
+        return CommerceReadSupport::orderIdForAction($action);
     }
 
     public static function formatOrderDisplay(string $orderId, ?float $value): string
@@ -283,34 +281,7 @@ final class EcomActivityCommerceSummary
 
     private static function amountForStage(string $stage, ActivityEcomUserAction $action): ?float
     {
-        if ($stage === 'payment_success') {
-            $payload = is_array($action->payment_success) ? $action->payment_success : [];
-            $total = 0.0;
-
-            foreach ([$payload['amount_paid'] ?? null, $payload['checkout_info']['totals']['grand_total'] ?? null] as $candidate) {
-                if (is_numeric($candidate)) {
-                    $total = max($total, round((float) $candidate, 2));
-                }
-            }
-
-            return $total > 0 ? $total : null;
-        }
-
-        $payloadKey = match ($stage) {
-            'proceed_checkout' => 'proceed_to_checkout',
-            'begin_checkout' => 'begin_checkout',
-            'add_to_cart' => 'add_to_cart',
-            default => null,
-        };
-
-        if ($payloadKey === null) {
-            return null;
-        }
-
-        $payload = is_array($action->{$payloadKey} ?? null) ? $action->{$payloadKey} : [];
-        $amount = CheckoutPayloadTotals::commerceAmount($payload);
-
-        return $amount !== null && $amount > 0 ? round($amount, 2) : null;
+        return CommerceReadSupport::amountForAction($action);
     }
 
     private static function tipForStage(string $stage, ActivityEcomUserAction $action, ?float $value): ?string

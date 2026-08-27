@@ -33,6 +33,14 @@ class ActivityEcomUser extends Model
         'utm_campaign',
         'landing_page',
         'is_logged_in',
+        'has_add_to_cart',
+        'has_begin_checkout',
+        'has_proceed_checkout',
+        'has_payment_success',
+        'max_order_value',
+        'first_payment_at',
+        'latest_funnel_stage',
+        'is_bot',
         'last_active_at',
         'session_duration_seconds',
         'created_at',
@@ -43,6 +51,13 @@ class ActivityEcomUser extends Model
     {
         return [
             'is_logged_in' => 'boolean',
+            'has_add_to_cart' => 'boolean',
+            'has_begin_checkout' => 'boolean',
+            'has_proceed_checkout' => 'boolean',
+            'has_payment_success' => 'boolean',
+            'max_order_value' => 'decimal:2',
+            'first_payment_at' => 'datetime',
+            'is_bot' => 'boolean',
             'last_active_at' => 'datetime',
             'session_duration_seconds' => 'integer',
         ];

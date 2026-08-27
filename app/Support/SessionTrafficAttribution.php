@@ -302,9 +302,11 @@ final class SessionTrafficAttribution
         return $parsed;
     }
 
-    private static function refererFromActions(ActivityEcomUser $session, ?Collection $actions = null): ?string
+    private static function refererFromActions(object $session, ?Collection $actions = null): ?string
     {
-        if ($session->relationLoaded('firstRefererAction') && filled($session->firstRefererAction?->referer)) {
+        if (method_exists($session, 'relationLoaded')
+            && $session->relationLoaded('firstRefererAction')
+            && filled($session->firstRefererAction?->referer)) {
             return (string) $session->firstRefererAction->referer;
         }
 
@@ -316,7 +318,7 @@ final class SessionTrafficAttribution
     /**
      * @param  array<string, string>|null  $parsed
      */
-    private static function resolveReferer(ActivityEcomUser $session, ?Collection $actions = null, ?array $parsed = null): ?string
+    private static function resolveReferer(object $session, ?Collection $actions = null, ?array $parsed = null): ?string
     {
         $referer = self::refererFromActions($session, $actions);
 
@@ -324,7 +326,7 @@ final class SessionTrafficAttribution
             return $referer;
         }
 
-        $parsed ??= self::parseFromUrl($session->landing_page)
+        $parsed ??= self::parseFromUrl($session->landing_page ?? null)
             + self::parseFromUrl(self::firstActionPageUrl($session, $actions));
 
         $source = self::normalizeSource($parsed['utm_source'] ?? null);
@@ -386,11 +388,11 @@ final class SessionTrafficAttribution
      * @return array<string, string>
      */
     public static function buildParsedAttribution(
-        ActivityEcomUser $session,
+        object $session,
         array $actionPageUrls = [],
         ?string $referer = null,
     ): array {
-        $parsed = self::parseFromUrl($session->landing_page);
+        $parsed = self::parseFromUrl($session->landing_page ?? null);
 
         if ($actionPageUrls === []) {
             $firstPageUrl = self::firstActionPageUrl($session);
@@ -419,7 +421,7 @@ final class SessionTrafficAttribution
      * @return array{source: ?string, medium: ?string, campaign: ?string}
      */
     public static function resolvedUtmFields(
-        ActivityEcomUser $session,
+        object $session,
         array $parsed = [],
         array $actionPageUrls = [],
         ?string $referer = null,
@@ -430,8 +432,8 @@ final class SessionTrafficAttribution
             $parsed = self::mergeRefererAttribution($parsed, $referer ?? self::refererFromActions($session));
         }
 
-        $sessionSource = filled($session->utm_source)
-            ? self::normalizeSource((string) $session->utm_source)
+        $sessionSource = filled($session->utm_source ?? null)
+            ? self::normalizeSource((string) ($session->utm_source ?? ''))
             : null;
         $parsedSource = isset($parsed['utm_source'])
             ? self::normalizeSource($parsed['utm_source'])
@@ -439,8 +441,8 @@ final class SessionTrafficAttribution
 
         return [
             'source' => $sessionSource ?? $parsedSource,
-            'medium' => filled($session->utm_medium) ? (string) $session->utm_medium : ($parsed['utm_medium'] ?? null),
-            'campaign' => filled($session->utm_campaign) ? (string) $session->utm_campaign : ($parsed['utm_campaign'] ?? null),
+            'medium' => filled($session->utm_medium ?? null) ? (string) ($session->utm_medium ?? '') : ($parsed['utm_medium'] ?? null),
+            'campaign' => filled($session->utm_campaign ?? null) ? (string) ($session->utm_campaign ?? '') : ($parsed['utm_campaign'] ?? null),
         ];
     }
 
@@ -463,7 +465,7 @@ final class SessionTrafficAttribution
      * @return array{source: string, medium: string}
      */
     public static function resolvedTrafficBucket(
-        ActivityEcomUser $session,
+        object $session,
         array $actionPageUrls = [],
         ?string $referer = null,
     ): array {
@@ -503,7 +505,7 @@ final class SessionTrafficAttribution
             }
         }
 
-        foreach ([$session->landing_page, self::firstActionPageUrl($session, $actions)] as $url) {
+        foreach ([$session->landing_page ?? null, self::firstActionPageUrl($session, $actions)] as $url) {
             foreach (self::parseFromUrl($url) as $key => $value) {
                 if (! isset($merged[$key])) {
                     $merged[$key] = $value;
@@ -694,11 +696,11 @@ final class SessionTrafficAttribution
     /**
      * @param  Collection<int, ActivityEcomUserAction>|null  $actions
      */
-    private static function firstActionPageUrl(ActivityEcomUser $session, ?Collection $actions = null): ?string
+    private static function firstActionPageUrl(object $session, ?Collection $actions = null): ?string
     {
         if ($actions !== null) {
             $action = $actions
-                ->filter(fn (ActivityEcomUserAction $row) => filled($row->page_url))
+                ->filter(fn (object $row) => filled($row->page_url ?? null))
                 ->sortBy([
                     ['created_at', 'asc'],
                     ['id', 'asc'],
@@ -720,11 +722,11 @@ final class SessionTrafficAttribution
     /**
      * @param  Collection<int, ActivityEcomUserAction>|null  $actions
      */
-    private static function firstActionReferer(ActivityEcomUser $session, ?Collection $actions = null): ?string
+    private static function firstActionReferer(object $session, ?Collection $actions = null): ?string
     {
         if ($actions !== null) {
             $action = $actions
-                ->filter(fn (ActivityEcomUserAction $row) => filled($row->referer))
+                ->filter(fn (object $row) => filled($row->referer ?? null))
                 ->sortBy([
                     ['created_at', 'asc'],
                     ['id', 'asc'],
