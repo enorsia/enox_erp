@@ -3,20 +3,29 @@
 use App\Models\Platform;
 use Illuminate\Support\Facades\Cache;
 
-if (! function_exists('avaiablePermissions')) {
-    function avaiablePermissions(bool $flat = false)
+if (! function_exists('avaiablePermissionsMap')) {
+    /**
+     * Permission catalog for nav / gates. Cached forever in the store, and
+     * once per request so Blade does not hit the cache table on every @canany.
+     *
+     * @return array{grouped: array<string, array<string, true>>, flat: array<string, true>, prefix: array<string, list<string>>}
+     */
+    function avaiablePermissionsMap(): array
     {
-        $cacheKey = 'permissions.available';
-        $data = Cache::rememberForever($cacheKey, function () {
+        static $data = null;
+
+        if ($data !== null) {
+            return $data;
+        }
+
+        $data = Cache::rememberForever('permissions.available', function () {
             $permissions = config('permissions.map');
 
-            $grouped  = [];
+            $grouped = [];
             $flatList = [];
-            $prefix   = [];
+            $prefix = [];
 
             foreach ($permissions as $module => $entities) {
-
-                // Define prefix once per module
                 $modulePrefix = "{$module}_";
 
                 foreach ($entities as $entity => $config) {
@@ -24,30 +33,32 @@ if (! function_exists('avaiablePermissions')) {
 
                     foreach ($config['actions'] as $action) {
                         $permission = "{$module}.{$entity}.{$action}";
-
-                        // Flat (key-based)
                         $flatList[$permission] = true;
-
-                        // Grouped (key-based)
                         $grouped[$groupKey][$permission] = true;
-
-                        // Prefix-based (value list for @canany)
                         $prefix[$modulePrefix][] = $permission;
                     }
                 }
             }
 
-            // Remove duplicate permissions inside prefixes
             foreach ($prefix as $key => $items) {
                 $prefix[$key] = array_values(array_unique($items));
             }
 
             return [
                 'grouped' => $grouped,
-                'flat'    => $flatList,
-                'prefix'  => $prefix,
+                'flat' => $flatList,
+                'prefix' => $prefix,
             ];
         });
+
+        return $data;
+    }
+}
+
+if (! function_exists('avaiablePermissions')) {
+    function avaiablePermissions(bool $flat = false)
+    {
+        $data = avaiablePermissionsMap();
 
         return $flat ? $data['flat'] : $data['grouped'];
     }

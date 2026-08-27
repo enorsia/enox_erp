@@ -623,8 +623,12 @@ class BotTrafficAnalyticsService
             TrackerRedisSupport::logBackendHealth('bot_traffic_report');
         }
 
-        $wasCached = Cache::has($key);
-        $result = Cache::remember($key, $ttlSeconds, $callback);
+        $wasCached = true;
+        $result = Cache::remember($key, $ttlSeconds, function () use ($callback, &$wasCached) {
+            $wasCached = false;
+
+            return $callback();
+        });
 
         EcomTrackerLogger::backend()->debug('redis.cache.read', $wasCached
             ? 'Analytics data loaded from cache OK'

@@ -99,6 +99,71 @@ test('activity index does not double apply funnel when focus already matches', f
     ))->toBeFalse();
 });
 
+test('cart abandonment focus defaults to sold first even when cart value is higher', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $cartOnly = Str::uuid()->toString();
+    $soldWithoutCheckout = Str::uuid()->toString();
+
+    foreach ([$cartOnly, $soldWithoutCheckout] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'created_at' => now(),
+            'last_active_at' => now(),
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $cartOnly,
+        'action_type' => 'add_to_cart',
+        'add_to_cart' => ['cart_total' => 999, 'qty' => 1],
+        'commerce_total' => 999,
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $soldWithoutCheckout,
+        'action_type' => 'add_to_cart',
+        'add_to_cart' => ['cart_total' => 1, 'qty' => 1],
+        'commerce_total' => 1,
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $soldWithoutCheckout,
+        'action_type' => 'payment_success',
+        'payment_success' => ['amount_paid' => 1, 'qty' => 1],
+        'amount_paid' => 1,
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $response = $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'cart_abandonment',
+        ]))
+        ->assertOk();
+
+    $content = $response->getContent();
+    $soldPos = strpos($content, substr($soldWithoutCheckout, 0, 8));
+    $cartPos = strpos($content, substr($cartOnly, 0, 8));
+
+    expect($soldPos)->not->toBeFalse()
+        ->and($cartPos)->not->toBeFalse()
+        ->and($soldPos)->toBeLessThan($cartPos);
+});
+
 test('activity index sorts by funnel stage with payment success first', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.activity.index');

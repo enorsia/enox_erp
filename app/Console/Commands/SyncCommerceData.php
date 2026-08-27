@@ -101,13 +101,11 @@ class SyncCommerceData extends Command
 
             try {
                 $checkpoint->update(['status' => 'running', 'started_at' => now()]);
-                $lastActionId = (int) ($checkpoint->last_action_id ?? 0);
 
                 foreach ($actionTypes as $stage) {
                     $this->actionQuery($cursor, $chunkEnd, [$stage])
-                        ->when($lastActionId > 0, fn ($q) => $q->where('id', '>', $lastActionId))
                         ->orderBy('id')
-                        ->chunkById($batchSize, function ($actions) use ($writer, $checkpoint, &$chunkSessions, &$lastActionId) {
+                        ->chunkById($batchSize, function ($actions) use ($writer, $checkpoint, &$chunkSessions) {
                             $batch = $actions->all();
                             $result = $writer->syncBatch($batch, true, true);
 
@@ -115,13 +113,10 @@ class SyncCommerceData extends Command
                                 $chunkSessions[$action->session_id] = true;
                             }
 
-                            if ($result['last_action_id'] !== null) {
-                                $lastActionId = $result['last_action_id'];
-                                $checkpoint->update([
-                                    'last_action_id' => $lastActionId,
-                                    'records_processed' => ($checkpoint->records_processed ?? 0) + $result['processed'],
-                                ]);
-                            }
+                            $checkpoint->update([
+                                'last_action_id' => $result['last_action_id'],
+                                'records_processed' => ($checkpoint->records_processed ?? 0) + $result['processed'],
+                            ]);
 
                             $this->line(sprintf(
                                 '  batch: processed %d skipped %d last_id %s',

@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
-use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Support\TrackerRedisCache;
 use App\Support\TrackerTime;
@@ -575,11 +574,10 @@ class VisitorAnalyticsService
     private function visitorOrderQtySubquery(Carbon $from, Carbon $to): \Closure
     {
         return function ($sub) use ($from, $to): void {
-            $sub->from('activity_ecom_user_actions as orders')
+            $sub->from('activity_ecom_orders as orders')
                 ->join('activity_ecom_user as order_sessions', 'order_sessions.session_id', '=', 'orders.session_id')
                 ->whereColumn('order_sessions.visitor_id', 'activity_ecom_user.visitor_id')
-                ->where('orders.action_type', 'payment_success')
-                ->whereBetween('orders.created_at', [
+                ->whereBetween('orders.ordered_at', [
                     TrackerTime::formatUtc($from),
                     TrackerTime::formatUtc($to),
                 ])

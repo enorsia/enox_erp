@@ -14,9 +14,10 @@
 
     <!-- Nav -->
     <nav class="flex-1 py-2">
+        @php($availablePermissions = avaiablePermissionsMap())
 
         {{-- Access --}}
-        @canany(Cache::get('permissions.available', [])['prefix']['authentication_'] ?? [])
+        @canany($availablePermissions['prefix']['authentication_'] ?? [])
             <div class="pt-4 pb-1">
                 <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Access</p>
 
@@ -58,7 +59,7 @@
         @endcanany
 
         {{-- General --}}
-        @canany(Cache::get('permissions.available', [])['prefix']['general_'] ?? [])
+        @canany($availablePermissions['prefix']['general_'] ?? [])
             <div class="pt-4">
                 <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Main</p>
 
@@ -77,11 +78,11 @@
                 @endcan
 
                 @canany([
-                    ...array_keys(Cache::get('permissions.available', [])['grouped']['general_chart'] ?? []),
-                    ...array_keys(Cache::get('permissions.available', [])['grouped']['general_fabrication'] ?? []),
-                    ...array_keys(Cache::get('permissions.available', [])['grouped']['general_expense'] ?? []),
-                    ...array_keys(Cache::get('permissions.available', [])['grouped']['general_forecasting'] ?? []),
-                    ...array_keys(Cache::get('permissions.available', [])['grouped']['general_discounts'] ?? []),
+                    ...array_keys($availablePermissions['grouped']['general_chart'] ?? []),
+                    ...array_keys($availablePermissions['grouped']['general_fabrication'] ?? []),
+                    ...array_keys($availablePermissions['grouped']['general_expense'] ?? []),
+                    ...array_keys($availablePermissions['grouped']['general_forecasting'] ?? []),
+                    ...array_keys($availablePermissions['grouped']['general_discounts'] ?? []),
                     'settings.platforms.index'
                 ])
                     <!-- Selling Chart Dropdown -->
@@ -153,7 +154,7 @@
         @endcanany
 
         {{-- Reports --}}
-        @canany(Cache::get('permissions.available', [])['prefix']['general_'] ?? [])
+        @canany($availablePermissions['prefix']['general_'] ?? [])
             <div class="pb-1">
                 <div x-data="{ open: {{ Request::is('admin/sales-spends/*') ? 'true' : 'false' }} }">
                     <button @click="open = !open"
@@ -226,7 +227,7 @@
                 </div>
 
                 @if (config('tracker.enabled'))
-                @canany(Cache::get('permissions.available', [])['prefix']['ecom_tracker_'] ?? [])
+                @canany($availablePermissions['prefix']['ecom_tracker_'] ?? [])
                 <div x-data="{ open: {{ Request::is('admin/ecom-tracker*') || Request::is('admin/ecom-activity*') ? 'true' : 'false' }} }">
                     <button @click="open = !open"
                             class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/ecom-tracker*') || Request::is('admin/ecom-activity*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">

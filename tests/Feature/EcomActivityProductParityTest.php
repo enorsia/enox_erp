@@ -1,9 +1,38 @@
 <?php
 
 use App\Models\ActivityEcomUser;
-use App\Models\ActivityEcomUserAction;
 use App\Services\EcomTrackerDashboardService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+
+function seedProductParityLineItem(
+    string $sessionId,
+    string $funnelStage,
+    string $productName,
+    string $productCode,
+    string $categoryName = '',
+    string $departmentName = '',
+    float $qty = 1,
+    float $lineTotal = 0,
+): void {
+    $now = now();
+
+    DB::table('activity_ecom_commerce_line_items')->insert([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'funnel_stage' => $funnelStage,
+        'line_no' => 1,
+        'product_name' => $productName,
+        'product_code' => $productCode,
+        'sku' => $productCode,
+        'category_name' => $categoryName,
+        'department_name' => $departmentName,
+        'qty' => $qty,
+        'line_total' => $lineTotal,
+        'staged_at' => $now,
+        'created_at' => $now,
+    ]);
+}
 
 test('product catalog session ids match dashboard product identity', function () {
     $sessionA = Str::uuid()->toString();
@@ -21,27 +50,8 @@ test('product catalog session ids match dashboard product identity', function ()
     $productName = 'Red Ruched Side Seam T-Shirt';
     $productCode = 'RRSST-001';
 
-    ActivityEcomUserAction::query()->create([
-        'event_id' => Str::uuid()->toString(),
-        'session_id' => $sessionA,
-        'action_type' => 'product_view',
-        'product_name' => $productName,
-        'product_code' => '',
-        'created_at' => now(),
-        'start_time' => now(),
-        'end_time' => now(),
-    ]);
-
-    ActivityEcomUserAction::query()->create([
-        'event_id' => Str::uuid()->toString(),
-        'session_id' => $sessionB,
-        'action_type' => 'product_view',
-        'product_name' => $productName,
-        'product_code' => $productCode,
-        'created_at' => now(),
-        'start_time' => now(),
-        'end_time' => now(),
-    ]);
+    seedProductParityLineItem($sessionA, 'add_to_cart', $productName, $productCode);
+    seedProductParityLineItem($sessionB, 'add_to_cart', $productName, $productCode);
 
     $dashboard = app(EcomTrackerDashboardService::class);
     $range = $dashboard->resolveDateRange(['period' => 'all']);
@@ -62,48 +72,56 @@ test('product catalog session ids match dashboard product identity', function ()
         ],
     );
 
-    expect($metrics[$sessionA]['products_viewed'])->toBe(1)
-        ->and($metrics[$sessionB]['products_viewed'])->toBe(1);
+    expect($metrics[$sessionA]['adds'])->toBe(1)
+        ->and($metrics[$sessionB]['adds'])->toBe(1)
+        ->and($metrics[$sessionA]['products_viewed'])->toBe(0)
+        ->and($metrics[$sessionB]['products_viewed'])->toBe(0);
 });
 
 test('category catalog metrics count payment success actions once per order', function () {
     $sessionId = Str::uuid()->toString();
     $categoryName = 'Tops and T-Shirts';
+    $eventId = Str::uuid()->toString();
+    $now = now();
 
     ActivityEcomUser::query()->create([
         'session_id' => $sessionId,
         'device_type' => 'desktop',
-        'created_at' => now(),
-        'last_active_at' => now(),
+        'created_at' => $now,
+        'last_active_at' => $now,
     ]);
 
-    ActivityEcomUserAction::query()->create([
-        'event_id' => Str::uuid()->toString(),
-        'session_id' => $sessionId,
-        'action_type' => 'payment_success',
-        'department_name' => 'Women',
-        'payment_success' => [
-            'amount_paid' => 45.50,
-            'checkout_info' => [
-                'items' => [
-                    [
-                        'product_name' => 'Summer Tee',
-                        'product_code' => 'TEE-001',
-                        'category_name' => $categoryName,
-                        'qty' => 1,
-                    ],
-                    [
-                        'product_name' => 'Classic Tee',
-                        'product_code' => 'TEE-002',
-                        'category_name' => $categoryName,
-                        'qty' => 1,
-                    ],
-                ],
-            ],
+    DB::table('activity_ecom_commerce_line_items')->insert([
+        [
+            'event_id' => $eventId,
+            'session_id' => $sessionId,
+            'funnel_stage' => 'payment_success',
+            'line_no' => 1,
+            'product_name' => 'Summer Tee',
+            'product_code' => 'TEE-001',
+            'sku' => 'TEE-001',
+            'category_name' => $categoryName,
+            'department_name' => 'Women',
+            'qty' => 1,
+            'line_total' => 22.75,
+            'staged_at' => $now,
+            'created_at' => $now,
         ],
-        'created_at' => now(),
-        'start_time' => now(),
-        'end_time' => now(),
+        [
+            'event_id' => $eventId,
+            'session_id' => $sessionId,
+            'funnel_stage' => 'payment_success',
+            'line_no' => 2,
+            'product_name' => 'Classic Tee',
+            'product_code' => 'TEE-002',
+            'sku' => 'TEE-002',
+            'category_name' => $categoryName,
+            'department_name' => 'Women',
+            'qty' => 1,
+            'line_total' => 22.75,
+            'staged_at' => $now,
+            'created_at' => $now,
+        ],
     ]);
 
     $dashboard = app(EcomTrackerDashboardService::class);
@@ -137,22 +155,8 @@ test('product catalog metrics sum matches dashboard view totals across sessions'
     $productName = 'Red Ruched Side Seam T-Shirt';
     $productCode = 'RRSST-001';
 
-    foreach ([
-        [$sessionA, ''],
-        [$sessionA, $productCode],
-        [$sessionB, $productCode],
-        [$sessionB, $productCode],
-    ] as [$sessionId, $code]) {
-        ActivityEcomUserAction::query()->create([
-            'event_id' => Str::uuid()->toString(),
-            'session_id' => $sessionId,
-            'action_type' => 'product_view',
-            'product_name' => $productName,
-            'product_code' => $code,
-            'created_at' => now(),
-            'start_time' => now(),
-            'end_time' => now(),
-        ]);
+    foreach ([$sessionA, $sessionA, $sessionB, $sessionB] as $sessionId) {
+        seedProductParityLineItem($sessionId, 'add_to_cart', $productName, $productCode);
     }
 
     $dashboard = app(EcomTrackerDashboardService::class);
@@ -169,7 +173,9 @@ test('product catalog metrics sum matches dashboard view totals across sessions'
         $options,
     );
 
-    expect(array_sum(array_column($metrics, 'products_viewed')))->toBe(4)
-        ->and($metrics[$sessionA]['products_viewed'])->toBe(2)
-        ->and($metrics[$sessionB]['products_viewed'])->toBe(2);
+    expect(array_sum(array_column($metrics, 'adds')))->toBe(4)
+        ->and($metrics[$sessionA]['adds'])->toBe(2)
+        ->and($metrics[$sessionB]['adds'])->toBe(2)
+        ->and($metrics[$sessionA]['products_viewed'])->toBe(0)
+        ->and($metrics[$sessionB]['products_viewed'])->toBe(0);
 });

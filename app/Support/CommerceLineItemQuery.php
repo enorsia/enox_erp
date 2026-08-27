@@ -83,20 +83,58 @@ final class CommerceLineItemQuery
         }
     }
 
-    private static function applyProductNameFilter(Builder $query, string $term, string $boolean = 'and'): void
+    /**
+     * BOOLEAN MODE prefix query, or null when MATCH cannot be used safely.
+     */
+    public static function booleanModePrefixQuery(string $term): ?string
     {
-        $driver = DB::connection()->getDriverName();
-        $like = '%'.$term.'%';
+        $cleaned = trim((string) preg_replace('/[+\-><()~*"@]+/', ' ', $term));
+        $cleaned = trim((string) preg_replace('/\s+/', ' ', $cleaned));
 
-        if ($driver === 'mysql' && strlen($term) >= 3) {
+        if ($cleaned === '') {
+            return null;
+        }
+
+        $parts = [];
+
+        foreach (preg_split('/\s+/', $cleaned) ?: [] as $word) {
+            if (strlen($word) < 3) {
+                continue;
+            }
+
+            $parts[] = $word.'*';
+        }
+
+        if ($parts === []) {
+            return null;
+        }
+
+        return implode(' ', $parts);
+    }
+
+    public static function applyProductNameContains(
+        Builder $query,
+        string $term,
+        string $boolean = 'and',
+        string $column = 'product_name',
+    ): void {
+        $like = '%'.$term.'%';
+        $booleanQuery = self::booleanModePrefixQuery($term);
+
+        if (DB::connection()->getDriverName() === 'mysql' && $booleanQuery !== null) {
             $method = $boolean === 'or' ? 'orWhereRaw' : 'whereRaw';
-            $query->{$method}('MATCH(product_name) AGAINST (? IN BOOLEAN MODE)', [$term.'*']);
+            $query->{$method}('MATCH('.$column.') AGAINST (? IN BOOLEAN MODE)', [$booleanQuery]);
 
             return;
         }
 
         $method = $boolean === 'or' ? 'orWhere' : 'where';
-        $query->{$method}('product_name', 'like', $like);
+        $query->{$method}($column, 'like', $like);
+    }
+
+    private static function applyProductNameFilter(Builder $query, string $term, string $boolean = 'and'): void
+    {
+        self::applyProductNameContains($query, $term, $boolean);
     }
 
     /**

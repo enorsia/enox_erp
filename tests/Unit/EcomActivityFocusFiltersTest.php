@@ -21,6 +21,8 @@ test('catalog scoped search is enabled for products and categories focus', funct
         ->and(EcomActivityFocus::searchFilterLabel($keywordRequest))->toBe('Search')
         ->and(EcomActivityFocus::looksLikeProductCodeSearch('MS31262181'))->toBeTrue()
         ->and(EcomActivityFocus::looksLikeProductCodeSearch('hoodie'))->toBeFalse()
+        ->and(EcomActivityFocus::looksLikeIdentitySearch('hodgson21142@outlook.com'))->toBeTrue()
+        ->and(EcomActivityFocus::looksLikeProductCodeSearch('hodgson21142@outlook.com'))->toBeFalse()
         ->and(EcomActivityFocus::shouldUseProductScopedSearchInIndex($productCodeRequest))->toBeTrue()
         ->and(EcomActivityFocus::indexCatalogFiltersFromRequest($productCodeRequest))->toBe(['search' => 'MS31262181']);
 });

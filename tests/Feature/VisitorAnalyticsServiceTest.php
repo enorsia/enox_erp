@@ -2,10 +2,10 @@
 
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
-use App\Models\ActivityEcomUserAction;
 use App\Services\VisitorAnalyticsService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -244,12 +244,18 @@ test('visitor breakdown includes order qty and can sort by orders', function () 
     ]);
 
     foreach (range(1, 2) as $index) {
-        ActivityEcomUserAction::query()->create([
+        $orderedAt = Carbon::parse('2026-07-16 12:'.str_pad((string) (10 + $index), 2, '0', STR_PAD_LEFT).':00');
+
+        DB::table('activity_ecom_orders')->insert([
+            'order_id' => 'ORD-'.$buyerSession.'-'.$index,
             'event_id' => (string) Str::uuid(),
             'session_id' => $buyerSession,
-            'action_type' => 'payment_success',
-            'payment_success' => ['amount_paid' => 50 * $index],
-            'created_at' => Carbon::parse('2026-07-16 12:'.str_pad((string) (10 + $index), 2, '0', STR_PAD_LEFT).':00'),
+            'visitor_id' => $buyer,
+            'amount_paid' => 50 * $index,
+            'item_qty' => 1,
+            'ordered_at' => $orderedAt,
+            'created_at' => $orderedAt,
+            'updated_at' => $orderedAt,
         ]);
     }
 

@@ -68,6 +68,38 @@ test('dashboard detail link points to user activity drill down', function () {
         ->and($response->getContent())->not->toContain('ecom-tracker/dashboard/details/cart-abandonment');
 });
 
+test('activity index audience focus renders without extra session filters', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => 'all',
+            'focus' => 'audience',
+        ]))
+        ->assertOk()
+        ->assertSee('Audience &amp; engagement', false)
+        ->assertSee(substr($sessionId, 0, 8));
+});
+
 test('activity index with cart abandonment focus shows only abandoned sessions', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.activity.index');

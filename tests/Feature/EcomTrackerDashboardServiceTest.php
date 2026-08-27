@@ -39,6 +39,51 @@ test('ecom tracker dashboard resolves today preset range', function () {
     Carbon::setTestNow();
 });
 
+test('activity funnel summary for unfiltered range does not require session ids', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $from = Carbon::parse('2026-07-20 00:00:00');
+    $to = Carbon::parse('2026-07-20 23:59:59');
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'add_to_cart',
+        'add_to_cart' => ['cart_total' => 20, 'qty' => 1],
+        'created_at' => $from->copy()->addHour(),
+        'start_time' => $from->copy()->addHour(),
+        'end_time' => $from->copy()->addHour()->addSeconds(5),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => ['amount_paid' => 20, 'qty' => 1],
+        'amount_paid' => 20,
+        'item_qty' => 1,
+        'created_at' => $from->copy()->addHours(2),
+        'start_time' => $from->copy()->addHours(2),
+        'end_time' => $from->copy()->addHours(2)->addSeconds(10),
+    ]);
+
+    $summary = $service->activityFunnelSummaryForFilters($from, $to, [], '7d');
+
+    expect($summary)->toBeArray()
+        ->and($summary['adds'])->toBe(1)
+        ->and($summary['purchases'])->toBe(1)
+        ->and($summary['qty'])->toBe(1)
+        ->and($summary['revenue'])->toBe(20.0);
+});
+
 test('ecom tracker dashboard sale amount sums payment_success amount_paid', function () {
     $service = app(EcomTrackerDashboardService::class);
     $from = Carbon::parse('2026-07-20 00:00:00');

@@ -100,11 +100,24 @@ final class CommerceReadSupport
             return collect();
         }
 
-        return DB::table('activity_ecom_commerce_line_items')
-            ->whereIn('event_id', $eventIds)
-            ->orderBy('line_no')
-            ->get()
-            ->groupBy('event_id');
+        $eventIds = array_values(array_unique(array_filter($eventIds, fn ($id) => filled($id))));
+
+        if ($eventIds === []) {
+            return collect();
+        }
+
+        $rows = collect();
+
+        foreach (array_chunk($eventIds, 1000) as $chunk) {
+            $rows = $rows->concat(
+                DB::table('activity_ecom_commerce_line_items')
+                    ->whereIn('event_id', $chunk)
+                    ->orderBy('line_no')
+                    ->get()
+            );
+        }
+
+        return $rows->groupBy('event_id');
     }
 
     /**
@@ -160,7 +173,9 @@ final class CommerceReadSupport
             ]];
         }
 
-        $lines = $linesByEvent?->get($action->event_id) ?? self::linesForEvent((string) $action->event_id);
+        $lines = $linesByEvent === null
+            ? self::linesForEvent((string) $action->event_id)
+            : ($linesByEvent->get($action->event_id) ?? collect());
 
         if ($lines->isEmpty()) {
             return [[
@@ -290,11 +305,10 @@ final class CommerceReadSupport
             return collect();
         }
 
-        return DB::table('activity_ecom_user_actions')
-            ->selectRaw('session_id, SUM(COALESCE(amount_paid, commerce_total, 0)) as order_value, SUM(COALESCE(item_qty, line_count, 0)) as order_qty')
+        return DB::table('activity_ecom_orders')
+            ->selectRaw('session_id, SUM(amount_paid) as order_value, SUM(COALESCE(item_qty, 0)) as order_qty')
             ->whereIn('session_id', $sessionIds->all())
-            ->where('action_type', 'payment_success')
-            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+            ->whereBetween('ordered_at', TrackerTime::storageRange($from, $to))
             ->groupBy('session_id')
             ->get()
             ->keyBy('session_id');

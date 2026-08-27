@@ -6,7 +6,6 @@ use App\Services\EcomTrackerDashboardService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class EcomActivityKeywordSearch
 {
@@ -38,24 +37,13 @@ class EcomActivityKeywordSearch
                     ->where('client_ip', 'like', $like)
                     ->orWhere('ip_country', 'like', $like)
                     ->orWhere('cf_ray', 'like', $like)
-                    ->orWhere('bot_reason', 'like', $like))
-                ->orWhereHas('actions', fn (Builder $actions) => $actions
-                    ->where(function (Builder $actionQuery) use ($like) {
-                        $actionQuery
-                            ->where('page_url', 'like', $like)
-                            ->orWhere('referer', 'like', $like)
-                            ->orWhere('product_name', 'like', $like)
-                            ->orWhere('product_code', 'like', $like)
-                            ->orWhere('sku', 'like', $like)
-                            ->orWhere('category_name', 'like', $like)
-                            ->orWhere('category_code', 'like', $like)
-                            ->orWhere('department_name', 'like', $like)
-                            ->orWhere('general_color_name', 'like', $like)
-                            ->orWhere('product_color_code', 'like', $like)
-                            ->orWhere('coupon_code', 'like', $like);
-                    }));
+                    ->orWhere('bot_reason', 'like', $like));
 
             self::applyCommerceKeywordMatches($keywordQuery, $search, $like);
+
+            if (EcomActivityFocus::looksLikeIdentitySearch($search)) {
+                return;
+            }
 
             $catalogSessionIds = $dashboardService->productCatalogSessionIds(
                 $from,
@@ -85,6 +73,10 @@ class EcomActivityKeywordSearch
                 });
         });
 
+        if (EcomActivityFocus::looksLikeIdentitySearch($search)) {
+            return;
+        }
+
         $query->orWhereExists(function ($lineQuery) use ($search, $like) {
             $lineQuery->selectRaw('1')
                 ->from('activity_ecom_commerce_line_items as li')
@@ -95,11 +87,7 @@ class EcomActivityKeywordSearch
                         ->orWhere('li.department_name', 'like', $like)
                         ->orWhere('li.category_name', 'like', $like);
 
-                    if (DB::connection()->getDriverName() === 'mysql' && strlen($search) >= 3) {
-                        $inner->orWhereRaw('MATCH(li.product_name) AGAINST (? IN BOOLEAN MODE)', [$search.'*']);
-                    } else {
-                        $inner->orWhere('li.product_name', 'like', $like);
-                    }
+                    CommerceLineItemQuery::applyProductNameContains($inner, $search, 'or', 'li.product_name');
                 });
         });
     }

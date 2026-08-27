@@ -24,7 +24,6 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 
 class EcomActivityController extends EcomTrackerAdminController
@@ -79,7 +78,7 @@ class EcomActivityController extends EcomTrackerAdminController
             : ['session_ids' => collect(), 'metrics' => []];
 
         $query = $this->buildIndexQuery($request, $range);
-        $sessions = $this->paginateSessions($query, $request, $focus, $funnelContext['session_ids'], $range);
+        $sessions = $this->paginateSessions($query, $request, $focus, $range);
 
         $rowMetrics = $this->rowMetrics->forSessions(
             collect($sessions->items()),
@@ -477,14 +476,10 @@ class EcomActivityController extends EcomTrackerAdminController
         return $query;
     }
 
-    /**
-     * @param  Collection<int, string>  $funnelSessionIds
-     */
     private function paginateSessions(
         Builder $query,
         Request $request,
         ?string $focus,
-        Collection $funnelSessionIds,
         array $range,
     ): LengthAwarePaginator {
         $perPage = 25;
@@ -494,29 +489,6 @@ class EcomActivityController extends EcomTrackerAdminController
             $request,
             $sortBy ?? EcomActivitySessionSort::DEFAULT_SORT_KEY,
         );
-
-        $useValueDesc = ! $request->filled('sort_by')
-            && EcomActivityFocus::isValid($focus)
-            && EcomActivityFocus::sortMode($focus) === 'value_desc'
-            && $funnelSessionIds->isNotEmpty();
-
-        if ($useValueDesc) {
-            $total = $funnelSessionIds->count();
-            $pageIds = $funnelSessionIds->slice(($page - 1) * $perPage, $perPage)->values();
-            $sessions = $query->whereIn('session_id', $pageIds->all())->get()->keyBy('session_id');
-            $items = $pageIds
-                ->map(fn (string $id) => $sessions->get($id))
-                ->filter()
-                ->values();
-
-            return new LengthAwarePaginator(
-                $items,
-                $total,
-                $perPage,
-                $page,
-                ['path' => $request->url(), 'query' => $this->activityPaginationQuery($request)],
-            );
-        }
 
         $scope = $this->sessionSortScope($request, $range, $focus);
         $effectiveSortBy = $sortBy ?? EcomActivitySessionSort::DEFAULT_SORT_KEY;
