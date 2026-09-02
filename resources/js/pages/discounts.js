@@ -68,16 +68,15 @@ function shouldUseOriginalCalc($row, form, ch_price_id) {
     const shipping = parseFloat(getShippingValue(form, ch_price_id)) || 0;
     const originalShipping = parseFloat($row.data('original-shipping')) || 0;
     const cost_basis = getCostBasis(form, ch_price_id);
-    return cost_basis === 'unit' && shipping > 0 && Math.abs(shipping - originalShipping) < 0.005;
+    return cost_basis === 'unit' && Math.abs(shipping - originalShipping) <= 0.005;
 }
 
 function calculateProfitForRow(form, $row, ch_price_id) {
-    if (shouldUseOriginalCalc($row, form, ch_price_id)) {
-        applyOriginalProfit($row);
-        return $.Deferred().resolve().promise();
-    }
+    // if (shouldUseOriginalCalc($row, form, ch_price_id)) {
+    //     applyOriginalProfit($row);
+    //     return $.Deferred().resolve().promise();
+    // }
 
-    console.log('Calculating profit for ' + ch_price_id);
     const platform_id = form.find('.platform_id').val();
     const $discountInput = getDiscountInputForRow(form, ch_price_id);
     const discount_price = parseFloat($discountInput.val()) || 0;
@@ -452,24 +451,28 @@ $(document).ready(function () {
 
             const requests = formsToSave.map(($form) => submitDiscountForm($form));
 
-            $.when.apply($, requests)
+            $.when
+                .apply($, requests)
                 .done(function () {
-                    formsToSave.forEach(($form) => updateDiscountSummaryForForm($form));
+                    formsToSave.forEach(($form) =>
+                        updateDiscountSummaryForForm($form),
+                    );
 
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Saved',
-                        text: 'Discount prices updated successfully.',
-                        timer: 2000,
-                        showConfirmButton: false
+                    iziToast.success({
+                        title: "Saved",
+                        message: "Discount prices updated successfully.",
+                        position: "topRight",
+                        timeout: 2000,
                     });
                 })
                 .fail(function (xhr) {
-                    const msg = xhr?.responseJSON?.message || 'Something went wrong. Please try again.';
-                    Swal.fire({ icon: 'error', title: 'Error', text: msg });
+                    const msg =
+                        xhr?.responseJSON?.message ||
+                        "Something went wrong. Please try again.";
+                    Swal.fire({ icon: "error", title: "Error", text: msg });
                 })
                 .always(function () {
-                    $btn.html(btnHtml).prop('disabled', false);
+                    $btn.html(btnHtml).prop("disabled", false);
                 });
         });
     }

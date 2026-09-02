@@ -130,8 +130,8 @@
                       data-default-shipping="{{ $defaultShippingCost }}">
                     @csrf
                     <input type="hidden" name="platform_id"   class="platform_id"   value="{{ $platform->id }}" />
-                    <input type="hidden" name="ecom_product_id" value="{{ $ecommerceProduct['id'] }}" />
-                    <input type="hidden" name="ecom_sku" value="{{ $ecommerceProduct['sku'] }}" />
+                    <input type="hidden" name="ecom_product_id" value="{{ $ecommerceProduct['id'] ?? '' }}" />
+                    <input type="hidden" name="ecom_sku" value="{{ $ecommerceProduct['sku'] ?? '' }}" />
                     <input type="hidden" name="department_id" class="department_id" value="{{ $chartInfo->department_id }}" />
 
                     @include('selling_chart.discounts.partials.calc-table', [

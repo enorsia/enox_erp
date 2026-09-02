@@ -775,7 +775,7 @@ $(document).ready(function () {
             const priceFOB = parseFloat($row.find('.price_fob').val()) || 0;
             const shippingCost = parseFloat($row.find('.shipping_cost').val()) || 0;
 
-            console.log((priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + (shippingCost || expShippingCost)));
+            // console.log((priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + (shippingCost || expShippingCost)));
 
             const unitPrice = (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + (shippingCost || expShippingCost));
             $row.find('.unit_price').val(unitPrice.toFixed(2));
