@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Models\ActivityEcomUserBotContext;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityFilterCounts;
 use App\Services\EcomActivityFunnelSessions;
@@ -24,6 +25,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class EcomActivityController extends EcomTrackerAdminController
@@ -53,6 +55,7 @@ class EcomActivityController extends EcomTrackerAdminController
         $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.activity.index');
 
+        $isTableFragment = $request->input('fragment') === 'table' && $request->ajax();
         $focus = $request->input('focus');
         $range = $this->resolveActivityRange($request);
         $resolvedDepartment = EcomActivityFocus::resolvedCategoryDepartment(
@@ -66,30 +69,46 @@ class EcomActivityController extends EcomTrackerAdminController
             $request->merge(['department' => $resolvedDepartment]);
         }
 
-        $funnelContext = EcomActivityFocus::isValid($focus)
-            ? EcomActivityFocus::resolveFunnelContext(
+        $query = $this->buildIndexQuery($request, $range);
+        $sessions = $this->paginateSessions($query, $request, $focus, $range);
+
+        $funnelMetrics = [];
+
+        if (EcomActivityFocus::isValid($focus) && ! $isTableFragment) {
+            $funnelContext = EcomActivityFocus::resolveFunnelContext(
                 $focus,
                 $range['from'],
                 $range['to'],
                 EcomActivityFocus::sessionFiltersFromRequest($request),
                 $range['period'],
                 $this->funnelSessions,
-            )
-            : ['session_ids' => collect(), 'metrics' => []];
-
-        $query = $this->buildIndexQuery($request, $range);
-        $sessions = $this->paginateSessions($query, $request, $focus, $range);
+            );
+            $funnelMetrics = $funnelContext['metrics'];
+        }
 
         $rowMetrics = $this->rowMetrics->forSessions(
             collect($sessions->items()),
             EcomActivityFocus::isValid($focus) ? $focus : null,
             $range['from'],
             $range['to'],
-            $funnelContext['metrics'],
+            $funnelMetrics,
             in_array($focus, ['products', 'categories'], true)
                 ? EcomActivityFocus::productCatalogFiltersFromRequest($request)
                 : EcomActivityFocus::indexCatalogFiltersFromRequest($request),
         );
+
+        $tableViewData = [
+            'sessions' => $sessions,
+            'focusColumns' => EcomActivityFocus::tableColumns($focus, $request),
+            'rowMetrics' => $rowMetrics,
+            'emptyMessage' => EcomActivityFocus::emptyMessage($focus),
+            'clearFocusUrl' => $request->fullUrlWithQuery(['focus' => null, 'page' => null]),
+            'hasFocus' => EcomActivityFocus::isValid($focus),
+        ];
+
+        if ($isTableFragment) {
+            return view('ecom_activity.partials.table-fragment', $tableViewData);
+        }
 
         $visitorQualitySummary = $this->visitorQualityCounts($request, $range);
         $filterOptionCounts = app(EcomActivityFilterCounts::class)->counts(
@@ -114,7 +133,7 @@ class EcomActivityController extends EcomTrackerAdminController
         $summaryCards = EcomActivityFocus::summaryForFocus(
             $summaryFocus,
             $sessions->total(),
-            $funnelContext['metrics'],
+            $funnelMetrics,
             $request,
             $range['from'],
             $range['to'],
@@ -124,7 +143,7 @@ class EcomActivityController extends EcomTrackerAdminController
             $request,
             $range['label'],
             $sessions->total(),
-            $funnelContext['metrics'],
+            $funnelMetrics,
             $range['from'],
             $range['to'],
             $range['period'],
@@ -146,17 +165,17 @@ class EcomActivityController extends EcomTrackerAdminController
         $productSortGroups = [];
         $productActivityOptions = [];
 
-        $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
-            $range['from'],
-            $range['to'],
-            array_merge(
-                EcomActivityFocus::sessionFiltersFromRequest($request),
-                EcomActivityFocus::productCatalogFiltersFromRequest($request),
-            ),
-            $range['period'],
-        );
-
         if ($showCatalogFilters) {
+            $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
+                $range['from'],
+                $range['to'],
+                array_merge(
+                    EcomActivityFocus::sessionFiltersFromRequest($request),
+                    EcomActivityFocus::productCatalogFiltersFromRequest($request),
+                ),
+                $range['period'],
+            );
+
             $catalogData = $this->dashboardService->buildProductCatalogPerformance(
                 $range['from'],
                 $range['to'],
@@ -175,19 +194,6 @@ class EcomActivityController extends EcomTrackerAdminController
             'focus' => $focus,
             'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
         ]);
-
-        $tableViewData = [
-            'sessions' => $sessions,
-            'focusColumns' => $focusColumns,
-            'rowMetrics' => $rowMetrics,
-            'emptyMessage' => $emptyMessage,
-            'clearFocusUrl' => $clearFocusUrl,
-            'hasFocus' => EcomActivityFocus::isValid($focus),
-        ];
-
-        if ($request->input('fragment') === 'table' && $request->ajax()) {
-            return view('ecom_activity.partials.table-fragment', $tableViewData);
-        }
 
         return view('ecom_activity.index', [
             'sessions' => $sessions,
@@ -368,9 +374,7 @@ class EcomActivityController extends EcomTrackerAdminController
         $focus = $request->input('focus');
 
         if (! $forCounts) {
-            $query->with(['botContext', 'firstAction', 'firstRefererAction'])
-                ->withCount('actions')
-                ->withCount(['actions as order_qty' => fn ($q) => $q->where('action_type', 'payment_success')]);
+            $query->with(['botContext']);
         }
 
         if (! EcomActivityFocus::usesActionScopedSessionDate($request)) {
@@ -491,33 +495,6 @@ class EcomActivityController extends EcomTrackerAdminController
         );
 
         $scope = $this->sessionSortScope($request, $range, $focus);
-        $effectiveSortBy = $sortBy ?? EcomActivitySessionSort::DEFAULT_SORT_KEY;
-
-        if (EcomActivitySessionSort::shouldRankCatalogSessionsInPhp($effectiveSortBy, $scope)) {
-            $sessionIds = (clone $query)->pluck('session_id');
-            $sortedIds = EcomActivitySessionSort::sortSessionIdsForCatalogScope(
-                $sessionIds,
-                $effectiveSortBy,
-                $sortDir,
-                $scope,
-                $this->dashboardService,
-            );
-            $total = $sortedIds->count();
-            $pageIds = $sortedIds->slice(($page - 1) * $perPage, $perPage)->values();
-            $sessions = $query->whereIn('session_id', $pageIds->all())->get()->keyBy('session_id');
-            $items = $pageIds
-                ->map(fn (string $id) => $sessions->get($id))
-                ->filter()
-                ->values();
-
-            return new LengthAwarePaginator(
-                $items,
-                $total,
-                $perPage,
-                $page,
-                ['path' => $request->url(), 'query' => $this->activityPaginationQuery($request)],
-            );
-        }
 
         return EcomActivitySessionSort::apply(
             $query,
@@ -589,11 +566,24 @@ class EcomActivityController extends EcomTrackerAdminController
     private function visitorQualityCounts(Request $request, array $range): array
     {
         $base = $this->buildIndexQuery($request, $range, forCounts: true);
+        $table = (new ActivityEcomUser)->getTable();
+        $botTable = (new ActivityEcomUserBotContext)->getTable();
+
+        $sessions = EcomActivityFilterCounts::aggregateQuery($base)
+            ->select("{$table}.id", "{$table}.session_id");
+
+        $bucketSql = "CASE WHEN {$botTable}.id IS NULL THEN 'unclassified' WHEN {$botTable}.is_bot = 1 THEN 'bot' ELSE 'human' END";
+        $rows = DB::query()
+            ->fromSub($sessions, 'et_activity_sessions')
+            ->leftJoin($botTable, $botTable.'.session_id', '=', 'et_activity_sessions.session_id')
+            ->selectRaw("{$bucketSql} as bucket, COUNT(DISTINCT et_activity_sessions.id) as total")
+            ->groupByRaw($bucketSql)
+            ->pluck('total', 'bucket');
 
         return [
-            'real_shoppers' => (clone $base)->whereHas('botContext', fn ($b) => $b->where('is_bot', false))->count(),
-            'automated_traffic' => (clone $base)->whereHas('botContext', fn ($b) => $b->where('is_bot', true))->count(),
-            'not_classified' => (clone $base)->whereDoesntHave('botContext')->count(),
+            'real_shoppers' => (int) ($rows['human'] ?? 0),
+            'automated_traffic' => (int) ($rows['bot'] ?? 0),
+            'not_classified' => (int) ($rows['unclassified'] ?? 0),
         ];
     }
 

@@ -3,11 +3,11 @@
 namespace App\Support;
 
 use App\Models\ActivityEcomUser;
-use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityFunnelSessions;
 use App\Services\EcomTrackerDashboardService;
 use App\Services\VisitorAnalyticsService;
+use App\Support\CommerceFunnelQuery;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -341,19 +341,12 @@ final class EcomActivityFocus
             return;
         }
 
-        $funnel = (string) $request->input('funnel');
-        $period = $request->input('period', '24h');
-        $sessionFilters = self::sessionFiltersFromRequest($request);
-        $context = self::resolveFunnelContext($funnel, $from, $to, $sessionFilters, $period, $funnelSessions);
-        $ids = $context['session_ids'];
-
-        if ($ids->isEmpty()) {
-            $query->whereRaw('1 = 0');
-
-            return;
-        }
-
-        self::constrainToSessionIds($query, $ids);
+        CommerceFunnelQuery::applySidebarFunnelKey(
+            $query,
+            (string) $request->input('funnel'),
+            $from,
+            $to,
+        );
     }
 
     public static function applyFocusFilter(
@@ -375,16 +368,16 @@ final class EcomActivityFocus
         $sessionFilters = self::sessionFiltersFromRequest($request);
 
         if (! empty($definition['funnel']) || ! empty($definition['payment_success'])) {
-            $context = self::resolveFunnelContext($focus, $from, $to, $sessionFilters, $period, $funnelSessions);
-            $ids = $context['session_ids'];
-
-            if ($ids->isEmpty()) {
-                $query->whereRaw('1 = 0');
-
-                return;
+            if (! empty($definition['payment_success'])) {
+                CommerceFunnelQuery::applyPaymentSuccessSessionFilter($query, $from, $to);
+            } elseif (! empty($definition['funnel'])) {
+                $funnel = $definition['funnel'];
+                CommerceFunnelQuery::applyAbandonedSessionFilter(
+                    $query,
+                    $funnel['stage'],
+                    $funnel['exclude'],
+                );
             }
-
-            self::constrainToSessionIds($query, $ids);
 
             return;
         }
@@ -399,10 +392,31 @@ final class EcomActivityFocus
                 return;
             }
 
-            $types = $definition['action_types'];
-            $query->whereHas('actions', fn (Builder $actions) => $actions
-                ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-                ->whereIn('action_type', $types));
+            $query->where(function (Builder $inner) use ($from, $to, $focus) {
+                if ($focus === 'products') {
+                    $inner->where('has_add_to_cart', true)
+                        ->orWhere('has_begin_checkout', true)
+                        ->orWhere('has_proceed_checkout', true)
+                        ->orWhere('has_payment_success', true);
+                }
+
+                $inner->orWhereExists(function ($exists) use ($from, $to, $focus) {
+                    $exists->selectRaw('1')
+                        ->from('activity_ecom_commerce_line_items as li')
+                        ->whereColumn('li.session_id', 'activity_ecom_user.session_id')
+                        ->whereBetween('li.staged_at', TrackerTime::storageRange($from, $to));
+
+                    if ($focus === 'categories') {
+                        $exists->where(function ($category) {
+                            $category->where('li.funnel_stage', 'payment_success')
+                                ->orWhere(function ($named) {
+                                    $named->whereNotNull('li.category_name')
+                                        ->where('li.category_name', '!=', '');
+                                });
+                        });
+                    }
+                });
+            });
 
             if ($focus === 'products' || $focus === 'categories') {
                 self::applyProductCatalogConstraints($query, $from, $to, $request, $dashboardService, $period, $except);

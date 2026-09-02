@@ -5,10 +5,10 @@ use Illuminate\Http\Request;
 
 uses(Tests\TestCase::class);
 
-test('catalog funnel sort uses php ranking when category filter is active', function () {
+test('catalog funnel sort uses sql ranking when category filter is active', function () {
     expect(EcomActivitySessionSort::shouldRankCatalogSessionsInPhp('funnel_stage', [
         'catalog_options' => ['category' => 'Polo Shirts', 'department' => 'Men'],
-    ]))->toBeTrue()
+    ]))->toBeFalse()
         ->and(EcomActivitySessionSort::shouldRankCatalogSessionsInPhp('actions', [
             'catalog_options' => ['category' => 'Polo Shirts'],
         ]))->toBeFalse();
@@ -89,18 +89,4 @@ test('session sort url removes fragment param from generated links', function ()
 
     expect($url)->toContain('sort_by=actions')
         ->and($url)->not->toContain('fragment=');
-});
-
-test('catalog funnel stage rank orders sold proceed checkout cart view', function () {
-    $method = new ReflectionMethod(EcomActivitySessionSort::class, 'funnelStageRankForActionType');
-    $method->setAccessible(true);
-
-    $rank = fn (string $actionType) => $method->invoke(null, $actionType);
-
-    expect($rank('payment_success'))->toBeGreaterThan($rank('proceed_checkout'))
-        ->and($rank('proceed_checkout'))->toBeGreaterThan($rank('begin_checkout'))
-        ->and($rank('begin_checkout'))->toBeGreaterThan($rank('add_to_cart'))
-        ->and($rank('add_to_cart'))->toBeGreaterThan($rank('product_view'))
-        ->and($rank('product_view'))->toBe($rank('product_view_popup'))
-        ->and($rank('product_view'))->toBeGreaterThan(0);
 });

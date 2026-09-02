@@ -3,27 +3,14 @@
 namespace App\Support;
 
 use App\Models\ActivityEcomUser;
-use App\Models\ActivityEcomUserAction;
-use App\Services\EcomTrackerDashboardService;
-use App\Support\CommerceReadSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 final class EcomActivitySessionSort
 {
     public const DEFAULT_SORT_KEY = 'funnel_stage';
-
-    /** @var list<string> */
-    private const FUNNEL_STAGE_ACTION_TYPES = [
-        'product_view',
-        'product_view_popup',
-        'add_to_cart',
-        'begin_checkout',
-        'proceed_checkout',
-        'payment_success',
-    ];
 
     /** @var array<string, int> */
     private const FUNNEL_STAGE_RANKS = [
@@ -35,7 +22,7 @@ final class EcomActivitySessionSort
         'product_view_popup' => 1,
     ];
 
-  /** @var list<string> */
+    /** @var list<string> */
     public const SORT_KEYS = [
         'funnel_stage',
         'latest',
@@ -121,168 +108,26 @@ final class EcomActivitySessionSort
     }
 
     /**
-     * Catalog drill-down matching uses PHP (JSON line items), so funnel/order sorts must too.
+     * Catalog drill-down sort uses SQL session flags after line-item EXISTS filters.
      *
      * @param  array{from?: ?Carbon, to?: ?Carbon, catalog_options?: array<string, mixed>}  $scope
      */
     public static function shouldRankCatalogSessionsInPhp(?string $sortBy, array $scope): bool
     {
-        if (! self::usesCatalogActionScope($scope['catalog_options'] ?? [])) {
-            return false;
-        }
-
-        $sortBy = $sortBy ?? self::DEFAULT_SORT_KEY;
-
-        return in_array($sortBy, ['funnel_stage', 'order_value'], true);
+        return false;
     }
 
     /**
-     * Rank sessions using the same catalog-aware commerce rules as the table Commerce column.
-     *
-     * @param  Collection<int, string>  $sessionIds
-     * @param  array{from?: ?Carbon, to?: ?Carbon, catalog_options?: array<string, mixed>}  $scope
-     * @return Collection<int, string>
+     * @param  Builder<ActivityEcomUser>  $query
+     * @return Builder<ActivityEcomUser>
      */
-    public static function sortSessionIdsForCatalogScope(
-        Collection $sessionIds,
-        string $sortBy,
-        string $sortDir,
-        array $scope,
-        EcomTrackerDashboardService $dashboard,
-    ): Collection {
-        if ($sessionIds->isEmpty()) {
-            return $sessionIds->values();
-        }
-
-        $catalogOptions = $scope['catalog_options'] ?? [];
-        $metrics = self::catalogCommerceSortMetrics($sessionIds, $scope, $dashboard);
-        $descending = strtolower($sortDir) !== 'asc';
-
-        return $sessionIds
-            ->sort(function (string $leftId, string $rightId) use ($metrics, $sortBy, $descending) {
-                $left = $metrics[$leftId] ?? ['funnel_rank' => 0, 'order_value' => 0.0, 'latest_at' => 0, 'id' => 0];
-                $right = $metrics[$rightId] ?? ['funnel_rank' => 0, 'order_value' => 0.0, 'latest_at' => 0, 'id' => 0];
-
-                if ($sortBy === 'order_value') {
-                    $primary = $left['order_value'] <=> $right['order_value'];
-                } else {
-                    $primary = $left['funnel_rank'] <=> $right['funnel_rank'];
-                }
-
-                if ($primary !== 0) {
-                    return $descending ? -$primary : $primary;
-                }
-
-                if ($sortBy === 'funnel_stage') {
-                    $secondary = $left['order_value'] <=> $right['order_value'];
-
-                    if ($secondary !== 0) {
-                        return $descending ? -$secondary : $secondary;
-                    }
-                }
-
-                $latest = $left['latest_at'] <=> $right['latest_at'];
-
-                if ($latest !== 0) {
-                    return $descending ? -$latest : $latest;
-                }
-
-                $id = $left['id'] <=> $right['id'];
-
-                return $descending ? -$id : $id;
-            })
-            ->values();
-    }
-
-    /**
-     * @param  Collection<int, string>  $sessionIds
-     * @param  array{from?: ?Carbon, to?: ?Carbon, catalog_options?: array<string, mixed>}  $scope
-     * @return array<string, array{funnel_rank: int, order_value: float, latest_at: int, id: int}>
-     */
-    private static function catalogCommerceSortMetrics(
-        Collection $sessionIds,
-        array $scope,
-        EcomTrackerDashboardService $dashboard,
-    ): array {
-        $catalogOptions = $scope['catalog_options'] ?? [];
-        $from = $scope['from'] ?? null;
-        $to = $scope['to'] ?? null;
-        $metrics = [];
-
-        foreach ($sessionIds as $sessionId) {
-            $metrics[$sessionId] = [
-                'funnel_rank' => 0,
-                'order_value' => 0.0,
-                'latest_at' => 0,
-                'id' => 0,
-            ];
-        }
-
-        $actionsQuery = ActivityEcomUserAction::query()
-            ->select(CommerceReadSupport::scalarActionColumns())
-            ->whereIn('session_id', $sessionIds->all())
-            ->whereIn('action_type', self::FUNNEL_STAGE_ACTION_TYPES);
-
-        if ($from instanceof Carbon && $to instanceof Carbon) {
-            $actionsQuery->whereBetween('created_at', TrackerTime::storageRange($from, $to));
-        }
-
-        $actionsBySession = $actionsQuery->get()->groupBy('session_id');
-
-        foreach ($sessionIds as $sessionId) {
-            $sessionActions = $actionsBySession->get($sessionId, collect());
-            $summary = EcomActivityCommerceSummary::summarizeCatalogActions(
-                $sessionActions,
-                $catalogOptions,
-                $dashboard,
-            );
-            $funnelRank = EcomActivityCommerceSummary::funnelStageRankFromSummary($summary);
-            $orderValue = (float) ($summary['commerce_value'] ?? 0.0);
-            $latestAt = 0;
-            $latestId = 0;
-
-            foreach ($sessionActions as $action) {
-                if (! self::actionMatchesCatalogScope($action, $catalogOptions, $dashboard)) {
-                    continue;
-                }
-
-                $timestamp = $action->created_at?->timestamp ?? 0;
-
-                if ($timestamp > $latestAt || ($timestamp === $latestAt && $action->id > $latestId)) {
-                    $latestAt = $timestamp;
-                    $latestId = (int) $action->id;
-                }
-            }
-
-            $metrics[$sessionId] = [
-                'funnel_rank' => $funnelRank,
-                'order_value' => $orderValue,
-                'latest_at' => $latestAt,
-                'id' => $latestId,
-            ];
-        }
-
-        return $metrics;
-    }
-
-    private static function funnelStageRankForActionType(string $actionType): int
+    private static function orderByActionsCount(Builder $query, string $direction): Builder
     {
-        return self::FUNNEL_STAGE_RANKS[$actionType] ?? 0;
-    }
+        $table = $query->getModel()->getTable();
 
-  /**
-     * @param  array<string, mixed>  $catalogOptions
-     */
-    private static function actionMatchesCatalogScope(
-        ActivityEcomUserAction $action,
-        array $catalogOptions,
-        EcomTrackerDashboardService $dashboard,
-    ): bool {
-        if ($action->action_type === 'payment_success') {
-            return $dashboard->paymentActionMatchesCategoryCatalog($action, $catalogOptions);
-        }
-
-        return $dashboard->actionMatchesCatalogOptions($action, $catalogOptions);
+        return $query
+            ->orderBy("{$table}.actions_count", $direction)
+            ->orderByDesc("{$table}.id");
     }
 
     /**
@@ -304,7 +149,7 @@ final class EcomActivitySessionSort
             'session' => $query->orderBy('created_at', $direction)->orderByDesc('id'),
             'last_active' => self::orderByLastActive($query, $direction),
             'duration' => $query->orderBy('session_duration_seconds', $direction)->orderByDesc('id'),
-            'actions' => $query->orderBy('actions_count', $direction)->orderByDesc('id'),
+            'actions' => self::orderByActionsCount($query, $direction),
             'funnel_stage' => self::orderByFunnelStage($query, $direction, $scope),
             'order_value' => self::orderByOrderValue($query, $direction, $scope),
             default => self::orderByFunnelStage($query, $direction, $scope),
@@ -351,115 +196,57 @@ final class EcomActivitySessionSort
      */
     private static function orderByFunnelStage(Builder $query, string $direction, array $scope = []): Builder
     {
-        ['sql' => $rankSql, 'bindings' => $bindings] = self::funnelStageRankSubquery(
-            $query->getModel()->getTable(),
-            $scope,
-        );
+        $table = $query->getModel()->getTable();
+        $dir = strtoupper($direction) === 'ASC' ? 'ASC' : 'DESC';
 
-        return $query
-            ->orderByRaw($rankSql.' '.$direction, $bindings)
-            ->orderByDesc('id');
-    }
+        $rankSql = <<<SQL
+CASE
+    WHEN {$table}.has_payment_success = 1 THEN 5
+    WHEN {$table}.has_proceed_checkout = 1 THEN 4
+    WHEN {$table}.has_begin_checkout = 1 THEN 3
+    WHEN {$table}.has_add_to_cart = 1 THEN 2
+    ELSE 0
+END
+SQL;
 
-    /**
-     * @param  array{from?: ?Carbon, to?: ?Carbon, catalog_options?: array<string, mixed>}  $scope
-     * @return array{sql: string, bindings: list<mixed>}
-     */
-    private static function funnelStageRankSubquery(string $table, array $scope = []): array
-    {
-        $actionsTable = 'activity_ecom_user_actions';
-        $actionTypeList = "'".implode("', '", self::FUNNEL_STAGE_ACTION_TYPES)."'";
-        $conditions = [
-            "{$actionsTable}.session_id = {$table}.session_id",
-            "{$actionsTable}.action_type IN ({$actionTypeList})",
-        ];
-        $bindings = [];
+        $lineSub = DB::table('activity_ecom_commerce_line_items')
+            ->selectRaw("session_id,
+                MAX(CASE WHEN funnel_stage = 'payment_success' THEN staged_at END) as latest_payment_staged,
+                MAX(CASE WHEN funnel_stage = 'proceed_checkout' THEN staged_at END) as latest_proceed,
+                MAX(CASE WHEN funnel_stage = 'begin_checkout' THEN staged_at END) as latest_begin,
+                MAX(CASE WHEN funnel_stage = 'add_to_cart' THEN staged_at END) as latest_cart")
+            ->groupBy('session_id');
+
+        $orderSub = DB::table('activity_ecom_orders')
+            ->selectRaw('session_id, MAX(ordered_at) as latest_ordered_at')
+            ->groupBy('session_id');
 
         $from = $scope['from'] ?? null;
         $to = $scope['to'] ?? null;
 
         if ($from instanceof Carbon && $to instanceof Carbon) {
             [$start, $end] = TrackerTime::storageRange($from, $to);
-            $conditions[] = "{$actionsTable}.created_at BETWEEN ? AND ?";
-            $bindings[] = $start;
-            $bindings[] = $end;
+            $lineSub->whereBetween('staged_at', [$start, $end]);
+            $orderSub->whereBetween('ordered_at', [$start, $end]);
         }
 
-        foreach (self::catalogScopeSql($actionsTable, $scope['catalog_options'] ?? []) as $fragment) {
-            $conditions[] = $fragment['sql'];
-            array_push($bindings, ...$fragment['bindings']);
-        }
-
-        $where = implode(' AND ', $conditions);
-        $caseWhen = collect(self::FUNNEL_STAGE_RANKS)
-            ->map(fn (int $rank, string $actionType) => "WHEN '{$actionType}' THEN {$rank}")
-            ->implode("\n        ");
-        $sql = <<<SQL
-(
-    SELECT MAX(CASE {$actionsTable}.action_type
-        {$caseWhen}
-        ELSE 0
-    END)
-    FROM {$actionsTable}
-    WHERE {$where}
-)
+        $stageTimeSql = <<<SQL
+CASE
+    WHEN {$table}.has_payment_success = 1 THEN COALESCE(funnel_order_times.latest_ordered_at, funnel_line_times.latest_payment_staged, {$table}.first_payment_at, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN {$table}.has_proceed_checkout = 1 THEN COALESCE(funnel_line_times.latest_proceed, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN {$table}.has_begin_checkout = 1 THEN COALESCE(funnel_line_times.latest_begin, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN {$table}.has_add_to_cart = 1 THEN COALESCE(funnel_line_times.latest_cart, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    ELSE COALESCE({$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+END
 SQL;
 
-        return ['sql' => $sql, 'bindings' => $bindings];
-    }
-
-    /**
-     * @param  array<string, mixed>  $catalogOptions
-     * @return list<array{sql: string, bindings: list<mixed>}>
-     */
-    private static function catalogScopeSql(string $actionsTable, array $catalogOptions): array
-    {
-        if (! self::usesCatalogActionScope($catalogOptions)) {
-            return [];
-        }
-
-        $fragments = [];
-
-        if (filled($catalogOptions['category'] ?? null)) {
-            $fragments[] = [
-                'sql' => "LOWER(TRIM({$actionsTable}.category_name)) = ?",
-                'bindings' => [mb_strtolower(trim((string) $catalogOptions['category']))],
-            ];
-        }
-
-        if (filled($catalogOptions['department'] ?? null)) {
-            $fragments[] = [
-                'sql' => "(TRIM(COALESCE({$actionsTable}.department_name, '')) = '' OR LOWER(TRIM({$actionsTable}.department_name)) = ?)",
-                'bindings' => [mb_strtolower(TrackerCategoryIdentity::normalizeDepartmentName((string) $catalogOptions['department']))],
-            ];
-        }
-
-        if (filled($catalogOptions['product_code'] ?? null) || filled($catalogOptions['product_name'] ?? null)) {
-            $identityConditions = [];
-            $bindings = [];
-
-            if (filled($catalogOptions['product_code'] ?? null)) {
-                $code = mb_strtolower(trim((string) $catalogOptions['product_code']));
-                $identityConditions[] = "LOWER(TRIM({$actionsTable}.product_code)) = ?";
-                $identityConditions[] = "LOWER(TRIM({$actionsTable}.sku)) = ?";
-                $bindings[] = $code;
-                $bindings[] = $code;
-            }
-
-            if (filled($catalogOptions['product_name'] ?? null)) {
-                $identityConditions[] = "LOWER(TRIM({$actionsTable}.product_name)) = ?";
-                $bindings[] = mb_strtolower(trim((string) $catalogOptions['product_name']));
-            }
-
-            if ($identityConditions !== []) {
-                $fragments[] = [
-                    'sql' => '('.implode(' OR ', $identityConditions).')',
-                    'bindings' => $bindings,
-                ];
-            }
-        }
-
-        return $fragments;
+        return $query
+            ->leftJoinSub($lineSub, 'funnel_line_times', 'funnel_line_times.session_id', '=', "{$table}.session_id")
+            ->leftJoinSub($orderSub, 'funnel_order_times', 'funnel_order_times.session_id', '=', "{$table}.session_id")
+            ->select("{$table}.*")
+            ->orderByRaw($rankSql.' '.$dir)
+            ->orderByRaw($stageTimeSql.' '.$dir)
+            ->orderByDesc("{$table}.id");
     }
 
     /**
@@ -472,59 +259,28 @@ SQL;
         $table = $query->getModel()->getTable();
         $from = $scope['from'] ?? null;
         $to = $scope['to'] ?? null;
-        $catalogOptions = $scope['catalog_options'] ?? [];
-
-        if (($from === null || $to === null) && $catalogOptions === []) {
-            return $query
-                ->orderBy('max_order_value', $direction)
-                ->orderByDesc('id');
-        }
-
-        $actionsTable = 'activity_ecom_user_actions';
-        $ordersTable = 'activity_ecom_orders';
-        $driver = $query->getConnection()->getDriverName();
-        $bindings = [];
 
         if ($from instanceof Carbon && $to instanceof Carbon) {
             [$start, $end] = TrackerTime::storageRange($from, $to);
-            $bindings = [$start, $end];
-
-            $valueSql = <<<SQL
-(
-    SELECT MAX(CAST({$ordersTable}.amount_paid AS DECIMAL(12,2)))
-    FROM {$ordersTable}
-    WHERE {$ordersTable}.session_id = {$table}.session_id
-      AND {$ordersTable}.ordered_at BETWEEN ? AND ?
-)
-SQL;
 
             return $query
-                ->orderByRaw($valueSql.' '.$direction, $bindings)
-                ->orderByDesc('id');
+                ->leftJoinSub(
+                    DB::table('activity_ecom_orders')
+                        ->selectRaw('session_id, MAX(CAST(amount_paid AS DECIMAL(12,2))) as period_order_value')
+                        ->whereBetween('ordered_at', [$start, $end])
+                        ->groupBy('session_id'),
+                    'period_orders',
+                    'period_orders.session_id',
+                    '=',
+                    "{$table}.session_id"
+                )
+                ->select("{$table}.*")
+                ->orderByRaw('COALESCE(period_orders.period_order_value, 0) '.$direction)
+                ->orderByDesc("{$table}.id");
         }
-
-        $conditions = [
-            "{$actionsTable}.session_id = {$table}.session_id",
-            "{$actionsTable}.action_type = 'payment_success'",
-        ];
-
-        foreach (self::catalogScopeSql($actionsTable, $catalogOptions) as $fragment) {
-            $conditions[] = $fragment['sql'];
-            array_push($bindings, ...$fragment['bindings']);
-        }
-
-        $where = implode(' AND ', $conditions);
-
-        $valueSql = <<<SQL
-(
-    SELECT MAX(CAST(COALESCE({$actionsTable}.amount_paid, {$actionsTable}.commerce_total, 0) AS DECIMAL(12,2)))
-    FROM {$actionsTable}
-    WHERE {$where}
-)
-SQL;
 
         return $query
-            ->orderByRaw($valueSql.' '.$direction, $bindings)
-            ->orderByDesc('id');
+            ->orderBy("{$table}.max_order_value", $direction)
+            ->orderByDesc("{$table}.id");
     }
 }

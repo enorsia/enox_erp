@@ -232,3 +232,95 @@ test('commerce events ignores non funnel actions', function () {
 
     expect(EcomActivityCommerceEvents::fromActions($actions))->toBe([]);
 });
+
+test('commerce events from line items and orders keep only the latest funnel action', function () {
+    $lines = collect([
+        (object) [
+            'event_id' => 'cart-1',
+            'funnel_stage' => 'add_to_cart',
+            'line_total' => 44,
+            'qty' => 1,
+            'product_name' => 'Oxford Shirt',
+            'product_code' => 'OX-1',
+            'sku' => 'OX-1',
+            'size_name' => 'M',
+            'color_name' => 'Blue',
+            'unit_price' => 44,
+            'staged_at' => now()->subMinutes(20)->toDateTimeString(),
+            'id' => 1,
+            'order_id' => null,
+        ],
+        (object) [
+            'event_id' => 'proceed-1',
+            'funnel_stage' => 'proceed_checkout',
+            'line_total' => 44,
+            'qty' => 1,
+            'product_name' => 'Oxford Shirt',
+            'product_code' => 'OX-1',
+            'sku' => 'OX-1',
+            'size_name' => 'M',
+            'color_name' => 'Blue',
+            'unit_price' => 44,
+            'staged_at' => now()->toDateTimeString(),
+            'id' => 2,
+            'order_id' => null,
+        ],
+    ]);
+
+    $events = EcomActivityCommerceEvents::fromCommerceRows($lines, collect());
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]['stage'])->toBe('proceed_checkout')
+        ->and($events[0]['trigger_label'])->toBe('Proceed · £44.00');
+});
+
+test('commerce events from orders keep separate payments and hide earlier funnel rows', function () {
+    $lines = collect([
+        (object) [
+            'event_id' => 'cart-1',
+            'funnel_stage' => 'add_to_cart',
+            'line_total' => 20,
+            'qty' => 1,
+            'product_name' => 'Tee',
+            'product_code' => 'T-1',
+            'sku' => 'T-1',
+            'size_name' => '',
+            'color_name' => '',
+            'unit_price' => 20,
+            'staged_at' => now()->subMinutes(30)->toDateTimeString(),
+            'id' => 1,
+            'order_id' => null,
+        ],
+        (object) [
+            'event_id' => 'pay-1',
+            'funnel_stage' => 'payment_success',
+            'line_total' => 20,
+            'qty' => 1,
+            'product_name' => 'Tee',
+            'product_code' => 'T-1',
+            'sku' => 'T-1',
+            'size_name' => '',
+            'color_name' => '',
+            'unit_price' => 20,
+            'staged_at' => now()->subMinutes(5)->toDateTimeString(),
+            'id' => 2,
+            'order_id' => 'ORD-1',
+        ],
+    ]);
+    $orders = collect([
+        (object) [
+            'event_id' => 'pay-1',
+            'order_id' => 'ORD-1',
+            'amount_paid' => 20,
+            'item_qty' => 1,
+            'ordered_at' => now()->subMinutes(5)->toDateTimeString(),
+            'id' => 1,
+        ],
+    ]);
+
+    $events = EcomActivityCommerceEvents::fromCommerceRows($lines, $orders);
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]['stage'])->toBe('payment_success')
+        ->and($events[0]['trigger_label'])->toBe('#ORD-1 · £20.00');
+});

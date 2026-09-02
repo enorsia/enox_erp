@@ -313,4 +313,132 @@ final class CommerceReadSupport
             ->get()
             ->keyBy('session_id');
     }
+
+    /**
+     * @param  Collection<int, string>  $sessionIds
+     * @param  list<string>  $funnelStages
+     * @param  array<string, mixed>  $catalogOptions
+     * @return Collection<int, object>
+     */
+    public static function linesForSessions(
+        Collection $sessionIds,
+        Carbon $from,
+        Carbon $to,
+        array $funnelStages = [],
+        array $catalogOptions = [],
+    ): Collection {
+        if ($sessionIds->isEmpty()) {
+            return collect();
+        }
+
+        $rows = collect();
+
+        foreach ($sessionIds->chunk(1000) as $chunk) {
+            $query = DB::table('activity_ecom_commerce_line_items')
+                ->whereIn('session_id', $chunk->values()->all())
+                ->whereBetween('staged_at', TrackerTime::storageRange($from, $to));
+
+            if ($funnelStages !== []) {
+                $query->whereIn('funnel_stage', $funnelStages);
+            }
+
+            CommerceLineItemQuery::applyCatalogFilters($query, $catalogOptions);
+
+            $rows = $rows->concat($query->orderBy('id')->get());
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  Collection<int, string>  $sessionIds
+     * @return Collection<int, object>
+     */
+    public static function ordersForSessions(
+        Collection $sessionIds,
+        Carbon $from,
+        Carbon $to,
+    ): Collection {
+        if ($sessionIds->isEmpty()) {
+            return collect();
+        }
+
+        $rows = collect();
+
+        foreach ($sessionIds->chunk(1000) as $chunk) {
+            $rows = $rows->concat(
+                DB::table('activity_ecom_orders')
+                    ->whereIn('session_id', $chunk->values()->all())
+                    ->whereBetween('ordered_at', TrackerTime::storageRange($from, $to))
+                    ->orderBy('ordered_at')
+                    ->orderBy('id')
+                    ->get()
+            );
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  Collection<int, string>  $sessionIds
+     * @return array<string, int>
+     */
+    public static function actionCountsForSessions(Collection $sessionIds): array
+    {
+        if ($sessionIds->isEmpty()) {
+            return [];
+        }
+
+        $counts = [];
+
+        foreach ($sessionIds->chunk(1000) as $chunk) {
+            $rows = DB::table('activity_ecom_user_actions')
+                ->selectRaw('session_id, COUNT(*) as actions_count')
+                ->whereIn('session_id', $chunk->values()->all())
+                ->groupBy('session_id')
+                ->pluck('actions_count', 'session_id');
+
+            foreach ($rows as $sessionId => $count) {
+                $counts[(string) $sessionId] = (int) $count;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * @param  Collection<int, object>  $lines
+     * @return list<array<string, mixed>>
+     */
+    public static function displayProductsFromLines(Collection $lines): array
+    {
+        if ($lines->isEmpty()) {
+            return [];
+        }
+
+        return array_values(array_map(function ($row) {
+            $qty = (int) max(1, (float) ($row->qty ?? 1));
+            $price = is_numeric($row->unit_price ?? null)
+                ? round((float) $row->unit_price, 2)
+                : (is_numeric($row->line_total ?? null) ? round((float) $row->line_total, 2) : null);
+            $title = trim((string) ($row->product_name ?? ''));
+            $code = trim((string) ($row->product_code ?? $row->sku ?? ''));
+
+            if ($title !== '' && $code !== '') {
+                $title .= ' ('.$code.')';
+            } elseif ($title === '' && $code !== '') {
+                $title = $code;
+            }
+
+            return array_filter([
+                'title' => $title !== '' ? $title : 'Product',
+                'size' => trim((string) ($row->size_name ?? '')),
+                'color_po' => trim((string) ($row->color_name ?? '')),
+                'color_ecommerce' => trim((string) ($row->color_name ?? '')),
+                'qty' => (string) $qty,
+                'price' => $price !== null ? '£'.number_format($price, 2) : '—',
+                'image_url' => '',
+            ], fn ($value) => $value !== '' && $value !== null);
+        }, $lines->all()));
+    }
 }

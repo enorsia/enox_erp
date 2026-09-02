@@ -4,7 +4,6 @@ namespace App\Support;
 
 use App\Models\ActivityEcomUserAction;
 use App\Services\EcomTrackerDashboardService;
-use App\Support\CommerceReadSupport;
 use Illuminate\Support\Collection;
 
 final class EcomActivityCommerceSummary
@@ -141,6 +140,113 @@ final class EcomActivityCommerceSummary
             'View' => 1,
             default => 0,
         };
+    }
+
+    /**
+     * Commerce cell for the activity list, from line items + orders (not user_actions).
+     *
+     * @param  Collection<int, object>  $lines
+     * @param  Collection<int, object>  $orders
+     * @return array{
+     *     commerce_label: ?string,
+     *     commerce_value: ?float,
+     *     commerce_has_order: bool,
+     *     commerce_display: string,
+     *     commerce_tip: ?string,
+     * }
+     */
+    public static function summarizeFromCommerce(Collection $lines, Collection $orders): array
+    {
+        $paymentLines = $lines->where('funnel_stage', 'payment_success')->values();
+
+        if ($orders->isNotEmpty() || $paymentLines->isNotEmpty()) {
+            $latestOrder = $orders
+                ->sortByDesc(fn (object $order) => [
+                    strtotime((string) ($order->ordered_at ?? '')) ?: 0,
+                    (int) ($order->id ?? 0),
+                ])
+                ->first();
+
+            if ($latestOrder === null && $paymentLines->isNotEmpty()) {
+                $latestLine = $paymentLines
+                    ->sortByDesc(fn (object $line) => [
+                        strtotime((string) ($line->staged_at ?? '')) ?: 0,
+                        (int) ($line->id ?? 0),
+                    ])
+                    ->first();
+                $value = round((float) $paymentLines->sum(fn (object $line) => (float) ($line->line_total ?? 0)), 2);
+                $orderId = trim((string) ($latestLine->order_id ?? ''));
+
+                return [
+                    'commerce_label' => 'Order',
+                    'commerce_value' => $value > 0 ? $value : null,
+                    'commerce_has_order' => true,
+                    'commerce_display' => self::formatOrderDisplay($orderId, $value > 0 ? $value : null),
+                    'commerce_tip' => self::tipFromParts('Order', $value > 0 ? $value : null, $orderId, $latestLine->staged_at ?? null),
+                ];
+            }
+
+            $value = $orders->isNotEmpty()
+                ? round((float) $orders->sum(fn (object $order) => (float) ($order->amount_paid ?? 0)), 2)
+                : round((float) $paymentLines->sum(fn (object $line) => (float) ($line->line_total ?? 0)), 2);
+            $orderId = trim((string) ($latestOrder->order_id ?? ''));
+
+            return [
+                'commerce_label' => 'Order',
+                'commerce_value' => $value > 0 ? $value : null,
+                'commerce_has_order' => true,
+                'commerce_display' => self::formatOrderDisplay($orderId, $value > 0 ? $value : null),
+                'commerce_tip' => self::tipFromParts('Order', $value > 0 ? $value : null, $orderId, $latestOrder->ordered_at ?? null),
+            ];
+        }
+
+        foreach (['proceed_checkout' => 'Proceed', 'begin_checkout' => 'Checkout', 'add_to_cart' => 'Cart'] as $stage => $label) {
+            $stageLines = $lines->where('funnel_stage', $stage)->values();
+
+            if ($stageLines->isEmpty()) {
+                continue;
+            }
+
+            $latest = $stageLines
+                ->sortByDesc(fn (object $line) => [
+                    strtotime((string) ($line->staged_at ?? '')) ?: 0,
+                    (int) ($line->id ?? 0),
+                ])
+                ->first();
+            $eventLines = $stageLines->where('event_id', $latest->event_id ?? null);
+            $value = round((float) $eventLines->sum(fn (object $line) => (float) ($line->line_total ?? 0)), 2);
+
+            return [
+                'commerce_label' => $label,
+                'commerce_value' => $value > 0 ? $value : null,
+                'commerce_has_order' => false,
+                'commerce_display' => self::formatDisplay($label, $value > 0 ? $value : null),
+                'commerce_tip' => self::tipFromParts($label, $value > 0 ? $value : null, null, $latest->staged_at ?? null),
+            ];
+        }
+
+        return self::emptySummary();
+    }
+
+    private static function tipFromParts(string $label, ?float $value, ?string $orderId, mixed $occurredAt): ?string
+    {
+        $parts = [$label];
+
+        if ($value !== null && $value > 0) {
+            $parts[] = '£'.number_format($value, 2);
+        }
+
+        if (filled($orderId)) {
+            $parts[] = 'Order #'.$orderId;
+        }
+
+        $when = TrackerTime::formatFromStorage($occurredAt);
+
+        if ($when !== null) {
+            $parts[] = $when;
+        }
+
+        return implode(' · ', array_filter($parts));
     }
 
     /**

@@ -43,6 +43,7 @@ class ActivityEcomUser extends Model
         'is_bot',
         'last_active_at',
         'session_duration_seconds',
+        'actions_count',
         'created_at',
         'updated_at',
     ];
@@ -60,6 +61,7 @@ class ActivityEcomUser extends Model
             'is_bot' => 'boolean',
             'last_active_at' => 'datetime',
             'session_duration_seconds' => 'integer',
+            'actions_count' => 'integer',
         ];
     }
 

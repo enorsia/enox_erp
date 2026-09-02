@@ -15,7 +15,8 @@ class CleanupTrackerHistoricalData extends Command
                             {--skip-customer-backfill : Skip restoring name/email/phone from checkout actions}
                             {--skip-dedupe-payments : Skip removing duplicate payment_success rows for the same order}
                             {--skip-orphan-sessions : Skip removing sessions that only contain a lone payment_success action}
-                            {--include-empty-sessions : Also remove sessions with zero actions}';
+                            {--include-empty-sessions : Also remove sessions with zero actions}
+                            {--skip-actions-count-backfill : Skip recounting actions_count from user_actions}';
 
     protected $description = 'Clean tracker data: ghost payment-only sessions, duplicate orders, and missing checkout customer identity.';
 
@@ -32,6 +33,19 @@ class CleanupTrackerHistoricalData extends Command
             $dryRun ? '[dry-run]' : '[live]',
             $before === null ? ' (all data)' : ' (on/before '.$before->toDateString().', '.TrackerTime::timezone().')',
         ));
+
+        if (! $this->option('skip-actions-count-backfill')) {
+            $actions = $cleanup->backfillSessionActionsCounts($before, $dryRun);
+            if ($actions['skipped']) {
+                $this->warn('Actions count backfill skipped: actions_count column is missing (run migrations first).');
+            } else {
+                $this->line(sprintf(
+                    'Actions count backfill: scanned %d, updated %d',
+                    $actions['scanned'],
+                    $dryRun ? 0 : $actions['updated'],
+                ));
+            }
+        }
 
         if (! $this->option('skip-orphan-sessions')) {
             $orphans = $cleanup->removePaymentOnlySessions($before, $dryRun);
@@ -67,6 +81,18 @@ class CleanupTrackerHistoricalData extends Command
             $this->line(sprintf('Customer identity backfill: updated %d session(s)', $updated));
         } elseif (! $this->option('skip-customer-backfill')) {
             $this->line('Customer identity backfill: skipped in dry-run mode');
+        }
+
+        if (! $this->option('skip-actions-count-backfill') && ! $dryRun) {
+            $actions = $cleanup->backfillSessionActionsCounts($before, false);
+            if ($actions['skipped']) {
+                $this->warn('Actions count backfill skipped: actions_count column is missing (run migrations first).');
+            } else {
+                $this->line(sprintf(
+                    'Actions count reconcile: updated %d session(s)',
+                    $actions['updated'],
+                ));
+            }
         }
 
         $this->info('Tracker cleanup complete.');

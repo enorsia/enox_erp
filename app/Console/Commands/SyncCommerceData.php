@@ -28,6 +28,7 @@ class SyncCommerceData extends Command
                             {--skip-dedupe-payments : Skip payment dedupe during cleanup}
                             {--skip-orphan-sessions : Skip orphan session removal}
                             {--skip-customer-backfill : Skip customer backfill}
+                            {--skip-actions-count-backfill : Skip recounting actions_count from user_actions}
                             {--include-empty-sessions : Remove empty sessions during cleanup}
                             {--cleanup-only : Run cleanup only}';
 
@@ -160,6 +161,23 @@ class SyncCommerceData extends Command
             $cursor = $chunkEnd->copy()->addSecond();
         }
 
+        if (! $this->option('skip-actions-count-backfill')) {
+            $before = $this->option('from')
+                ? Carbon::parse((string) $this->option('from'), TrackerTime::timezone())->endOfDay()
+                : null;
+
+            $actions = $cleanup->backfillSessionActionsCounts($before, $dryRun);
+            if ($actions['skipped']) {
+                $this->warn('Actions count backfill skipped: actions_count column is missing (run migrations first).');
+            } else {
+                $this->line(sprintf(
+                    'Actions count backfill: scanned %d, updated %d',
+                    $actions['scanned'],
+                    $dryRun ? 0 : $actions['updated'],
+                ));
+            }
+        }
+
         $this->info('Commerce sync complete.');
 
         return self::SUCCESS;
@@ -210,6 +228,15 @@ class SyncCommerceData extends Command
             ? Carbon::parse((string) $this->option('from'), TrackerTime::timezone())->endOfDay()
             : null;
 
+        if (! $this->option('skip-actions-count-backfill') && ! $this->option('dry-run')) {
+            $actions = $cleanup->backfillSessionActionsCounts($before, false);
+            if ($actions['skipped']) {
+                $this->warn('Actions count backfill skipped: actions_count column is missing (run migrations first).');
+            } else {
+                $this->line(sprintf('Actions count backfill: updated %d session(s)', $actions['updated']));
+            }
+        }
+
         if (! $this->option('skip-orphan-sessions')) {
             $orphans = $cleanup->removePaymentOnlySessions($before, (bool) $this->option('dry-run'));
             $this->line("Payment-only sessions deleted: {$orphans['deleted_sessions']}");
@@ -228,6 +255,15 @@ class SyncCommerceData extends Command
         if (! $this->option('skip-customer-backfill') && ! $this->option('dry-run')) {
             $updated = $cleanup->backfillSessionCustomerFields();
             $this->line("Customer fields backfilled: {$updated}");
+        }
+
+        if (! $this->option('skip-actions-count-backfill') && ! $this->option('dry-run')) {
+            $actions = $cleanup->backfillSessionActionsCounts($before, false);
+            if ($actions['skipped']) {
+                $this->warn('Actions count backfill skipped: actions_count column is missing (run migrations first).');
+            } else {
+                $this->line(sprintf('Actions count reconcile: updated %d session(s)', $actions['updated']));
+            }
         }
     }
 }

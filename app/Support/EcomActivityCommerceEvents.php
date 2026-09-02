@@ -5,7 +5,6 @@ namespace App\Support;
 use App\Models\ActivityEcomUserAction;
 use App\Services\EcomTrackerDashboardService;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 final class EcomActivityCommerceEvents
 {
@@ -61,6 +60,173 @@ final class EcomActivityCommerceEvents
         $events = self::dedupePaymentEvents($events);
 
         return self::collapseToDisplayEvents($events);
+    }
+
+    /**
+     * Activity-list commerce popovers from line items + orders (not user_actions).
+     *
+     * @param  Collection<int, object>  $lines
+     * @param  Collection<int, object>  $orders
+     * @return list<array<string, mixed>>
+     */
+    public static function fromCommerceRows(Collection $lines, Collection $orders): array
+    {
+        $events = [];
+        $linesByEvent = $lines->groupBy(fn (object $line) => (string) ($line->event_id ?? ''));
+        $ordersByEvent = $orders->keyBy(fn (object $order) => (string) ($order->event_id ?? ''));
+        $seenPaymentEvents = [];
+
+        foreach ($linesByEvent as $eventId => $eventLines) {
+            if ($eventId === '') {
+                continue;
+            }
+
+            $stage = (string) ($eventLines->first()->funnel_stage ?? '');
+            $order = $ordersByEvent->get($eventId);
+            $event = match ($stage) {
+                'payment_success' => self::paymentEventFromRows($eventLines, $order),
+                'proceed_checkout' => self::funnelEventFromRows($eventLines, 'proceed_checkout', 'Proceed'),
+                'begin_checkout' => self::funnelEventFromRows($eventLines, 'begin_checkout', 'Checkout'),
+                'add_to_cart' => self::funnelEventFromRows($eventLines, 'add_to_cart', 'Cart'),
+                default => null,
+            };
+
+            if ($event === null) {
+                continue;
+            }
+
+            if ($stage === 'payment_success') {
+                $seenPaymentEvents[$eventId] = true;
+            }
+
+            $events[] = $event;
+        }
+
+        foreach ($orders as $order) {
+            $eventId = (string) ($order->event_id ?? '');
+
+            if ($eventId !== '' && isset($seenPaymentEvents[$eventId])) {
+                continue;
+            }
+
+            $orderLines = $eventId !== '' ? ($linesByEvent->get($eventId) ?? collect()) : collect();
+            $event = self::paymentEventFromRows($orderLines, $order);
+
+            if ($event === null) {
+                continue;
+            }
+
+            $events[] = $event;
+        }
+
+        $events = self::dedupePaymentEvents($events);
+
+        return self::collapseToDisplayEvents($events);
+    }
+
+    /**
+     * @param  Collection<int, object>  $lines
+     * @return array<string, mixed>|null
+     */
+    private static function paymentEventFromRows(Collection $lines, ?object $order): ?array
+    {
+        $orderId = trim((string) ($order?->order_id ?? $lines->first()?->order_id ?? ''));
+        $amount = is_numeric($order?->amount_paid ?? null)
+            ? round((float) $order->amount_paid, 2)
+            : round((float) $lines->sum(fn (object $line) => (float) ($line->line_total ?? 0)), 2);
+        $qty = (int) ($order?->item_qty ?? 0);
+
+        if ($qty <= 0) {
+            $qty = (int) max(0, $lines->sum(fn (object $line) => (float) ($line->qty ?? 0)));
+        }
+
+        if ($orderId === '' && $amount <= 0 && $qty === 0 && $lines->isEmpty()) {
+            return null;
+        }
+
+        $occurredAt = $order->ordered_at ?? $lines->first()?->staged_at ?? null;
+        $amount = $amount > 0 ? $amount : null;
+
+        return [
+            'id' => 'payment:'.($orderId !== '' ? $orderId : (string) ($order?->event_id ?? $lines->first()?->event_id ?? '')),
+            'stage' => 'payment_success',
+            'stage_label' => 'Order',
+            'trigger_label' => self::orderTriggerLabel($orderId, $amount),
+            'title' => 'Order details'.($orderId !== '' ? ': #'.$orderId : ''),
+            'sort_at' => strtotime((string) $occurredAt) ?: 0,
+            'occurred_at' => TrackerTime::formatFromStorage($occurredAt),
+            'info_groups' => array_values(array_filter([
+                [
+                    'title' => 'Order info',
+                    'fields' => array_values(array_filter([
+                        $orderId !== '' ? ['label' => 'Order ID', 'value' => $orderId] : null,
+                        $amount !== null ? ['label' => 'Total', 'value' => self::formatMoney($amount), 'emphasis' => true] : null,
+                        $qty > 0 ? ['label' => 'Quantity', 'value' => (string) $qty] : null,
+                        filled($order?->payment_method ?? null) ? ['label' => 'Payment', 'value' => (string) $order->payment_method] : null,
+                        ['label' => 'Ordered', 'value' => TrackerTime::formatFromStorage($occurredAt, 'Y-m-d h:i A') ?? '—'],
+                    ])),
+                ],
+                (filled($order?->customer_email ?? null) || filled($order?->customer_phone ?? null))
+                    ? [
+                        'title' => 'Customer',
+                        'fields' => array_values(array_filter([
+                            filled($order?->customer_phone ?? null) ? ['label' => 'Phone', 'value' => (string) $order->customer_phone] : null,
+                            filled($order?->customer_email ?? null) ? ['label' => 'Email', 'value' => (string) $order->customer_email] : null,
+                        ])),
+                    ]
+                    : null,
+                [
+                    'title' => 'Prices',
+                    'fields' => array_values(array_filter([
+                        self::moneyField('Sub total', $order?->subtotal ?? null),
+                        self::moneyField('Delivery charge', $order?->shipping_charge ?? null),
+                        self::moneyField('Discount', $order?->discount_amount ?? $order?->coupon_discount ?? null, true),
+                        $amount !== null ? ['label' => 'Grand total', 'value' => self::formatMoney($amount), 'emphasis' => true] : null,
+                    ])),
+                ],
+            ])),
+            'products' => CommerceReadSupport::displayProductsFromLines($lines),
+            'layout' => 'detail',
+        ];
+    }
+
+    /**
+     * @param  Collection<int, object>  $lines
+     * @return array<string, mixed>|null
+     */
+    private static function funnelEventFromRows(Collection $lines, string $stage, string $title): ?array
+    {
+        $amount = round((float) $lines->sum(fn (object $line) => (float) ($line->line_total ?? 0)), 2);
+        $itemQty = (int) max(0, $lines->sum(fn (object $line) => (float) ($line->qty ?? 0)));
+        $products = CommerceReadSupport::displayProductsFromLines($lines);
+        $latest = $lines
+            ->sortByDesc(fn (object $line) => [
+                strtotime((string) ($line->staged_at ?? '')) ?: 0,
+                (int) ($line->id ?? 0),
+            ])
+            ->first();
+
+        if ($amount <= 0 && $products === [] && $itemQty === 0) {
+            return null;
+        }
+
+        $amount = $amount > 0 ? $amount : null;
+        $eventId = (string) ($latest->event_id ?? $stage);
+
+        return [
+            'id' => $stage.':'.$eventId,
+            'stage' => $stage,
+            'stage_label' => $title,
+            'trigger_label' => $amount !== null ? $title.' · '.self::formatMoney($amount) : $title,
+            'title' => $stage === 'add_to_cart' ? 'Cart details' : $title,
+            'sort_at' => strtotime((string) ($latest->staged_at ?? '')) ?: 0,
+            'occurred_at' => TrackerTime::formatFromStorage($latest->staged_at ?? null),
+            'layout' => 'compact',
+            'cart_qty' => $itemQty,
+            'cart_total' => $amount !== null ? self::formatMoney($amount) : null,
+            'footer_note' => null,
+            'products' => $products,
+        ];
     }
 
     /**

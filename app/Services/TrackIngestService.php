@@ -122,14 +122,23 @@ class TrackIngestService
             }
 
             $row = $this->mapEventToRow($sessionId, $event);
+            $actionAlreadyStored = ActivityEcomUserAction::query()
+                ->where('event_id', $eventId)
+                ->exists();
 
             try {
                 if (in_array($event['action_type'] ?? '', CommerceIngestWriter::COMMERCE_ACTION_TYPES, true)) {
-                    DB::transaction(function () use ($eventId, $row, $event) {
+                    DB::transaction(function () use ($eventId, $row, $event, $actionAlreadyStored, $sessionId) {
                         ActivityEcomUserAction::query()->updateOrInsert(
                             ['event_id' => $eventId],
                             $row
                         );
+
+                        if (! $actionAlreadyStored) {
+                            ActivityEcomUser::query()
+                                ->where('session_id', $sessionId)
+                                ->increment('actions_count');
+                        }
 
                         $action = ActivityEcomUserAction::query()->where('event_id', $eventId)->first();
                         if ($action !== null) {
@@ -141,6 +150,12 @@ class TrackIngestService
                         ['event_id' => $eventId],
                         $row
                     );
+
+                    if (! $actionAlreadyStored) {
+                        ActivityEcomUser::query()
+                            ->where('session_id', $sessionId)
+                            ->increment('actions_count');
+                    }
                 }
             } catch (Throwable $e) {
                 EcomTrackerLogger::frontend()->error('commerce.ingest.failed', 'Commerce ingest failed', [

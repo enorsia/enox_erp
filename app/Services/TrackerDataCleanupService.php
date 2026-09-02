@@ -7,6 +7,8 @@ use App\Models\ActivityEcomUserAction;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class TrackerDataCleanupService
 {
@@ -57,10 +59,16 @@ class TrackerDataCleanupService
                 }
 
                 if (! $dryRun) {
+                    $sessionId = (string) $action->session_id;
                     $action->delete();
 
-                    if (ActivityEcomUserAction::query()->where('session_id', $action->session_id)->doesntExist()) {
-                        ActivityEcomUser::query()->where('session_id', $action->session_id)->delete();
+                    ActivityEcomUser::query()
+                        ->where('session_id', $sessionId)
+                        ->where('actions_count', '>', 0)
+                        ->decrement('actions_count');
+
+                    if (ActivityEcomUserAction::query()->where('session_id', $sessionId)->doesntExist()) {
+                        ActivityEcomUser::query()->where('session_id', $sessionId)->delete();
                     }
                 }
 
@@ -82,7 +90,6 @@ class TrackerDataCleanupService
     public function removePaymentOnlySessions(?Carbon $before = null, bool $dryRun = false): array
     {
         $query = ActivityEcomUser::query()
-            ->withCount('actions')
             ->with(['actions' => fn ($builder) => $builder->select('id', 'session_id', 'action_type')])
             ->orderBy('id');
 
@@ -121,7 +128,6 @@ class TrackerDataCleanupService
     public function removeEmptySessions(?Carbon $before = null, bool $dryRun = false): array
     {
         $query = ActivityEcomUser::query()
-            ->withCount('actions')
             ->orderBy('id');
 
         if ($before !== null) {
@@ -156,6 +162,69 @@ class TrackerDataCleanupService
     public function backfillSessionCustomerFields(int $chunkSize = 100): int
     {
         return $this->trackIngestService->backfillSessionCustomerFromCheckoutActions($chunkSize);
+    }
+
+    /**
+     * Recount actions per session from activity_ecom_user_actions into actions_count.
+     *
+     * @return array{scanned: int, updated: int, skipped: bool}
+     */
+    public function backfillSessionActionsCounts(?Carbon $before = null, bool $dryRun = false, int $chunkSize = 1000): array
+    {
+        if (! Schema::hasColumn('activity_ecom_user', 'actions_count')) {
+            return [
+                'scanned' => 0,
+                'updated' => 0,
+                'skipped' => true,
+            ];
+        }
+
+        $lastId = 0;
+        $scanned = 0;
+        $updated = 0;
+
+        do {
+            $query = ActivityEcomUser::query()
+                ->where('id', '>', $lastId)
+                ->orderBy('id')
+                ->limit($chunkSize);
+
+            if ($before !== null) {
+                $query->where('created_at', '<=', TrackerTime::formatUtc($before));
+            }
+
+            $ids = $query->pluck('id');
+
+            if ($ids->isEmpty()) {
+                break;
+            }
+
+            $scanned += $ids->count();
+
+            if (! $dryRun) {
+                $idList = $ids->implode(',');
+
+                DB::statement(<<<SQL
+UPDATE activity_ecom_user u
+SET actions_count = (
+    SELECT COUNT(*)
+    FROM activity_ecom_user_actions a
+    WHERE a.session_id = u.session_id
+)
+WHERE u.id IN ({$idList})
+SQL);
+
+                $updated += $ids->count();
+            }
+
+            $lastId = (int) $ids->last();
+        } while ($ids->count() === $chunkSize);
+
+        return [
+            'scanned' => $scanned,
+            'updated' => $updated,
+            'skipped' => false,
+        ];
     }
 
     private function isPaymentOnlySession(ActivityEcomUser $session): bool

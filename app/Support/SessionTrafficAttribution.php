@@ -546,14 +546,17 @@ final class SessionTrafficAttribution
      */
     public static function listRowSummary(ActivityEcomUser $session): array
     {
-        $parsed = self::buildParsedAttribution($session);
-        $utm = self::resolvedUtmFields($session, $parsed);
+        $parsed = self::parseFromUrl($session->landing_page ?? null);
+        $utm = self::resolvedUtmFields($session, $parsed, [], '');
         $utmParts = array_values(array_filter([$utm['medium'], $utm['campaign']], fn ($value) => filled($value)));
+        $source = $utm['source'] ?? null;
 
         return [
-            'source' => self::displaySourceLabel($utm['source']),
+            'source' => self::displaySourceLabel($source),
             'utm' => $utmParts !== [] ? implode(' / ', $utmParts) : null,
-            'referer' => self::resolveReferer($session, null, $parsed),
+            'referer' => ($source !== null && isset(self::canonicalRefererBySource()[$source]))
+                ? self::canonicalRefererBySource()[$source]
+                : null,
         ];
     }
 

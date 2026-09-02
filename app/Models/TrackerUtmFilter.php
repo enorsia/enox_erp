@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Static UTM source / medium options for tracker analytics filters.
+ * Reads session utm_* and landing_page only (no user_actions scans).
  */
 final class TrackerUtmFilter
 {
@@ -183,7 +184,6 @@ final class TrackerUtmFilter
     public static function sourceCountsFrom(Builder $query): array
     {
         $sessionTable = $query->getModel()->getTable();
-        $actionsTable = (new ActivityEcomUserAction)->getTable();
         $cases = [];
 
         foreach (config('tracker.utm_source_aliases', []) as $alias => $canonical) {
@@ -192,7 +192,7 @@ final class TrackerUtmFilter
 
         $cases[] = "WHEN {$sessionTable}.utm_source IS NOT NULL AND {$sessionTable}.utm_source != '' THEN {$sessionTable}.utm_source";
 
-        foreach (self::inferredSourceUrlMatches($sessionTable, $actionsTable) as $source => $matchSql) {
+        foreach (self::inferredSourceUrlMatches($sessionTable) as $source => $matchSql) {
             $cases[] = "WHEN {$matchSql} THEN '".self::escapeLike($source)."'";
         }
 
@@ -215,9 +215,7 @@ final class TrackerUtmFilter
     public static function mediumCountsFrom(Builder $query): array
     {
         $sessionTable = $query->getModel()->getTable();
-        $actionsTable = (new ActivityEcomUserAction)->getTable();
-        $paidMatch = self::sqlColumnMatchesAny($sessionTable.'.landing_page', self::PAID_MEDIUM_URL_NEEDLES)
-            .' OR '.self::sqlActionsMatchAny($sessionTable, $actionsTable, self::PAID_MEDIUM_URL_NEEDLES);
+        $paidMatch = self::sqlColumnMatchesAny($sessionTable.'.landing_page', self::PAID_MEDIUM_URL_NEEDLES);
 
         $bucketSql = "CASE
             WHEN {$sessionTable}.utm_medium IS NOT NULL AND {$sessionTable}.utm_medium != '' THEN {$sessionTable}.utm_medium
@@ -365,18 +363,15 @@ final class TrackerUtmFilter
     /**
      * @return array<string, string>
      */
-    private static function inferredSourceUrlMatches(string $sessionTable, string $actionsTable): array
+    private static function inferredSourceUrlMatches(string $sessionTable): array
     {
         $matches = [
-            'google' => self::sqlColumnMatchesAny($sessionTable.'.landing_page', self::GOOGLE_SOURCE_URL_NEEDLES)
-                .' OR '.self::sqlActionsMatchAny($sessionTable, $actionsTable, self::GOOGLE_SOURCE_URL_NEEDLES),
-            'awin' => self::sqlColumnMatchesAny($sessionTable.'.landing_page', self::AWIN_URL_NEEDLES)
-                .' OR '.self::sqlActionsMatchAny($sessionTable, $actionsTable, self::AWIN_URL_NEEDLES),
+            'google' => self::sqlColumnMatchesAny($sessionTable.'.landing_page', self::GOOGLE_SOURCE_URL_NEEDLES),
+            'awin' => self::sqlColumnMatchesAny($sessionTable.'.landing_page', self::AWIN_URL_NEEDLES),
         ];
 
         foreach (self::SOURCE_URL_NEEDLES as $source => $needles) {
-            $matches[$source] = self::sqlColumnMatchesAny($sessionTable.'.landing_page', $needles)
-                .' OR '.self::sqlActionsMatchAny($sessionTable, $actionsTable, $needles);
+            $matches[$source] = self::sqlColumnMatchesAny($sessionTable.'.landing_page', $needles);
         }
 
         return $matches;
@@ -408,15 +403,11 @@ final class TrackerUtmFilter
 
         $query->{$method}(function (Builder $inner) use ($needles) {
             self::applyColumnNeedleMatches($inner, 'landing_page', $needles);
-
-            $inner->orWhereHas('actions', function (Builder $actions) use ($needles) {
-                self::applyColumnNeedleMatches($actions, 'page_url', $needles);
-            });
         });
     }
 
     /**
-     * @param  Builder<ActivityEcomUser>|Builder<ActivityEcomUserAction>  $query
+     * @param  Builder<ActivityEcomUser>  $query
      * @param  list<string>  $needles
      */
     private static function applyColumnNeedleMatches(Builder $query, string $column, array $needles): void
@@ -464,12 +455,6 @@ final class TrackerUtmFilter
             foreach ($needles as $needle) {
                 $inner->where('landing_page', 'not like', '%'.$needle.'%');
             }
-        })->whereDoesntHave('actions', function (Builder $actions) use ($needles) {
-            $actions->where(function (Builder $urls) use ($needles) {
-                foreach ($needles as $needle) {
-                    $urls->orWhere('page_url', 'like', '%'.$needle.'%');
-                }
-            });
         });
     }
 
@@ -484,21 +469,6 @@ final class TrackerUtmFilter
         );
 
         return '('.implode(' OR ', $parts).')';
-    }
-
-    /**
-     * @param  list<string>  $needles
-     */
-    private static function sqlActionsMatchAny(string $sessionTable, string $actionsTable, array $needles): string
-    {
-        $pageMatches = array_map(
-            fn (string $needle) => "a.page_url LIKE '%".self::escapeLike($needle)."%'",
-            $needles,
-        );
-
-        return "EXISTS (SELECT 1 FROM {$actionsTable} a WHERE a.session_id = {$sessionTable}.session_id AND ("
-            .implode(' OR ', $pageMatches)
-            .'))';
     }
 
     private static function escapeLike(string $value): string

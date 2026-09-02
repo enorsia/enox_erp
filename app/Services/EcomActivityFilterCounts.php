@@ -57,10 +57,7 @@ class EcomActivityFilterCounts
 
         return match ($dimension) {
             'device_type' => $this->groupCount($query, 'device_type'),
-            'logged_in' => [
-                '1' => (clone $query)->where('is_logged_in', true)->count(),
-                '0' => (clone $query)->where('is_logged_in', false)->count(),
-            ],
+            'logged_in' => $this->groupLoggedInCount($query),
             'has_order' => $this->countHasOrder($request, $query, $deferredHasOrderCounter),
             'utm_source' => TrackerUtmFilter::sourceCountsFrom($query),
             'utm_medium' => TrackerUtmFilter::mediumCountsFrom($query),
@@ -91,6 +88,24 @@ class EcomActivityFilterCounts
         return [
             '1' => $withOrder->count(),
             '0' => $withoutOrder->count(),
+        ];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function groupLoggedInCount(Builder $query): array
+    {
+        $table = $query->getModel()->getTable();
+
+        $rows = self::aggregateQuery($query)
+            ->selectRaw("CASE WHEN {$table}.is_logged_in = 1 THEN '1' ELSE '0' END as bucket, COUNT(*) as total")
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+
+        return [
+            '1' => (int) ($rows['1'] ?? 0),
+            '0' => (int) ($rows['0'] ?? 0),
         ];
     }
 

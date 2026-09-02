@@ -2,7 +2,9 @@
 
 namespace App\Support;
 
+use App\Support\CommerceHasOrderFilter;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -261,6 +263,64 @@ final class CommerceFunnelQuery
             'payment_success' => 'has_payment_success',
             default => null,
         };
+    }
+
+    /**
+     * Activity-list funnel drawer / focus filter using session flags (no giant whereIn).
+     *
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    public static function applySidebarFunnelKey(
+        Builder $query,
+        string $funnelKey,
+        Carbon $from,
+        Carbon $to,
+    ): void {
+        match ($funnelKey) {
+            'cart_abandonment' => self::applyAbandonedSessionFilter($query, 'add_to_cart', 'begin_checkout'),
+            'begin_checkout_abandonment' => self::applyAbandonedSessionFilter($query, 'begin_checkout', 'proceed_checkout'),
+            'proceed_checkout_abandonment' => self::applyAbandonedSessionFilter($query, 'proceed_checkout', 'payment_success'),
+            'payment_success' => self::applyPaymentSuccessSessionFilter($query, $from, $to),
+            default => $query->whereRaw('1 = 0'),
+        };
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    public static function applyAbandonedSessionFilter(
+        Builder $query,
+        string $stage,
+        string $excludeActionType,
+    ): void {
+        $stage = self::normalizeStage($stage);
+        $excludeActionType = self::normalizeStage($excludeActionType);
+        $flag = self::stageFlag($stage);
+        $excludeFlag = self::stageFlag($excludeActionType);
+
+        if ($flag === null) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $table = $query->getModel()->getTable();
+        $query->where("{$table}.{$flag}", true);
+
+        if ($excludeFlag !== null) {
+            $query->where("{$table}.{$excludeFlag}", false);
+        }
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    public static function applyPaymentSuccessSessionFilter(
+        Builder $query,
+        Carbon $from,
+        Carbon $to,
+    ): void {
+        CommerceHasOrderFilter::apply($query, true, $from, $to);
     }
 
     public static function normalizeStage(string $stage): string

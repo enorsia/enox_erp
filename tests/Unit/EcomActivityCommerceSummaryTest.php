@@ -215,3 +215,59 @@ test('catalog commerce summary shows view when payment is for a different produc
         ->and($summary['commerce_has_order'])->toBeFalse()
         ->and($summary['commerce_label'])->toBe('View');
 });
+
+test('commerce summary from line items and orders prefers paid order over cart', function () {
+    $lines = collect([
+        (object) [
+            'funnel_stage' => 'add_to_cart',
+            'line_total' => 20,
+            'event_id' => 'e1',
+            'staged_at' => now()->subMinutes(10)->toDateTimeString(),
+            'id' => 1,
+            'order_id' => null,
+        ],
+        (object) [
+            'funnel_stage' => 'payment_success',
+            'line_total' => 15.49,
+            'event_id' => 'e2',
+            'staged_at' => now()->toDateTimeString(),
+            'id' => 2,
+            'order_id' => 'ORD-1',
+        ],
+    ]);
+    $orders = collect([
+        (object) [
+            'order_id' => 'ORD-1',
+            'amount_paid' => 15.49,
+            'ordered_at' => now()->toDateTimeString(),
+            'id' => 1,
+            'event_id' => 'e2',
+        ],
+    ]);
+
+    $summary = EcomActivityCommerceSummary::summarizeFromCommerce($lines, $orders);
+
+    expect($summary['commerce_label'])->toBe('Order')
+        ->and($summary['commerce_has_order'])->toBeTrue()
+        ->and($summary['commerce_display'])->toBe('#ORD-1 · £15.49')
+        ->and($summary['commerce_value'])->toBe(15.49);
+});
+
+test('commerce summary from line items shows proceed when payment is missing', function () {
+    $lines = collect([
+        (object) [
+            'funnel_stage' => 'proceed_checkout',
+            'line_total' => 44.50,
+            'event_id' => 'e3',
+            'staged_at' => now()->toDateTimeString(),
+            'id' => 3,
+            'order_id' => null,
+        ],
+    ]);
+
+    $summary = EcomActivityCommerceSummary::summarizeFromCommerce($lines, collect());
+
+    expect($summary['commerce_label'])->toBe('Proceed')
+        ->and($summary['commerce_has_order'])->toBeFalse()
+        ->and($summary['commerce_display'])->toBe('Proceed · £44.50');
+});

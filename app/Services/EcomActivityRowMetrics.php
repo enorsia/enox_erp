@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\ActivityEcomUser;
-use App\Models\ActivityEcomUserAction;
 use App\Support\CommerceReadSupport;
 use App\Support\EcomActivityCommerceEvents;
 use App\Support\EcomActivityCommerceSummary;
@@ -81,7 +80,9 @@ class EcomActivityRowMetrics
             foreach ($sessions as $session) {
                 $traffic = SessionTrafficAttribution::listRowSummary($session);
                 $metrics[$session->session_id]['traffic_source'] = $traffic['source'] ?? '—';
-                $metrics[$session->session_id]['traffic_medium'] = $traffic['utm']['medium'] ?? ($session->utm_medium ?? '—');
+                $metrics[$session->session_id]['traffic_medium'] = filled($traffic['utm'] ?? null)
+                    ? (string) $traffic['utm']
+                    : (filled($session->utm_medium) ? (string) $session->utm_medium : '—');
             }
         }
 
@@ -137,31 +138,38 @@ class EcomActivityRowMetrics
         array $catalogOptions = [],
     ): void {
         $useCatalogScope = EcomActivitySessionSort::usesCatalogActionScope($catalogOptions);
-        $actionTypes = ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'];
-
-        if ($useCatalogScope) {
-            $actionTypes = array_merge(['product_view', 'product_view_popup'], $actionTypes);
-        }
-
-        $actions = ActivityEcomUserAction::query()
-            ->select(CommerceReadSupport::scalarActionColumns())
-            ->whereIn('session_id', $sessionIds)
-            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-            ->whereIn('action_type', $actionTypes)
-            ->get()
-            ->groupBy('session_id');
+        $lines = CommerceReadSupport::linesForSessions(
+            $sessionIds,
+            $from,
+            $to,
+            ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'],
+            $useCatalogScope ? $catalogOptions : [],
+        );
+        $orders = CommerceReadSupport::ordersForSessions($sessionIds, $from, $to);
+        $linesBySession = $lines->groupBy(fn (object $line) => (string) $line->session_id);
+        $ordersBySession = $orders->groupBy(fn (object $order) => (string) $order->session_id);
 
         foreach ($sessionIds as $sessionId) {
-            $sessionActions = $actions->get($sessionId, collect());
-            $summary = $useCatalogScope
-                ? EcomActivityCommerceSummary::summarizeCatalogActions($sessionActions, $catalogOptions, $this->dashboardService)
-                : EcomActivityCommerceSummary::summarizeActions($sessionActions);
+            $sessionLines = $linesBySession->get($sessionId, collect());
+            $sessionOrders = $ordersBySession->get($sessionId, collect());
+
+            if ($useCatalogScope) {
+                $paymentEventIds = $sessionLines
+                    ->where('funnel_stage', 'payment_success')
+                    ->pluck('event_id')
+                    ->filter()
+                    ->map(fn ($id) => (string) $id)
+                    ->unique()
+                    ->all();
+                $sessionOrders = $sessionOrders->filter(
+                    fn (object $order) => in_array((string) ($order->event_id ?? ''), $paymentEventIds, true)
+                        || in_array((string) ($order->order_id ?? ''), $sessionLines->pluck('order_id')->filter()->map(fn ($id) => (string) $id)->all(), true),
+                );
+            }
+
+            $summary = EcomActivityCommerceSummary::summarizeFromCommerce($sessionLines, $sessionOrders);
             $metrics[$sessionId] = array_merge($metrics[$sessionId] ?? [], $summary, [
-                'commerce_events' => EcomActivityCommerceEvents::fromActions(
-                    $sessionActions,
-                    $useCatalogScope ? $catalogOptions : [],
-                    $this->dashboardService,
-                ),
+                'commerce_events' => EcomActivityCommerceEvents::fromCommerceRows($sessionLines, $sessionOrders),
             ]);
         }
     }
@@ -193,34 +201,19 @@ class EcomActivityRowMetrics
             return;
         }
 
-        $actions = ActivityEcomUserAction::query()
-            ->select('session_id', 'action_type')
-            ->whereIn('session_id', $sessionIds)
-            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-            ->whereIn('action_type', ['product_view', 'product_view_popup', 'add_to_cart', 'payment_success'])
-            ->get()
-            ->groupBy('session_id');
+        $lines = CommerceReadSupport::linesForSessions(
+            $sessionIds,
+            $from,
+            $to,
+            ['add_to_cart', 'payment_success'],
+        )->groupBy(fn (object $line) => (string) $line->session_id);
 
-        foreach ($actions as $sessionId => $sessionActions) {
-            $viewed = 0;
-            $adds = 0;
-            $purchased = false;
+        foreach ($sessionIds as $sessionId) {
+            $sessionLines = $lines->get($sessionId, collect());
+            $adds = $sessionLines->where('funnel_stage', 'add_to_cart')->count();
+            $purchased = $sessionLines->contains(fn (object $line) => $line->funnel_stage === 'payment_success');
 
-            foreach ($sessionActions as $action) {
-                if (in_array($action->action_type, ['product_view', 'product_view_popup'], true)) {
-                    $viewed++;
-                }
-
-                if ($action->action_type === 'add_to_cart') {
-                    $adds++;
-                }
-
-                if ($action->action_type === 'payment_success') {
-                    $purchased = true;
-                }
-            }
-
-            $metrics[$sessionId]['products_viewed'] = $viewed;
+            $metrics[$sessionId]['products_viewed'] = 0;
             $metrics[$sessionId]['adds'] = $adds;
             $metrics[$sessionId]['purchased'] = $purchased ? 'Yes' : '—';
         }
@@ -266,34 +259,26 @@ class EcomActivityRowMetrics
             return;
         }
 
-        $actions = ActivityEcomUserAction::query()
-            ->select('session_id', 'action_type', 'category_name')
-            ->whereIn('session_id', $sessionIds)
-            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
-            ->whereIn('action_type', ['category_view', 'payment_success'])
-            ->get()
-            ->groupBy('session_id');
+        $payments = CommerceReadSupport::sumPaymentMetricsForSessions($sessionIds, $from, $to);
+        $lines = CommerceReadSupport::linesForSessions($sessionIds, $from, $to)->groupBy(
+            fn (object $line) => (string) $line->session_id,
+        );
 
-        foreach ($actions as $sessionId => $sessionActions) {
+        foreach ($sessionIds as $sessionId) {
+            $sessionLines = $lines->get($sessionId, collect());
             $topCategory = '—';
-            $purchases = 0;
 
-            foreach ($sessionActions as $action) {
-                if ($action->action_type === 'category_view') {
-                    $label = trim((string) ($action->category_name ?? ''));
+            foreach ($sessionLines->sortByDesc(fn (object $line) => (int) ($line->id ?? 0)) as $line) {
+                $label = trim((string) ($line->category_name ?? ''));
 
-                    if ($label !== '') {
-                        $topCategory = $label;
-                    }
-                }
-
-                if ($action->action_type === 'payment_success') {
-                    $purchases++;
+                if ($label !== '') {
+                    $topCategory = $label;
+                    break;
                 }
             }
 
             $metrics[$sessionId]['top_category'] = $topCategory;
-            $metrics[$sessionId]['purchases'] = $purchases;
+            $metrics[$sessionId]['purchases'] = (int) ($payments->get($sessionId)?->order_qty ?? 0);
         }
     }
 }
