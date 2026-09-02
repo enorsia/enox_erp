@@ -76,6 +76,48 @@ test('track endpoint stores department name on category view', function () {
     expect($action->department_name)->toBe('Men');
 });
 
+test('track endpoint rejects more events than the ingest cap', function () {
+    $sessionId = Str::uuid()->toString();
+    $max = (int) config('tracker.ingest_max_events', 50);
+    $events = [];
+
+    for ($i = 0; $i < $max + 1; $i++) {
+        $events[] = [
+            'id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => 'category_view',
+            'category_name' => 'Women',
+        ];
+    }
+
+    $this->postJson('/api/track', trackPayload($sessionId, $events), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['events']);
+});
+
+test('track endpoint accepts a full ingest batch', function () {
+    $sessionId = Str::uuid()->toString();
+    $max = (int) config('tracker.ingest_max_events', 50);
+    $events = [];
+
+    for ($i = 0; $i < $max; $i++) {
+        $events[] = [
+            'id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => 'category_view',
+            'category_name' => 'Women',
+        ];
+    }
+
+    $this->postJson('/api/track', trackPayload($sessionId, $events), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])
+        ->assertOk()
+        ->assertJsonCount($max, 'accepted_ids');
+});
+
 test('track endpoint rejects invalid api key', function () {
     $response = $this->postJson('/api/track', trackPayload(Str::uuid()->toString(), [[
         'id' => Str::uuid()->toString(),

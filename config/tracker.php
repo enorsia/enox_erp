@@ -15,6 +15,12 @@ return [
 
     'api_key_hash' => env('TRACKER_API_KEY_HASH'),
 
+    /*
+    | Max events accepted in a single /api/track payload. The storefront
+    | tracker must chunk larger queues to this size (MAX_EVENTS_PER_FLUSH).
+    */
+    'ingest_max_events' => (int) env('TRACKER_INGEST_MAX_EVENTS', 50),
+
     'logging_enabled' => (bool) env('TRACKER_LOGGING', env('APP_DEBUG', false)),
 
     'log_channel' => env('TRACKER_LOG_CHANNEL', 'ecom_tracker'),
