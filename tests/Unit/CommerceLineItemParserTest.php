@@ -61,6 +61,42 @@ test('commerce line item parser parses cart items', function () {
         ->and($lines[0]['order_id'])->toBeNull();
 });
 
+test('commerce line item parser keeps per item catalog metadata on multi line cart', function () {
+    $action = new ActivityEcomUserAction([
+        'event_id' => (string) Str::uuid(),
+        'session_id' => 'sess-2b',
+        'action_type' => 'add_to_cart',
+        'department_name' => 'Men',
+        'category_name' => 'Jeans',
+        'add_to_cart' => [
+            'cart_total' => 79.99,
+            'items' => [
+                [
+                    'product_code' => 'WA520041218',
+                    'qty' => 1,
+                    'price' => 40,
+                    'department_name' => 'Women',
+                    'category_name' => 'Jumpers',
+                ],
+                [
+                    'product_code' => 'MA31214415',
+                    'qty' => 1,
+                    'price' => 39.99,
+                    'department_name' => 'Men',
+                    'category_name' => 'Jeans',
+                ],
+            ],
+        ],
+        'created_at' => now(),
+    ]);
+    $action->setRelation('session', new ActivityEcomUser(['visitor_id' => 'visitor-1']));
+
+    $lines = CommerceLineItemParser::parseFromAction($action);
+
+    expect($lines[0]['department_name'])->toBe('Women')
+        ->and($lines[1]['department_name'])->toBe('Men');
+});
+
 test('commerce line item parser parses category view from action scalars', function () {
     $action = new ActivityEcomUserAction([
         'event_id' => (string) Str::uuid(),

@@ -12,8 +12,9 @@
     use App\Support\EcomTrackerViewData;
 
     $focusColspan = count($focusColumns);
-    $totalCols = 8 + $focusColspan;
-    $isWideTable = $focusColspan > 0;
+    $showCatalogFilterColumn = request()->filled('department') || request()->filled('category');
+    $totalCols = 8 + $focusColspan + ($showCatalogFilterColumn ? 1 : 0);
+    $isWideTable = $focusColspan > 0 || $showCatalogFilterColumn;
 @endphp
 
 <div class="etd-activity-table-shell" data-etd-activity-table-shell>
@@ -63,6 +64,14 @@
                         'align' => 'center',
                     ])
                 </th>
+                @if ($showCatalogFilterColumn)
+                    <th class="etd-col-catalog-filter">
+                        @include('ecom_tracker.partials.column-header-with-tip', [
+                            'label' => 'Category activity',
+                            'tip' => 'Actions in this session that match the department or category filter',
+                        ])
+                    </th>
+                @endif
                 @foreach ($focusColumns as $column)
                     <th @class([$column['class'] ?? null])>
                         @if (! empty($column['tip']))
@@ -114,12 +123,6 @@
                     <td class="etd-col-session" data-label="Session">
                         @include('ecom_tracker.partials.session-id-chip', ['sessionId' => $session->session_id])
                         <div class="etd-subtle mt-0.5">{{ TrackerTime::formatFromStorage($session->created_at) }}</div>
-                        @if (request()->filled('department') || request()->filled('category'))
-                            @php $catalogPath = trim((string) ($metrics['catalog_path'] ?? '')); @endphp
-                            @if ($catalogPath !== '' && $catalogPath !== '—')
-                                <div class="etd-subtle mt-0.5">{{ $catalogPath }}</div>
-                            @endif
-                        @endif
                     </td>
                     <td class="etd-col-user" data-label="User">
                         @include('ecom_tracker.partials.session-identity', ['session' => $session])
@@ -135,6 +138,31 @@
                         ])
                     </td>
                     <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($session->actions_count ?? $metrics['actions_count'] ?? 0)) }}</td>
+                    @if ($showCatalogFilterColumn)
+                        @php
+                            $catalogPath = trim((string) ($metrics['catalog_path'] ?? ''));
+                            $catalogFilterActions = $metrics['catalog_filter_actions'] ?? [];
+                        @endphp
+                        <td class="etd-col-catalog-filter" data-label="Category activity">
+                            @if ($catalogPath !== '' && $catalogPath !== '—')
+                                <div class="etd-subtle etd-catalog-filter__path">{{ $catalogPath }}</div>
+                            @endif
+                            @if (count($catalogFilterActions) > 0)
+                                <ul class="etd-catalog-filter__actions">
+                                    @foreach ($catalogFilterActions as $filterAction)
+                                        <li class="etd-catalog-filter__action">
+                                            <span>{{ $filterAction['label'] }}</span>
+                                            @if (! empty($filterAction['detail']))
+                                                <span class="etd-subtle">· {{ $filterAction['detail'] }}</span>
+                                            @endif
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            @elseif ($catalogPath === '' || $catalogPath === '—')
+                                <span class="etd-subtle">—</span>
+                            @endif
+                        </td>
+                    @endif
                     @foreach ($focusColumns as $column)
                         <td @class([$column['class'] ?? null]) data-label="{{ $column['label'] }}">
                             {{ $formatMetric($column['key']) }}

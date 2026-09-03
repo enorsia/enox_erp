@@ -33,6 +33,14 @@ final class CommerceTestSchema
             $table->uuid('event_id')->unique();
             $table->string('session_id', 64);
             $table->string('action_type', 64);
+            $table->string('category_name', 255)->nullable();
+            $table->string('category_code', 255)->nullable();
+            $table->string('department_name', 255)->nullable();
+            $table->string('product_name', 500)->nullable();
+            $table->string('product_code', 255)->nullable();
+            $table->string('sku', 255)->nullable();
+            $table->string('general_color_name', 255)->nullable();
+            $table->decimal('product_price', 14, 2)->nullable();
             $table->json('payment_success')->nullable();
             $table->json('add_to_cart')->nullable();
             $table->json('begin_checkout')->nullable();

@@ -5,11 +5,13 @@ namespace App\Services;
 use App\Models\ActivityEcomUser;
 use App\Support\CommerceLineItemQuery;
 use App\Support\CommerceReadSupport;
+use App\Support\EcomActivityCatalogFilterActions;
 use App\Support\EcomActivityCommerceEvents;
 use App\Support\EcomActivityCommerceSummary;
 use App\Support\EcomActivitySessionSort;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
+use App\Support\TrackerProductCatalogIdentity;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -161,6 +163,10 @@ class EcomActivityRowMetrics
             $sessionOrders = $ordersBySession->get($sessionId, collect());
 
             if ($useCatalogScope) {
+                $sessionLines = TrackerProductCatalogIdentity::filterLinesMatchingCatalogOptions(
+                    $sessionLines,
+                    $catalogOptions,
+                );
                 $paymentEventIds = $sessionLines
                     ->where('funnel_stage', 'payment_success')
                     ->pluck('event_id')
@@ -315,9 +321,13 @@ class EcomActivityRowMetrics
         )->groupBy(fn (object $line) => (string) $line->session_id);
 
         foreach ($sessionIds as $sessionId) {
+            $sessionLines = TrackerProductCatalogIdentity::filterLinesMatchingCatalogOptions(
+                $lines->get($sessionId, collect()),
+                $catalogOptions,
+            );
             $catalogPath = '—';
 
-            foreach ($lines->get($sessionId, collect())->sortByDesc(fn (object $line) => (int) ($line->id ?? 0)) as $line) {
+            foreach ($sessionLines->sortByDesc(fn (object $line) => (int) ($line->id ?? 0)) as $line) {
                 $department = trim((string) ($line->department_name ?? ''));
                 $category = trim((string) ($line->category_name ?? ''));
 
@@ -330,6 +340,7 @@ class EcomActivityRowMetrics
             }
 
             $metrics[$sessionId]['catalog_path'] = $catalogPath;
+            $metrics[$sessionId]['catalog_filter_actions'] = EcomActivityCatalogFilterActions::fromLines($sessionLines);
         }
     }
 }

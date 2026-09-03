@@ -2613,6 +2613,30 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     text-align: center;
 }
 
+.etd-table--activity th.etd-col-catalog-filter,
+.etd-table--activity td.etd-col-catalog-filter {
+    min-width: 9.5rem;
+    max-width: 13rem;
+    white-space: normal;
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+
+.etd-catalog-filter__path {
+    margin-bottom: 0.2rem;
+    font-weight: 600;
+}
+
+.etd-catalog-filter__actions {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.etd-catalog-filter__action + .etd-catalog-filter__action {
+    margin-top: 0.15rem;
+}
+
 .etd-commerce-cell__line {
     display: block;
     font-size: 0.75rem;
