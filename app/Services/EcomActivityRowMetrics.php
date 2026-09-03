@@ -114,7 +114,7 @@ class EcomActivityRowMetrics
 
         $this->attachCommerceSummary(
             $metrics,
-            $sessionIds,
+            $sessions,
             $from,
             $to,
             $productCatalogOptions,
@@ -133,57 +133,146 @@ class EcomActivityRowMetrics
 
     /**
      * @param  array<string, array<string, mixed>>  $metrics
-     * @param  Collection<int, string>  $sessionIds
+     * @param  Collection<int, ActivityEcomUser>  $sessions
      */
     private function attachCommerceSummary(
         array &$metrics,
-        Collection $sessionIds,
+        Collection $sessions,
         Carbon $from,
         Carbon $to,
         array $catalogOptions = [],
     ): void {
+        $sessionIds = $sessions->pluck('session_id');
         $useCatalogScope = EcomActivitySessionSort::usesCatalogActionScope($catalogOptions);
-        $funnelStages = $useCatalogScope
-            ? CommerceLineItemQuery::CATALOG_FUNNEL_STAGES
-            : ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'];
+        $commerceFunnelStages = ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'];
+        $viewFunnelStages = ['product_view', 'product_view_popup', 'category_view'];
+        $catalogOptionsForQuery = $useCatalogScope ? $catalogOptions : [];
+        $epoch = Carbon::parse('2000-01-01', 'UTC');
+
         $lines = CommerceReadSupport::linesForSessions(
             $sessionIds,
             $from,
             $to,
-            $funnelStages,
-            $useCatalogScope ? $catalogOptions : [],
+            $commerceFunnelStages,
+            $catalogOptionsForQuery,
         );
         $orders = CommerceReadSupport::ordersForSessions($sessionIds, $from, $to);
+        $cumulativeLines = CommerceReadSupport::linesForSessions(
+            $sessionIds,
+            $epoch,
+            $to,
+            $commerceFunnelStages,
+            $catalogOptionsForQuery,
+        );
+        $cumulativeOrders = CommerceReadSupport::ordersForSessions($sessionIds, $epoch, $to);
+        $viewLines = CommerceReadSupport::linesForSessions(
+            $sessionIds,
+            $from,
+            $to,
+            $viewFunnelStages,
+            $catalogOptionsForQuery,
+        );
         $linesBySession = $lines->groupBy(fn (object $line) => (string) $line->session_id);
         $ordersBySession = $orders->groupBy(fn (object $order) => (string) $order->session_id);
+        $cumulativeLinesBySession = $cumulativeLines->groupBy(fn (object $line) => (string) $line->session_id);
+        $cumulativeOrdersBySession = $cumulativeOrders->groupBy(fn (object $order) => (string) $order->session_id);
+        $viewLinesBySession = $viewLines->groupBy(fn (object $line) => (string) $line->session_id);
 
-        foreach ($sessionIds as $sessionId) {
-            $sessionLines = $linesBySession->get($sessionId, collect());
-            $sessionOrders = $ordersBySession->get($sessionId, collect());
-
-            if ($useCatalogScope) {
-                $sessionLines = TrackerProductCatalogIdentity::filterLinesMatchingCatalogOptions(
-                    $sessionLines,
-                    $catalogOptions,
-                );
-                $paymentEventIds = $sessionLines
-                    ->where('funnel_stage', 'payment_success')
-                    ->pluck('event_id')
-                    ->filter()
-                    ->map(fn ($id) => (string) $id)
-                    ->unique()
-                    ->all();
-                $sessionOrders = $sessionOrders->filter(
-                    fn (object $order) => in_array((string) ($order->event_id ?? ''), $paymentEventIds, true)
-                        || in_array((string) ($order->order_id ?? ''), $sessionLines->pluck('order_id')->filter()->map(fn ($id) => (string) $id)->all(), true),
-                );
-            }
+        foreach ($sessions as $session) {
+            $sessionId = (string) $session->session_id;
+            [$sessionLines, $sessionOrders] = $this->scopedCommerceRows(
+                $linesBySession->get($sessionId, collect()),
+                $ordersBySession->get($sessionId, collect()),
+                $catalogOptions,
+                $useCatalogScope,
+            );
 
             $summary = EcomActivityCommerceSummary::summarizeFromCommerce($sessionLines, $sessionOrders);
+            $eventLines = $sessionLines;
+            $eventOrders = $sessionOrders;
+
+            if (($summary['commerce_label'] ?? null) === null && $this->sessionHasCommerceFunnelState($session)) {
+                [$cumulativeSessionLines, $cumulativeSessionOrders] = $this->scopedCommerceRows(
+                    $cumulativeLinesBySession->get($sessionId, collect()),
+                    $cumulativeOrdersBySession->get($sessionId, collect()),
+                    $catalogOptions,
+                    $useCatalogScope,
+                );
+                $fallbackSummary = EcomActivityCommerceSummary::summarizeFromCommerce(
+                    $cumulativeSessionLines,
+                    $cumulativeSessionOrders,
+                );
+
+                if (($fallbackSummary['commerce_label'] ?? null) !== null) {
+                    $summary = $fallbackSummary;
+                    $eventLines = $cumulativeSessionLines;
+                    $eventOrders = $cumulativeSessionOrders;
+                }
+            }
+
+            if (($summary['commerce_label'] ?? null) === null) {
+                $viewSessionLines = $viewLinesBySession->get($sessionId, collect());
+
+                if ($useCatalogScope) {
+                    $viewSessionLines = TrackerProductCatalogIdentity::filterLinesMatchingCatalogOptions(
+                        $viewSessionLines,
+                        $catalogOptions,
+                    );
+                }
+
+                $viewSummary = EcomActivityCommerceSummary::summarizeFromViewLines($viewSessionLines);
+
+                if ($viewSummary !== null) {
+                    $summary = $viewSummary;
+                }
+            }
+
             $metrics[$sessionId] = array_merge($metrics[$sessionId] ?? [], $summary, [
-                'commerce_events' => EcomActivityCommerceEvents::fromCommerceRows($sessionLines, $sessionOrders),
+                'commerce_events' => EcomActivityCommerceEvents::fromCommerceRows($eventLines, $eventOrders),
             ]);
         }
+    }
+
+    /**
+     * @param  Collection<int, object>  $sessionLines
+     * @param  Collection<int, object>  $sessionOrders
+     * @return array{0: Collection<int, object>, 1: Collection<int, object>}
+     */
+    private function scopedCommerceRows(
+        Collection $sessionLines,
+        Collection $sessionOrders,
+        array $catalogOptions,
+        bool $useCatalogScope,
+    ): array {
+        if (! $useCatalogScope) {
+            return [$sessionLines, $sessionOrders];
+        }
+
+        $sessionLines = TrackerProductCatalogIdentity::filterLinesMatchingCatalogOptions(
+            $sessionLines,
+            $catalogOptions,
+        );
+        $paymentEventIds = $sessionLines
+            ->where('funnel_stage', 'payment_success')
+            ->pluck('event_id')
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->all();
+        $sessionOrders = $sessionOrders->filter(
+            fn (object $order) => in_array((string) ($order->event_id ?? ''), $paymentEventIds, true)
+                || in_array((string) ($order->order_id ?? ''), $sessionLines->pluck('order_id')->filter()->map(fn ($id) => (string) $id)->all(), true),
+        );
+
+        return [$sessionLines, $sessionOrders];
+    }
+
+    private function sessionHasCommerceFunnelState(ActivityEcomUser $session): bool
+    {
+        return ($session->has_payment_success ?? false)
+            || ($session->has_proceed_checkout ?? false)
+            || ($session->has_begin_checkout ?? false)
+            || ($session->has_add_to_cart ?? false);
     }
 
     /**

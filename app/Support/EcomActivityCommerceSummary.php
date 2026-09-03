@@ -228,6 +228,39 @@ final class EcomActivityCommerceSummary
         return self::emptySummary();
     }
 
+    /**
+     * @param  Collection<int, object>  $lines
+     * @return array{
+     *     commerce_label: string,
+     *     commerce_value: null,
+     *     commerce_has_order: false,
+     *     commerce_display: string,
+     *     commerce_tip: null,
+     * }|null
+     */
+    public static function summarizeFromViewLines(Collection $lines): ?array
+    {
+        $viewLines = $lines->filter(
+            fn (object $line) => in_array((string) ($line->funnel_stage ?? ''), [
+                'product_view',
+                'product_view_popup',
+                'category_view',
+            ], true),
+        );
+
+        if ($viewLines->isEmpty()) {
+            return null;
+        }
+
+        return [
+            'commerce_label' => 'View',
+            'commerce_value' => null,
+            'commerce_has_order' => false,
+            'commerce_display' => 'View',
+            'commerce_tip' => null,
+        ];
+    }
+
     private static function tipFromParts(string $label, ?float $value, ?string $orderId, mixed $occurredAt): ?string
     {
         $parts = [$label];
