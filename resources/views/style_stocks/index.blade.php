@@ -248,9 +248,13 @@
                                                 ? preg_replace('#/w=\d+$#', '/public', $product['image_link'])
                                                 : null;
                                             $scInfo = $sc_infos->get($product['style']);
+                                            $hasDiscount = $scInfo
+                                                ?->sellingChartPrices
+                                                ?->flatMap->discounts
+                                                ?->contains(fn ($d) => $d->price && $d->platform) ?? false;
                                         @endphp
                                         <tr class="ssr-row ssr-row--product product-row category-{{ $deptKey }}-{{ $catKey }} hidden"
-                                            data-has-discount="{{ !empty($product['itemPrice']['maxDiscountPrice']) && $product['itemPrice']['maxDiscountPrice'] > 0 ? '1' : '0' }}">
+                                            data-has-discount="{{ $hasDiscount ? '1' : '0' }}">
                                             <td class="ssr-label-cell ssr-label-cell--product">
                                                 <div class="ssr-product-wrap">
                                                     @if (!empty($product['image_link']))
