@@ -162,6 +162,7 @@ final class EcomActivitySessionSort
     public static function usesCatalogActionScope(array $catalogOptions): bool
     {
         return filled($catalogOptions['category'] ?? null)
+            || filled($catalogOptions['department'] ?? null)
             || filled($catalogOptions['product_code'] ?? null)
             || filled($catalogOptions['product_name'] ?? null)
             || (

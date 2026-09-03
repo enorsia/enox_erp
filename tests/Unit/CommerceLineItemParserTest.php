@@ -60,3 +60,44 @@ test('commerce line item parser parses cart items', function () {
         ->and($lines[0]['funnel_stage'])->toBe('add_to_cart')
         ->and($lines[0]['order_id'])->toBeNull();
 });
+
+test('commerce line item parser parses category view from action scalars', function () {
+    $action = new ActivityEcomUserAction([
+        'event_id' => (string) Str::uuid(),
+        'session_id' => 'sess-3',
+        'action_type' => 'category_view',
+        'department_name' => 'Women',
+        'category_name' => 'Dresses',
+        'created_at' => now(),
+    ]);
+    $action->setRelation('session', new ActivityEcomUser(['visitor_id' => 'visitor-1']));
+
+    $lines = CommerceLineItemParser::parseFromAction($action);
+
+    expect($lines)->toHaveCount(1)
+        ->and($lines[0]['funnel_stage'])->toBe('category_view')
+        ->and($lines[0]['department_name'])->toBe('Women')
+        ->and($lines[0]['category_name'])->toBe('Dresses')
+        ->and($lines[0]['product_code'])->toBeNull();
+});
+
+test('commerce line item parser parses product view from action scalars', function () {
+    $action = new ActivityEcomUserAction([
+        'event_id' => (string) Str::uuid(),
+        'session_id' => 'sess-4',
+        'action_type' => 'product_view',
+        'department_name' => 'Women',
+        'category_name' => 'Dresses',
+        'product_code' => 'DR-1',
+        'product_name' => 'Summer Dress',
+        'created_at' => now(),
+    ]);
+    $action->setRelation('session', new ActivityEcomUser(['visitor_id' => 'visitor-1']));
+
+    $lines = CommerceLineItemParser::parseFromAction($action);
+
+    expect($lines)->toHaveCount(1)
+        ->and($lines[0]['funnel_stage'])->toBe('product_view')
+        ->and($lines[0]['product_code'])->toBe('DR-1')
+        ->and($lines[0]['category_name'])->toBe('Dresses');
+});

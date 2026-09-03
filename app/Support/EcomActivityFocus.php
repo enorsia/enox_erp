@@ -382,6 +382,8 @@ final class EcomActivityFocus
                     $query,
                     $funnel['stage'],
                     $funnel['exclude'],
+                    $from,
+                    $to,
                 );
             }
 
@@ -1301,9 +1303,9 @@ final class EcomActivityFocus
     private static function drillDownDescription(?string $focus): ?string
     {
         return match ($focus) {
-            'cart_abandonment' => 'Sessions that added to cart but did not begin checkout.',
-            'begin_checkout_abandonment' => 'Sessions that began checkout but did not proceed.',
-            'proceed_checkout_abandonment' => 'Sessions that proceeded to checkout but did not complete payment.',
+            'cart_abandonment' => 'Sessions that added to cart in this period but did not begin checkout, proceed, or pay.',
+            'begin_checkout_abandonment' => 'Sessions that began checkout in this period and did not proceed, pay, or return to cart.',
+            'proceed_checkout_abandonment' => 'Sessions that proceeded to checkout in this period and did not pay or return to an earlier step.',
             'payment_success' => 'Sessions with a completed payment in this period.',
             'conversion' => 'Sessions with a completed order in this period.',
             'products' => 'Sessions with product views, cart, or purchase activity matching the filters below.',

@@ -161,22 +161,17 @@ class EcomActivityController extends EcomTrackerAdminController
 
         $showCatalogFilters = EcomActivityFocus::showCatalogFiltersInDrawer($request);
         $productFilterOptions = ['categories' => [], 'colors' => [], 'sizes' => []];
-        $categoryFilterOptions = ['departments' => [], 'categories_by_department' => []];
         $eventScenarioOptions = [];
         $productSortGroups = [];
         $productActivityOptions = [];
+        $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
+            $range['from'],
+            $range['to'],
+            [],
+            $range['period'],
+        );
 
         if ($showCatalogFilters) {
-            $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
-                $range['from'],
-                $range['to'],
-                array_merge(
-                    EcomActivityFocus::sessionFiltersFromRequest($request),
-                    EcomActivityFocus::productCatalogFiltersFromRequest($request),
-                ),
-                $range['period'],
-            );
-
             $catalogData = $this->dashboardService->buildProductCatalogPerformance(
                 $range['from'],
                 $range['to'],

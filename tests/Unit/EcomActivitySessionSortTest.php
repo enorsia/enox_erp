@@ -23,7 +23,7 @@ test('funnel sort uses catalog action scope when category or product filters are
     ]))->toBeTrue()
         ->and(EcomActivitySessionSort::usesCatalogActionScope([
             'department' => 'Men',
-        ]))->toBeFalse()
+        ]))->toBeTrue()
         ->and(EcomActivitySessionSort::usesCatalogActionScope([
             'product_code' => 'TEE-1',
         ]))->toBeTrue()

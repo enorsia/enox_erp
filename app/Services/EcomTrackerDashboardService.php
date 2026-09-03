@@ -529,10 +529,10 @@ class EcomTrackerDashboardService
 
         $matchedSessionIds = match ($hasOrder) {
             '1' => $this->queryProductCatalogPurchaseSessionIds($from, $to, $catalogOptions),
-            '0' => $this->queryProductCatalogActivitySessionIds($from, $to, $catalogOptions)
+            '0' => $this->queryProductCatalogActivitySessionIds($from, $to, $catalogOptions, $period)
                 ->diff($this->queryProductCatalogPurchaseSessionIds($from, $to, $catalogOptions))
                 ->values(),
-            default => $this->queryProductCatalogActivitySessionIds($from, $to, $catalogOptions),
+            default => $this->queryProductCatalogActivitySessionIds($from, $to, $catalogOptions, $period),
         };
 
         $matchedSessionIds = $this->filterSessionIdsByProductCatalogActivity(
@@ -557,9 +557,13 @@ class EcomTrackerDashboardService
      * @param  array<string, mixed>  $catalogOptions
      * @return Collection<int, string>
      */
-    private function queryProductCatalogActivitySessionIds(Carbon $from, Carbon $to, array $catalogOptions): Collection
-    {
-        return CommerceLineItemQuery::sessionIds($from, $to, $catalogOptions);
+    private function queryProductCatalogActivitySessionIds(
+        Carbon $from,
+        Carbon $to,
+        array $catalogOptions,
+        ?string $period = null,
+    ): Collection {
+        return CommerceLineItemQuery::sessionIds($from, $to, $catalogOptions, [], $period);
     }
 
     /**
@@ -743,12 +747,16 @@ class EcomTrackerDashboardService
             $metrics[$sessionId] = [
                 'top_category' => $categoryFilter !== ''
                     ? TrackerCategoryIdentity::label($departmentFilter, $categoryFilter)
-                    : '—',
+                    : ($departmentFilter !== '' ? $departmentFilter : '—'),
                 'purchases' => 0,
             ];
         }
 
-        if ($sessionIds->isEmpty() || $categoryFilter === '') {
+        if ($sessionIds->isEmpty() || ($categoryFilter === '' && $departmentFilter === '')) {
+            return $metrics;
+        }
+
+        if ($categoryFilter === '') {
             return $metrics;
         }
 
@@ -1054,11 +1062,13 @@ class EcomTrackerDashboardService
 
     /**
      * Department → category options for activity/catalog filter drawers.
+     * Built from category/product/add-to-cart actions in the same session window
+     * as the activity list (no JSON, no keyword search).
      *
      * @param  array<string, mixed>  $filters
      * @return array{
-     *     departments: array<int, string>,
-     *     categories_by_department: array<string, array<int, string>>
+     *     departments: list<string>,
+     *     categories_by_department: array<string, list<string>>
      * }
      */
     public function categoryFilterOptionsForRange(
@@ -1067,90 +1077,11 @@ class EcomTrackerDashboardService
         array $filters = [],
         ?string $period = null,
     ): array {
-        $sessionFilters = $this->extractSessionFilters($filters);
-        $catalogOptions = $this->extractProductCatalogOptions($filters);
-
         return $this->rememberQuery(
-            $this->queryCacheKey('categoryFilterOptionsForRange', $from, $to, $period, array_merge($sessionFilters, $catalogOptions)),
-            function () use ($from, $to, $period, $sessionFilters, $catalogOptions) {
-                $sessionIds = null;
-
-                if ($sessionFilters !== [] || $catalogOptions !== []) {
-                    $sessionIds = $this->activitySessionIds(
-                        $from,
-                        $to,
-                        array_merge($sessionFilters, $catalogOptions),
-                        $period,
-                    );
-
-                    if ($sessionIds->isEmpty()) {
-                        return [
-                            'departments' => [],
-                            'categories_by_department' => [],
-                        ];
-                    }
-                }
-
-                $query = DB::table('activity_ecom_commerce_line_items')
-                    ->select('department_name', 'category_name')
-                    ->whereBetween('staged_at', TrackerTime::storageRange($from, $to))
-                    ->whereNotNull('category_name')
-                    ->where('category_name', '!=', '');
-
-                if ($sessionIds !== null) {
-                    $this->constrainToSessionIds($query, $sessionIds);
-                } elseif ($period !== null) {
-                    $query->whereIn('session_id', function ($sub) use ($from, $to, $period) {
-                        $sub->from('activity_ecom_user')->select('session_id');
-                        TrackerTime::applyEcomActivitySessionScope($sub, $from, $to, $period);
-                    });
-                }
-
-                $pairs = $query
-                    ->distinct()
-                    ->orderBy('department_name')
-                    ->orderBy('category_name')
-                    ->get();
-
-                $departments = [];
-                $categoriesByDepartment = [];
-
-                foreach ($pairs as $row) {
-                    $categoryName = trim((string) ($row->category_name ?? ''));
-
-                    if ($categoryName === '') {
-                        continue;
-                    }
-
-                    $departmentName = trim((string) ($row->department_name ?? ''));
-
-                    if ($departmentName === '') {
-                        $departmentName = 'Uncategorized';
-                    }
-
-                    if (! in_array($departmentName, $departments, true)) {
-                        $departments[] = $departmentName;
-                    }
-
-                    $categoriesByDepartment[$departmentName] ??= [];
-
-                    if (! in_array($categoryName, $categoriesByDepartment[$departmentName], true)) {
-                        $categoriesByDepartment[$departmentName][] = $categoryName;
-                    }
-                }
-
-                sort($departments, SORT_NATURAL | SORT_FLAG_CASE);
-
-                foreach ($categoriesByDepartment as $departmentName => $categories) {
-                    sort($categories, SORT_NATURAL | SORT_FLAG_CASE);
-                    $categoriesByDepartment[$departmentName] = array_values($categories);
-                }
-
-                return [
-                    'departments' => $departments,
-                    'categories_by_department' => $categoriesByDepartment,
-                ];
-            },
+            $this->queryCacheKey('categoryFilterOptionsForRange', $from, $to, $period),
+            fn () => TrackerCategoryIdentity::filterOptionsFromPairs(
+                CommerceLineItemQuery::categoryDepartmentPairsForRange($from, $to, $period),
+            ),
         );
     }
 
@@ -1681,7 +1612,10 @@ class EcomTrackerDashboardService
 
         $categoryFilter = trim((string) ($options['category'] ?? ''));
 
-        if ($categoryFilter !== '' && strcasecmp((string) ($line['category'] ?? ''), $categoryFilter) !== 0) {
+        if ($categoryFilter !== '' && ! TrackerCategoryIdentity::categoryMatchesFilter(
+            (string) ($line['category'] ?? ''),
+            $categoryFilter,
+        )) {
             return false;
         }
 
@@ -2043,8 +1977,8 @@ class EcomTrackerDashboardService
                      COALESCE(SUM(has_begin_checkout), 0) as begin_checkout,
                      COALESCE(SUM(has_proceed_checkout), 0) as proceed_checkout,
                      COALESCE(SUM(has_payment_success), 0) as payment_success,
-                     COALESCE(SUM(CASE WHEN has_add_to_cart = 1 AND has_begin_checkout = 0 THEN 1 ELSE 0 END), 0) as cart_abandoned,
-                     COALESCE(SUM(CASE WHEN has_begin_checkout = 1 AND has_proceed_checkout = 0 THEN 1 ELSE 0 END), 0) as begin_checkout_abandoned,
+                     COALESCE(SUM(CASE WHEN has_add_to_cart = 1 AND has_begin_checkout = 0 AND has_proceed_checkout = 0 AND has_payment_success = 0 THEN 1 ELSE 0 END), 0) as cart_abandoned,
+                     COALESCE(SUM(CASE WHEN has_begin_checkout = 1 AND has_proceed_checkout = 0 AND has_payment_success = 0 THEN 1 ELSE 0 END), 0) as begin_checkout_abandoned,
                      COALESCE(SUM(CASE WHEN has_proceed_checkout = 1 AND has_payment_success = 0 THEN 1 ELSE 0 END), 0) as proceed_checkout_abandoned',
                 )->first();
 

@@ -413,6 +413,22 @@ test('catalog constraints apply on non catalog focus when department is set', fu
     expect(EcomActivityFocus::shouldApplyCatalogConstraintsInIndexQuery('devices', $request))->toBeTrue();
 });
 
+test('activity drawer department options are not limited to products or categories focus', function () {
+    $request = Request::create('/', 'GET', [
+        'period' => '30d',
+        'funnel' => 'cart_abandonment',
+        'department' => 'Women',
+        'device_type' => 'mobile',
+    ]);
+
+    expect(EcomActivityFocus::showCatalogFiltersInDrawer($request))->toBeFalse()
+        ->and(EcomActivityFocus::sessionFiltersFromRequest($request))
+        ->toHaveKey('device_type')
+        ->not->toHaveKey('department')
+        ->not->toHaveKey('category')
+        ->and(EcomActivityFocus::sidebarFilterQueryKeys($request))->toContain('department', 'category');
+});
+
 test('session and catalog filters exclude facet dimension when computing option counts', function () {
     $request = Request::create('/', 'GET', [
         'focus' => 'categories',

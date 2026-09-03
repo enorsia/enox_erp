@@ -3,11 +3,13 @@
 namespace App\Services;
 
 use App\Models\ActivityEcomUser;
+use App\Support\CommerceLineItemQuery;
 use App\Support\CommerceReadSupport;
 use App\Support\EcomActivityCommerceEvents;
 use App\Support\EcomActivityCommerceSummary;
 use App\Support\EcomActivitySessionSort;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -117,6 +119,8 @@ class EcomActivityRowMetrics
             $productCatalogOptions,
         );
 
+        $this->attachCatalogContext($metrics, $sessionIds, $from, $to, $productCatalogOptions);
+
         foreach ($metrics as $sessionId => $row) {
             if (! empty($row['abandoned_at']) && ($row['abandoned_at'] ?? '—') !== '—') {
                 $metrics[$sessionId]['commerce_meta'] = $row['abandoned_at'];
@@ -138,11 +142,14 @@ class EcomActivityRowMetrics
         array $catalogOptions = [],
     ): void {
         $useCatalogScope = EcomActivitySessionSort::usesCatalogActionScope($catalogOptions);
+        $funnelStages = $useCatalogScope
+            ? CommerceLineItemQuery::CATALOG_FUNNEL_STAGES
+            : ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'];
         $lines = CommerceReadSupport::linesForSessions(
             $sessionIds,
             $from,
             $to,
-            ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'],
+            $funnelStages,
             $useCatalogScope ? $catalogOptions : [],
         );
         $orders = CommerceReadSupport::ordersForSessions($sessionIds, $from, $to);
@@ -269,16 +276,60 @@ class EcomActivityRowMetrics
             $topCategory = '—';
 
             foreach ($sessionLines->sortByDesc(fn (object $line) => (int) ($line->id ?? 0)) as $line) {
-                $label = trim((string) ($line->category_name ?? ''));
+                $department = trim((string) ($line->department_name ?? ''));
+                $category = trim((string) ($line->category_name ?? ''));
 
-                if ($label !== '') {
-                    $topCategory = $label;
+                if ($category !== '') {
+                    $topCategory = TrackerCategoryIdentity::label($department, $category);
                     break;
                 }
             }
 
             $metrics[$sessionId]['top_category'] = $topCategory;
             $metrics[$sessionId]['purchases'] = (int) ($payments->get($sessionId)?->order_qty ?? 0);
+        }
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $metrics
+     * @param  Collection<int, string>  $sessionIds
+     * @param  array<string, mixed>  $catalogOptions
+     */
+    private function attachCatalogContext(
+        array &$metrics,
+        Collection $sessionIds,
+        Carbon $from,
+        Carbon $to,
+        array $catalogOptions,
+    ): void {
+        if (! filled($catalogOptions['department'] ?? null) && ! filled($catalogOptions['category'] ?? null)) {
+            return;
+        }
+
+        $lines = CommerceReadSupport::linesForSessions(
+            $sessionIds,
+            $from,
+            $to,
+            CommerceLineItemQuery::CATALOG_FUNNEL_STAGES,
+            $catalogOptions,
+        )->groupBy(fn (object $line) => (string) $line->session_id);
+
+        foreach ($sessionIds as $sessionId) {
+            $catalogPath = '—';
+
+            foreach ($lines->get($sessionId, collect())->sortByDesc(fn (object $line) => (int) ($line->id ?? 0)) as $line) {
+                $department = trim((string) ($line->department_name ?? ''));
+                $category = trim((string) ($line->category_name ?? ''));
+
+                if ($department === '' && $category === '') {
+                    continue;
+                }
+
+                $catalogPath = TrackerCategoryIdentity::label($department, $category);
+                break;
+            }
+
+            $metrics[$sessionId]['catalog_path'] = $catalogPath;
         }
     }
 }

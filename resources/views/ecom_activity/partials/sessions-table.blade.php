@@ -114,6 +114,12 @@
                     <td class="etd-col-session" data-label="Session">
                         @include('ecom_tracker.partials.session-id-chip', ['sessionId' => $session->session_id])
                         <div class="etd-subtle mt-0.5">{{ TrackerTime::formatFromStorage($session->created_at) }}</div>
+                        @if (request()->filled('department') || request()->filled('category'))
+                            @php $catalogPath = trim((string) ($metrics['catalog_path'] ?? '')); @endphp
+                            @if ($catalogPath !== '' && $catalogPath !== '—')
+                                <div class="etd-subtle mt-0.5">{{ $catalogPath }}</div>
+                            @endif
+                        @endif
                     </td>
                     <td class="etd-col-user" data-label="User">
                         @include('ecom_tracker.partials.session-identity', ['session' => $session])

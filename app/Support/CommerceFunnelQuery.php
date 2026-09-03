@@ -18,6 +18,9 @@ final class CommerceFunnelQuery
 {
     private const SESSION_ID_CHUNK = 1000;
 
+    /** @var list<string> */
+    private const FUNNEL_STAGES = ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'];
+
     /**
      * @param  Collection<int, string>|null  $allowedSessionIds
      * @return list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>
@@ -64,34 +67,44 @@ final class CommerceFunnelQuery
         string $stage,
         string $excludeActionType,
     ): array {
-        $excludeStage = self::normalizeStage($excludeActionType);
         $stage = self::normalizeStage($stage);
         $flag = self::stageFlag($stage);
-        $excludeFlag = self::stageFlag($excludeStage);
+        $laterStages = self::laterStages($stage);
 
         $flagged = collect();
         if ($flag !== null) {
             $flagged = $sessions
-                ->filter(function (object $session) use ($flag, $excludeFlag) {
+                ->filter(function (object $session) use ($flag, $laterStages) {
                     if (! (bool) ($session->{$flag} ?? false)) {
                         return false;
                     }
 
-                    return $excludeFlag === null || ! (bool) ($session->{$excludeFlag} ?? false);
+                    foreach ($laterStages as $laterStage) {
+                        $laterFlag = self::stageFlag($laterStage);
+                        if ($laterFlag !== null && (bool) ($session->{$laterFlag} ?? false)) {
+                            return false;
+                        }
+                    }
+
+                    return true;
                 })
                 ->keys()
                 ->map(fn ($id) => (string) $id)
                 ->values();
         }
 
+        $stageSessionIds = $lines
+            ->filter(fn (object $line) => (string) ($line->funnel_stage ?? '') === $stage)
+            ->pluck('session_id')
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+        $stageSet = array_fill_keys($stageSessionIds->all(), true);
+        $flagged = $flagged->filter(fn (string $id) => isset($stageSet[$id]))->values();
+
         $candidates = $flagged;
         if ($candidates->isEmpty()) {
-            $candidates = $lines
-                ->filter(fn (object $line) => (string) ($line->funnel_stage ?? '') === $stage)
-                ->pluck('session_id')
-                ->map(fn ($id) => (string) $id)
-                ->unique()
-                ->values();
+            $candidates = $stageSessionIds;
         }
 
         if ($candidates->isEmpty()) {
@@ -100,7 +113,7 @@ final class CommerceFunnelQuery
 
         $excluded = [];
         foreach ($lines as $line) {
-            if ((string) ($line->funnel_stage ?? '') !== $excludeStage) {
+            if (! in_array((string) ($line->funnel_stage ?? ''), $laterStages, true)) {
                 continue;
             }
 
@@ -127,6 +140,13 @@ final class CommerceFunnelQuery
                 $latestIdBySession[$sessionId] = $lineId;
                 $eventByMaxId[$sessionId] = (string) ($line->event_id ?? '');
             }
+        }
+
+        $kept = $kept->filter(fn (string $id) => isset($eventByMaxId[$id]))->values();
+        $latestStage = self::latestFunnelStageFromLines($lines);
+        $kept = $kept->filter(fn (string $id) => ($latestStage[$id] ?? null) === $stage)->values();
+        if ($kept->isEmpty()) {
+            return [];
         }
 
         $qtyBySession = [];
@@ -277,9 +297,9 @@ final class CommerceFunnelQuery
         Carbon $to,
     ): void {
         match ($funnelKey) {
-            'cart_abandonment' => self::applyAbandonedSessionFilter($query, 'add_to_cart', 'begin_checkout'),
-            'begin_checkout_abandonment' => self::applyAbandonedSessionFilter($query, 'begin_checkout', 'proceed_checkout'),
-            'proceed_checkout_abandonment' => self::applyAbandonedSessionFilter($query, 'proceed_checkout', 'payment_success'),
+            'cart_abandonment' => self::applyAbandonedSessionFilter($query, 'add_to_cart', 'begin_checkout', $from, $to),
+            'begin_checkout_abandonment' => self::applyAbandonedSessionFilter($query, 'begin_checkout', 'proceed_checkout', $from, $to),
+            'proceed_checkout_abandonment' => self::applyAbandonedSessionFilter($query, 'proceed_checkout', 'payment_success', $from, $to),
             'payment_success' => self::applyPaymentSuccessSessionFilter($query, $from, $to),
             default => $query->whereRaw('1 = 0'),
         };
@@ -292,11 +312,11 @@ final class CommerceFunnelQuery
         Builder $query,
         string $stage,
         string $excludeActionType,
+        ?Carbon $from = null,
+        ?Carbon $to = null,
     ): void {
         $stage = self::normalizeStage($stage);
-        $excludeActionType = self::normalizeStage($excludeActionType);
         $flag = self::stageFlag($stage);
-        $excludeFlag = self::stageFlag($excludeActionType);
 
         if ($flag === null) {
             $query->whereRaw('1 = 0');
@@ -306,10 +326,140 @@ final class CommerceFunnelQuery
 
         $table = $query->getModel()->getTable();
         $query->where("{$table}.{$flag}", true);
+        self::excludeLaterStageFlags($query, $stage, $table);
 
-        if ($excludeFlag !== null) {
-            $query->where("{$table}.{$excludeFlag}", false);
+        if ($from instanceof Carbon && $to instanceof Carbon) {
+            self::constrainToStageInPeriod($query, $table, $stage, $from, $to);
+            self::constrainToLatestFunnelStageInPeriod($query, $table, $stage, $from, $to);
+            self::excludeInPeriodOrders($query, $table, $from, $to);
         }
+    }
+
+    /**
+     * Stages after $stage. Abandoned at $stage means none of these happened.
+     *
+     * @return list<string>
+     */
+    public static function laterStages(string $stage): array
+    {
+        $index = array_search(self::normalizeStage($stage), self::FUNNEL_STAGES, true);
+
+        if ($index === false) {
+            return [];
+        }
+
+        return array_values(array_slice(self::FUNNEL_STAGES, $index + 1));
+    }
+
+    /**
+     * @param  \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder  $query
+     */
+    private static function excludeLaterStageFlags($query, string $stage, ?string $table = null): void
+    {
+        foreach (self::laterStages($stage) as $laterStage) {
+            $flag = self::stageFlag($laterStage);
+            if ($flag === null) {
+                continue;
+            }
+
+            $query->where($table ? "{$table}.{$flag}" : $flag, false);
+        }
+    }
+
+    /**
+     * @param  \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder  $query
+     */
+    private static function constrainToStageInPeriod($query, string $table, string $stage, Carbon $from, Carbon $to): void
+    {
+        $query->whereExists(function ($exists) use ($table, $stage, $from, $to) {
+            $exists->selectRaw('1')
+                ->from('activity_ecom_commerce_line_items as abandon_li')
+                ->whereColumn('abandon_li.session_id', "{$table}.session_id")
+                ->where('abandon_li.funnel_stage', $stage)
+                ->whereBetween('abandon_li.staged_at', TrackerTime::storageRange($from, $to));
+        });
+    }
+
+    /**
+     * Abandoned at $stage only when that stage is the last funnel event in the period.
+     * Returning to cart after begin/proceed checkout is not that stage's abandonment.
+     *
+     * @param  \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder  $query
+     */
+    private static function constrainToLatestFunnelStageInPeriod($query, string $table, string $stage, Carbon $from, Carbon $to): void
+    {
+        $range = TrackerTime::storageRange($from, $to);
+
+        $query->whereNotExists(function ($exists) use ($table, $stage, $range) {
+            $exists->selectRaw('1')
+                ->from('activity_ecom_commerce_line_items as later_li')
+                ->whereColumn('later_li.session_id', "{$table}.session_id")
+                ->whereIn('later_li.funnel_stage', self::FUNNEL_STAGES)
+                ->where('later_li.funnel_stage', '!=', $stage)
+                ->whereBetween('later_li.staged_at', $range)
+                ->whereRaw(
+                    'later_li.staged_at > (
+                        SELECT MAX(stage_li.staged_at)
+                        FROM activity_ecom_commerce_line_items AS stage_li
+                        WHERE stage_li.session_id = later_li.session_id
+                          AND stage_li.funnel_stage = ?
+                          AND stage_li.staged_at BETWEEN ? AND ?
+                    )',
+                    [$stage, $range[0], $range[1]],
+                );
+        });
+    }
+
+    /**
+     * @param  \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder  $query
+     */
+    private static function excludeInPeriodOrders($query, string $table, Carbon $from, Carbon $to): void
+    {
+        $query->whereNotExists(function ($exists) use ($table, $from, $to) {
+            $exists->selectRaw('1')
+                ->from('activity_ecom_orders as abandon_ord')
+                ->whereColumn('abandon_ord.session_id', "{$table}.session_id")
+                ->whereBetween('abandon_ord.ordered_at', TrackerTime::storageRange($from, $to));
+        });
+    }
+
+    /**
+     * @param  Collection<int, object>  $lines
+     * @return array<string, string>
+     */
+    private static function latestFunnelStageFromLines(Collection $lines): array
+    {
+        $latestAt = [];
+        $latestRank = [];
+        $latestId = [];
+        $latestStage = [];
+
+        foreach ($lines as $line) {
+            $funnelStage = self::normalizeStage((string) ($line->funnel_stage ?? ''));
+            $rank = array_search($funnelStage, self::FUNNEL_STAGES, true);
+            if ($rank === false) {
+                continue;
+            }
+
+            $sessionId = (string) ($line->session_id ?? '');
+            $stagedAt = (string) ($line->staged_at ?? '');
+            $lineId = (int) ($line->id ?? 0);
+            $previousAt = $latestAt[$sessionId] ?? '';
+            $previousRank = $latestRank[$sessionId] ?? -1;
+            $previousId = $latestId[$sessionId] ?? 0;
+            $isNewer = $stagedAt > $previousAt
+                || ($stagedAt === $previousAt && $rank > $previousRank)
+                || ($stagedAt === $previousAt && $rank === $previousRank && $lineId > $previousId);
+
+            if ($isNewer) {
+                $latestAt[$sessionId] = $stagedAt;
+                $latestRank[$sessionId] = $rank;
+                $latestId[$sessionId] = $lineId;
+                $latestStage[$sessionId] = $funnelStage;
+            }
+        }
+
+        return $latestStage;
     }
 
     /**
@@ -344,7 +494,6 @@ final class CommerceFunnelQuery
         ?string $period,
     ): Collection {
         $flag = self::stageFlag($stage);
-        $excludeFlag = self::stageFlag($excludeStage);
 
         if ($flag === null) {
             return collect();
@@ -354,9 +503,10 @@ final class CommerceFunnelQuery
             ->select('session_id')
             ->where($flag, true);
 
-        if ($excludeFlag !== null) {
-            $query->where($excludeFlag, false);
-        }
+        self::excludeLaterStageFlags($query, $stage);
+        self::constrainToStageInPeriod($query, 'activity_ecom_user', $stage, $from, $to);
+        self::constrainToLatestFunnelStageInPeriod($query, 'activity_ecom_user', $stage, $from, $to);
+        self::excludeInPeriodOrders($query, 'activity_ecom_user', $from, $to);
 
         if ($allowedSessionIds !== null) {
             self::constrainToSessionIds($query, $allowedSessionIds);
@@ -400,12 +550,39 @@ final class CommerceFunnelQuery
         string $stage,
         string $excludeStage,
     ): array {
-        $excluded = CommerceLineItemQuery::sessionIdsHavingFunnelStage($candidateIds, $excludeStage, $from, $to);
+        $excluded = [];
+        foreach (self::laterStages($stage) as $laterStage) {
+            $excluded += CommerceLineItemQuery::sessionIdsHavingFunnelStage($candidateIds, $laterStage, $from, $to);
+        }
 
         $kept = $candidateIds
             ->map(fn ($id) => (string) $id)
             ->reject(fn (string $id) => isset($excluded[$id]))
             ->values();
+
+        if ($kept->isEmpty()) {
+            return [];
+        }
+
+        $latestStage = self::latestFunnelStageBySession($kept, $from, $to);
+        $kept = $kept->filter(fn (string $id) => ($latestStage[$id] ?? null) === $stage)->values();
+
+        if ($kept->isEmpty()) {
+            return [];
+        }
+
+        $paid = [];
+        foreach ($kept->chunk(self::SESSION_ID_CHUNK) as $chunk) {
+            foreach (DB::table('activity_ecom_orders')
+                ->whereIn('session_id', $chunk->values()->all())
+                ->whereBetween('ordered_at', TrackerTime::storageRange($from, $to))
+                ->pluck('session_id') as $sessionId
+            ) {
+                $paid[(string) $sessionId] = true;
+            }
+        }
+
+        $kept = $kept->reject(fn (string $id) => isset($paid[$id]))->values();
 
         if ($kept->isEmpty()) {
             return [];
@@ -480,6 +657,33 @@ final class CommerceFunnelQuery
         }
 
         return $totals;
+    }
+
+    /**
+     * @param  Collection<int, string>  $sessionIds
+     * @return array<string, string>
+     */
+    private static function latestFunnelStageBySession(Collection $sessionIds, Carbon $from, Carbon $to): array
+    {
+        if ($sessionIds->isEmpty()) {
+            return [];
+        }
+
+        $range = TrackerTime::storageRange($from, $to);
+        $lines = collect();
+
+        foreach ($sessionIds->chunk(self::SESSION_ID_CHUNK) as $chunk) {
+            $lines = $lines->concat(
+                DB::table('activity_ecom_commerce_line_items')
+                    ->select('session_id', 'funnel_stage', 'staged_at', 'id')
+                    ->whereIn('session_id', $chunk->values()->all())
+                    ->whereIn('funnel_stage', self::FUNNEL_STAGES)
+                    ->whereBetween('staged_at', $range)
+                    ->get(),
+            );
+        }
+
+        return self::latestFunnelStageFromLines($lines);
     }
 
     /**

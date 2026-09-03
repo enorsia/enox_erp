@@ -64,7 +64,8 @@ class TrackerCategoryIdentity
         }
 
         if (! preg_match('#/c/(men|women|boys|girls)(?:/|$)#i', $path, $matches)
-            && ! preg_match('#/style/(men|women|boys|girls)(?:/|$)#i', $path, $matches)) {
+            && ! preg_match('#/style/(men|women|boys|girls)(?:/|$)#i', $path, $matches)
+            && ! preg_match('#^/(men|women|boys|girls)(?:/|$)#i', $path, $matches)) {
             return '';
         }
 
@@ -121,6 +122,61 @@ class TrackerCategoryIdentity
         }
 
         return self::DISPLAY_NAME_MAP[$name] ?? $name;
+    }
+
+    /**
+     * Exact stored category_name values that match a dashboard filter label.
+     *
+     * @return list<string>
+     */
+    public static function storedCategoryNamesForFilter(string $category): array
+    {
+        $category = trim($category);
+
+        if ($category === '') {
+            return [];
+        }
+
+        $names = [$category];
+        $display = self::displayName($category);
+
+        if ($display !== '' && strcasecmp($display, $category) !== 0) {
+            $names[] = $display;
+        }
+
+        foreach (self::DISPLAY_NAME_MAP as $stored => $mapped) {
+            if (strcasecmp($mapped, $category) === 0 || strcasecmp($mapped, $display) === 0) {
+                $names[] = $stored;
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    public static function categoryMatchesFilter(?string $storedName, string $filter): bool
+    {
+        $storedName = trim((string) $storedName);
+        $filter = trim($filter);
+
+        if ($filter === '') {
+            return true;
+        }
+
+        if ($storedName === '') {
+            return false;
+        }
+
+        if (strcasecmp(self::displayName($storedName), self::displayName($filter)) === 0) {
+            return true;
+        }
+
+        foreach (self::storedCategoryNamesForFilter($filter) as $name) {
+            if (strcasecmp($storedName, $name) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -246,5 +302,57 @@ class TrackerCategoryIdentity
         }
 
         return self::meta($departmentName, $categoryCode, $categoryName, $categoryId);
+    }
+
+    /**
+     * Department/category dropdowns from pairs that actually occurred.
+     * Empty storefront departments are omitted.
+     *
+     * @param  iterable<int, object|array<string, mixed>>  $pairs
+     * @return array{
+     *     departments: list<string>,
+     *     categories_by_department: array<string, list<string>>
+     * }
+     */
+    public static function filterOptionsFromPairs(iterable $pairs): array
+    {
+        $categoriesByDepartment = array_fill_keys(self::DEPARTMENTS, []);
+
+        foreach ($pairs as $row) {
+            $row = is_array($row) ? $row : (array) $row;
+            $department = self::normalizeDepartmentName((string) ($row['department_name'] ?? ''));
+
+            if (! in_array($department, self::DEPARTMENTS, true)) {
+                continue;
+            }
+
+            $category = self::displayName((string) ($row['category_name'] ?? $row['category'] ?? ''));
+
+            if ($category === '' || strcasecmp($category, $department) === 0) {
+                continue;
+            }
+
+            if (! in_array($category, $categoriesByDepartment[$department], true)) {
+                $categoriesByDepartment[$department][] = $category;
+            }
+        }
+
+        foreach ($categoriesByDepartment as $department => $categories) {
+            sort($categories, SORT_NATURAL | SORT_FLAG_CASE);
+            $categoriesByDepartment[$department] = array_values($categories);
+        }
+
+        $departments = array_values(array_filter(
+            self::DEPARTMENTS,
+            fn (string $department) => $categoriesByDepartment[$department] !== [],
+        ));
+
+        return [
+            'departments' => $departments,
+            'categories_by_department' => array_intersect_key(
+                $categoriesByDepartment,
+                array_flip($departments),
+            ),
+        ];
     }
 }

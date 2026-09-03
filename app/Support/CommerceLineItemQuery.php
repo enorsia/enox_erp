@@ -10,6 +10,19 @@ use Illuminate\Support\Facades\DB;
 final class CommerceLineItemQuery
 {
     /**
+     * @var list<string>
+     */
+    public const CATALOG_FUNNEL_STAGES = [
+        'category_view',
+        'product_view',
+        'product_view_popup',
+        'add_to_cart',
+        'begin_checkout',
+        'proceed_checkout',
+        'payment_success',
+    ];
+
+    /**
      * @param  list<string>  $funnelStages
      * @param  array<string, mixed>  $catalogOptions
      * @return Collection<int, string>
@@ -19,68 +32,136 @@ final class CommerceLineItemQuery
         Carbon $to,
         array $catalogOptions = [],
         array $funnelStages = [],
+        ?string $period = null,
     ): Collection {
-        $query = DB::table('activity_ecom_commerce_line_items')
-            ->select('session_id')
-            ->whereBetween('staged_at', TrackerTime::storageRange($from, $to))
+        $query = DB::table('activity_ecom_commerce_line_items as li')
+            ->select('li.session_id')
+            ->whereBetween('li.staged_at', TrackerTime::storageRange($from, $to))
             ->distinct();
 
-        if ($funnelStages !== []) {
-            $query->whereIn('funnel_stage', $funnelStages);
+        if ($period !== null) {
+            $query->join('activity_ecom_user as s', 's.session_id', '=', 'li.session_id');
+            TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, 's');
         }
 
-        self::applyCatalogFilters($query, $catalogOptions);
+        if ($funnelStages !== []) {
+            $query->whereIn('li.funnel_stage', $funnelStages);
+        }
 
-        return $query->pluck('session_id')->values();
+        self::applyCatalogFilters($query, $catalogOptions, 'li');
+
+        return $query->pluck('li.session_id')->values();
     }
 
     /**
      * @param  array<string, mixed>  $catalogOptions
      */
-    public static function applyCatalogFilters(Builder $query, array $catalogOptions): void
+    public static function applyCatalogFilters(Builder $query, array $catalogOptions, string $table = ''): void
     {
+        $prefix = $table !== '' ? $table.'.' : '';
+
         $productCode = trim((string) ($catalogOptions['product_code'] ?? ''));
         if ($productCode !== '') {
-            $query->where(function (Builder $inner) use ($productCode) {
-                $inner->where('product_code', $productCode)
-                    ->orWhere('sku', $productCode);
+            $query->where(function (Builder $inner) use ($productCode, $prefix) {
+                $inner->where($prefix.'product_code', $productCode)
+                    ->orWhere($prefix.'sku', $productCode);
             });
         }
 
         $productName = trim((string) ($catalogOptions['product_name'] ?? ''));
         if ($productName !== '') {
-            self::applyProductNameFilter($query, $productName);
+            self::applyProductNameFilter($query, $productName, 'and', $prefix.'product_name');
         }
 
         $search = trim((string) ($catalogOptions['search'] ?? ''));
         if ($search !== '' && $productCode === '' && $productName === '') {
             $searchUpper = strtoupper($search);
-            $query->where(function (Builder $inner) use ($search, $searchUpper) {
-                $inner->where('product_code', $searchUpper)
-                    ->orWhere('sku', $searchUpper);
-                self::applyProductNameFilter($inner, $search, 'or');
+            $query->where(function (Builder $inner) use ($search, $searchUpper, $prefix) {
+                $inner->where($prefix.'product_code', $searchUpper)
+                    ->orWhere($prefix.'sku', $searchUpper);
+                self::applyProductNameFilter($inner, $search, 'or', $prefix.'product_name');
             });
         }
 
         $category = trim((string) ($catalogOptions['category'] ?? ''));
         if ($category !== '') {
-            $query->where('category_name', $category);
+            self::applyCategoryNameFilter($query, $category, $prefix.'category_name');
         }
 
         $department = trim((string) ($catalogOptions['department'] ?? ''));
         if ($department !== '') {
-            $query->where('department_name', TrackerCategoryIdentity::normalizeDepartmentName($department));
+            self::applyDepartmentFilter($query, $department, $prefix.'department_name');
         }
 
         $color = trim((string) ($catalogOptions['color'] ?? ''));
         if ($color !== '') {
-            $query->where('color_name', $color);
+            $query->where($prefix.'color_name', $color);
         }
 
         $size = trim((string) ($catalogOptions['size'] ?? ''));
         if ($size !== '') {
-            $query->where('size_name', $size);
+            $query->where($prefix.'size_name', $size);
         }
+    }
+
+    public static function applyCategoryNameFilter(
+        Builder $query,
+        string $category,
+        string $column = 'category_name',
+    ): void {
+        $categoryNames = TrackerCategoryIdentity::storedCategoryNamesForFilter($category);
+
+        if ($categoryNames === []) {
+            return;
+        }
+
+        if (count($categoryNames) === 1) {
+            $query->where($column, $categoryNames[0]);
+
+            return;
+        }
+
+        $query->whereIn($column, $categoryNames);
+    }
+
+    public static function applyDepartmentFilter(
+        Builder $query,
+        string $department,
+        string $column = 'department_name',
+    ): void {
+        $department = TrackerCategoryIdentity::normalizeDepartmentName($department);
+
+        if ($department === '') {
+            return;
+        }
+
+        $query->where($column, $department);
+    }
+
+    /**
+     * Department/category pairs from synced commerce line items in the activity list window.
+     *
+     * @return Collection<int, object>
+     */
+    public static function categoryDepartmentPairsForRange(
+        Carbon $from,
+        Carbon $to,
+        ?string $period = null,
+    ): Collection {
+        $query = DB::table('activity_ecom_commerce_line_items as li')
+            ->select('li.department_name', 'li.category_name')
+            ->join('activity_ecom_user as s', 's.session_id', '=', 'li.session_id')
+            ->whereBetween('li.staged_at', TrackerTime::storageRange($from, $to))
+            ->whereIn('li.funnel_stage', self::CATALOG_FUNNEL_STAGES)
+            ->whereNotNull('li.department_name')
+            ->where('li.department_name', '!=', '')
+            ->whereNotNull('li.category_name')
+            ->where('li.category_name', '!=', '')
+            ->distinct();
+
+        TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, 's');
+
+        return $query->get();
     }
 
     /**

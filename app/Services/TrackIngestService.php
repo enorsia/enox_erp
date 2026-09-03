@@ -127,7 +127,7 @@ class TrackIngestService
                 ->exists();
 
             try {
-                if (in_array($event['action_type'] ?? '', CommerceIngestWriter::COMMERCE_ACTION_TYPES, true)) {
+                if (CommerceIngestWriter::isSyncableActionType($event['action_type'] ?? '')) {
                     DB::transaction(function () use ($eventId, $row, $event, $actionAlreadyStored, $sessionId) {
                         ActivityEcomUserAction::query()->updateOrInsert(
                             ['event_id' => $eventId],

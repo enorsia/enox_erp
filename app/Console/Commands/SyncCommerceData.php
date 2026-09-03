@@ -23,7 +23,7 @@ class SyncCommerceData extends Command
                             {--batch-size= : Actions per DB transaction}
                             {--resume : Continue from checkpoints}
                             {--validate : Run integrity checks after each chunk}
-                            {--only= : Limit stages: payments,cart,checkout}
+                            {--only= : Limit stages: payments,cart,checkout,views}
                             {--with-cleanup : Run cleanup before sync}
                             {--skip-dedupe-payments : Skip payment dedupe during cleanup}
                             {--skip-orphan-sessions : Skip orphan session removal}
@@ -190,13 +190,22 @@ class SyncCommerceData extends Command
     {
         $only = (string) ($this->option('only') ?? '');
         if ($only === '') {
-            return ['payment_success', 'proceed_checkout', 'begin_checkout', 'add_to_cart'];
+            return [
+                'payment_success',
+                'proceed_checkout',
+                'begin_checkout',
+                'add_to_cart',
+                'product_view',
+                'product_view_popup',
+                'category_view',
+            ];
         }
 
         $map = [
             'payments' => 'payment_success',
             'checkout' => ['proceed_checkout', 'begin_checkout'],
             'cart' => 'add_to_cart',
+            'views' => ['category_view', 'product_view', 'product_view_popup'],
         ];
 
         $types = [];

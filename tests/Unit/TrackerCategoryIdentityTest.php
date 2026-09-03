@@ -11,6 +11,10 @@ test('tracker category identity resolves department from category page url', fun
         ->toBe('Men');
     expect(TrackerCategoryIdentity::departmentNameFromPageUrl('https://enorsia.com/c/women/jumpers-and-cardigans-1'))
         ->toBe('Women');
+    expect(TrackerCategoryIdentity::departmentNameFromPageUrl('https://enorsia.com/women/dresses'))
+        ->toBe('Women');
+    expect(TrackerCategoryIdentity::departmentNameFromPageUrl('https://enorsia.com/women'))
+        ->toBe('Women');
     expect(TrackerCategoryIdentity::resolveDepartmentName([
         'department_name' => '',
         'page_url' => 'https://enorsia.com/c/women/dresses',
@@ -77,4 +81,33 @@ test('tracker category identity builds department category label', function () {
 
     expect($meta['label'])->toBe('Women -> Dresses');
     expect($meta['key'])->toBe('women|drs');
+});
+
+test('tracker category identity expands dashboard category filter labels to stored names', function () {
+    expect(TrackerCategoryIdentity::storedCategoryNamesForFilter('Jumpsuits'))
+        ->toBe(['Jumpsuits', 'Jumpsuits and Playsuits'])
+        ->and(TrackerCategoryIdentity::storedCategoryNamesForFilter('Jumpsuits and Playsuits'))
+        ->toBe(['Jumpsuits and Playsuits', 'Jumpsuits']);
+});
+
+test('tracker category identity matches stored category names to dashboard filter labels', function () {
+    expect(TrackerCategoryIdentity::categoryMatchesFilter('Jumpsuits and Playsuits', 'Jumpsuits'))->toBeTrue()
+        ->and(TrackerCategoryIdentity::categoryMatchesFilter('Jumpsuits', 'Jumpsuits and Playsuits'))->toBeTrue()
+        ->and(TrackerCategoryIdentity::categoryMatchesFilter('Dresses', 'Jumpsuits'))->toBeFalse();
+});
+
+test('tracker category identity builds dashboard department filter options from line pairs', function () {
+    $options = TrackerCategoryIdentity::filterOptionsFromPairs([
+        ['department_name' => 'women', 'category_name' => 'Dresses'],
+        ['department_name' => 'Women', 'category_name' => 'Jumpsuits and Playsuits'],
+        ['department_name' => 'Men', 'category_name' => 'Men'],
+        ['department_name' => 'Other', 'category_name' => 'Outlet'],
+        ['department_name' => 'Boys', 'category_name' => 'T-Shirts'],
+    ]);
+
+    expect($options['departments'])->toBe(['Women', 'Boys'])
+        ->and($options['categories_by_department']['Women'])->toBe(['Dresses', 'Jumpsuits'])
+        ->and($options['categories_by_department']['Boys'])->toBe(['T-Shirts'])
+        ->and($options['categories_by_department'])->not->toHaveKey('Men')
+        ->and($options['categories_by_department'])->not->toHaveKey('Girls');
 });

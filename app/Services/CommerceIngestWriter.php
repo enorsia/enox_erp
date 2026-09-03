@@ -25,17 +25,39 @@ class CommerceIngestWriter
         'payment_success',
     ];
 
+    /** @var list<string> */
+    public const CATALOG_INTEREST_ACTION_TYPES = [
+        'category_view',
+        'product_view',
+        'product_view_popup',
+    ];
+
+    /** @var list<string> */
+    public const SYNCABLE_ACTION_TYPES = [
+        ...self::COMMERCE_ACTION_TYPES,
+        ...self::CATALOG_INTEREST_ACTION_TYPES,
+    ];
+
+    public static function isSyncableActionType(string $actionType): bool
+    {
+        return in_array($actionType, self::SYNCABLE_ACTION_TYPES, true);
+    }
+
     /**
      * @return array{status: string, skipped?: bool, reason?: string}
      */
     public function syncFromAction(ActivityEcomUserAction $action, bool $skipOnParseError = false, bool $useInsertOrIgnoreOrders = false): array
     {
-        if (! in_array($action->action_type, self::COMMERCE_ACTION_TYPES, true)) {
+        if (! self::isSyncableActionType($action->action_type)) {
             return ['status' => 'ignored'];
         }
 
         try {
-            $this->writeActionCommerce($action, $useInsertOrIgnoreOrders);
+            if (in_array($action->action_type, self::CATALOG_INTEREST_ACTION_TYPES, true)) {
+                $this->writeCatalogInterest($action);
+            } else {
+                $this->writeActionCommerce($action, $useInsertOrIgnoreOrders);
+            }
 
             return ['status' => 'ok'];
         } catch (CommerceParseException $e) {
@@ -66,12 +88,16 @@ class CommerceIngestWriter
 
         $parsed = [];
         foreach ($actions as $action) {
-            if (! in_array($action->action_type, self::COMMERCE_ACTION_TYPES, true)) {
+            if (! self::isSyncableActionType($action->action_type)) {
                 continue;
             }
 
             try {
-                $parsed[] = $this->prepareActionWrite($action);
+                if (in_array($action->action_type, self::CATALOG_INTEREST_ACTION_TYPES, true)) {
+                    $parsed[] = $this->prepareCatalogInterestWrite($action);
+                } else {
+                    $parsed[] = $this->prepareActionWrite($action);
+                }
             } catch (CommerceParseException $e) {
                 $skipped++;
                 $this->logParseSkip($action, $e);
@@ -87,7 +113,11 @@ class CommerceIngestWriter
 
         DB::transaction(function () use ($parsed, $useInsertOrIgnoreOrders, &$processed, &$lastActionId) {
             foreach ($parsed as $item) {
-                $this->applyPreparedWrite($item['action'], $item['lines'], $item['pricing'], $item['funnel_stage'], $useInsertOrIgnoreOrders);
+                if ($item['catalog_interest'] ?? false) {
+                    $this->applyCatalogInterestWrite($item['action'], $item['lines'], $item['funnel_stage']);
+                } else {
+                    $this->applyPreparedWrite($item['action'], $item['lines'], $item['pricing'], $item['funnel_stage'], $useInsertOrIgnoreOrders);
+                }
                 $processed++;
                 $lastActionId = (int) $item['action']->id;
             }
@@ -174,7 +204,56 @@ class CommerceIngestWriter
             'lines' => $lines,
             'pricing' => $pricing,
             'funnel_stage' => $funnelStage,
+            'catalog_interest' => false,
         ];
+    }
+
+    /**
+     * @return array{action: ActivityEcomUserAction, lines: list<array<string, mixed>>, funnel_stage: string, catalog_interest: true}
+     */
+    public function prepareCatalogInterestWrite(ActivityEcomUserAction $action): array
+    {
+        $funnelStage = CommerceLineItemParser::funnelStage($action->action_type);
+        $lines = CommerceLineItemParser::parseFromAction($action);
+
+        if ($lines === []) {
+            throw new CommerceParseException(
+                'Catalog interest action produced no line items',
+                'empty:catalog_interest',
+                $action->event_id,
+                $action->action_type,
+            );
+        }
+
+        return [
+            'action' => $action,
+            'lines' => $lines,
+            'funnel_stage' => $funnelStage,
+            'catalog_interest' => true,
+        ];
+    }
+
+    private function writeCatalogInterest(ActivityEcomUserAction $action): void
+    {
+        $prepared = $this->prepareCatalogInterestWrite($action);
+        $this->applyCatalogInterestWrite($prepared['action'], $prepared['lines'], $prepared['funnel_stage']);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lines
+     */
+    private function applyCatalogInterestWrite(
+        ActivityEcomUserAction $action,
+        array $lines,
+        string $funnelStage,
+    ): void {
+        DB::table('activity_ecom_commerce_line_items')->where('event_id', $action->event_id)->delete();
+        $this->insertLines($lines, false);
+
+        EcomTrackerLogger::frontend()->info('commerce.catalog_interest.written', 'Catalog interest line written', [
+            'event_id' => $action->event_id,
+            'funnel_stage' => $funnelStage,
+        ]);
     }
 
     /**

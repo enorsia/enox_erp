@@ -15,12 +15,42 @@ final class CommerceLineItemParser
 
     public const STAGE_PAYMENT_SUCCESS = 'payment_success';
 
+    public const STAGE_CATEGORY_VIEW = 'category_view';
+
+    public const STAGE_PRODUCT_VIEW = 'product_view';
+
+    public const STAGE_PRODUCT_VIEW_POPUP = 'product_view_popup';
+
+    /**
+     * @return list<string>
+     */
+    public static function catalogInterestStages(): array
+    {
+        return [
+            self::STAGE_CATEGORY_VIEW,
+            self::STAGE_PRODUCT_VIEW,
+            self::STAGE_PRODUCT_VIEW_POPUP,
+        ];
+    }
+
+    public static function isCatalogInterestStage(string $stage): bool
+    {
+        return in_array($stage, self::catalogInterestStages(), true);
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
     public static function parseFromAction(ActivityEcomUserAction $action): array
     {
         $stage = self::funnelStage($action->action_type);
+
+        if (self::isCatalogInterestStage($stage)) {
+            $action->loadMissing('session');
+
+            return self::parseCatalogInterestLines($action, $stage);
+        }
+
         $payload = self::payloadForAction($action);
 
         if ($payload === null) {
@@ -86,6 +116,9 @@ final class CommerceLineItemParser
             'begin_checkout' => self::STAGE_BEGIN_CHECKOUT,
             'proceed_checkout' => self::STAGE_PROCEED_CHECKOUT,
             'payment_success' => self::STAGE_PAYMENT_SUCCESS,
+            'category_view' => self::STAGE_CATEGORY_VIEW,
+            'product_view' => self::STAGE_PRODUCT_VIEW,
+            'product_view_popup' => self::STAGE_PRODUCT_VIEW_POPUP,
             default => throw new CommerceParseException(
                 'Unsupported commerce action type: '.$actionType,
                 'unsupported:'.$actionType,
@@ -188,6 +221,61 @@ final class CommerceLineItemParser
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>|null
      */
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function parseCatalogInterestLines(ActivityEcomUserAction $action, string $stage): array
+    {
+        $department = trim((string) ($action->department_name ?? ''));
+        $category = trim((string) ($action->category_name ?? ''));
+
+        if ($department === '' && $category === '') {
+            throw new CommerceParseException(
+                'Catalog interest action missing department and category',
+                'missing:catalog_interest_identity',
+                $action->event_id,
+                $action->action_type,
+            );
+        }
+
+        $productCode = trim((string) ($action->product_code ?? ''));
+        $productName = trim((string) ($action->product_name ?? ''));
+
+        if ($stage !== self::STAGE_CATEGORY_VIEW && $productCode === '' && $productName === '') {
+            throw new CommerceParseException(
+                'Product view action missing product identity',
+                'missing:catalog_interest_product',
+                $action->event_id,
+                $action->action_type,
+            );
+        }
+
+        return [[
+            'event_id' => $action->event_id,
+            'session_id' => $action->session_id,
+            'visitor_id' => $action->session?->visitor_id,
+            'funnel_stage' => $stage,
+            'order_id' => null,
+            'line_no' => 1,
+            'product_id' => null,
+            'product_code' => $productCode !== '' ? self::limit('product_code', $productCode) : null,
+            'sku' => $action->sku ?: null,
+            'product_name' => $productName !== '' ? self::limit('product_name', $productName) : null,
+            'department_name' => self::limit('department_name', $department),
+            'category_name' => self::limit('category_name', $category),
+            'category_code' => self::limit('category_code', (string) ($action->category_code ?? '')),
+            'color_name' => self::limit('general_color_name', (string) ($action->general_color_name ?? '')),
+            'size_name' => null,
+            'qty' => 1,
+            'unit_price' => $action->product_price ? (float) $action->product_price : null,
+            'line_total' => null,
+            'currency' => null,
+            'product_snapshot_json' => null,
+            'staged_at' => TrackerTime::formatUtc($action->created_at ?? TrackerTime::nowUtc()),
+            'created_at' => TrackerTime::formatUtc(TrackerTime::nowUtc()),
+        ]];
+    }
+
     private static function singleLineFromCartPayload(array $payload, ActivityEcomUserAction $action, ?string $currency): ?array
     {
         if (! filled($action->product_code) && ! filled($action->product_name)) {
