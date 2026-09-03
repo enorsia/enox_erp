@@ -1058,6 +1058,7 @@ class SalesChartController extends Controller
     {
         $platform = Platform::find($request->platform_id);
         $price = SellingChartPrice::with('sellingChartBasicInfo')->findOrFail($request->ch_price_id);
+        $m_confirm_selling_price = $price->confirm_selling_price;
         $price->confirm_selling_price = (float) $request->discount_price > 0 ? $request->discount_price : $price->confirm_selling_price;
         $expenseConfig = SellingChartExpense::configForSeason(
             $price->sellingChartBasicInfo?->season_name
@@ -1073,6 +1074,8 @@ class SalesChartController extends Controller
                 'original_shipping' => $originalShipping,
                 'conversion_rate' => $expenseConfig['conversion_rate'],
                 'default_shipping' => $expenseConfig['shipping_cost'],
+                'confirm_selling_price' => $m_confirm_selling_price,
+                'discount_price' => (float) $request->discount_price ?? 0,
             ]
         );
 

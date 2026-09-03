@@ -47,6 +47,7 @@ function applyProfitResponse($row, response) {
     $row.find('.sp-vat').text('£' + response.selling_price_and_vat.toFixed(2));
     $row.find('.pm').text(response.profit_margin.toFixed(2) + '%');
     $row.find('.np').text('£' + response.net_profit.toFixed(2));
+    $row.find('.dis-perc').text(response.discount_percent.toFixed(2) + '%');
 
     const $adjusted = $row.find('.adjusted-unit-price');
     if (response.adjusted_unit_price != null && response.cost_basis !== 'fob') {

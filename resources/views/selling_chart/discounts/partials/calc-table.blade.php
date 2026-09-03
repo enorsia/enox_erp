@@ -31,7 +31,7 @@
                 <th class="toogle-item vat px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">SP+VAT</th>
                 <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">PM%</th>
                 <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">NP</th>
-                {{-- <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Dis.(%)</th> --}}
+                <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Dis.(%)</th>
                 {{-- <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700 w-36">Action</th> --}}
             </tr>
         </thead>
@@ -47,21 +47,19 @@
                     $rowShippingCost = $isMenWomen ? $groupShipping : ($d_price?->shipping_cost ?? $defaultShippingCost);
                     $fobPound = convertFobUsdToPound((float) $ch_price->price_fob, $conversionRate);
 
-                    $profit_cal = calculatePlatformProfit($h_ch_price, $platform, [
+                    $profitOptions = [
                         'cost_basis' => $rowCostBasis,
                         'shipping_cost' => $rowShippingCost,
                         'original_shipping' => $originalShipping,
                         'conversion_rate' => $conversionRate,
                         'default_shipping' => $defaultShippingCost,
-                    ]);
+                        'confirm_selling_price' => $ch_price->confirm_selling_price,
+                        'discount_price' => $d_price ? $d_price->price : 0,
+                    ];
 
-                    $original_profit_cal = calculatePlatformProfit($h_ch_price, $platform, [
-                        'cost_basis' => $rowCostBasis,
-                        'shipping_cost' => $originalShipping,
-                        'original_shipping' => $originalShipping,
-                        'conversion_rate' => $conversionRate,
-                        'default_shipping' => $defaultShippingCost,
-                    ]);
+                    $profit_cal = calculatePlatformProfit($h_ch_price, $platform, $profitOptions);
+
+                    $original_profit_cal = calculatePlatformProfit($h_ch_price, $platform, $profitOptions);
                 @endphp
                 <tr class="discount-calc-row hover:bg-slate-50/60 dark:hover:bg-slate-700/20"
                     data-price-id="{{ $ch_price->id }}"
@@ -182,6 +180,7 @@
                             <td class="toogle-item vat px-2 py-1.5 text-slate-600 whitespace-nowrap sp-vat" style="display:none" rowspan="{{ $rowCount }}">@price($profit_cal['selling_price_and_vat'])</td>
                             <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap pm" rowspan="{{ $rowCount }}">@pricews($profit_cal['profit_margin'])%</td>
                             <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap np" rowspan="{{ $rowCount }}">@price($profit_cal['net_profit'])</td>
+                        <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap dis-perc" rowspan="{{ $rowCount }}">@pricews($profit_cal['discount_percent'])%</td>
                         @endif
                     @else
                         <td class="toogle-item commission px-2 py-1.5 text-slate-600 whitespace-nowrap" style="display:none">
@@ -223,6 +222,7 @@
                         <td class="toogle-item vat px-2 py-1.5 text-slate-600 whitespace-nowrap sp-vat" style="display:none">@price($profit_cal['selling_price_and_vat'])</td>
                         <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap pm">@pricews($profit_cal['profit_margin'])%</td>
                         <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap np">@price($profit_cal['net_profit'])</td>
+                        <td class="px-2 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap dis-perc">@pricews($profit_cal['discount_percent'])%</td>
                     @endif
 
                     {{-- @if ($loop->first)

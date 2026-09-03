@@ -616,6 +616,7 @@ $(document).ready(function () {
                     tr.find('.sp-vat').text('£' + response.selling_price_and_vat.toFixed(2));
                     tr.find('.pm').text(response.profit_margin.toFixed(2) + '%');
                     tr.find('.np').text('£' + response.net_profit.toFixed(2));
+                    tr.find('.dis-perc').text(response.discount_percent.toFixed(2) + '%');
                 }
             });
         }

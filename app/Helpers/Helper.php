@@ -169,6 +169,14 @@ if (!function_exists('calculatePlatformProfit')) {
             }
         }
 
+        $data['discount_percent'] = 0;
+        if (!empty($options['discount_price']) && $options['discount_price'] > 0) {
+            $data['discount_percent'] = $options['confirm_selling_price'] - $options['discount_price'] > 0
+                ? (($options['confirm_selling_price'] - $options['discount_price']) / $options['confirm_selling_price']) * 100
+                : 0;
+        }
+        // dd($options['discount_price'], $options['confirm_selling_price'], $data['discount_percent']);
+
         $data['fob_pound'] = $fobPound;
         $data['db_unit_price'] = $dbUnitPrice;
         $data['cost_basis'] = $costBasis;

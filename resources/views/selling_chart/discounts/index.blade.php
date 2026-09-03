@@ -355,6 +355,8 @@
                                                             'original_shipping' => $originalShipping,
                                                             'conversion_rate' => $chartExpense['conversion_rate'] ?? 0,
                                                             'default_shipping' => $chartExpense['shipping_cost'] ?? 0,
+                                                            'confirm_selling_price' => $ch_price->confirm_selling_price,
+                                                            'discount_price' => $d_price ? $d_price->price : 0,
                                                         ];
 
                                                         $cal_val   = calculatePlatformProfit($ch_price, $platform, $profitOptions);
