@@ -18,6 +18,7 @@ use App\Support\EcomActivityKeywordSearch;
 use App\Support\EcomActivitySessionSort;
 use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
+use App\Support\SessionDurationBuckets;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -148,7 +149,7 @@ class EcomActivityController extends EcomTrackerAdminController
             $range['to'],
             $range['period'],
         );
-        $backUrl = EcomTrackerViewData::resolveBackUrl($request->input('back'));
+        $backUrl = EcomTrackerViewData::activityIndexBackUrl($request);
         $breadcrumbs = $this->buildBreadcrumbs(
             $request,
             $activityListContext ? null : $focusLabel,
@@ -439,6 +440,10 @@ class EcomActivityController extends EcomTrackerAdminController
 
         if (! in_array('device_type', $except, true) && $request->filled('device_type')) {
             $query->where('device_type', $request->device_type);
+        }
+
+        if (! in_array('duration_bucket', $except, true) && $request->filled('duration_bucket')) {
+            SessionDurationBuckets::applyToQuery($query, (string) $request->input('duration_bucket'));
         }
 
         if (! in_array('logged_in', $except, true) && $request->filled('logged_in')) {

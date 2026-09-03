@@ -286,6 +286,14 @@ test('activity index products focus filters sessions by product code', function 
         ->assertDontSee('Section:')
         ->assertSee(substr($matchingSession, 0, 8))
         ->assertDontSee(substr($otherSession, 0, 8));
+
+    $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', [
+            'period' => '24h',
+            'focus' => 'products',
+            'product_code' => 'DRS-001',
+        ]))
+        ->assertOk();
 });
 
 test('activity index products focus matches dashboard views when code is missing on early events', function () {

@@ -54,7 +54,11 @@ final class EcomTrackerViewData
                 $extra,
                 $back,
             ),
-            'activitySourceLink' => fn (string $source) => self::activitySourceLink($filters, $source),
+            'activitySourceLink' => fn (string $source) => self::activitySourceLink(
+                array_merge($filters, $queryParams),
+                $source,
+                $back,
+            ),
             'hasActiveFilters' => $activeFilterCount > 0,
             'visitorDetailLink' => fn (string $section) => route('admin.ecom-tracker.visitors.details', $section).'?'.http_build_query(array_filter(
                 array_merge(self::visitorQueryFromDashboardFilters($filters), ['back' => $back]),
@@ -184,7 +188,7 @@ final class EcomTrackerViewData
         return [
             'period', 'date_from', 'date_to', 'focus', 'back', 'funnel',
             'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
-            'utm_source', 'utm_medium', 'search', 'category', 'department', 'color', 'size',
+            'utm_source', 'utm_medium', 'duration_bucket', 'search', 'category', 'department', 'color', 'size',
             'product_code', 'product_name', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
             'sort_by', 'sort_dir',
         ];
@@ -257,6 +261,32 @@ final class EcomTrackerViewData
     public static function activityShowUrlFromRequest(Request $request, string $sessionId): string
     {
         return self::activityShowUrl($sessionId, $request->fullUrl());
+    }
+
+    /**
+     * Dashboard return URL for activity drill-downs.
+     *
+     * Prefer the explicit `back` query param from store-performance links.
+     * When a dashboard section focus is present without `back` (legacy traffic
+     * source links), fall back to the dashboard with the current date range.
+     */
+    public static function activityIndexBackUrl(Request $request): ?string
+    {
+        $explicit = self::resolveBackUrl($request->input('back'));
+
+        if ($explicit !== null) {
+            return $explicit;
+        }
+
+        if (! EcomActivityFocus::isValid($request->input('focus'))) {
+            return null;
+        }
+
+        return route('admin.ecom-tracker.dashboard', array_filter([
+            'period' => $request->input('period'),
+            'date_from' => $request->input('date_from'),
+            'date_to' => $request->input('date_to'),
+        ], fn ($value) => filled($value)));
     }
 
     /**
@@ -474,7 +504,7 @@ final class EcomTrackerViewData
     /**
      * @param  array<string, mixed>  $filters
      */
-    public static function activitySourceLink(array $filters, string $source): string
+    public static function activitySourceLink(array $filters, string $source, ?string $back = null): string
     {
         if ($source === '' || $source === 'Other') {
             return '';
@@ -484,7 +514,12 @@ final class EcomTrackerViewData
             ? '(direct)'
             : (SessionTrafficAttribution::normalizeSource($source) ?? $source);
 
-        return self::activityDrillDownLink('traffic', array_merge($filters, ['utm_source' => $resolved]));
+        return self::activityDrillDownLink(
+            'traffic',
+            array_merge($filters, ['utm_source' => $resolved]),
+            [],
+            $back,
+        );
     }
 
     /**

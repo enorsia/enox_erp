@@ -2,6 +2,7 @@
     'distribution' => [],
     'showPanel' => true,
     'panelClass' => '',
+    'activityDurationLink' => null,
 ])
 
 @php
@@ -28,7 +29,17 @@
             @if ($totalSessions > 0)
                 <div class="etd-duration-buckets" role="list">
                     @foreach ($buckets as $bucket)
-                        <div class="etd-duration-bucket" role="listitem">
+                        @php
+                            $bucketUrl = is_callable($activityDurationLink)
+                                ? $activityDurationLink($bucket)
+                                : null;
+                            $isLink = filled($bucketUrl);
+                        @endphp
+                        <{{ $isLink ? 'a' : 'div' }}
+                            @if ($isLink) href="{{ $bucketUrl }}" @endif
+                            class="etd-duration-bucket{{ $isLink ? ' etd-duration-bucket--link' : '' }}"
+                            role="listitem"
+                        >
                             <div class="etd-duration-bucket__head">
                                 <span class="etd-duration-bucket__label">{{ $bucket['label'] }}</span>
                                 <span class="etd-duration-bucket__stats">
@@ -39,7 +50,7 @@
                             <div class="etd-duration-bucket__bar" aria-hidden="true">
                                 <span class="etd-duration-bucket__fill" style="width: {{ min(100, (float) ($bucket['pct'] ?? 0)) }}%"></span>
                             </div>
-                        </div>
+                        </{{ $isLink ? 'a' : 'div' }}>
                     @endforeach
                 </div>
 

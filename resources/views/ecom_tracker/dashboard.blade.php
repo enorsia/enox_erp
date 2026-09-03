@@ -422,6 +422,9 @@
     @include('ecom_tracker.partials.session-duration-distribution', [
         'distribution' => $d['duration_distribution'] ?? [],
         'panelClass' => 'mt-5',
+        'activityDurationLink' => fn (array $bucket) => filled($bucket['key'] ?? null)
+            ? $activityFocusLink('duration', ['duration_bucket' => $bucket['key']])
+            : null,
     ])
 </div>
 

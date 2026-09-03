@@ -207,11 +207,21 @@ test('category performance summary metrics use shared funnel formatter', functio
 test('resolve filter summary focus infers devices and traffic from sidebar filters', function () {
     $deviceRequest = Request::create('/', 'GET', ['device_type' => 'mobile']);
     $trafficRequest = Request::create('/', 'GET', ['utm_source' => 'google']);
+    $durationRequest = Request::create('/', 'GET', ['duration_bucket' => '0-1']);
     $plainRequest = Request::create('/', 'GET', ['period' => '7d']);
 
     expect(EcomActivityFocus::resolveFilterSummaryFocus($deviceRequest))->toBe('devices')
         ->and(EcomActivityFocus::resolveFilterSummaryFocus($trafficRequest))->toBe('traffic')
+        ->and(EcomActivityFocus::resolveFilterSummaryFocus($durationRequest))->toBe('duration')
         ->and(EcomActivityFocus::resolveFilterSummaryFocus($plainRequest))->toBeNull();
+});
+
+test('duration bucket is shown as a duration filter criterion', function () {
+    $request = Request::create('/', 'GET', ['duration_bucket' => '0-1']);
+    $criteria = collect(EcomActivityFocus::filterCriteriaFromRequest($request))->pluck('value', 'label');
+
+    expect($criteria['Duration'] ?? null)->toBe('0–1 min')
+        ->and(EcomActivityFocus::label('duration'))->toBe('Session duration');
 });
 
 test('activity list context includes funnel metrics for visitor keyword search filters', function () {
@@ -353,7 +363,7 @@ test('activity sidebar filter keys include visitor audience and funnel fields', 
 
     $keys = EcomActivityFocus::sidebarFilterQueryKeys($request);
 
-    expect($keys)->toContain('device_type', 'utm_source', 'logged_in', 'funnel', 'visitor_type')
+    expect($keys)->toContain('device_type', 'utm_source', 'logged_in', 'funnel', 'visitor_type', 'duration_bucket')
         ->and($keys)->not->toContain('country', 'date_from', 'date_to');
 });
 

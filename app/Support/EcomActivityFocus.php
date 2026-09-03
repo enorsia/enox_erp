@@ -131,6 +131,12 @@ final class EcomActivityFocus
             'columns' => ['classification_reason'],
             'sort' => 'latest',
         ],
+        'duration' => [
+            'label' => 'Session duration',
+            'empty' => 'No sessions in this duration range.',
+            'columns' => [],
+            'sort' => 'latest',
+        ],
     ];
 
     public static function fromSection(string $section): ?string
@@ -663,7 +669,7 @@ final class EcomActivityFocus
     public static function sidebarFilterQueryKeys(?Request $request = null): array
     {
         return array_merge(
-            ['search', 'department', 'category', 'funnel'],
+            ['search', 'department', 'category', 'funnel', 'duration_bucket'],
             self::SHARED_SESSION_FILTER_KEYS,
             self::DASHBOARD_AUDIENCE_FILTER_KEYS,
         );
@@ -674,7 +680,7 @@ final class EcomActivityFocus
      */
     public static function activitySidebarChipLabels(Request $request): array
     {
-        $labels = ['Department', 'Category', 'Funnel', 'Device', 'Login', 'Orders', 'Visitor type', 'Source', 'Medium'];
+        $labels = ['Department', 'Category', 'Funnel', 'Device', 'Login', 'Orders', 'Visitor type', 'Source', 'Medium', 'Duration'];
 
         if (self::showActivitySearchInDrawer($request) && ! self::usesCatalogScopedSearch($request)) {
             $labels[] = self::searchFilterLabel($request);
@@ -823,15 +829,17 @@ final class EcomActivityFocus
             return;
         }
 
+        $column = $query->getModel()->getTable().'.session_id';
+
         if (count($ids) <= 1000) {
-            $query->whereIn('session_id', $ids);
+            $query->whereIn($column, $ids);
 
             return;
         }
 
-        $query->where(function (Builder $inner) use ($ids) {
+        $query->where(function (Builder $inner) use ($ids, $column) {
             foreach (array_chunk($ids, 1000) as $chunk) {
-                $inner->orWhereIn('session_id', $chunk);
+                $inner->orWhereIn($column, $chunk);
             }
         });
     }
@@ -859,6 +867,10 @@ final class EcomActivityFocus
 
         if ($request->filled('device_type')) {
             return 'devices';
+        }
+
+        if ($request->filled('duration_bucket')) {
+            return 'duration';
         }
 
         if ($request->filled('utm_source')) {
@@ -988,6 +1000,14 @@ final class EcomActivityFocus
             $add('Device', ucfirst((string) $request->device_type));
         }
 
+        if ($request->filled('duration_bucket')) {
+            $add(
+                'Duration',
+                SessionDurationBuckets::labelForKey((string) $request->input('duration_bucket'))
+                    ?? (string) $request->input('duration_bucket'),
+            );
+        }
+
         if ($request->filled('logged_in')) {
             $add('Login', $request->logged_in === '1' ? 'Logged in' : 'Guest');
         }
@@ -1086,6 +1106,7 @@ final class EcomActivityFocus
                 'Color' => 'color',
                 'Size' => 'size',
                 'Device' => 'device_type',
+                'Duration' => 'duration_bucket',
                 'Login' => 'logged_in',
                 'Orders' => 'has_order',
                 'Funnel' => 'funnel',
@@ -1207,6 +1228,7 @@ final class EcomActivityFocus
             'Color' => 'color',
             'Size' => 'size',
             'Device' => 'device_type',
+            'Duration' => 'duration_bucket',
             'Login' => 'logged_in',
             'Orders' => 'has_order',
             'Funnel' => 'funnel',
@@ -1287,6 +1309,7 @@ final class EcomActivityFocus
             'products' => 'Sessions with product views, cart, or purchase activity matching the filters below.',
             'categories' => 'Sessions with category or product activity in the selected category.',
             'devices' => 'Sessions on the selected device type from the dashboard.',
+            'duration' => 'Sessions whose stay time falls in the selected duration bucket.',
             'traffic' => 'Sessions from the selected traffic source or medium.',
             'session_quality' => 'Sessions matching the selected visitor classification.',
             'audience' => 'All sessions in the selected date range.',
@@ -1298,6 +1321,7 @@ final class EcomActivityFocus
     {
         return match ($summaryFocus) {
             'devices' => 'Sessions on the selected device type.',
+            'duration' => 'Sessions whose stay time falls in the selected duration bucket.',
             'traffic' => 'Sessions from the selected traffic source or medium.',
             'categories' => 'Sessions with category or product activity in the selected category.',
             'products' => 'Sessions with product views, cart, or purchase activity matching the filters below.',

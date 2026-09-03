@@ -210,7 +210,7 @@ END
 SQL;
 
         $lineSub = DB::table('activity_ecom_commerce_line_items')
-            ->selectRaw("session_id,
+            ->selectRaw("session_id as line_session_id,
                 MAX(CASE WHEN funnel_stage = 'payment_success' THEN staged_at END) as latest_payment_staged,
                 MAX(CASE WHEN funnel_stage = 'proceed_checkout' THEN staged_at END) as latest_proceed,
                 MAX(CASE WHEN funnel_stage = 'begin_checkout' THEN staged_at END) as latest_begin,
@@ -218,7 +218,7 @@ SQL;
             ->groupBy('session_id');
 
         $orderSub = DB::table('activity_ecom_orders')
-            ->selectRaw('session_id, MAX(ordered_at) as latest_ordered_at')
+            ->selectRaw('session_id as order_session_id, MAX(ordered_at) as latest_ordered_at')
             ->groupBy('session_id');
 
         $from = $scope['from'] ?? null;
@@ -241,8 +241,8 @@ END
 SQL;
 
         return $query
-            ->leftJoinSub($lineSub, 'funnel_line_times', 'funnel_line_times.session_id', '=', "{$table}.session_id")
-            ->leftJoinSub($orderSub, 'funnel_order_times', 'funnel_order_times.session_id', '=', "{$table}.session_id")
+            ->leftJoinSub($lineSub, 'funnel_line_times', 'funnel_line_times.line_session_id', '=', "{$table}.session_id")
+            ->leftJoinSub($orderSub, 'funnel_order_times', 'funnel_order_times.order_session_id', '=', "{$table}.session_id")
             ->select("{$table}.*")
             ->orderByRaw($rankSql.' '.$dir)
             ->orderByRaw($stageTimeSql.' '.$dir)
@@ -266,11 +266,11 @@ SQL;
             return $query
                 ->leftJoinSub(
                     DB::table('activity_ecom_orders')
-                        ->selectRaw('session_id, MAX(CAST(amount_paid AS DECIMAL(12,2))) as period_order_value')
+                        ->selectRaw('session_id as period_order_session_id, MAX(CAST(amount_paid AS DECIMAL(12,2))) as period_order_value')
                         ->whereBetween('ordered_at', [$start, $end])
                         ->groupBy('session_id'),
                     'period_orders',
-                    'period_orders.session_id',
+                    'period_orders.period_order_session_id',
                     '=',
                     "{$table}.session_id"
                 )

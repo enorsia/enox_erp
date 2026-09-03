@@ -18,10 +18,11 @@ class EcomActivityKeywordSearch
         ?string $period,
     ): void {
         $like = '%'.$search.'%';
+        $sessionIdColumn = $query->getModel()->getTable().'.session_id';
 
-        $query->where(function (Builder $keywordQuery) use ($search, $like, $dashboardService, $from, $to, $period) {
+        $query->where(function (Builder $keywordQuery) use ($search, $like, $dashboardService, $from, $to, $period, $sessionIdColumn) {
             $keywordQuery
-                ->where('session_id', 'like', $like)
+                ->where($sessionIdColumn, 'like', $like)
                 ->orWhere('visitor_id', 'like', $like)
                 ->orWhere('ip', 'like', $like)
                 ->orWhere('user_name', 'like', $like)
@@ -52,7 +53,7 @@ class EcomActivityKeywordSearch
                 $period,
             );
 
-            self::orWhereSessionIds($keywordQuery, $catalogSessionIds);
+            self::orWhereSessionIds($keywordQuery, $catalogSessionIds, $sessionIdColumn);
         });
     }
 
@@ -96,7 +97,7 @@ class EcomActivityKeywordSearch
      * @param  Builder<\App\Models\ActivityEcomUser>  $query
      * @param  Collection<int, string>  $sessionIds
      */
-    private static function orWhereSessionIds(Builder $query, Collection $sessionIds): void
+    private static function orWhereSessionIds(Builder $query, Collection $sessionIds, string $column = 'session_id'): void
     {
         $ids = $sessionIds->values()->all();
 
@@ -105,14 +106,14 @@ class EcomActivityKeywordSearch
         }
 
         if (count($ids) <= 1000) {
-            $query->orWhereIn('session_id', $ids);
+            $query->orWhereIn($column, $ids);
 
             return;
         }
 
-        $query->orWhere(function (Builder $inner) use ($ids) {
+        $query->orWhere(function (Builder $inner) use ($ids, $column) {
             foreach (array_chunk($ids, 1000) as $chunk) {
-                $inner->orWhereIn('session_id', $chunk);
+                $inner->orWhereIn($column, $chunk);
             }
         });
     }

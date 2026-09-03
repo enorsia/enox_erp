@@ -1964,6 +1964,30 @@
     background: color-mix(in srgb, var(--etd-accent) 78%, transparent);
 }
 
+a.etd-duration-bucket--link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 0.5rem;
+    padding: 0.2rem 0.35rem;
+    margin: 0 -0.35rem;
+}
+
+a.etd-duration-bucket--link:hover .etd-duration-bucket__label,
+a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__label {
+    color: var(--etd-accent, #0f766e);
+}
+
+a.etd-duration-bucket--link:hover .etd-duration-bucket__fill,
+a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
+    background: var(--etd-accent, #0f766e);
+}
+
+.dark a.etd-duration-bucket--link:hover .etd-duration-bucket__label,
+.dark a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__label {
+    color: #5eead4;
+}
+
 .etd-panel-note--duration {
     font-size: 0.75rem;
 }

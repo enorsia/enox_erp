@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\ActivityEcomUser;
+use App\Support\EcomActivityFocus;
 use App\Support\EcomActivitySessionSort;
 use Illuminate\Http\Request;
 
@@ -75,6 +77,42 @@ test('drawer funnel filter is skipped when focus already matches', function () {
 
     expect(\App\Support\EcomActivityFocus::shouldApplyDrawerFunnelFilter($request))->toBeFalse()
         ->and(\App\Support\EcomActivityFocus::drawerFunnelSelectedValue($request))->toBe('payment_success');
+});
+
+test('funnel stage sort qualifies session_id when catalog constraints join funnel times', function () {
+    $query = ActivityEcomUser::query();
+    EcomActivityFocus::constrainToSessionIds($query, collect(['dcb20d76-bb52-41c9-9088-12d776f929b7']));
+
+    $sql = EcomActivitySessionSort::apply($query, 'funnel_stage', 'desc', [
+        'from' => now()->subDay(),
+        'to' => now(),
+    ])->toSql();
+
+    $normalized = str_replace(['`', '"'], '', $sql);
+
+    expect($normalized)->toContain('funnel_line_times')
+        ->and($normalized)->toContain('funnel_order_times')
+        ->and($normalized)->toContain('line_session_id')
+        ->and($normalized)->toContain('order_session_id')
+        ->and($normalized)->toContain('activity_ecom_user.session_id')
+        ->and($normalized)->not->toContain('where session_id in');
+});
+
+test('order value sort aliases joined session_id so catalog constraints stay unambiguous', function () {
+    $query = ActivityEcomUser::query();
+    EcomActivityFocus::constrainToSessionIds($query, collect(['dcb20d76-bb52-41c9-9088-12d776f929b7']));
+
+    $sql = EcomActivitySessionSort::apply($query, 'order_value', 'desc', [
+        'from' => now()->subDay(),
+        'to' => now(),
+    ])->toSql();
+
+    $normalized = str_replace(['`', '"'], '', $sql);
+
+    expect($normalized)->toContain('period_orders')
+        ->and($normalized)->toContain('period_order_session_id')
+        ->and($normalized)->toContain('activity_ecom_user.session_id')
+        ->and($normalized)->not->toContain('where session_id in');
 });
 
 test('session sort url removes fragment param from generated links', function () {

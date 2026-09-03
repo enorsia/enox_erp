@@ -103,6 +103,14 @@
                     <option value="0" @selected(request('logged_in') === '0')>{{ $countLabel('0', 'Guest', $filterOptionCounts['logged_in'] ?? []) }}</option>
                 </select>
             </label>
+            <label class="etd-filter-compact-field">
+                <span class="etd-filter-compact-label">Duration</span>
+                <select name="duration_bucket" class="{{ $tomSelectClass }}" data-placeholder="All">
+                    @foreach (\App\Support\SessionDurationBuckets::optionLabels() as $value => $label)
+                        <option value="{{ $value }}" @selected((string) request('duration_bucket', '') === (string) $value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </label>
         </div>
     </section>
 
