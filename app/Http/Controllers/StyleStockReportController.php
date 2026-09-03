@@ -35,10 +35,10 @@ class StyleStockReportController extends Controller
             notify()->error($result['error'], 'Error');
         }
         $result['sc_infos'] = SellingChartBasicInfo::select('id', 'design_no')->with([
-            'sellingChartPrices:id,basic_info_id,color_id,range_id',
+            'sellingChartPrices:id,basic_info_id,range',
             'sellingChartPrices.discounts:id,selling_chart_price_id,platform_id,price',
             'sellingChartPrices.discounts.platform:id,code',
-            ])->get()->keyBy('design_no');
+        ])->get()->keyBy('design_no');
 
         return view('style_stocks.index', [
             'style_stocks' => $result['style_stocks'],

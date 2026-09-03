@@ -247,7 +247,7 @@
                                             $productImageFull = !empty($product['image_link'])
                                                 ? preg_replace('#/w=\d+$#', '/public', $product['image_link'])
                                                 : null;
-                                            $scInfo = $sc_infos->has($product['style']) ? $sc_infos->get($product['style']) : collect();
+                                            $scInfo = $sc_infos->get($product['style']);
                                         @endphp
                                         <tr class="ssr-row ssr-row--product product-row category-{{ $deptKey }}-{{ $catKey }} hidden"
                                             data-has-discount="{{ !empty($product['itemPrice']['maxDiscountPrice']) && $product['itemPrice']['maxDiscountPrice'] > 0 ? '1' : '0' }}">
@@ -276,9 +276,11 @@
                                                             discount</span>
 
                                                     </div>
-                                                    <div>
-                                                        <p class="text-black text-[12px]">Applied Discounts:</p>
-                                                    </div>
+                                                    @if ($scInfo)
+                                                        <div class="min-w-[180px]">
+                                                            @include('style_stocks.partials.applied-discounts', ['scInfo' => $scInfo])
+                                                        </div>
+                                                    @endif
                                                 </div>
                                             </td>
                                             <td class="text-right px-4">
