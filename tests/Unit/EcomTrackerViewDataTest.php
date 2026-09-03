@@ -73,3 +73,14 @@ test('session duration bucket drill down includes activity filter and dashboard 
         ->and($url)->toContain('duration_bucket=0-1')
         ->and($url)->toContain('back=');
 });
+
+test('activity back url keeps dashboard scroll hash', function () {
+    $back = 'https://example.test/admin/ecom-tracker/dashboard?period=24h#etd-y=1420';
+
+    expect(EcomTrackerViewData::resolveBackUrl($back))->toBe($back)
+        ->and(EcomTrackerViewData::activityIndexBackUrl(Request::create(
+            'https://example.test/admin/ecom-activity',
+            'GET',
+            ['focus' => 'duration', 'back' => $back],
+        )))->toBe($back);
+});

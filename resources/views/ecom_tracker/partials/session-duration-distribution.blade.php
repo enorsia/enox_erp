@@ -12,7 +12,7 @@
 @endphp
 
 @if ($showPanel)
-    <div @class(['etd-panel mb-5', $panelClass => filled($panelClass)])>
+    <div @class(['etd-panel mb-5', $panelClass => filled($panelClass)]) id="duration">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Session duration distribution</h2>
         </div>
@@ -38,6 +38,7 @@
                         <{{ $isLink ? 'a' : 'div' }}
                             @if ($isLink) href="{{ $bucketUrl }}" @endif
                             class="etd-duration-bucket{{ $isLink ? ' etd-duration-bucket--link' : '' }}"
+                            @if ($isLink) data-preserve-scroll @endif
                             role="listitem"
                         >
                             <div class="etd-duration-bucket__head">
