@@ -247,6 +247,7 @@
                                             $productImageFull = !empty($product['image_link'])
                                                 ? preg_replace('#/w=\d+$#', '/public', $product['image_link'])
                                                 : null;
+                                            $scInfo = $sc_infos->has($product['style']) ? $sc_infos->get($product['style']) : collect();
                                         @endphp
                                         <tr class="ssr-row ssr-row--product product-row category-{{ $deptKey }}-{{ $catKey }} hidden"
                                             data-has-discount="{{ !empty($product['itemPrice']['maxDiscountPrice']) && $product['itemPrice']['maxDiscountPrice'] > 0 ? '1' : '0' }}">
@@ -265,15 +266,18 @@
                                                         <a href="{{ $product['link'] }}" target="_blank"
                                                             class="ssr-product-link">{{ $product['item_no'] }}</a>
                                                         <p class="ssr-product-meta">Ecom. Price: {{ $product['ecom_price'] }}</p>
-                                                        @if ($product['itemPrice']['maxDiscountPrice'] > 0)
+                                                        {{-- @if ($product['itemPrice']['maxDiscountPrice'] > 0)
                                                             <p class="ssr-product-meta">Dis. Price: {{ $product['discount_price'] }}</p>
-                                                        @endif
+                                                        @endif --}}
                                                         <p class="ssr-product-meta">FOB Price: {{ $product['fob_price'] }}</p>
 
                                                         <span data-url="{{ route('admin.style.stock.discounts', $product['style']) }}" type="button" @click="drawerOpen = true"
                                                             class="flex items-center gap-2 text-[12px] transition-colors underline cursor-pointer discount-btn">Apply
                                                             discount</span>
 
+                                                    </div>
+                                                    <div>
+                                                        <p class="text-black text-[12px]">Applied Discounts:</p>
                                                     </div>
                                                 </div>
                                             </td>
@@ -373,7 +377,7 @@
             x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
             x-transition:leave="transition ease-in duration-200" x-transition:leave-start="translate-x-0"
             x-transition:leave-end="translate-x-full"
-            class="fixed top-0 right-0 bottom-0 w-full sm:w-[700px] bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col z-[201] shadow-2xl"
+            class="fixed top-0 right-0 bottom-0 w-full sm:w-[900px] bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col z-[201] shadow-2xl"
             style="display:none;">
 
             {{-- Drawer Head --}}
