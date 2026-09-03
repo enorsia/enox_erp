@@ -111,3 +111,54 @@ test('tracker category identity builds dashboard department filter options from 
         ->and($options['categories_by_department'])->not->toHaveKey('Men')
         ->and($options['categories_by_department'])->not->toHaveKey('Girls');
 });
+
+test('tracker category identity builds filter options only from categories with activity', function () {
+    $options = TrackerCategoryIdentity::filterOptionsFromCategoryPerformance([
+        [
+            'department_name' => 'Women',
+            'category_name' => 'Dresses',
+            'category_views' => 2,
+            'product_views' => 0,
+            'views' => 2,
+            'adds' => 0,
+            'proceed_checkouts' => 0,
+            'purchases' => 0,
+            'sale_items' => 0,
+            'sale_amount' => 0.0,
+        ],
+        [
+            'department_name' => 'Men',
+            'category_name' => 'Jeans',
+            'category_views' => 0,
+            'product_views' => 0,
+            'views' => 0,
+            'adds' => 0,
+            'proceed_checkouts' => 0,
+            'purchases' => 0,
+            'sale_items' => 0,
+            'sale_amount' => 0.0,
+        ],
+    ]);
+
+    expect($options['departments'])->toBe(['Women'])
+        ->and($options['categories_by_department'])->toBe([
+            'Women' => ['Dresses'],
+        ]);
+});
+
+test('tracker category identity resolves departments for a category filter label', function () {
+    $filterOptions = [
+        'departments' => ['Men', 'Women'],
+        'categories_by_department' => [
+            'Men' => ['Chinos', 'Jeans'],
+            'Women' => ['Dresses'],
+        ],
+    ];
+
+    expect(TrackerCategoryIdentity::departmentsForCategoryInFilterOptions('Chinos', $filterOptions))
+        ->toBe(['Men'])
+        ->and(TrackerCategoryIdentity::categoryListedForDepartment('Chinos', 'Women', $filterOptions))
+        ->toBeFalse()
+        ->and(TrackerCategoryIdentity::categoryListedForDepartment('Chinos', 'Men', $filterOptions))
+        ->toBeTrue();
+});

@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\ActivityEcomUser;
 use App\Support\CommerceLineItemQuery;
 use App\Support\CommerceReadSupport;
-use App\Support\EcomActivityCatalogFilterActions;
 use App\Support\EcomActivityCommerceEvents;
 use App\Support\EcomActivityCommerceSummary;
 use App\Support\EcomActivitySessionSort;
@@ -312,6 +311,19 @@ class EcomActivityRowMetrics
             return;
         }
 
+        if (filled($catalogOptions['department'] ?? null) && filled($catalogOptions['category'] ?? null)) {
+            $catalogPath = TrackerCategoryIdentity::label(
+                (string) $catalogOptions['department'],
+                (string) $catalogOptions['category'],
+            );
+
+            foreach ($sessionIds as $sessionId) {
+                $metrics[$sessionId]['catalog_path'] = $catalogPath;
+            }
+
+            return;
+        }
+
         $lines = CommerceReadSupport::linesForSessions(
             $sessionIds,
             $from,
@@ -325,7 +337,7 @@ class EcomActivityRowMetrics
                 $lines->get($sessionId, collect()),
                 $catalogOptions,
             );
-            $catalogPath = '—';
+            $rowCatalogPath = null;
 
             foreach ($sessionLines->sortByDesc(fn (object $line) => (int) ($line->id ?? 0)) as $line) {
                 $department = trim((string) ($line->department_name ?? ''));
@@ -335,12 +347,11 @@ class EcomActivityRowMetrics
                     continue;
                 }
 
-                $catalogPath = TrackerCategoryIdentity::label($department, $category);
+                $rowCatalogPath = TrackerCategoryIdentity::label($department, $category);
                 break;
             }
 
-            $metrics[$sessionId]['catalog_path'] = $catalogPath;
-            $metrics[$sessionId]['catalog_filter_actions'] = EcomActivityCatalogFilterActions::fromLines($sessionLines);
+            $metrics[$sessionId]['catalog_path'] = $rowCatalogPath ?? '—';
         }
     }
 }

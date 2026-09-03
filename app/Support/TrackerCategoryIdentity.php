@@ -305,6 +305,85 @@ class TrackerCategoryIdentity
     }
 
     /**
+     * @param  array<string, mixed>  $row
+     */
+    public static function categoryRowHasActivity(array $row): bool
+    {
+        foreach (['category_views', 'product_views', 'views', 'adds', 'proceed_checkouts', 'purchases', 'sale_items'] as $field) {
+            if ((int) ($row[$field] ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return (float) ($row['sale_amount'] ?? 0) > 0;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $categories
+     * @return array{
+     *     departments: list<string>,
+     *     categories_by_department: array<string, list<string>>
+     * }
+     */
+    public static function filterOptionsFromCategoryPerformance(array $categories): array
+    {
+        $pairs = [];
+
+        foreach ($categories as $row) {
+            if (! self::categoryRowHasActivity($row)) {
+                continue;
+            }
+
+            $pairs[] = [
+                'department_name' => (string) ($row['department_name'] ?? ''),
+                'category_name' => (string) ($row['category_name'] ?? ''),
+            ];
+        }
+
+        return self::filterOptionsFromPairs($pairs);
+    }
+
+    public static function departmentsForCategoryInFilterOptions(string $category, array $filterOptions): array
+    {
+        $category = trim($category);
+
+        if ($category === '') {
+            return [];
+        }
+
+        $matches = [];
+
+        foreach (array_keys($filterOptions['categories_by_department'] ?? []) as $department) {
+            if (self::categoryListedForDepartment($category, $department, $filterOptions)) {
+                $matches[] = $department;
+            }
+        }
+
+        return $matches;
+    }
+
+    public static function categoryListedForDepartment(
+        string $category,
+        string $department,
+        array $filterOptions,
+    ): bool {
+        $department = self::normalizeDepartmentName($department);
+        $category = trim($category);
+
+        if ($category === '' || $department === '') {
+            return false;
+        }
+
+        foreach ($filterOptions['categories_by_department'][$department] ?? [] as $listedCategory) {
+            if (self::categoryMatchesFilter($listedCategory, $category)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Department/category dropdowns from pairs that actually occurred.
      * Empty storefront departments are omitted.
      *

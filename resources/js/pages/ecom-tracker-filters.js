@@ -157,11 +157,50 @@ function escapeHtml(value) {
 }
 
 function categoryOptionRecords(select) {
-    return Array.from(select.querySelectorAll('option[data-department]')).map((option) => ({
-        value: option.value,
-        text: option.textContent.trim(),
-        department: option.dataset.department,
-    }));
+    const seen = new Set();
+    const records = [];
+
+    select.querySelectorAll('option[data-department]').forEach((option) => {
+        const record = {
+            value: option.value,
+            text: option.textContent.trim(),
+            department: option.dataset.department,
+        };
+        const key = `${record.department}|${record.value}`;
+
+        if (seen.has(key)) {
+            return;
+        }
+
+        seen.add(key);
+        records.push(record);
+    });
+
+    return records;
+}
+
+function categoryCatalogFromContainer(container, categorySelect) {
+    const raw = container.dataset.etdCategoryCatalog;
+
+    if (!raw) {
+        return categoryOptionRecords(categorySelect);
+    }
+
+    try {
+        const byDepartment = JSON.parse(raw);
+
+        return Object.entries(byDepartment).flatMap(([department, categories]) => (
+            Array.isArray(categories)
+                ? categories.map((category) => ({
+                    value: String(category),
+                    text: String(category),
+                    department: String(department),
+                }))
+                : []
+        ));
+    } catch {
+        return categoryOptionRecords(categorySelect);
+    }
 }
 
 function matchingCategoryOptions(options, department) {
@@ -191,11 +230,23 @@ function syncNativeCategoryOptions(categorySelect, options, department, selected
 
 function syncTomSelectCategoryOptions(categorySelect, options, department, selectedValue, emptyLabel) {
     const ts = categorySelect.tomselect;
+    const matching = matchingCategoryOptions(options, department);
 
     writeCategorySelectOptions(categorySelect, options, department, emptyLabel);
-    ts.sync();
+
+    ts.clearOptions();
+    ts.addOption({ value: '', text: emptyLabel });
+    matching.forEach((option) => {
+        ts.addOption({
+            value: option.value,
+            text: option.text,
+        });
+    });
+    ts.refreshOptions(false);
     setSelectDisabled(categorySelect, department === '');
-    ts.setValue(selectedValue, true);
+
+    const nextValue = matching.some((option) => option.value === selectedValue) ? selectedValue : '';
+    ts.setValue(nextValue, true);
 }
 
 function initDepartmentCategoryFilters(root) {
@@ -209,9 +260,9 @@ function initDepartmentCategoryFilters(root) {
             return;
         }
 
-        const snapshot = categoryOptionRecords(categorySelect);
+        const snapshot = categoryCatalogFromContainer(container, categorySelect);
 
-        if (!container._etdCategoryOptions?.length && snapshot.length) {
+        if (snapshot.length) {
             container._etdCategoryOptions = snapshot;
         }
 

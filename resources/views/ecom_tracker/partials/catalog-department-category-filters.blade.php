@@ -5,10 +5,20 @@
 ])
 
 @php
-    $departments = $filterOptions['departments'] ?? \App\Support\TrackerCategoryIdentity::DEPARTMENTS;
+    $departments = $filterOptions['departments'] ?? [];
     $categoriesByDepartment = $filterOptions['categories_by_department'] ?? [];
     $selectedDepartment = request('department', '');
     $selectedCategory = request('category', '');
+
+    if ($selectedDepartment !== '' && $selectedCategory !== ''
+        && ! \App\Support\TrackerCategoryIdentity::categoryListedForDepartment(
+            $selectedCategory,
+            $selectedDepartment,
+            $filterOptions,
+        )) {
+        $selectedCategory = '';
+    }
+
     $tomSelectClass = 'tom-select etd-tom-select w-full';
 @endphp
 
@@ -17,7 +27,8 @@
 @endif
 
 <div class="etd-product-filters-compact{{ ($layout ?? 'stack') === 'grid' ? ' etd-activity-filter-grid' : '' }}"
-     data-etd-department-category>
+     data-etd-department-category
+     data-etd-category-catalog='@json($categoriesByDepartment)'>
     <label class="etd-filter-compact-field" for="catalog-filter-department">
         <span class="etd-filter-compact-label">Department</span>
         <select id="catalog-filter-department"
@@ -42,14 +53,13 @@
                 data-etd-category-select
                 @disabled($selectedDepartment === '')>
             <option value="" @selected($selectedCategory === '')>All categories</option>
-            @foreach ($categoriesByDepartment as $department => $categories)
-                @foreach ($categories as $category)
+            @if ($selectedDepartment !== '')
+                @foreach ($categoriesByDepartment[$selectedDepartment] ?? [] as $category)
                     <option value="{{ $category }}"
-                            data-department="{{ $department }}"
-                            @selected($selectedDepartment === $department && $selectedCategory === $category)
-                            @if ($selectedDepartment === '' || $selectedDepartment !== $department) hidden @endif>{{ $category }}</option>
+                            data-department="{{ $selectedDepartment }}"
+                            @selected($selectedCategory === $category)>{{ $category }}</option>
                 @endforeach
-            @endforeach
+            @endif
         </select>
     </label>
 </div>

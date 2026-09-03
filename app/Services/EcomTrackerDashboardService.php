@@ -1078,9 +1078,9 @@ class EcomTrackerDashboardService
         ?string $period = null,
     ): array {
         return $this->rememberQuery(
-            $this->queryCacheKey('categoryFilterOptionsForRange', $from, $to, $period),
-            fn () => TrackerCategoryIdentity::filterOptionsFromPairs(
-                CommerceLineItemQuery::categoryDepartmentPairsForRange($from, $to, $period),
+            $this->queryCacheKey('categoryFilterOptionsForRange', $from, $to, $period, $filters),
+            fn () => TrackerCategoryIdentity::filterOptionsFromCategoryPerformance(
+                $this->buildCategoryPerformance($from, $to, null, $filters, $period),
             ),
         );
     }
@@ -3434,7 +3434,12 @@ class EcomTrackerDashboardService
             $rows[$key] ??= $this->emptyCategoryPerformanceRow($meta);
 
             $stage = (string) $line->funnel_stage;
-            if ($stage === 'add_to_cart') {
+
+            if ($stage === 'category_view') {
+                $rows[$key]['category_views']++;
+            } elseif (in_array($stage, ['product_view', 'product_view_popup'], true)) {
+                $rows[$key]['product_views']++;
+            } elseif ($stage === 'add_to_cart') {
                 $rows[$key]['adds']++;
             } elseif ($stage === 'proceed_checkout') {
                 $rows[$key]['proceed_checkouts']++;
@@ -3443,6 +3448,8 @@ class EcomTrackerDashboardService
                 $rows[$key]['sale_items'] += (int) round((float) ($line->qty ?? 0));
                 $rows[$key]['sale_amount'] += (float) ($line->line_total ?? 0);
             }
+
+            $rows[$key]['views'] = (int) $rows[$key]['category_views'] + (int) $rows[$key]['product_views'];
         }
 
         if ($rows === []) {
@@ -3450,6 +3457,7 @@ class EcomTrackerDashboardService
         }
 
         return collect($rows)
+            ->filter(fn (array $row) => TrackerCategoryIdentity::categoryRowHasActivity($row))
             ->map(function (array $row) {
                 $row['label'] = TrackerCategoryIdentity::label(
                     (string) ($row['department_name'] ?? ''),
@@ -3492,6 +3500,10 @@ class EcomTrackerDashboardService
         $departments = [];
 
         foreach ($categories as $row) {
+            if (! TrackerCategoryIdentity::categoryRowHasActivity($row)) {
+                continue;
+            }
+
             $normalized = TrackerCategoryIdentity::normalizeDepartmentName((string) ($row['department_name'] ?? ''));
             $target = in_array($normalized, TrackerCategoryIdentity::DEPARTMENTS, true) ? $normalized : 'Other';
             $categoryName = TrackerCategoryIdentity::displayName((string) ($row['category_name'] ?? ''));

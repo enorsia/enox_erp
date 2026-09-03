@@ -24,6 +24,7 @@ use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -51,7 +52,7 @@ class EcomActivityController extends EcomTrackerAdminController
         parent::__construct($featureGate);
     }
 
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
         $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.activity.index');
@@ -59,11 +60,29 @@ class EcomActivityController extends EcomTrackerAdminController
         $isTableFragment = $request->input('fragment') === 'table' && $request->ajax();
         $focus = $request->input('focus');
         $range = $this->resolveActivityRange($request);
+        $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
+            $range['from'],
+            $range['to'],
+            [],
+            $range['period'],
+        );
+
+        $reconciledCatalogFilters = EcomActivityFocus::reconcileCatalogFilters($request, $categoryFilterOptions);
+
+        if ($reconciledCatalogFilters !== null) {
+            if (! $isTableFragment && ! $request->ajax()) {
+                return redirect()->to($this->activityIndexUrlWithCatalogFilters($request, $reconciledCatalogFilters));
+            }
+
+            $this->applyCatalogFilterOverrides($request, $reconciledCatalogFilters);
+        }
+
         $resolvedDepartment = EcomActivityFocus::resolvedCategoryDepartment(
             $request,
             $range['from'],
             $range['to'],
             $range['period'],
+            $categoryFilterOptions,
         );
 
         if ($resolvedDepartment !== null && ! $request->filled('department')) {
@@ -164,13 +183,6 @@ class EcomActivityController extends EcomTrackerAdminController
         $eventScenarioOptions = [];
         $productSortGroups = [];
         $productActivityOptions = [];
-        $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
-            $range['from'],
-            $range['to'],
-            [],
-            $range['period'],
-        );
-
         if ($showCatalogFilters) {
             $catalogData = $this->dashboardService->buildProductCatalogPerformance(
                 $range['from'],
@@ -603,5 +615,54 @@ class EcomActivityController extends EcomTrackerAdminController
         }
 
         return [['label' => $focusLabel]];
+    }
+
+    /**
+     * @param  array{department?: string|null, category?: string|null}  $filters
+     */
+    private function activityIndexUrlWithCatalogFilters(Request $request, array $filters): string
+    {
+        $query = $request->query();
+
+        foreach (['department', 'category'] as $key) {
+            if (! array_key_exists($key, $filters)) {
+                continue;
+            }
+
+            $value = $filters[$key];
+
+            if ($value === null || $value === '') {
+                unset($query[$key]);
+            } else {
+                $query[$key] = $value;
+            }
+        }
+
+        unset($query['page']);
+
+        return $request->url().(count($query) > 0 ? '?'.http_build_query($query) : '');
+    }
+
+    /**
+     * @param  array{department?: string|null, category?: string|null}  $filters
+     */
+    private function applyCatalogFilterOverrides(Request $request, array $filters): void
+    {
+        foreach (['department', 'category'] as $key) {
+            if (! array_key_exists($key, $filters)) {
+                continue;
+            }
+
+            $value = $filters[$key];
+
+            if ($value === null || $value === '') {
+                $request->query->remove($key);
+                $request->request->remove($key);
+
+                continue;
+            }
+
+            $request->merge([$key => $value]);
+        }
     }
 }

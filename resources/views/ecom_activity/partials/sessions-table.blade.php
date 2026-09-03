@@ -67,8 +67,8 @@
                 @if ($showCatalogFilterColumn)
                     <th class="etd-col-catalog-filter">
                         @include('ecom_tracker.partials.column-header-with-tip', [
-                            'label' => 'Category activity',
-                            'tip' => 'Actions in this session that match the department or category filter',
+                            'label' => 'Category',
+                            'tip' => 'Department and category matched by the active filter',
                         ])
                     </th>
                 @endif
@@ -139,28 +139,9 @@
                     </td>
                     <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($session->actions_count ?? $metrics['actions_count'] ?? 0)) }}</td>
                     @if ($showCatalogFilterColumn)
-                        @php
-                            $catalogPath = trim((string) ($metrics['catalog_path'] ?? ''));
-                            $catalogFilterActions = $metrics['catalog_filter_actions'] ?? [];
-                        @endphp
-                        <td class="etd-col-catalog-filter" data-label="Category activity">
-                            @if ($catalogPath !== '' && $catalogPath !== '—')
-                                <div class="etd-subtle etd-catalog-filter__path">{{ $catalogPath }}</div>
-                            @endif
-                            @if (count($catalogFilterActions) > 0)
-                                <ul class="etd-catalog-filter__actions">
-                                    @foreach ($catalogFilterActions as $filterAction)
-                                        <li class="etd-catalog-filter__action">
-                                            <span>{{ $filterAction['label'] }}</span>
-                                            @if (! empty($filterAction['detail']))
-                                                <span class="etd-subtle">· {{ $filterAction['detail'] }}</span>
-                                            @endif
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            @elseif ($catalogPath === '' || $catalogPath === '—')
-                                <span class="etd-subtle">—</span>
-                            @endif
+                        @php $catalogPath = trim((string) ($metrics['catalog_path'] ?? '')); @endphp
+                        <td class="etd-col-catalog-filter" data-label="Category">
+                            {{ ($catalogPath !== '' && $catalogPath !== '—') ? $catalogPath : '—' }}
                         </td>
                     @endif
                     @foreach ($focusColumns as $column)

@@ -212,14 +212,19 @@ final class EcomActivityFocus
 
         $focusKeys = self::definition($focus)['columns'] ?? [];
 
-        if ($request?->filled('category')) {
-            $defs['top_category']['label'] = 'Category';
-        }
-
-        return array_values(array_filter(array_map(
+        $columns = array_values(array_filter(array_map(
             fn (string $key) => $defs[$key] ?? null,
             $focusKeys,
         )));
+
+        if ($request?->filled('category')) {
+            $columns = array_values(array_filter(
+                $columns,
+                fn (array $column) => ($column['key'] ?? '') !== 'top_category',
+            ));
+        }
+
+        return $columns;
     }
 
     /**
@@ -766,19 +771,40 @@ final class EcomActivityFocus
         Carbon $from,
         Carbon $to,
         ?string $period,
+        array $filterOptions = [],
     ): ?string {
         if (! $request->filled('category')) {
             return null;
         }
 
+        $category = trim((string) $request->input('category'));
+
+        if ($filterOptions !== []) {
+            $departments = TrackerCategoryIdentity::departmentsForCategoryInFilterOptions($category, $filterOptions);
+
+            if (count($departments) === 1) {
+                return $departments[0];
+            }
+
+            if ($request->filled('department')) {
+                $department = TrackerCategoryIdentity::normalizeDepartmentName((string) $request->input('department'));
+
+                if (in_array($department, $departments, true)) {
+                    return $department;
+                }
+
+                return $departments[0] ?? TrackerCategoryIdentity::normalizeDepartmentName((string) $request->input('department'));
+            }
+        }
+
         if ($request->filled('department')) {
-            return (string) $request->input('department');
+            return TrackerCategoryIdentity::normalizeDepartmentName((string) $request->input('department'));
         }
 
         $row = app(EcomTrackerDashboardService::class)->categoryPerformanceForName(
             $from,
             $to,
-            (string) $request->input('category'),
+            $category,
             self::sessionFiltersFromRequest($request),
             $period,
         );
@@ -786,6 +812,50 @@ final class EcomActivityFocus
         $departmentName = trim((string) ($row['department_name'] ?? ''));
 
         return $departmentName !== '' ? $departmentName : null;
+    }
+
+    /**
+     * @return array{department?: string|null, category?: string|null}|null
+     */
+    public static function reconcileCatalogFilters(Request $request, array $filterOptions): ?array
+    {
+        $category = trim((string) $request->input('category', ''));
+
+        if ($category === '') {
+            return null;
+        }
+
+        $department = TrackerCategoryIdentity::normalizeDepartmentName((string) $request->input('department', ''));
+
+        if ($department !== ''
+            && TrackerCategoryIdentity::categoryListedForDepartment($category, $department, $filterOptions)) {
+            return null;
+        }
+
+        $departments = TrackerCategoryIdentity::departmentsForCategoryInFilterOptions($category, $filterOptions);
+
+        if ($departments === []) {
+            return [
+                'department' => $department !== '' ? $department : null,
+                'category' => null,
+            ];
+        }
+
+        if (count($departments) === 1) {
+            return [
+                'department' => $departments[0],
+                'category' => $category,
+            ];
+        }
+
+        if ($department !== '' && in_array($department, $departments, true)) {
+            return null;
+        }
+
+        return [
+            'department' => $departments[0],
+            'category' => $category,
+        ];
     }
 
     public static function applyProductCatalogConstraints(

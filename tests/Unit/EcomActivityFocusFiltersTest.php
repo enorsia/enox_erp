@@ -509,3 +509,51 @@ test('abandonment summary items in cart use matched funnel metrics', function ()
         ->and($values['At stake'])->toBe('£135.00')
         ->and($values['Items in cart'])->toBe('7');
 });
+
+test('catalog filters reconcile mismatched department and category combinations', function () {
+    $request = Request::create('/', 'GET', [
+        'department' => 'Women',
+        'category' => 'Chinos',
+    ]);
+
+    $filterOptions = [
+        'departments' => ['Men', 'Women'],
+        'categories_by_department' => [
+            'Men' => ['Chinos'],
+            'Women' => ['Dresses'],
+        ],
+    ];
+
+    expect(EcomActivityFocus::reconcileCatalogFilters($request, $filterOptions))
+        ->toBe([
+            'department' => 'Men',
+            'category' => 'Chinos',
+        ])
+        ->and(EcomActivityFocus::reconcileCatalogFilters(
+            Request::create('/', 'GET', ['department' => 'Men', 'category' => 'Chinos']),
+            $filterOptions,
+        ))->toBeNull();
+});
+
+test('categories focus omits top category column when category filter is active', function () {
+    $request = Request::create('/', 'GET', [
+        'focus' => 'categories',
+        'department' => 'Women',
+        'category' => 'Co-ords',
+    ]);
+
+    $columns = EcomActivityFocus::tableColumns('categories', $request);
+
+    expect(collect($columns)->pluck('key')->all())->toBe(['purchases']);
+});
+
+test('categories focus keeps top category column when only department filter is active', function () {
+    $request = Request::create('/', 'GET', [
+        'focus' => 'categories',
+        'department' => 'Women',
+    ]);
+
+    $columns = EcomActivityFocus::tableColumns('categories', $request);
+
+    expect(collect($columns)->pluck('key')->all())->toBe(['top_category', 'purchases']);
+});
