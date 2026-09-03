@@ -1079,9 +1079,28 @@ class EcomTrackerDashboardService
     ): array {
         return $this->rememberQuery(
             $this->queryCacheKey('categoryFilterOptionsForRange', $from, $to, $period, $filters),
-            fn () => TrackerCategoryIdentity::filterOptionsFromCategoryPerformance(
-                $this->buildCategoryPerformance($from, $to, null, $filters, $period),
-            ),
+            function () use ($from, $to, $filters, $period) {
+                $categories = $this->buildCategoryPerformance($from, $to, null, $filters, $period);
+                $allOptions = TrackerCategoryIdentity::filterOptionsFromCategoryPerformance($categories);
+                $visibleDepartments = $this->dashboardVisibleCategoryDepartments($categories);
+
+                if ($visibleDepartments === []) {
+                    return $allOptions;
+                }
+
+                $visibleDepartmentSet = array_flip($visibleDepartments);
+
+                return [
+                    'departments' => array_values(array_filter(
+                        $allOptions['departments'],
+                        fn (string $department) => isset($visibleDepartmentSet[$department]),
+                    )),
+                    'categories_by_department' => array_intersect_key(
+                        $allOptions['categories_by_department'],
+                        $visibleDepartmentSet,
+                    ),
+                ];
+            },
         );
     }
 
@@ -3488,6 +3507,19 @@ class EcomTrackerDashboardService
             ->when($limit !== null, fn ($collection) => $collection->take($limit))
             ->values()
             ->all();
+    }
+
+    /**
+     * Departments surfaced in the dashboard category panel for a period.
+     *
+     * @param  array<int, array<string, mixed>>  $categories
+     * @return list<string>
+     */
+    private function dashboardVisibleCategoryDepartments(array $categories): array
+    {
+        return collect($this->groupCategoryPerformanceByDepartment(
+            array_slice($categories, 0, self::TABLE_DISPLAY_LIMIT),
+        ))->pluck('name')->filter()->map(fn ($name) => (string) $name)->values()->all();
     }
 
     /**

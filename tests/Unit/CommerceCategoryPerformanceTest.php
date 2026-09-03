@@ -96,3 +96,42 @@ test('category filter options only include departments and categories with activ
             'Men' => ['Jeans'],
         ]);
 });
+
+test('category filter departments match dashboard category panel visibility', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $visibleMethod = (new ReflectionClass($service))
+        ->getMethod('dashboardVisibleCategoryDepartments');
+    $visibleMethod->setAccessible(true);
+
+    $categories = [];
+
+    foreach (range(1, 20) as $index) {
+        $categories[] = [
+            'department_name' => 'Women',
+            'category_name' => "Category {$index}",
+            'category_views' => 100 - $index,
+            'product_views' => 0,
+            'views' => 100 - $index,
+            'adds' => 0,
+            'proceed_checkouts' => 0,
+            'purchases' => 0,
+            'sale_items' => 0,
+            'sale_amount' => 0.0,
+        ];
+    }
+
+    $categories[] = [
+        'department_name' => 'Girls',
+        'category_name' => 'Dresses',
+        'category_views' => 1,
+        'product_views' => 0,
+        'views' => 1,
+        'adds' => 0,
+        'proceed_checkouts' => 0,
+        'purchases' => 0,
+        'sale_items' => 0,
+        'sale_amount' => 0.0,
+    ];
+
+    expect($visibleMethod->invoke($service, $categories))->toBe(['Women']);
+});
