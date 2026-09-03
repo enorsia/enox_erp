@@ -20,8 +20,11 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
     }
 
     function productHasDiscount(product) {
-        const maxDiscount = product?.itemPrice?.maxDiscountPrice;
-        return Number(maxDiscount) > 0;
+        return (
+            product?.has_discount === true ||
+            product?.has_discount === 1 ||
+            String(product?.has_discount) === "1"
+        );
     }
 
     function iterateProducts(products, callback) {

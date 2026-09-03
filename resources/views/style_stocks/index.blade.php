@@ -152,11 +152,6 @@
 
             {{-- ─── Report Table ─── --}}
             @if (!$style_stocks->isEmpty())
-                @php
-                    $grandTotalStock = 0;
-                    $grandTotalSold = 0;
-                @endphp
-
                 <div class="ssr-table-wrap shadow-sm">
                     <table class="ssr-table">
                         <thead>
@@ -169,11 +164,6 @@
                         <tbody>
 
                             @foreach ($style_stocks as $deptKey => $department)
-                                @php
-                                    $grandTotalStock += $department['stock'];
-                                    $grandTotalSold += $department['sold'];
-                                @endphp
-
                                 <tr class="ssr-row ssr-row--dept department-row" data-target="department-{{ $deptKey }}">
                                     <td class="ssr-label-cell ps-4">
                                         <div class="flex items-center gap-2">
@@ -243,22 +233,12 @@
                                     </tr>
 
                                     @foreach ($category['products'] as $product)
-                                        @php
-                                            $productImageFull = !empty($product['image_link'])
-                                                ? preg_replace('#/w=\d+$#', '/public', $product['image_link'])
-                                                : null;
-                                            $scInfo = $sc_infos->get($product['style']);
-                                            $hasDiscount = $scInfo
-                                                ?->sellingChartPrices
-                                                ?->flatMap->discounts
-                                                ?->contains(fn ($d) => $d->price && $d->platform) ?? false;
-                                        @endphp
                                         <tr class="ssr-row ssr-row--product product-row category-{{ $deptKey }}-{{ $catKey }} hidden"
-                                            data-has-discount="{{ $hasDiscount ? '1' : '0' }}">
+                                            data-has-discount="{{ $product['has_discount'] ? '1' : '0' }}">
                                             <td class="ssr-label-cell ssr-label-cell--product">
                                                 <div class="ssr-product-wrap">
                                                     @if (!empty($product['image_link']))
-                                                        <a href="{{ $productImageFull }}"
+                                                        <a href="{{ $product['image_link_full'] }}"
                                                             data-fancybox="gallery-style-stock-{{ Str::slug($product['item_no'] ?? 'product-' . $loop->index) }}"
                                                             data-caption="{{ $product['item_no'] }}"
                                                             class="block rounded-lg overflow-hidden border border-slate-200 dark:border-slate-600 hover:scale-105 hover:shadow-md transition-all duration-150 shrink-0">
@@ -280,9 +260,11 @@
                                                             discount</span>
 
                                                     </div>
-                                                    @if ($scInfo)
-                                                        <div class="min-w-[180px]">
-                                                            @include('style_stocks.partials.applied-discounts', ['scInfo' => $scInfo])
+                                                    @if ($product['has_discount'] && !empty($product['applied_discounts']))
+                                                        <div class="bg-slate-200 rounded-lg ms-5 p-2 min-w-[180px]">
+                                                            @include('style_stocks.partials.applied-discounts', [
+                                                                'appliedDiscounts' => $product['applied_discounts'],
+                                                            ])
                                                         </div>
                                                     @endif
                                                 </div>
@@ -309,27 +291,21 @@
                                 @endforeach
                             @endforeach
 
-                            @php
-                                $grandTotal = $grandTotalStock + $grandTotalSold;
-                                $grandStockPercent = $grandTotal > 0 ? round(($grandTotalStock / $grandTotal) * 100) : 0;
-                                $grandSoldPercent = $grandTotal > 0 ? round(($grandTotalSold / $grandTotal) * 100) : 0;
-                            @endphp
-
                             <tr class="ssr-row ssr-row--total">
                                 <td class="ssr-label-cell ps-4 uppercase text-[12px] tracking-wide">Total Stock</td>
                                 <td class="text-right px-4">
                                     @include('style_stocks.partials.progress', [
-                                        'percent' => $grandStockPercent,
-                                        'value' => $grandTotalStock,
+                                        'percent' => $grand_totals['stock_percent'],
+                                        'value' => $grand_totals['stock'],
                                         'level' => 'total',
                                         'type' => 'stock',
                                     ])
                                 </td>
                                 <td class="text-right px-4 pe-4">
                                     @include('style_stocks.partials.progress', [
-                                        'percent' => $grandSoldPercent,
-                                        'value' => $grandTotalSold,
-                                        'displayValue' => zeroToString($grandTotalSold),
+                                        'percent' => $grand_totals['sold_percent'],
+                                        'value' => $grand_totals['sold'],
+                                        'displayValue' => zeroToString($grand_totals['sold']),
                                         'level' => 'total',
                                         'type' => 'sold',
                                     ])

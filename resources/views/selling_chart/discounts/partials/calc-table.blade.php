@@ -31,6 +31,7 @@
                 <th class="toogle-item vat px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700" style="display:none">SP+VAT</th>
                 <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">PM%</th>
                 <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">NP</th>
+                {{-- <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700">Dis.(%)</th> --}}
                 {{-- <th class="px-2 py-2 text-left text-[9px] font-semibold text-slate-500 uppercase whitespace-nowrap border-b border-slate-200 dark:border-slate-700 w-36">Action</th> --}}
             </tr>
         </thead>

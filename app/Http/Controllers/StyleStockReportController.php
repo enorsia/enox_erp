@@ -9,6 +9,7 @@ use App\Models\SellingChartExpense;
 use App\Services\StyleStockReportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -34,17 +35,151 @@ class StyleStockReportController extends Controller
         if (! $result['success']) {
             notify()->error($result['error'], 'Error');
         }
-        $result['sc_infos'] = SellingChartBasicInfo::select('id', 'design_no')->with([
+
+        $scInfos = $this->loadSellingChartInfos();
+        $styleStocks = $this->enrichStyleStocks($result['style_stocks'], $scInfos);
+
+        // dd($styleStocks->toArray()[1926]);
+
+        return view('style_stocks.index', [
+            'style_stocks' => $styleStocks,
+            'grand_totals' => $this->buildGrandTotals($styleStocks),
+            'load_error' => $result['error'],
+        ]);
+    }
+
+    protected function loadSellingChartInfos(): Collection
+    {
+        return SellingChartBasicInfo::select('id', 'design_no')->with([
             'sellingChartPrices:id,basic_info_id,range',
             'sellingChartPrices.discounts:id,selling_chart_price_id,platform_id,price',
             'sellingChartPrices.discounts.platform:id,code',
         ])->get()->keyBy('design_no');
+    }
 
-        return view('style_stocks.index', [
-            'style_stocks' => $result['style_stocks'],
-            'sc_infos' => $result['sc_infos'],
-            'load_error' => $result['error'],
-        ]);
+    protected function enrichStyleStocks(Collection $styleStocks, Collection $scInfos): Collection
+    {
+        return $styleStocks->map(function (array $department) use ($scInfos) {
+            $department['categories'] = collect($department['categories'] ?? [])
+                ->map(function (array $category) use ($scInfos) {
+                    $category['products'] = collect($category['products'] ?? [])
+                        ->map(function (array $product) use ($scInfos) {
+                            $scInfo = $scInfos->get($product['style'] ?? null);
+                            $sellingChartData = $this->resolveSellingChartData($scInfo);
+
+                            $product['image_link_full'] = ! empty($product['image_link'])
+                                ? preg_replace('#/w=\d+$#', '/public', $product['image_link'])
+                                : null;
+                            $product['has_selling_chart'] = $sellingChartData['has_selling_chart'];
+                            $product['has_discount'] = $sellingChartData['has_discount'];
+                            $product['applied_discounts'] = $sellingChartData['applied_discounts'];
+
+                            return $product;
+                        })
+                        ->all();
+
+                    return $category;
+                })
+                ->all();
+
+            return $department;
+        });
+    }
+
+    /**
+     * @return array{has_selling_chart: bool, has_discount: bool, applied_discounts: ?array}
+     */
+    protected function resolveSellingChartData(?SellingChartBasicInfo $scInfo): array
+    {
+        if (! $scInfo) {
+            return [
+                'has_selling_chart' => false,
+                'has_discount' => false,
+                'applied_discounts' => null,
+            ];
+        }
+
+        return [
+            'has_selling_chart' => true,
+            'has_discount' => $this->productHasSellingChartDiscount($scInfo),
+            'applied_discounts' => $this->buildAppliedDiscounts($scInfo),
+        ];
+    }
+
+    protected function productHasSellingChartDiscount(?SellingChartBasicInfo $scInfo): bool
+    {
+        if (! $scInfo) {
+            return false;
+        }
+
+        return $scInfo->sellingChartPrices
+            ?->flatMap->discounts
+            ?->contains(fn ($discount) => $discount->price && $discount->platform) ?? false;
+    }
+
+    protected function buildAppliedDiscounts(SellingChartBasicInfo $scInfo): ?array
+    {
+        $firstPrice = $scInfo->sellingChartPrices?->first();
+
+        if (! $firstPrice) {
+            return null;
+        }
+
+        if ($firstPrice->range) {
+            $platformRanges = [];
+
+            foreach ($scInfo->sellingChartPrices as $price) {
+                foreach ($price->discounts as $discount) {
+                    if (! $discount->price || ! $discount->platform) {
+                        continue;
+                    }
+
+                    $code = $discount->platform->code;
+                    $platformRanges[$code][] = [
+                        'range' => $price->range,
+                        'price' => $discount->price,
+                    ];
+                }
+            }
+
+            return [
+                'has_range' => true,
+                'platform_ranges' => $platformRanges,
+                'platform_discounts' => [],
+            ];
+        }
+
+        $platformDiscounts = $firstPrice->discounts
+            ->filter(fn ($discount) => $discount->price && $discount->platform)
+            ->map(fn ($discount) => [
+                'code' => $discount->platform->code,
+                'price' => $discount->price,
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'has_range' => false,
+            'platform_ranges' => [],
+            'platform_discounts' => $platformDiscounts,
+        ];
+    }
+
+    /**
+     * @return array{stock: int|float, sold: int|float, stock_percent: int, sold_percent: int}
+     */
+    protected function buildGrandTotals(Collection $styleStocks): array
+    {
+        $grandTotalStock = $styleStocks->sum('stock');
+        $grandTotalSold = $styleStocks->sum('sold');
+        $grandTotal = $grandTotalStock + $grandTotalSold;
+
+        return [
+            'stock' => $grandTotalStock,
+            'sold' => $grandTotalSold,
+            'stock_percent' => $grandTotal > 0 ? round(($grandTotalStock / $grandTotal) * 100) : 0,
+            'sold_percent' => $grandTotal > 0 ? round(($grandTotalSold / $grandTotal) * 100) : 0,
+        ];
     }
 
     protected function export(Request $request): RedirectResponse|StreamedResponse
