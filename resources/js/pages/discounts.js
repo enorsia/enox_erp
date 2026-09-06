@@ -201,6 +201,9 @@ $(document).ready(function () {
         let csp   = parseFloat(input.data('csp')) || 0;
 
         let rawValue = input.val().trim();
+        if (rawValue !== '') {
+            input.removeClass('is-invalid');
+        }
         if (rawValue !== '' && isNaN(rawValue)) {
             Swal.fire({ icon: 'error', title: 'Invalid Input', text: 'Please enter a numeric value only.' });
             input.val('');
@@ -238,31 +241,58 @@ $(document).ready(function () {
         let hasError   = false;
         let hasDiscount = false;
         const department_id = $form.find('.department_id').val();
-        const isGrouped = isGroupedDept(department_id) || isGirlsBoysDept(department_id);
+        const isGirlsBoys = isGirlsBoysDept(department_id);
+        const isGrouped = isGroupedDept(department_id) || isGirlsBoys;
         const groupStatus = $form.find('.group-status-toggle').prop('checked');
 
         $form.find('.discount_price').removeClass('is-invalid').next('.custom-error').remove();
 
-        $form.find('.discount_price').each(function () {
-            const val = $(this).val().trim();
-            if (val) {
-                hasDiscount = true;
-            }
-        });
+        if (requireDiscount && isGirlsBoys) {
+            let allFilled = true;
 
-        if (requireDiscount && !hasDiscount) {
-            return { valid: false, hasDiscount: false };
+            $form.find('.discount_price').each(function () {
+                const val = $(this).val().trim();
+                if (!val) {
+                    allFilled = false;
+                    $(this).addClass('is-invalid');
+                } else if (isNaN(val)) {
+                    hasError = true;
+                    $(this).addClass('is-invalid');
+                }
+            });
+
+            if (!allFilled || hasError) {
+                return { valid: false, hasDiscount: false };
+            }
+
+            hasDiscount = true;
+        } else {
+            $form.find('.discount_price').each(function () {
+                const val = $(this).val().trim();
+                if (val) {
+                    hasDiscount = true;
+                }
+            });
+
+            if (requireDiscount && !hasDiscount) {
+                $form.find('.discount_price').each(function () {
+                    if (!$(this).val().trim()) {
+                        $(this).addClass('is-invalid');
+                    }
+                });
+                return { valid: false, hasDiscount: false };
+            }
+
+            $form.find('.discount_price').each(function () {
+                const val = $(this).val().trim();
+                if (val !== '' && isNaN(val)) {
+                    hasError = true;
+                    $(this).addClass('is-invalid');
+                }
+            });
+
+            if (hasError) return { valid: false, hasDiscount };
         }
-
-        $form.find('.discount_price').each(function () {
-            const val = $(this).val().trim();
-            if (val !== '' && isNaN(val)) {
-                hasError = true;
-                $(this).addClass('is-invalid');
-            }
-        });
-
-        if (hasError) return { valid: false, hasDiscount };
 
         if (isGrouped && saveType == 2 && groupStatus) {
             Swal.fire({
@@ -478,12 +508,18 @@ $(document).ready(function () {
     function buildAppliedDiscountsHtml(appliedDiscounts) {
         if (!appliedDiscounts) return '';
 
+        const boxOpen =
+            '<div class="rounded-lg p-2 bg-slate-200 dark:bg-slate-700/50 border border-transparent dark:border-slate-600">';
+        const boxClose = '</div>';
+        const title =
+            '<p class="text-slate-800 dark:text-slate-200 text-[12px] font-medium mb-1">Applied Discounts:</p>';
+
         if (appliedDiscounts.has_range) {
             const items = Object.entries(appliedDiscounts.platform_ranges || {})
                 .map(([code, ranges]) => {
                     const rangeLines = (ranges || [])
                         .map((item) =>
-                            '<span class="block">' +
+                            '<span class="block text-slate-600 dark:text-slate-400">' +
                             (item.range || 'N/A') +
                             ' — ' +
                             formatDiscountPrice(item.price) +
@@ -492,7 +528,7 @@ $(document).ready(function () {
                         .join('');
 
                     return (
-                        '<div class="ssr-product-meta">' +
+                        '<div class="ssr-product-meta text-slate-600 dark:text-slate-400">' +
                         '<span class="font-medium text-slate-700 dark:text-slate-300">' +
                         formatPlatformCode(code) +
                         ':</span>' +
@@ -503,28 +539,33 @@ $(document).ready(function () {
                 .join('');
 
             return (
-                '<p class="text-black dark:text-slate-200 text-[12px] font-medium mb-1">Applied Discounts:</p>' +
+                boxOpen +
+                title +
                 '<div class="grid grid-cols-2 gap-x-3 gap-y-1">' +
-                (items || '<p class="ssr-product-meta col-span-2">No discounts applied</p>') +
-                '</div>'
+                (items || '<p class="ssr-product-meta col-span-2 text-slate-600 dark:text-slate-400">No discounts applied</p>') +
+                '</div>' +
+                boxClose
             );
         }
 
         const items = (appliedDiscounts.platform_discounts || [])
             .map((discount) =>
-                '<p class="ssr-product-meta">' +
+                '<p class="ssr-product-meta text-slate-600 dark:text-slate-400">' +
+                '<span class="font-medium text-slate-700 dark:text-slate-300">' +
                 formatPlatformCode(discount.code) +
-                ': ' +
+                ':</span> ' +
                 formatDiscountPrice(discount.price) +
                 '</p>'
             )
             .join('');
 
         return (
-            '<p class="text-black dark:text-slate-200 text-[12px] font-medium mb-1">Applied Discounts:</p>' +
+            boxOpen +
+            title +
             '<div class="grid grid-cols-2 gap-x-3 gap-y-1">' +
-            (items || '<p class="ssr-product-meta col-span-2">No discounts applied</p>') +
-            '</div>'
+            (items || '<p class="ssr-product-meta col-span-2 text-slate-600 dark:text-slate-400">No discounts applied</p>') +
+            '</div>' +
+            boxClose
         );
     }
 
@@ -568,17 +609,23 @@ $(document).ready(function () {
 
         const formsToSave = [];
         let hasAnyDiscount = false;
+        let allValid = true;
 
         for (let i = 0; i < $forms.length; i++) {
             const $form = $($forms[i]);
-            const result = validateDiscountForm($form, { requireDiscount: false });
-            if (!result.valid) return;
+            const result = validateDiscountForm($form, { requireDiscount: true });
+            if (!result.valid) {
+                allValid = false;
+                continue;
+            }
 
             if (result.hasDiscount) {
                 hasAnyDiscount = true;
                 formsToSave.push($form);
             }
         }
+
+        if (!allValid) return;
 
         if (!hasAnyDiscount) {
             Swal.fire({ title: 'No Discount', text: 'Enter at least one discount price to save.', icon: 'warning' });

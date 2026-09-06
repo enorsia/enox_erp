@@ -262,7 +262,7 @@
                                                             discount</span>
 
                                                     </div>
-                                                    <div class="bg-slate-200 rounded-lg ms-5 p-2 min-w-[180px] applied-discounts-{{ Str::slug($product['item_no']) }} {{ ($product['has_discount'] && !empty($product['applied_discounts'])) ? '' : 'hidden' }}">
+                                                    <div class="ms-5 min-w-[180px] applied-discounts-{{ Str::slug($product['item_no']) }} {{ ($product['has_discount'] && !empty($product['applied_discounts'])) ? '' : 'hidden' }}">
                                                         @if ($product['has_discount'] && !empty($product['applied_discounts']))
                                                             @include('style_stocks.partials.applied-discounts', [
                                                                 'appliedDiscounts' => $product['applied_discounts'],
