@@ -20,6 +20,14 @@
         <svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
     </a>
 
+    @can('ecom_tracker.dashboard.index')
+        @if ($showDashboardLink ?? false)
+            <div class="etd-segmented etd-segmented--compact etd-date-nav__shortcut">
+                <a href="{{ route('admin.ecom-tracker.dashboard') }}" class="etd-segmented-btn no-underline">Dashboard</a>
+            </div>
+        @endif
+    @endcan
+
     @can('ecom_tracker.activity.index')
         @if ($showUserActivityLink ?? false)
             <div class="etd-segmented etd-segmented--compact etd-date-nav__shortcut">

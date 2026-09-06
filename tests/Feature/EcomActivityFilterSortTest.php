@@ -261,7 +261,6 @@ test('activity filter drawer includes visitor trust and country fields', functio
     $this->actingAs($user)
         ->get(route('admin.ecom-activity.index', ['period' => 'all']))
         ->assertOk()
-        ->assertSee('Visitor trust')
         ->assertSee('Funnel stage')
         ->assertSee('etd-filter-drawer--wide', false);
 });

@@ -1,6 +1,6 @@
 @php
     $filterOptionCounts = $filterOptionCounts ?? [];
-    $includeVisitorTrust = $includeVisitorTrust ?? true;
+    $includeVisitorTrust = $includeVisitorTrust ?? false;
     $includeCountry = $includeCountry ?? true;
     $countLabel = static function (string $value, string $label, array $counts): string {
         return isset($counts[$value]) ? "{$label} ({$counts[$value]})" : $label;

@@ -1235,7 +1235,6 @@ test('activity index filter drawer includes sectioned funnel and visitor fields'
         ->get(route('admin.ecom-activity.index', ['period' => 'all']))
         ->assertOk()
         ->assertSee('Funnel stage')
-        ->assertSee('Visitor trust')
         ->assertSee('Traffic source')
         ->assertSee('Device')
         ->assertSee('Logged in')

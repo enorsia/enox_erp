@@ -9,7 +9,6 @@
     $dateFrom = $filters['date_from'] ?? '';
     $dateTo = $filters['date_to'] ?? '';
     $queryParams = $page['queryParams'];
-    $exportUrl = $page['exportUrl'];
     $detailLink = $page['detailLink'];
     $activityFocusLink = $page['activityFocusLink'];
     $hasActiveFilters = $page['hasActiveFilters'];
@@ -48,6 +47,7 @@
         'preservePeriodParams' => true,
         'showSessionFilters' => true,
         'sessionFiltersHeading' => 'Sessions & audience',
+        'includeCountry' => false,
         'period' => $period,
         'dateFrom' => $dateFrom,
         'dateTo' => $dateTo,
@@ -110,10 +110,6 @@
                             <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
                         @endif
                     </button>
-                    <a href="{{ $exportUrl }}" class="etd-header-btn etd-header-btn--primary no-underline" title="Export Excel">
-                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l4-4m-4 4L8 11M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg>
-                        <span class="etd-header-btn-text">Export</span>
-                    </a>
                 </div>
             </div>
 

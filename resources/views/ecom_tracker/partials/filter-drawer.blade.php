@@ -7,7 +7,7 @@
     'showActivityFilters' => false,
     'activityFiltersIncludeDateRange' => true,
     'includeSessionSearch' => true,
-    'includeVisitorTrust' => true,
+    'includeVisitorTrust' => false,
     'includeCountry' => true,
     'categoryFilterOptions' => ['departments' => [], 'categories_by_department' => []],
     'showProductFilters' => false,
@@ -124,7 +124,7 @@
                     'sessionFiltersHeading' => $sessionFiltersHeading ?? null,
                     'filterOptionCounts' => $filterOptionCounts ?? [],
                     'utmFilterState' => $utmFilterState ?? null,
-                    'includeVisitorTrust' => $includeVisitorTrust ?? true,
+                    'includeVisitorTrust' => $includeVisitorTrust ?? false,
                     'includeCountry' => $includeCountry ?? true,
                     'categoryFilterOptions' => $categoryFilterOptions ?? ['departments' => [], 'categories_by_department' => []],
                 ])
@@ -144,7 +144,7 @@
                         ])
                     </div>
                 @endif
-                @if ($includeVisitorTrust ?? true)
+                @if ($includeVisitorTrust ?? false)
                     @include('ecom_activity.partials.activity-visitor-filter', [
                         'filterOptionCounts' => $filterOptionCounts ?? [],
                     ])
@@ -158,7 +158,12 @@
                     @if ($sessionFiltersHeading)
                         <p class="etd-kpi-section-label mb-2">{{ $sessionFiltersHeading }}</p>
                     @endif
-                    @include('ecom_tracker.partials.session-filters')
+                    @include('ecom_tracker.partials.session-filters', [
+                        'filterOptionCounts' => $filterOptionCounts ?? [],
+                        'utmFilterState' => $utmFilterState ?? null,
+                        'includeVisitorTrust' => $includeVisitorTrust ?? false,
+                        'includeCountry' => $includeCountry ?? true,
+                    ])
                     @if ($showProductFilters)
                         <hr class="etd-filter-divider"/>
                     @endif

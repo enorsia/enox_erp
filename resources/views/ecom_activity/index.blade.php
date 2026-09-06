@@ -31,7 +31,7 @@
         'dateFrom' => $dateFrom,
         'dateTo' => $dateTo,
         'drawerWide' => true,
-        'includeVisitorTrust' => true,
+        'includeVisitorTrust' => false,
         'includeSessionSearch' => \App\Support\EcomActivityFocus::showActivitySearchInDrawer(request()),
         'showProductFilters' => $showProductCatalogExtras,
         'productFiltersHeading' => $showProductCatalogExtras ? 'Additional product filters' : null,
@@ -107,6 +107,7 @@
                     'range' => $range,
                     'period' => $period,
                     'routeName' => 'admin.ecom-activity.index',
+                    'showDashboardLink' => true,
                 ])
 
                 <div class="etd-header-actions">
