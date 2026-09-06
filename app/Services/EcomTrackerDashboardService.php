@@ -100,7 +100,7 @@ class EcomTrackerDashboardService
             $currentIds = $this->filteredSessionIds($range['from'], $range['to'], $extraFilters, $period);
             $currentSessions = $currentSessions->only($currentIds->all());
             $scopedSessionIds = $currentSessions->keys()->values();
-            $currentKpis = $this->buildKpis($range['from'], $range['to'], $currentSessions, false, $period);
+            $currentKpis = $this->buildKpis($range['from'], $range['to'], $currentSessions, false, $period, $extraFilters);
         }
         $productCatalog = $this->buildProductCatalogPerformance(
             $range['from'],
@@ -2219,10 +2219,10 @@ class EcomTrackerDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function buildKpis(Carbon $from, Carbon $to, Collection $sessions, bool $useNormalizedOrders = false, ?string $period = null): array
+    private function buildKpis(Carbon $from, Carbon $to, Collection $sessions, bool $useNormalizedOrders = false, ?string $period = null, array $filters = []): array
     {
         $sessionIds = $sessions->keys();
-        $funnel = $this->computeFunnelKpis($from, $to, $sessions, $period);
+        $funnel = $this->computeFunnelKpis($from, $to, $sessions, $period, $filters);
 
         $commerceScope = $useNormalizedOrders ? null : $sessionIds;
         $revenue = $this->sumRevenueForSessions($from, $to, $commerceScope);
@@ -2299,19 +2299,64 @@ class EcomTrackerDashboardService
     }
 
     /**
+     * @param  array<string, mixed>  $filters
+     * @return array{cart_abandoned_count: int, begin_checkout_abandoned_count: int, proceed_checkout_abandoned_count: int}
+     */
+    private function abandonedSessionCounts(
+        Carbon $from,
+        Carbon $to,
+        array $filters = [],
+        ?string $period = null,
+    ): array {
+        return [
+            'cart_abandoned_count' => (int) $this->abandonedSessions(
+                $from,
+                $to,
+                'add_to_cart',
+                'add_to_cart',
+                null,
+                $filters,
+                'begin_checkout',
+                $period,
+            )['total_count'],
+            'begin_checkout_abandoned_count' => (int) $this->abandonedSessions(
+                $from,
+                $to,
+                'begin_checkout',
+                'begin_checkout',
+                null,
+                $filters,
+                'proceed_checkout',
+                $period,
+            )['total_count'],
+            'proceed_checkout_abandoned_count' => (int) $this->abandonedSessions(
+                $from,
+                $to,
+                'proceed_checkout',
+                'proceed_to_checkout',
+                null,
+                $filters,
+                'payment_success',
+                $period,
+            )['total_count'],
+        ];
+    }
+
+    /**
      * @return array<string, float|int>
      */
     private function computeFunnelKpisFromAggregates(Carbon $from, Carbon $to, ?string $period = null): array
     {
         $row = $this->periodSessionAggregates($from, $to, $period);
+        $abandoned = $this->abandonedSessionCounts($from, $to, [], $period);
         $totalSessions = $row['sessions'];
         $convertedSessions = $row['payment_success'];
         $cartStageCount = $row['add_to_cart'];
         $beginCheckoutStageCount = $row['begin_checkout'];
         $proceedCheckoutStageCount = $row['proceed_checkout'];
-        $cartAbandoned = $row['cart_abandoned'];
-        $beginCheckoutAbandoned = $row['begin_checkout_abandoned'];
-        $proceedCheckoutAbandoned = $row['proceed_checkout_abandoned'];
+        $cartAbandoned = $abandoned['cart_abandoned_count'];
+        $beginCheckoutAbandoned = $abandoned['begin_checkout_abandoned_count'];
+        $proceedCheckoutAbandoned = $abandoned['proceed_checkout_abandoned_count'];
 
         $conversionRate = $totalSessions > 0 ? ($convertedSessions / $totalSessions) * 100 : 0;
         $cartAbandonRate = $cartStageCount > 0 ? ($cartAbandoned / $cartStageCount) * 100 : 0;
@@ -2364,22 +2409,20 @@ class EcomTrackerDashboardService
     /**
      * @return array<string, float|int>
      */
-    private function computeFunnelKpis(Carbon $from, Carbon $to, Collection $sessions, ?string $period = null): array
+    private function computeFunnelKpis(Carbon $from, Carbon $to, Collection $sessions, ?string $period = null, array $filters = []): array
     {
         return $this->rememberQuery(
-            $this->sessionSetCacheKey('computeFunnelKpis', $from, $to, $sessions->keys()),
-            function () use ($from, $to, $sessions, $period) {
+            $this->queryCacheKey('computeFunnelKpis', $from, $to, $period, $filters, $sessions->keys()->sort()->values()->all()),
+            function () use ($from, $to, $sessions, $period, $filters) {
                 $sessionIds = $sessions->keys();
                 $totalSessions = $sessionIds->count();
                 $typeSets = $this->sessionActionTypeSets($sessionIds, $from, $to, $period);
+                $abandoned = $this->abandonedSessionCounts($from, $to, $filters, $period);
 
                 $convertedSessions = 0;
                 $cartStageCount = 0;
                 $beginCheckoutStageCount = 0;
                 $proceedCheckoutStageCount = 0;
-                $cartAbandoned = 0;
-                $beginCheckoutAbandoned = 0;
-                $proceedCheckoutAbandoned = 0;
 
                 foreach ($typeSets as $types) {
                     $hasCart = isset($types['add_to_cart']);
@@ -2393,28 +2436,20 @@ class EcomTrackerDashboardService
 
                     if ($hasCart) {
                         $cartStageCount++;
-
-                        if (! $hasBegin) {
-                            $cartAbandoned++;
-                        }
                     }
 
                     if ($hasBegin) {
                         $beginCheckoutStageCount++;
-
-                        if (! $hasProceed) {
-                            $beginCheckoutAbandoned++;
-                        }
                     }
 
                     if ($hasProceed) {
                         $proceedCheckoutStageCount++;
-
-                        if (! $hasPayment) {
-                            $proceedCheckoutAbandoned++;
-                        }
                     }
                 }
+
+                $cartAbandoned = $abandoned['cart_abandoned_count'];
+                $beginCheckoutAbandoned = $abandoned['begin_checkout_abandoned_count'];
+                $proceedCheckoutAbandoned = $abandoned['proceed_checkout_abandoned_count'];
 
                 $conversionRate = $totalSessions > 0 ? ($convertedSessions / $totalSessions) * 100 : 0;
                 $cartAbandonRate = $cartStageCount > 0 ? ($cartAbandoned / $cartStageCount) * 100 : 0;
@@ -2549,7 +2584,7 @@ class EcomTrackerDashboardService
         $period = $range['period'] ?? null;
         $current = $extraFilters === []
             ? $this->computeFunnelKpisFromAggregates($from, $to, $period)
-            : $this->computeFunnelKpis($from, $to, $currentSessions, $period);
+            : $this->computeFunnelKpis($from, $to, $currentSessions, $period, $extraFilters);
         $prevRange = $this->resolvePreviousPeriodRange($range);
         $prevPeriod = $prevRange['period'] ?? null;
         $previous = $extraFilters === []
@@ -2559,6 +2594,7 @@ class EcomTrackerDashboardService
                 $prevRange['to'],
                 $this->filteredSessionsForRange($prevRange['from'], $prevRange['to'], $extraFilters, $prevPeriod),
                 $prevPeriod,
+                $extraFilters,
             );
         $comparisonLabel = $prevRange['label'];
 
@@ -2957,10 +2993,10 @@ class EcomTrackerDashboardService
     {
         if ($compare == 0.0) {
             if ($current > 0) {
-                return ['delta_pct' => null, 'delta_direction' => null, 'delta_label' => 'new'];
+                return ['delta_pct' => null, 'delta_direction' => 'up', 'delta_label' => null];
             }
 
-            return ['delta_pct' => null, 'delta_direction' => null, 'delta_label' => 'no_prior_data'];
+            return ['delta_pct' => 0.0, 'delta_direction' => 'flat', 'delta_label' => null];
         }
 
         if ($current == 0.0) {

@@ -846,6 +846,61 @@ test('ecom tracker dashboard counts all three funnel abandonment stages', functi
     expect($data['payment_success_events']['rows'][0]['occurred_ago'] ?? null)->not->toBeEmpty();
     expect($data['payment_success_events']['rows'][0]['qty'] ?? null)->toBeGreaterThan(0);
 
+    expect($data['funnel_dropoff']['cart_drop']['formatted'])->toBe('100.0% / 1');
+    expect($data['funnel_dropoff']['checkout_drop']['formatted'])->toBe('100.0% / 1');
+    expect($data['funnel_dropoff']['proceed_drop']['formatted'])->toBe('100.0% / 1');
+
+    Carbon::setTestNow();
+});
+
+test('funnel drop proceed count matches proceed checkout abandonment when session returned to cart', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-09-06 16:00:00', TrackerTime::timezone()));
+
+    $sessionId = Str::uuid()->toString();
+    $from = now()->subHours(12);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'has_add_to_cart' => true,
+        'has_begin_checkout' => true,
+        'has_proceed_checkout' => true,
+        'has_payment_success' => false,
+        'created_at' => $from,
+        'updated_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    Illuminate\Support\Facades\DB::table('activity_ecom_commerce_line_items')->insert([
+        [
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'funnel_stage' => 'proceed_checkout',
+            'line_no' => 1,
+            'qty' => 1,
+            'line_total' => 40,
+            'staged_at' => $from->copy()->addMinutes(10),
+            'created_at' => $from->copy()->addMinutes(10),
+        ],
+        [
+            'event_id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'funnel_stage' => 'add_to_cart',
+            'line_no' => 1,
+            'qty' => 1,
+            'line_total' => 40,
+            'staged_at' => $from->copy()->addMinutes(20),
+            'created_at' => $from->copy()->addMinutes(20),
+        ],
+    ]);
+
+    $data = $service->getDashboardData(['period' => '24h']);
+
+    expect($data['proceed_checkout_abandonment']['session_count'])->toBe(0);
+    expect($data['funnel_dropoff']['proceed_drop']['formatted'])->toBe('0.0% / 0');
+
     Carbon::setTestNow();
 });
 
