@@ -1489,7 +1489,6 @@ final class EcomActivityFocus
         $cartAbandonment = max(0, $normalized['adds'] - $normalized['proceed_checkouts']);
 
         return [
-            ['label' => 'Views', 'value' => number_format($normalized['views'])],
             ['label' => 'Adds', 'value' => number_format($normalized['adds'])],
             ['label' => 'Checkout', 'value' => number_format($normalized['begin_checkouts'])],
             ['label' => 'Proceed', 'value' => number_format($normalized['proceed_checkouts'])],

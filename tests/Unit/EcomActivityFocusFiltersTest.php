@@ -136,7 +136,6 @@ test('format funnel summary metrics from normalized acquisition row', function (
     $values = collect($metrics)->pluck('value', 'label')->all();
 
     expect($labels)->toBe([
-        'Views',
         'Adds',
         'Checkout',
         'Proceed',
@@ -145,7 +144,6 @@ test('format funnel summary metrics from normalized acquisition row', function (
         'Sold qty',
         'Sale',
     ])
-        ->and($values['Views'])->toBe('11')
         ->and($values['Adds'])->toBe('3')
         ->and($values['Checkout'])->toBe('2')
         ->and($values['Proceed'])->toBe('1')
@@ -199,7 +197,7 @@ test('category performance summary metrics use shared funnel formatter', functio
 
     $values = collect($metrics)->pluck('value', 'label')->all();
 
-    expect($values['Views'])->toBe('5')
+    expect($values)->not->toHaveKey('Views')
         ->and($values['Cart abandoned'])->toBe('1')
         ->and($values['Sale'])->toBe('£45.00');
 });
@@ -272,7 +270,7 @@ test('activity list context includes funnel metrics for visitor keyword search f
     expect(EcomActivityFocus::activitySummaryFiltersFromRequest($request))
         ->toMatchArray(['keyword_search' => 'Michael Corbett'])
         ->and($context['section'])->toBe('Audience & engagement')
-        ->and($values['Views'] ?? null)->toBe('4')
+        ->and($values)->not->toHaveKey('Views')
         ->and($values['Sold qty'] ?? null)->toBe('2')
         ->and($values['Sale'] ?? null)->toBe('£45.50');
 });
@@ -319,7 +317,8 @@ test('activity list context includes funnel metrics for keyword search filters',
     $labels = collect($context['metrics'] ?? [])->pluck('label')->all();
 
     expect($context['section'])->toBe('Audience & engagement')
-        ->and($labels)->toContain('Views', 'Adds', 'Checkout', 'Proceed', 'Sold', 'Sold qty', 'Sale', 'Unique visitors', 'Avg stay');
+        ->and($labels)->toContain('Adds', 'Checkout', 'Proceed', 'Sold', 'Sold qty', 'Sale', 'Unique visitors', 'Avg stay')
+        ->and($labels)->not->toContain('Views');
 });
 
 test('activity list context is built for sidebar device filters without dashboard focus', function () {
@@ -355,7 +354,8 @@ test('activity list context is built for sidebar device filters without dashboar
     expect($context)->not->toBeNull()
         ->and($context['section'])->toBe('Device & browser')
         ->and($context['clear_label'])->toBe('Clear filters')
-        ->and(collect($context['metrics'])->pluck('label')->all())->toContain('Views', 'Adds', 'Sale');
+        ->and(collect($context['metrics'])->pluck('label')->all())->toContain('Adds', 'Sale')
+        ->and(collect($context['metrics'])->pluck('label')->all())->not->toContain('Views');
 });
 
 test('activity sidebar filter keys include visitor audience and funnel fields', function () {
