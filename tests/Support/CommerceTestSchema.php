@@ -25,6 +25,7 @@ final class CommerceTestSchema
             $table->decimal('max_order_value', 14, 2)->nullable();
             $table->timestamp('first_payment_at')->nullable();
             $table->string('latest_funnel_stage', 30)->nullable();
+            $table->timestamp('last_active_at')->nullable();
             $table->timestamps();
         });
 

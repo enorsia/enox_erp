@@ -108,7 +108,7 @@ final class EcomActivitySessionSort
     }
 
     /**
-     * Catalog drill-down sort uses SQL session flags after line-item EXISTS filters.
+     * Catalog drill-down sort ranks in SQL from matching line items, not PHP.
      *
      * @param  array{from?: ?Carbon, to?: ?Carbon, catalog_options?: array<string, mixed>}  $scope
      */
@@ -199,24 +199,21 @@ final class EcomActivitySessionSort
     {
         $table = $query->getModel()->getTable();
         $dir = strtoupper($direction) === 'ASC' ? 'ASC' : 'DESC';
+        $catalogOptions = is_array($scope['catalog_options'] ?? null) ? $scope['catalog_options'] : [];
+        $useCatalogScope = self::usesCatalogActionScope($catalogOptions);
 
-        $rankSql = <<<SQL
-CASE
-    WHEN {$table}.has_payment_success = 1 THEN 5
-    WHEN {$table}.has_proceed_checkout = 1 THEN 4
-    WHEN {$table}.has_begin_checkout = 1 THEN 3
-    WHEN {$table}.has_add_to_cart = 1 THEN 2
-    ELSE 0
-END
-SQL;
+        $lineSub = self::funnelLineTimesSubquery($scope, $useCatalogScope ? $catalogOptions : []);
 
-        $lineSub = DB::table('activity_ecom_commerce_line_items')
-            ->selectRaw("session_id as line_session_id,
-                MAX(CASE WHEN funnel_stage = 'payment_success' THEN staged_at END) as latest_payment_staged,
-                MAX(CASE WHEN funnel_stage = 'proceed_checkout' THEN staged_at END) as latest_proceed,
-                MAX(CASE WHEN funnel_stage = 'begin_checkout' THEN staged_at END) as latest_begin,
-                MAX(CASE WHEN funnel_stage = 'add_to_cart' THEN staged_at END) as latest_cart")
-            ->groupBy('session_id');
+        $query = $query
+            ->leftJoinSub($lineSub, 'funnel_line_times', 'funnel_line_times.line_session_id', '=', "{$table}.session_id")
+            ->select("{$table}.*");
+
+        if ($useCatalogScope) {
+            return $query
+                ->orderByRaw('COALESCE(funnel_line_times.stage_rank, 0) '.$dir)
+                ->orderByRaw(self::catalogStageTimeSql($table).' '.$dir)
+                ->orderByDesc("{$table}.id");
+        }
 
         $orderSub = DB::table('activity_ecom_orders')
             ->selectRaw('session_id as order_session_id, MAX(ordered_at) as latest_ordered_at')
@@ -227,9 +224,18 @@ SQL;
 
         if ($from instanceof Carbon && $to instanceof Carbon) {
             [$start, $end] = TrackerTime::storageRange($from, $to);
-            $lineSub->whereBetween('staged_at', [$start, $end]);
             $orderSub->whereBetween('ordered_at', [$start, $end]);
         }
+
+        $rankSql = <<<SQL
+CASE
+    WHEN {$table}.has_payment_success = 1 THEN 5
+    WHEN {$table}.has_proceed_checkout = 1 THEN 4
+    WHEN {$table}.has_begin_checkout = 1 THEN 3
+    WHEN {$table}.has_add_to_cart = 1 THEN 2
+    ELSE 0
+END
+SQL;
 
         $stageTimeSql = <<<SQL
 CASE
@@ -242,12 +248,62 @@ END
 SQL;
 
         return $query
-            ->leftJoinSub($lineSub, 'funnel_line_times', 'funnel_line_times.line_session_id', '=', "{$table}.session_id")
             ->leftJoinSub($orderSub, 'funnel_order_times', 'funnel_order_times.order_session_id', '=', "{$table}.session_id")
-            ->select("{$table}.*")
             ->orderByRaw($rankSql.' '.$dir)
             ->orderByRaw($stageTimeSql.' '.$dir)
             ->orderByDesc("{$table}.id");
+    }
+
+    /**
+     * @param  array{from?: ?Carbon, to?: ?Carbon, catalog_options?: array<string, mixed>}  $scope
+     * @param  array<string, mixed>  $catalogOptions
+     */
+    private static function funnelLineTimesSubquery(array $scope, array $catalogOptions): \Illuminate\Database\Query\Builder
+    {
+        $lineSub = DB::table('activity_ecom_commerce_line_items as li')
+            ->selectRaw("li.session_id as line_session_id,
+                MAX(CASE
+                    WHEN li.funnel_stage = 'payment_success' THEN 5
+                    WHEN li.funnel_stage = 'proceed_checkout' THEN 4
+                    WHEN li.funnel_stage = 'begin_checkout' THEN 3
+                    WHEN li.funnel_stage = 'add_to_cart' THEN 2
+                    WHEN li.funnel_stage IN ('product_view', 'product_view_popup', 'category_view') THEN 1
+                    ELSE 0
+                END) as stage_rank,
+                MAX(CASE WHEN li.funnel_stage = 'payment_success' THEN li.staged_at END) as latest_payment_staged,
+                MAX(CASE WHEN li.funnel_stage = 'proceed_checkout' THEN li.staged_at END) as latest_proceed,
+                MAX(CASE WHEN li.funnel_stage = 'begin_checkout' THEN li.staged_at END) as latest_begin,
+                MAX(CASE WHEN li.funnel_stage = 'add_to_cart' THEN li.staged_at END) as latest_cart,
+                MAX(CASE WHEN li.funnel_stage IN ('product_view', 'product_view_popup', 'category_view') THEN li.staged_at END) as latest_view")
+            ->groupBy('li.session_id');
+
+        $from = $scope['from'] ?? null;
+        $to = $scope['to'] ?? null;
+
+        if ($from instanceof Carbon && $to instanceof Carbon) {
+            [$start, $end] = TrackerTime::storageRange($from, $to);
+            $lineSub->whereBetween('li.staged_at', [$start, $end]);
+        }
+
+        if ($catalogOptions !== []) {
+            CommerceLineItemQuery::applyCatalogFilters($lineSub, $catalogOptions, 'li');
+        }
+
+        return $lineSub;
+    }
+
+    private static function catalogStageTimeSql(string $table): string
+    {
+        return <<<SQL
+CASE
+    WHEN COALESCE(funnel_line_times.stage_rank, 0) = 5 THEN COALESCE(funnel_line_times.latest_payment_staged, {$table}.first_payment_at, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN COALESCE(funnel_line_times.stage_rank, 0) = 4 THEN COALESCE(funnel_line_times.latest_proceed, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN COALESCE(funnel_line_times.stage_rank, 0) = 3 THEN COALESCE(funnel_line_times.latest_begin, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN COALESCE(funnel_line_times.stage_rank, 0) = 2 THEN COALESCE(funnel_line_times.latest_cart, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN COALESCE(funnel_line_times.stage_rank, 0) = 1 THEN COALESCE(funnel_line_times.latest_view, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    ELSE COALESCE({$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+END
+SQL;
     }
 
     /**
