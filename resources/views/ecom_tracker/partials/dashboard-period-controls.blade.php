@@ -13,17 +13,10 @@
 @endphp
 
 <div class="etd-date-nav">
-    <a href="{{ $dayNav['previous_url'] }}"
-       class="etd-segmented-btn etd-date-nav-btn no-underline"
-       aria-label="Previous day"
-       title="Previous day">
-        <svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-    </a>
-
     @can('ecom_tracker.dashboard.index')
         @if ($showDashboardLink ?? false)
             <div class="etd-segmented etd-segmented--compact etd-date-nav__shortcut">
-                <a href="{{ EcomTrackerViewData::dashboardShortcutUrl(request()) }}" class="etd-segmented-btn no-underline">Dashboard</a>
+                <a href="{{ $dashboardUrl ?? EcomTrackerViewData::dashboardShortcutUrl(request()) }}" class="etd-segmented-btn no-underline">Dashboard</a>
             </div>
         @endif
     @endcan
@@ -35,6 +28,13 @@
             </div>
         @endif
     @endcan
+
+    <a href="{{ $dayNav['previous_url'] }}"
+       class="etd-segmented-btn etd-date-nav-btn no-underline"
+       aria-label="Previous day"
+       title="Previous day">
+        <svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    </a>
 
     <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
         <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="{{ TrackerTime::todayPresetLabel() }}">{{ TrackerTime::todayPresetButtonLabel() }}</a>

@@ -253,12 +253,12 @@
                                 </a>
                             @endcan
 
-                            @can('ecom_tracker.activity.index')
+                            {{-- @can('ecom_tracker.activity.index')
                                 <a href="{{ route('admin.ecom-activity.index') }}"
                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-activity*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     User Activity
                                 </a>
-                            @endcan
+                            @endcan --}}
 
                         </div>
                     </div>

@@ -95,19 +95,13 @@
             </div>
 
             <div class="etd-page-header-right">
-                @if (filled($backUrl ?? null))
-                    @include('ecom_tracker.partials.header-back-button', [
-                        'url' => $backUrl,
-                        'label' => 'Dashboard',
-                    ])
-                @endif
-
                 @include('ecom_tracker.partials.dashboard-period-controls', [
                     'baseQuery' => $baseQuery,
                     'range' => $range,
                     'period' => $period,
                     'routeName' => 'admin.ecom-activity.index',
                     'showDashboardLink' => true,
+                    'dashboardUrl' => $backUrl ?? null,
                 ])
 
                 <div class="etd-header-actions">
