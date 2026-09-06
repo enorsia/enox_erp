@@ -3386,9 +3386,21 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     background: #fff;
 }
 
+.dark .etd-category-departments .etd-category-dept-row {
+    background: transparent;
+}
+
 .etd-category-departments .etd-category-dept-row.is-expanded,
 .etd-category-departments .etd-catalog-product-row.is-expanded {
     background: #f8fafc;
+}
+
+.dark .etd-category-departments .etd-category-dept-row .etd-catalog-expand-btn {
+    color: #94a3b8;
+}
+
+.dark .etd-category-departments .etd-category-dept-row .etd-catalog-expand-btn:hover {
+    color: var(--etd-green);
 }
 
 .etd-category-departments thead .etd-catalog-expand-col,
@@ -3433,15 +3445,39 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 }
 
 .etd-category-child-name {
-    padding-left: 0.65rem !important;
+    padding-left: 0.35rem !important;
     padding-right: 0.35rem !important;
+    vertical-align: middle;
     font-weight: 400;
     color: #475569;
+}
+
+.etd-category-child-line {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.etd-category-child-branch {
+    width: 0.75rem;
+    height: 0.75rem;
+    flex-shrink: 0;
+    color: #94a3b8;
+}
+
+.etd-category-child-label {
+    display: block;
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    white-space: nowrap;
+    line-height: 1.35;
+}
+
+.etd-category-departments .etd-category-child-row td.etd-col-category {
+    vertical-align: middle;
 }
 
 .etd-category-count-badge {
@@ -3469,7 +3505,7 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 
 .dark .etd-category-departments .etd-category-dept-row.is-expanded,
 .dark .etd-category-departments .etd-catalog-product-row.is-expanded {
-    background: rgba(15, 23, 42, 0.55);
+    background: rgba(0, 153, 102, 0.12);
 }
 
 .dark .etd-category-child-row td {
@@ -3477,8 +3513,13 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     border-top-color: #334155;
 }
 
-.dark .etd-category-child-name {
+.dark .etd-category-child-name,
+.dark .etd-category-child-label {
     color: #cbd5e1;
+}
+
+.dark .etd-category-child-branch {
+    color: #64748b;
 }
 
 .dark .etd-category-count-badge {

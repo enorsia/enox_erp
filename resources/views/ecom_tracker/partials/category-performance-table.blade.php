@@ -103,13 +103,18 @@
                             x-cloak>
                             <td class="etd-catalog-expand-col"></td>
                             <td class="etd-col-category etd-category-child-name">
-                                @if ($categoryLink)
-                                    <a href="{{ $categoryLink }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
-                                        {{ $category['category_name'] }}
-                                    </a>
-                                @else
-                                    {{ $category['category_name'] }}
-                                @endif
+                                <div class="etd-category-child-line">
+                                    <svg class="etd-category-child-branch" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 2v5h6"/>
+                                    </svg>
+                                    @if ($categoryLink)
+                                        <a href="{{ $categoryLink }}" class="etd-row-drilldown-link etd-category-child-label no-underline text-inherit hover:text-accent-500">
+                                            {{ $category['category_name'] }}
+                                        </a>
+                                    @else
+                                        <span class="etd-category-child-label">{{ $category['category_name'] }}</span>
+                                    @endif
+                                </div>
                             </td>
                             <td class="etd-num etd-col-metric">{{ number_format($category['category_views'] ?? 0) }}</td>
                             <td class="etd-num etd-col-metric">{{ number_format($category['product_views'] ?? 0) }}</td>

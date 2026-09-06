@@ -242,7 +242,7 @@
                     <h2 class="etd-panel-title">Category performance</h2>
                     @php $categoryTotals = $d['category_catalog_totals'] ?? null; @endphp
                     @if ($categoryTotals && ($categoryTotals['category_count'] ?? 0) > 0)
-                        <p class="etd-panel-subtitle text-slate-500 text-sm mt-1 mb-0">
+                        <p class="etd-panel-subtitle text-slate-500 dark:text-slate-400 text-sm mt-1 mb-0">
                             {{ number_format($categoryTotals['category_views'] ?? 0) }} category views · {{ number_format($categoryTotals['product_views'] ?? 0) }} product views across {{ number_format($categoryTotals['category_count']) }} categories
                         </p>
                     @endif
