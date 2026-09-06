@@ -1,6 +1,6 @@
 @props([
     'title',
-    'rangeLabel' => 'Last 24 hours',
+    'rangeLabel' => \App\Support\TrackerTime::todayPresetLabel(),
     'activeWindow',
     'datetimeFromValue' => '',
     'datetimeToValue' => '',
@@ -60,8 +60,8 @@
 
         <div class="etd-page-header-right">
             <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Time window">
-                @foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days'] as $windowKey => $windowLabel)
-                    <button type="button" class="etd-segmented-btn {{ $activeWindow === $windowKey ? 'active' : '' }}" aria-label="{{ $windowLabel }}" @click="apply('{{ $windowKey }}')">{{ $windowKey }}</button>
+                @foreach (['24h' => \App\Support\TrackerTime::todayPresetButtonLabel(), '7d' => '7 days', '30d' => '30 days', '90d' => '90 days'] as $windowKey => $windowLabel)
+                    <button type="button" class="etd-segmented-btn {{ $activeWindow === $windowKey ? 'active' : '' }}" aria-label="{{ $windowLabel }}" @click="apply('{{ $windowKey }}')">{{ $windowKey === '24h' ? \App\Support\TrackerTime::todayPresetButtonLabel() : $windowKey }}</button>
                 @endforeach
                 <button type="button" class="etd-segmented-btn {{ $activeWindow === 'custom' ? 'active' : '' }}" aria-label="Custom date range" @click="apply('custom')">Custom</button>
             </div>

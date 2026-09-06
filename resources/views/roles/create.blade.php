@@ -59,6 +59,9 @@
                 @if (!empty($nested) && count($nested))
                     <div class="space-y-3">
                         @foreach ($nested as $moduleIndex => $moduleItem)
+                            @if (strtolower($moduleIndex) === 'ecom_tracker' && ! config('tracker.enabled'))
+                                @continue
+                            @endif
                             @php $colId = 'mod_' . Str::slug($moduleIndex); @endphp
                             <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
                                 <!-- Module header -->

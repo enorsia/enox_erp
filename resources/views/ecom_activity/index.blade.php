@@ -14,7 +14,7 @@
     $dateTo = request('date_to');
     $period = request('period', '24h');
     $activePreset = $period === 'all' ? 'all' : '24h';
-    $rangeLabel = $period === 'all' ? 'All sessions' : 'Last 24 hours';
+    $rangeLabel = $period === 'all' ? 'All sessions' : \App\Support\TrackerTime::todayPresetLabel();
 
     if ($period !== 'all' && filled($dateFrom) && filled($dateTo)) {
         $from = Carbon::parse($dateFrom, TrackerTime::timezone())->startOfDay();
@@ -105,7 +105,7 @@
 
             <div class="etd-page-header-right">
                 <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Session date range">
-                    <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="Last 24 hours">24h</a>
+                    <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="{{ \App\Support\TrackerTime::todayPresetLabel() }}">{{ \App\Support\TrackerTime::todayPresetButtonLabel() }}</a>
                     <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
                     <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
                     <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
@@ -174,7 +174,7 @@
     </header>
 
     <div class="etd-panel">
-        <div class="etd-table-scroll">
+        <div class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity">
             <table class="etd-table etd-table--activity w-full">
                 <thead>
                     <tr>
@@ -228,7 +228,7 @@
                             </td>
                             <td class="etd-num">{{ $session->actions_count }}</td>
                             <td>{{ format_duration((int) ($session->session_duration_seconds ?? 0)) }}</td>
-                            <td>{{ TrackerTime::diffForHumansFromStorage($session->last_active_at) ?? '—' }}</td>
+                            <td>{{ TrackerTime::diffForHumansLatestActivity($session->updated_at, $session->last_active_at, $session->created_at) ?? '—' }}</td>
                             <td class="etd-col-action">
                                 @can('ecom_tracker.activity.show')
                                     <a href="{{ \App\Support\EcomTrackerViewData::activityShowUrl($session->session_id) }}" class="etd-link">View session</a>

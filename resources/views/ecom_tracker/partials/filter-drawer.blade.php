@@ -84,7 +84,7 @@
                                 data-placeholder="All"
                                 @change="drawerPeriod = $event.target.value">
                             <option value="" @selected(! request()->filled('period'))>All</option>
-                            @foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', 'custom' => 'Custom'] as $periodKey => $periodOptionLabel)
+                            @foreach (['24h' => \App\Support\TrackerTime::todayPresetButtonLabel(), 'yesterday' => \App\Support\TrackerTime::yesterdayPresetButtonLabel(), '7d' => '7 days', '30d' => '30 days', 'custom' => 'Custom'] as $periodKey => $periodOptionLabel)
                                 <option value="{{ $periodKey }}" @selected($period === $periodKey)>{{ $periodOptionLabel }}</option>
                             @endforeach
                         </select>

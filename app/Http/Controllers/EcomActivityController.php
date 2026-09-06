@@ -7,18 +7,20 @@ use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomActivityFilterCounts;
 use App\Services\EcomActivityTimelinePresenter;
+use App\Services\EcomTrackerFeatureGate;
 use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
+use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 
-class EcomActivityController extends Controller
+class EcomActivityController extends EcomTrackerAdminController
 {
     private const TIMELINE_PER_PAGE = 15;
 
@@ -31,6 +33,11 @@ class EcomActivityController extends Controller
         'payment_success',
     ];
 
+    public function __construct(EcomTrackerFeatureGate $featureGate)
+    {
+        parent::__construct($featureGate);
+    }
+
     public function index(Request $request): View
     {
         $startedAt = microtime(true);
@@ -39,9 +46,7 @@ class EcomActivityController extends Controller
         $query = $this->buildIndexQuery($request);
 
         $sessions = (clone $query)
-            ->orderByDesc('last_active_at')
-            ->orderByDesc('created_at')
-            ->orderByDesc('id')
+            ->orderByLatestActivity()
             ->paginate(25)
             ->withQueryString();
 
@@ -88,6 +93,11 @@ class EcomActivityController extends Controller
             ->get();
 
         $fullTimeline = $timelinePresenter->present($actions);
+        $latestActionAt = $actions
+            ->map(fn (ActivityEcomUserAction $action) => TrackerTime::toUtc($action->created_at))
+            ->filter()
+            ->sortByDesc(fn (?Carbon $at) => $at?->timestamp ?? 0)
+            ->first();
 
         $reachedSteps = $fullTimeline
             ->pluck('action_type')
@@ -145,6 +155,7 @@ class EcomActivityController extends Controller
             'backUrl' => $backUrl,
             'trafficAttribution' => $trafficAttribution,
             'landingPage' => $landingPage,
+            'latestActionAt' => $latestActionAt,
         ]);
     }
 
@@ -155,21 +166,26 @@ class EcomActivityController extends Controller
         }
 
         if ($request->filled('date_from') || $request->filled('date_to')) {
-            if ($request->filled('date_from')) {
-                $query->whereDate('created_at', '>=', $request->date_from);
-            }
+            $timezone = TrackerTime::timezone();
 
-            if ($request->filled('date_to')) {
-                $query->whereDate('created_at', '<=', $request->date_to);
+            if ($request->filled('date_from') && $request->filled('date_to')) {
+                $from = \Carbon\Carbon::parse($request->date_from, $timezone)->startOfDay()->utc();
+                $to = \Carbon\Carbon::parse($request->date_to, $timezone)->endOfDay()->utc();
+                $query->whereBetween('created_at', TrackerTime::storageRange($from, $to));
+            } elseif ($request->filled('date_from')) {
+                $from = \Carbon\Carbon::parse($request->date_from, $timezone)->startOfDay()->utc();
+                $query->where('created_at', '>=', TrackerTime::formatUtc($from));
+            } elseif ($request->filled('date_to')) {
+                $to = \Carbon\Carbon::parse($request->date_to, $timezone)->endOfDay()->utc();
+                $query->where('created_at', '<=', TrackerTime::formatUtc($to));
             }
 
             return;
         }
 
-        $from = TrackerTime::localNow()->subHours(24)->utc();
-        $to = TrackerTime::localNow()->utc();
+        $today = TrackerTime::todayRangeUtc();
 
-        TrackerTime::applySessionActivityWindow($query, $from, $to);
+        TrackerTime::applyEcomActivitySessionScope($query, $today['from'], $today['to'], '24h');
     }
 
     /**

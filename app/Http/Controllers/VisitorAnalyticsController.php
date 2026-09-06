@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exports\VisitorAnalyticsExport;
 use App\Models\TrackerUtmFilter;
 use App\Services\BotTrafficAnalyticsService;
+use App\Services\EcomTrackerFeatureGate;
 use App\Services\VisitorAnalyticsService;
 use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
@@ -17,12 +18,15 @@ use Illuminate\Support\Facades\Gate;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
-class VisitorAnalyticsController extends Controller
+class VisitorAnalyticsController extends EcomTrackerAdminController
 {
     public function __construct(
+        EcomTrackerFeatureGate $featureGate,
         private VisitorAnalyticsService $analytics,
         private BotTrafficAnalyticsService $botTrafficAnalytics,
-    ) {}
+    ) {
+        parent::__construct($featureGate);
+    }
 
     public function index(Request $request): View
     {
@@ -183,6 +187,18 @@ class VisitorAnalyticsController extends Controller
         }
 
         $window = $request->input('window', '24h');
+
+        if ($window === '24h') {
+            $today = TrackerTime::todayRangeUtc();
+
+            return [
+                'from' => $today['from'],
+                'to' => $today['to'],
+                'until' => $today['to'],
+                'label' => TrackerTime::todayPresetLabel(),
+            ];
+        }
+
         $from = $this->resolveSince($request, $window);
         $to = TrackerTime::nowUtc();
 
@@ -206,7 +222,7 @@ class VisitorAnalyticsController extends Controller
             '3h' => 'Last 3 hours',
             '6h' => 'Last 6 hours',
             '12h' => 'Last 12 hours',
-            '24h' => 'Last 24 hours',
+            '24h' => TrackerTime::todayPresetLabel(),
             '1d' => 'Last 1 day',
             '7d' => 'Last 7 days',
             '14d' => 'Last 14 days',
@@ -221,7 +237,7 @@ class VisitorAnalyticsController extends Controller
             '6m' => 'Last 6 months',
             '12m' => 'Last 12 months',
             '1y' => 'Last 1 year',
-            default => 'Last 24 hours',
+            default => TrackerTime::todayPresetLabel(),
         };
     }
 

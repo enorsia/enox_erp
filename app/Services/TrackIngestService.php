@@ -6,11 +6,12 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -87,6 +88,18 @@ class TrackIngestService
 
             $this->validatePaymentSuccessPayload($event);
 
+            if ($this->isDuplicatePaymentSuccess($event)) {
+                $acceptedIds[] = $eventId;
+
+                $this->logWarning('ingest.skip_duplicate_payment', 'Skipped duplicate payment_success for order', [
+                    'session_id' => $sessionId,
+                    'event_id' => $eventId,
+                    'order_id' => $this->paymentSuccessOrderId($event),
+                ]);
+
+                continue;
+            }
+
             $row = $this->mapEventToRow($sessionId, $event);
 
             ActivityEcomUserAction::query()->updateOrInsert(
@@ -94,7 +107,11 @@ class TrackIngestService
                 $row
             );
 
-            $this->backfillSessionAttribution($sessionId, $event['page_url'] ?? null);
+            $this->backfillSessionAttribution(
+                $sessionId,
+                $event['page_url'] ?? null,
+                $event['referer'] ?? null,
+            );
 
             if (($event['action_type'] ?? '') === 'proceed_checkout') {
                 $this->syncSessionUserFromProceedCheckout($sessionId, $event);
@@ -111,8 +128,12 @@ class TrackIngestService
                 'event_id' => $eventId,
                 'action_type' => $event['action_type'] ?? null,
                 'page_url' => $event['page_url'] ?? null,
+                'category_name' => $event['category_name'] ?? null,
+                'department_name' => $event['department_name'] ?? null,
             ]);
         }
+
+        $this->syncSessionLastActiveFromEvents($sessionId, $events);
 
         $this->logInfo('ingest.complete', 'All actions saved', [
             'session_id' => $sessionId,
@@ -142,7 +163,6 @@ class TrackIngestService
             'device_type' => $parsed['device_type'],
             'browser' => $parsed['browser'],
             'os' => $parsed['os'],
-            'last_active_at' => $now,
         ];
 
         if ($clientContext !== null && ! empty($clientContext['ip_country'])) {
@@ -166,11 +186,13 @@ class TrackIngestService
         }
 
         if (! $existing) {
+            $ingestAttribution = SessionTrafficAttribution::sessionAttributesFromIngest($sessionData);
+
             $attributes['session_id'] = $sessionId;
-            $attributes['utm_source'] = $sessionData['utm_source'] ?? null;
-            $attributes['utm_medium'] = $sessionData['utm_medium'] ?? null;
-            $attributes['utm_campaign'] = $sessionData['utm_campaign'] ?? null;
-            $attributes['landing_page'] = $sessionData['landing_page'] ?? null;
+            $attributes['utm_source'] = $ingestAttribution['utm_source'] ?? $sessionData['utm_source'] ?? null;
+            $attributes['utm_medium'] = $ingestAttribution['utm_medium'] ?? $sessionData['utm_medium'] ?? null;
+            $attributes['utm_campaign'] = $ingestAttribution['utm_campaign'] ?? $sessionData['utm_campaign'] ?? null;
+            $attributes['landing_page'] = $ingestAttribution['landing_page'] ?? $sessionData['landing_page'] ?? null;
             $attributes['created_at'] = $now;
             $attributes['updated_at'] = $now;
             $attributes['session_duration_seconds'] = 0;
@@ -207,16 +229,22 @@ class TrackIngestService
     /**
      * @param  array<string, mixed>  $sessionData
      */
-    private function mergeAttributionIntoSession(ActivityEcomUser $session, array $sessionData): void
-    {
+    private function mergeAttributionIntoSession(
+        ActivityEcomUser $session,
+        array $sessionData,
+        ?string $pageUrl = null,
+        ?string $referer = null,
+    ): void {
+        $attribution = SessionTrafficAttribution::sessionAttributesFromIngest($sessionData, $pageUrl, $referer);
+
         $updates = [];
 
         foreach (['utm_source', 'utm_medium', 'utm_campaign', 'landing_page'] as $field) {
-            if (filled($session->{$field}) || empty($sessionData[$field])) {
+            if (filled($session->{$field}) || empty($attribution[$field] ?? null)) {
                 continue;
             }
 
-            $updates[$field] = $sessionData[$field];
+            $updates[$field] = $attribution[$field];
         }
 
         if ($updates !== []) {
@@ -224,9 +252,9 @@ class TrackIngestService
         }
     }
 
-    private function backfillSessionAttribution(string $sessionId, ?string $pageUrl): void
+    private function backfillSessionAttribution(string $sessionId, ?string $pageUrl, ?string $referer = null): void
     {
-        if (! filled($pageUrl)) {
+        if (! filled($pageUrl) && ! filled($referer)) {
             return;
         }
 
@@ -236,7 +264,7 @@ class TrackIngestService
             return;
         }
 
-        SessionTrafficAttribution::backfillSession($session, $pageUrl);
+        SessionTrafficAttribution::backfillSession($session, $pageUrl, $referer);
     }
 
     /**
@@ -291,8 +319,10 @@ class TrackIngestService
         $scalarFields = [
             'category_name',
             'category_code',
+            'department_name',
             'product_name',
             'product_code',
+            'sku',
             'product_color_id',
             'product_color_code',
             'general_color_name',
@@ -319,6 +349,7 @@ class TrackIngestService
 
         if ($actionType === 'add_to_cart' && isset($event['add_to_cart'])) {
             $row['add_to_cart'] = json_encode($event['add_to_cart']);
+            $row = $this->enrichAddToCartScalars($row, $event['add_to_cart']);
         }
 
         if ($actionType === 'begin_checkout' && isset($event['begin_checkout'])) {
@@ -331,6 +362,40 @@ class TrackIngestService
 
         if ($actionType === 'payment_success' && isset($event['payment_success'])) {
             $row['payment_success'] = json_encode($event['payment_success']);
+        }
+
+        if (($row['department_name'] ?? '') === '' && ($actionType === 'category_view' || ! empty($row['category_name']))) {
+            $departmentName = TrackerCategoryIdentity::departmentNameFromPageUrl((string) ($event['page_url'] ?? ''));
+
+            if ($departmentName !== '') {
+                $row['department_name'] = $departmentName;
+            }
+        }
+
+        return $row;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>  $cart
+     * @return array<string, mixed>
+     */
+    private function enrichAddToCartScalars(array $row, array $cart): array
+    {
+        $items = $cart['items'] ?? [];
+        $line = is_array($items[0] ?? null) ? $items[0] : [];
+
+        foreach (['category_name', 'category_code', 'department_name', 'product_name', 'product_code', 'sku'] as $field) {
+            if (! empty($row[$field])) {
+                continue;
+            }
+
+            $value = $cart[$field] ?? $line[$field] ?? null;
+            $normalized = $this->normalizeScalarField($field, $value);
+
+            if ($normalized !== null && $normalized !== '') {
+                $row[$field] = $normalized;
+            }
         }
 
         return $row;
@@ -513,7 +578,77 @@ class TrackIngestService
             return 0;
         }
 
-        return (int) $createdAt->diffInSeconds(TrackerTime::nowUtc());
+        $lastActiveAt = TrackerTime::toUtc($session->getRawOriginal('last_active_at')) ?? TrackerTime::nowUtc();
+
+        return $this->durationSecondsBetween($createdAt, $lastActiveAt);
+    }
+
+    private function durationSecondsBetween(Carbon $from, Carbon $to): int
+    {
+        if ($to->lessThan($from)) {
+            return 0;
+        }
+
+        return max(0, (int) $from->diffInSeconds($to, absolute: true));
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $events
+     */
+    private function syncSessionLastActiveFromEvents(string $sessionId, array $events): void
+    {
+        $latest = null;
+
+        foreach ($events as $event) {
+            $at = TrackerTime::toUtc($event['created_at'] ?? null);
+
+            if ($at === null) {
+                continue;
+            }
+
+            if ($latest === null || $at->greaterThan($latest)) {
+                $latest = $at;
+            }
+        }
+
+        $ingestedAt = TrackerTime::nowUtc();
+
+        if ($latest === null) {
+            $latest = $ingestedAt;
+        } elseif ($ingestedAt->greaterThan($latest)) {
+            // Client event timestamps can predate session creation (view start time).
+            // Admin "last active" should reflect when we last heard from this session.
+            $latest = $ingestedAt;
+        }
+
+        $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
+
+        if ($session === null) {
+            return;
+        }
+
+        $current = TrackerTime::toUtc($session->last_active_at);
+        $updates = [
+            'updated_at' => TrackerTime::formatUtc(TrackerTime::nowUtc()),
+        ];
+
+        $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
+
+        if ($createdAt !== null && $latest->lessThan($createdAt)) {
+            $latest = $createdAt->copy();
+        }
+
+        if ($current === null || $latest->greaterThan($current)) {
+            $updates['last_active_at'] = TrackerTime::formatUtc($latest);
+        }
+
+        $effectiveLastActive = TrackerTime::toUtc($updates['last_active_at'] ?? $session->last_active_at) ?? $latest;
+
+        $updates['session_duration_seconds'] = $createdAt
+            ? $this->durationSecondsBetween($createdAt, $effectiveLastActive)
+            : 0;
+
+        $session->update($updates);
     }
 
     private function formatDateTime(mixed $value): ?string
@@ -546,6 +681,57 @@ class TrackIngestService
         }
 
         return $text;
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function paymentSuccessOrderId(array $event): string
+    {
+        $payload = $event['payment_success'] ?? [];
+
+        if (! is_array($payload)) {
+            return '';
+        }
+
+        $orderId = trim((string) ($payload['order_id'] ?? ''));
+
+        if ($orderId !== '') {
+            return $orderId;
+        }
+
+        $checkoutInfo = $payload['checkout_info'] ?? [];
+
+        if (! is_array($checkoutInfo)) {
+            return '';
+        }
+
+        return trim((string) ($checkoutInfo['order_number'] ?? $checkoutInfo['order_pk'] ?? ''));
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function isDuplicatePaymentSuccess(array $event): bool
+    {
+        if (($event['action_type'] ?? '') !== 'payment_success') {
+            return false;
+        }
+
+        $orderId = $this->paymentSuccessOrderId($event);
+
+        if ($orderId === '') {
+            return false;
+        }
+
+        return ActivityEcomUserAction::query()
+            ->where('action_type', 'payment_success')
+            ->where(function ($query) use ($orderId) {
+                $query->where('payment_success->order_id', $orderId)
+                    ->orWhere('payment_success->checkout_info->order_number', $orderId)
+                    ->orWhere('payment_success->checkout_info->order_pk', $orderId);
+            })
+            ->exists();
     }
 
     /**

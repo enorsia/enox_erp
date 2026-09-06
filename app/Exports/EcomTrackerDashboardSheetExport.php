@@ -238,6 +238,7 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'category' => 28,
             'product' => 38,
             'code' => 18,
+            'product_code' => 18,
             'sku' => 18,
             'color' => 20,
             'views' => 14,
@@ -245,6 +246,9 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'purchases' => 12,
             'revenue' => 16,
             'sale' => 16,
+            'adds' => 14,
+            'sale_items' => 14,
+            'sale_amount' => 16,
             'add_rate' => 14,
             'viewed' => 14,
             'purchased' => 14,
@@ -309,6 +313,7 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'signal',
             'signal_label',
             'code',
+            'product_code',
             'date',
             'visitor_id',
             'browser',
@@ -331,6 +336,8 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
             'views',
             'add_to_cart',
             'purchases',
+            'sale_items',
+            'sale_amount',
             'revenue',
             'sale',
             'sessions',
@@ -351,7 +358,7 @@ class EcomTrackerDashboardSheetExport implements FromCollection, WithHeadings, W
 
     private function isMoneyKey(string $key): bool
     {
-        return in_array($key, ['revenue', 'sale', 'value', 'cart_value', 'total'], true);
+        return in_array($key, ['revenue', 'sale', 'sale_amount', 'value', 'cart_value', 'total'], true);
     }
 
     private function isPercentKey(string $key): bool

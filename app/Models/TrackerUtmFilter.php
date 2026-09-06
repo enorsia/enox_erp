@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\EcomActivityFilterCounts;
+use App\Support\SessionTrafficAttribution;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -10,6 +11,88 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class TrackerUtmFilter
 {
+    /** @var list<string> */
+    private const GOOGLE_SOURCE_URL_NEEDLES = [
+        'gclid=',
+        'gbraid=',
+        'wbraid=',
+        'gad_campaignid=',
+        'gad_source=',
+        'utm_source=google',
+    ];
+
+    /** @var list<string> */
+    private const AWIN_URL_NEEDLES = [
+        'utm_source=awin',
+        'source=aw',
+        'awc=',
+    ];
+
+    /** @var array<string, list<string>> */
+    private const SOURCE_URL_NEEDLES = [
+        'facebook' => [
+            'fbclid=',
+            'utm_source=facebook',
+            'utm_source=fb',
+            'utm_source=meta',
+        ],
+        'instagram' => [
+            'utm_source=instagram',
+            'utm_source=ig',
+            'utm_source=insta',
+        ],
+        'tiktok' => [
+            'ttclid=',
+            'utm_source=tiktok',
+            'utm_source=tt',
+        ],
+        'bing' => [
+            'msclkid=',
+            'utm_source=bing',
+            'utm_source=ms',
+        ],
+        'youtube' => [
+            'utm_source=youtube',
+            'utm_source=yt',
+        ],
+        'pinterest' => [
+            'epik=',
+            'utm_source=pinterest',
+            'utm_source=pin',
+        ],
+        'linkedin' => [
+            'li_fat_id=',
+            'utm_source=linkedin',
+            'utm_source=li',
+        ],
+        'twitter' => [
+            'twclid=',
+            'utm_source=twitter',
+            'utm_source=x',
+        ],
+        'snapchat' => [
+            'sc_cid=',
+            'utm_source=snapchat',
+            'utm_source=snap',
+        ],
+    ];
+
+    /** @var list<string> */
+    private const PAID_MEDIUM_URL_NEEDLES = [
+        'gclid=',
+        'gbraid=',
+        'wbraid=',
+        'gad_campaignid=',
+        'gad_source=',
+        'fbclid=',
+        'ttclid=',
+        'twclid=',
+        'li_fat_id=',
+        'epik=',
+        'sc_cid=',
+        'msclkid=',
+    ];
+
     /**
      * @return array<string, string>
      */
@@ -32,8 +115,10 @@ final class TrackerUtmFilter
             return null;
         }
 
-        if (array_key_exists($value, self::sources())) {
-            return $value;
+        $normalized = SessionTrafficAttribution::normalizeSource($value);
+
+        if ($normalized !== null && array_key_exists($normalized, self::sources())) {
+            return $normalized;
         }
 
         return self::isValidToken($value) ? $value : null;
@@ -97,10 +182,25 @@ final class TrackerUtmFilter
      */
     public static function sourceCountsFrom(Builder $query): array
     {
-        $table = $query->getModel()->getTable();
+        $sessionTable = $query->getModel()->getTable();
+        $actionsTable = (new ActivityEcomUserAction)->getTable();
+        $cases = [];
+
+        foreach (config('tracker.utm_source_aliases', []) as $alias => $canonical) {
+            $cases[] = "WHEN {$sessionTable}.utm_source = '".self::escapeLike($alias)."' THEN '".self::escapeLike($canonical)."'";
+        }
+
+        $cases[] = "WHEN {$sessionTable}.utm_source IS NOT NULL AND {$sessionTable}.utm_source != '' THEN {$sessionTable}.utm_source";
+
+        foreach (self::inferredSourceUrlMatches($sessionTable, $actionsTable) as $source => $matchSql) {
+            $cases[] = "WHEN {$matchSql} THEN '".self::escapeLike($source)."'";
+        }
+
+        $cases[] = "ELSE '(direct)'";
+        $bucketSql = 'CASE '.implode(' ', $cases).' END';
 
         return EcomActivityFilterCounts::aggregateQuery($query)
-            ->selectRaw("COALESCE(NULLIF({$table}.utm_source, ''), '(direct)') as bucket, COUNT(*) as total")
+            ->selectRaw("{$bucketSql} as bucket, COUNT(*) as total")
             ->groupBy('bucket')
             ->orderByDesc('total')
             ->pluck('total', 'bucket')
@@ -114,10 +214,19 @@ final class TrackerUtmFilter
      */
     public static function mediumCountsFrom(Builder $query): array
     {
-        $table = $query->getModel()->getTable();
+        $sessionTable = $query->getModel()->getTable();
+        $actionsTable = (new ActivityEcomUserAction)->getTable();
+        $paidMatch = self::sqlColumnMatchesAny($sessionTable.'.landing_page', self::PAID_MEDIUM_URL_NEEDLES)
+            .' OR '.self::sqlActionsMatchAny($sessionTable, $actionsTable, self::PAID_MEDIUM_URL_NEEDLES);
+
+        $bucketSql = "CASE
+            WHEN {$sessionTable}.utm_medium IS NOT NULL AND {$sessionTable}.utm_medium != '' THEN {$sessionTable}.utm_medium
+            WHEN {$paidMatch} THEN 'paid'
+            ELSE 'none'
+        END";
 
         return EcomActivityFilterCounts::aggregateQuery($query)
-            ->selectRaw("COALESCE(NULLIF({$table}.utm_medium, ''), 'none') as bucket, COUNT(*) as total")
+            ->selectRaw("{$bucketSql} as bucket, COUNT(*) as total")
             ->groupBy('bucket')
             ->orderByDesc('total')
             ->pluck('total', 'bucket')
@@ -140,7 +249,7 @@ final class TrackerUtmFilter
             $query->where(function (Builder $inner) {
                 $inner->whereNull('utm_source')->orWhere('utm_source', '');
             })->where(function (Builder $inner) {
-                self::excludeAwinUrlMatches($inner);
+                self::excludeInferredSourceUrlMatches($inner);
             });
 
             return;
@@ -148,49 +257,32 @@ final class TrackerUtmFilter
 
         if ($source === 'awin') {
             $query->where(function (Builder $inner) {
-                $inner->where('utm_source', 'awin');
+                $inner->whereIn('utm_source', self::sourceColumnValues('awin'));
                 self::applyAwinUrlMatches($inner, 'or');
             });
 
             return;
         }
 
+        if ($source === 'google') {
+            $query->where(function (Builder $inner) {
+                $inner->whereIn('utm_source', self::sourceColumnValues('google'));
+                self::applyGoogleUrlMatches($inner, 'or');
+            });
+
+            return;
+        }
+
+        if (isset(self::SOURCE_URL_NEEDLES[$source])) {
+            $query->where(function (Builder $inner) use ($source) {
+                $inner->whereIn('utm_source', self::sourceColumnValues($source));
+                self::applyUrlNeedleMatches($inner, self::SOURCE_URL_NEEDLES[$source], 'or');
+            });
+
+            return;
+        }
+
         $query->where('utm_source', $source);
-    }
-
-    /**
-     * @param  Builder<ActivityEcomUser>  $query
-     */
-    private static function applyAwinUrlMatches(Builder $query, string $boolean = 'and'): void
-    {
-        $method = $boolean === 'or' ? 'orWhere' : 'where';
-
-        $query->{$method}(function (Builder $inner) {
-            $inner->where('landing_page', 'like', '%utm_source=awin%')
-                ->orWhere('landing_page', 'like', '%source=aw%')
-                ->orWhere('landing_page', 'like', '%awc=%')
-                ->orWhereHas('actions', fn (Builder $actions) => $actions
-                    ->where('page_url', 'like', '%utm_source=awin%')
-                    ->orWhere('page_url', 'like', '%source=aw%')
-                    ->orWhere('page_url', 'like', '%awc=%'));
-        });
-    }
-
-    /**
-     * @param  Builder<ActivityEcomUser>  $query
-     */
-    private static function excludeAwinUrlMatches(Builder $query): void
-    {
-        $query->where(function (Builder $inner) {
-            $inner->whereNull('landing_page')->orWhere('landing_page', '');
-        })->orWhere(function (Builder $inner) {
-            $inner->where('landing_page', 'not like', '%utm_source=awin%')
-                ->where('landing_page', 'not like', '%source=aw%')
-                ->where('landing_page', 'not like', '%awc=%');
-        })->whereDoesntHave('actions', fn (Builder $actions) => $actions
-            ->where('page_url', 'like', '%utm_source=awin%')
-            ->orWhere('page_url', 'like', '%source=aw%')
-            ->orWhere('page_url', 'like', '%awc=%'));
     }
 
     /**
@@ -207,12 +299,211 @@ final class TrackerUtmFilter
         if ($medium === 'none') {
             $query->where(function (Builder $inner) {
                 $inner->whereNull('utm_medium')->orWhere('utm_medium', '');
+            })->where(function (Builder $inner) {
+                self::excludePaidMediumUrlMatches($inner);
+            });
+
+            return;
+        }
+
+        if (in_array($medium, ['paid', 'cpc'], true)) {
+            $query->where(function (Builder $inner) use ($medium) {
+                $inner->where('utm_medium', $medium);
+
+                if ($medium === 'paid') {
+                    $inner->orWhere('utm_medium', 'cpc');
+                } else {
+                    $inner->orWhere('utm_medium', 'paid');
+                }
+
+                self::applyPaidMediumUrlMatches($inner, 'or');
             });
 
             return;
         }
 
         $query->where('utm_medium', $medium);
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function applyGoogleUrlMatches(Builder $query, string $boolean = 'and'): void
+    {
+        self::applyUrlNeedleMatches($query, self::GOOGLE_SOURCE_URL_NEEDLES, $boolean);
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function applyPaidMediumUrlMatches(Builder $query, string $boolean = 'and'): void
+    {
+        self::applyUrlNeedleMatches($query, self::PAID_MEDIUM_URL_NEEDLES, $boolean);
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function excludePaidMediumUrlMatches(Builder $query): void
+    {
+        self::excludeUrlNeedleMatches($query, self::PAID_MEDIUM_URL_NEEDLES);
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function excludeInferredSourceUrlMatches(Builder $query): void
+    {
+        self::excludeAwinUrlMatches($query);
+        self::excludeGoogleUrlMatches($query);
+
+        foreach (self::SOURCE_URL_NEEDLES as $needles) {
+            self::excludeUrlNeedleMatches($query, $needles);
+        }
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function inferredSourceUrlMatches(string $sessionTable, string $actionsTable): array
+    {
+        $matches = [
+            'google' => self::sqlColumnMatchesAny($sessionTable.'.landing_page', self::GOOGLE_SOURCE_URL_NEEDLES)
+                .' OR '.self::sqlActionsMatchAny($sessionTable, $actionsTable, self::GOOGLE_SOURCE_URL_NEEDLES),
+            'awin' => self::sqlColumnMatchesAny($sessionTable.'.landing_page', self::AWIN_URL_NEEDLES)
+                .' OR '.self::sqlActionsMatchAny($sessionTable, $actionsTable, self::AWIN_URL_NEEDLES),
+        ];
+
+        foreach (self::SOURCE_URL_NEEDLES as $source => $needles) {
+            $matches[$source] = self::sqlColumnMatchesAny($sessionTable.'.landing_page', $needles)
+                .' OR '.self::sqlActionsMatchAny($sessionTable, $actionsTable, $needles);
+        }
+
+        return $matches;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function sourceColumnValues(string $canonical): array
+    {
+        $values = [$canonical];
+
+        foreach (config('tracker.utm_source_aliases', []) as $alias => $target) {
+            if ($target === $canonical) {
+                $values[] = $alias;
+            }
+        }
+
+        return array_values(array_unique($values));
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     * @param  list<string>  $needles
+     */
+    private static function applyUrlNeedleMatches(Builder $query, array $needles, string $boolean = 'and'): void
+    {
+        $method = $boolean === 'or' ? 'orWhere' : 'where';
+
+        $query->{$method}(function (Builder $inner) use ($needles) {
+            self::applyColumnNeedleMatches($inner, 'landing_page', $needles);
+
+            $inner->orWhereHas('actions', function (Builder $actions) use ($needles) {
+                self::applyColumnNeedleMatches($actions, 'page_url', $needles);
+            });
+        });
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>|Builder<ActivityEcomUserAction>  $query
+     * @param  list<string>  $needles
+     */
+    private static function applyColumnNeedleMatches(Builder $query, string $column, array $needles): void
+    {
+        $query->where(function (Builder $inner) use ($column, $needles) {
+            foreach ($needles as $needle) {
+                $inner->orWhere($column, 'like', '%'.$needle.'%');
+            }
+        });
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function applyAwinUrlMatches(Builder $query, string $boolean = 'and'): void
+    {
+        self::applyUrlNeedleMatches($query, self::AWIN_URL_NEEDLES, $boolean);
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function excludeAwinUrlMatches(Builder $query): void
+    {
+        self::excludeUrlNeedleMatches($query, self::AWIN_URL_NEEDLES);
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function excludeGoogleUrlMatches(Builder $query): void
+    {
+        self::excludeUrlNeedleMatches($query, self::GOOGLE_SOURCE_URL_NEEDLES);
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     * @param  list<string>  $needles
+     */
+    private static function excludeUrlNeedleMatches(Builder $query, array $needles): void
+    {
+        $query->where(function (Builder $inner) {
+            $inner->whereNull('landing_page')->orWhere('landing_page', '');
+        })->orWhere(function (Builder $inner) use ($needles) {
+            foreach ($needles as $needle) {
+                $inner->where('landing_page', 'not like', '%'.$needle.'%');
+            }
+        })->whereDoesntHave('actions', function (Builder $actions) use ($needles) {
+            $actions->where(function (Builder $urls) use ($needles) {
+                foreach ($needles as $needle) {
+                    $urls->orWhere('page_url', 'like', '%'.$needle.'%');
+                }
+            });
+        });
+    }
+
+    /**
+     * @param  list<string>  $needles
+     */
+    private static function sqlColumnMatchesAny(string $column, array $needles): string
+    {
+        $parts = array_map(
+            fn (string $needle) => '('.$column." LIKE '%".self::escapeLike($needle)."%')",
+            $needles,
+        );
+
+        return '('.implode(' OR ', $parts).')';
+    }
+
+    /**
+     * @param  list<string>  $needles
+     */
+    private static function sqlActionsMatchAny(string $sessionTable, string $actionsTable, array $needles): string
+    {
+        $pageMatches = array_map(
+            fn (string $needle) => "a.page_url LIKE '%".self::escapeLike($needle)."%'",
+            $needles,
+        );
+
+        return "EXISTS (SELECT 1 FROM {$actionsTable} a WHERE a.session_id = {$sessionTable}.session_id AND ("
+            .implode(' OR ', $pageMatches)
+            .'))';
+    }
+
+    private static function escapeLike(string $value): string
+    {
+        return str_replace(["'", '%', '_'], ["''", '\%', '\_'], $value);
     }
 
     private static function humanizeToken(string $value): string

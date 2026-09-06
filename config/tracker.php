@@ -2,6 +2,17 @@
 
 return [
 
+    /*
+    |--------------------------------------------------------------------------
+    | Ecom Tracker (admin UI + permissions)
+    |--------------------------------------------------------------------------
+    |
+    | When false, Ecom Tracker is hidden from the admin sidebar, role permission
+    | screens, and web routes. Set ECOM_TRACKER_ENABLED=true to re-enable.
+    |
+    */
+    'enabled' => (bool) env('ECOM_TRACKER_ENABLED', false),
+
     'api_key_hash' => env('TRACKER_API_KEY_HASH'),
 
     'logging_enabled' => (bool) env('TRACKER_LOGGING', env('APP_DEBUG', false)),
@@ -31,8 +42,10 @@ return [
     'scalar_field_limits' => [
         'category_name' => 255,
         'category_code' => 100,
+        'department_name' => 255,
         'product_name' => 255,
         'product_code' => 100,
+        'sku' => 100,
         'product_color_id' => 50,
         'product_color_code' => 255,
         'general_color_name' => 255,
@@ -108,6 +121,26 @@ return [
         'snapchat' => 'Snapchat',
         'email' => 'Email',
         '(direct)' => 'Direct',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | UTM source aliases (stored as canonical keys above)
+    |--------------------------------------------------------------------------
+    */
+    'utm_source_aliases' => [
+        'fb' => 'facebook',
+        'meta' => 'facebook',
+        'ig' => 'instagram',
+        'insta' => 'instagram',
+        'yt' => 'youtube',
+        'tt' => 'tiktok',
+        'x' => 'twitter',
+        'pin' => 'pinterest',
+        'li' => 'linkedin',
+        'snap' => 'snapchat',
+        'ms' => 'bing',
+        'aw' => 'awin',
     ],
 
     'utm_mediums' => [

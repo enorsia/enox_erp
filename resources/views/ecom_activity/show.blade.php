@@ -30,6 +30,7 @@
                 <div>
                     <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Visitor Session</h1>
                     <p class="text-[12px] font-mono text-slate-400 mt-0.5">{{ $activityUser->session_id }}</p>
+                    <p class="text-[11px] text-slate-400 mt-1">All times {{ TrackerTime::timezoneLabel() }}</p>
                 </div>
             </div>
             <a href="{{ $backUrl }}"
@@ -117,7 +118,10 @@
                                     <div><span class="text-slate-400">Product:</span> {{ $item->product_name }}</div>
                                 @endif
                                 @if ($item->product_code)
-                                    <div><span class="text-slate-400">Code:</span> {{ $item->product_code }}</div>
+                                    <div><span class="text-slate-400">Product code:</span> {{ $item->product_code }}</div>
+                                @endif
+                                @if ($item->sku)
+                                    <div><span class="text-slate-400">SKU:</span> {{ $item->sku }}</div>
                                 @endif
                                 @if (in_array($item->action_type, ['product_view', 'product_view_popup'], true) && $item->color_timeline)
                                     <div class="sm:col-span-2">
@@ -202,7 +206,7 @@
                             'Device' => ucfirst($activityUser->device_type ?? '—') . ' · ' . ($activityUser->browser ?? '') . ' · ' . ($activityUser->os ?? ''),
                             'User' => $activityUser->identitySummary(),
                             'First seen' => TrackerTime::formatFromStorage($activityUser->created_at, 'd M Y, h:i A'),
-                            'Last active' => TrackerTime::formatFromStorage($activityUser->last_active_at, 'd M Y, h:i A'),
+                            'Last active' => TrackerTime::formatFromStorage($latestActionAt ?? $activityUser->last_active_at, 'd M Y, h:i A'),
                         ] as $label => $value)
                             <div class="py-2.5 first:pt-0 min-w-0">
                                 <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>

@@ -64,7 +64,13 @@
             @if (!$roles->isEmpty())
                 @foreach ($roles as $role)
                     @php
-                        $countNested = $role->permissions->groupBy(function ($perm) {
+                        $visiblePermissions = $role->permissions->when(
+                            ! config('tracker.enabled'),
+                            fn ($permissions) => $permissions->reject(
+                                fn ($perm) => str_starts_with($perm->name, 'ecom_tracker.')
+                            )
+                        );
+                        $countNested = $visiblePermissions->groupBy(function ($perm) {
                             $parts  = explode('.', $perm->name);
                             $module = $parts[0] ?? 'Other';
                             $model  = $parts[1] ?? $module;
@@ -79,7 +85,7 @@
                                     <span class="text-sm font-semibold text-slate-800 dark:text-slate-100">{{
                                         ucfirst($role->name) }}</span>
                                     @if ($countNested->isNotEmpty())
-                                        <span class="badge-custom badge-blue">{{ $role->permissions->count() }} permissions
+                                        <span class="badge-custom badge-blue">{{ $visiblePermissions->count() }} permissions
                                             </span>
                                     @else
                                         <span class="badge-custom badge-amber">No permissions</span>

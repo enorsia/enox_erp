@@ -78,7 +78,7 @@ class VisitorAnalyticsService
             '3h' => $now->copy()->subHours(3),
             '6h' => $now->copy()->subHours(6),
             '12h' => $now->copy()->subHours(12),
-            '24h' => $now->copy()->subHours(24),
+            '24h' => $now->copy()->startOfDay()->addSecond(),
             '1d' => $now->copy()->subDay(),
             '7d' => $now->copy()->subDays(7),
             '14d' => $now->copy()->subDays(14),
@@ -93,7 +93,7 @@ class VisitorAnalyticsService
             '6m' => $now->copy()->subMonths(6),
             '12m' => $now->copy()->subMonths(12),
             '1y' => $now->copy()->subYear(),
-            default => $now->copy()->subHours(24),
+            default => $now->copy()->startOfDay()->addSecond(),
         };
 
         return $from->utc();
@@ -185,6 +185,17 @@ class VisitorAnalyticsService
             ->whereNotNull('visitor_id')
             ->selectRaw('AVG('.$durationSql.') as aggregate')
             ->value('aggregate'));
+    }
+
+    public function totalStaySecondsInRange(Carbon $from, Carbon $to): int
+    {
+        $durationSql = $this->effectiveDurationSecondsSql();
+
+        return (int) ActivityEcomUser::query()
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+            ->whereNotNull('visitor_id')
+            ->selectRaw('SUM('.$durationSql.') as aggregate')
+            ->value('aggregate');
     }
 
     public function avgVisitorStay(Carbon $from, ?Carbon $until = null): int
