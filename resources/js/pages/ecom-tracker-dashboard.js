@@ -460,29 +460,28 @@ if (dwellCtx && D.engagement) {
     });
 }
 
-const botTrendCtx = ctx('botTrafficTrendChart');
-const botTrend = window.botTrafficTrendData || {};
-if (botTrendCtx && botTrend.labels) {
-    new Chart(botTrendCtx, {
-        type: 'bar',
+const newReturningCtx = ctx('etdNewReturningChart');
+if (newReturningCtx && D.new_returning) {
+    new Chart(newReturningCtx, {
+        type: 'doughnut',
         data: {
-            labels: botTrend.labels,
-            datasets: [
-                {
-                    label: 'Automated traffic',
-                    data: botTrend.bot || [],
-                    backgroundColor: '#f59e0b8C',
-                    borderRadius: 3,
-                },
-            ],
+            labels: D.new_returning.labels || [],
+            datasets: [{
+                data: D.new_returning.values || [],
+                backgroundColor: [accent(), '#64748b'],
+                borderWidth: 0,
+            }],
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { labels: { boxWidth: 10 } }, tooltip: tipStyle() },
-            scales: {
-                x: { grid: { display: false } },
-                y: { grid: { color: gridClr() }, beginAtZero: true },
+            cutout: '68%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 10, padding: 12 },
+                },
+                tooltip: tipStyle(),
             },
         },
     });
@@ -547,3 +546,108 @@ if (kpiPanel) {
         kpiPanel.querySelectorAll('.etd-kpi-group').forEach((group) => kpiResizeObserver.observe(group));
     }
 }
+
+const DASHBOARD_SCROLL_HASH = /^etd-y=(\d+)$/;
+
+function dashboardScrollY() {
+    const main = document.querySelector('main');
+
+    return Math.max(0, Math.round(main ? main.scrollTop : window.scrollY));
+}
+
+function applyDashboardScrollY(y) {
+    const main = document.querySelector('main');
+
+    if (main) {
+        main.scrollTop = y;
+        return;
+    }
+
+    window.scrollTo(0, y);
+}
+
+function stampActivityBackScroll(anchor) {
+    const href = anchor.getAttribute('href');
+
+    if (!href) {
+        return;
+    }
+
+    let url;
+
+    try {
+        url = new URL(href, window.location.origin);
+    } catch {
+        return;
+    }
+
+    if (!url.pathname.includes('/admin/ecom-activity')) {
+        return;
+    }
+
+    const back = url.searchParams.get('back');
+
+    if (!back) {
+        return;
+    }
+
+    let backUrl;
+
+    try {
+        backUrl = new URL(back, window.location.origin);
+    } catch {
+        return;
+    }
+
+    backUrl.hash = `etd-y=${dashboardScrollY()}`;
+    url.searchParams.set('back', backUrl.toString());
+    anchor.setAttribute('href', url.toString());
+}
+
+function restoreDashboardScroll() {
+    const hash = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
+    const hashMatch = hash.match(DASHBOARD_SCROLL_HASH);
+    const storageKey = `admin_scroll_${window.location.pathname}`;
+    let y = hashMatch ? parseInt(hashMatch[1], 10) : Number.NaN;
+
+    if (Number.isNaN(y)) {
+        const saved = sessionStorage.getItem(storageKey);
+        y = saved !== null && saved !== '' ? parseInt(saved, 10) : Number.NaN;
+    }
+
+    sessionStorage.removeItem(storageKey);
+
+    if (hashMatch) {
+        history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+
+    if (Number.isNaN(y) || y < 1) {
+        return;
+    }
+
+    applyDashboardScrollY(y);
+}
+
+const dashboardRoot = document.getElementById('ecom-tracker-dashboard-content');
+
+if (dashboardRoot) {
+    const rememberDashboardScrollForLink = (event) => {
+        const link = event.target.closest('a[href]');
+
+        if (!link || !dashboardRoot.contains(link)) {
+            return;
+        }
+
+        stampActivityBackScroll(link);
+
+        if (typeof window.saveScrollPosition === 'function') {
+            window.saveScrollPosition();
+        }
+    };
+
+    dashboardRoot.addEventListener('pointerdown', rememberDashboardScrollForLink);
+    dashboardRoot.addEventListener('click', rememberDashboardScrollForLink);
+
+    restoreDashboardScroll();
+}
+

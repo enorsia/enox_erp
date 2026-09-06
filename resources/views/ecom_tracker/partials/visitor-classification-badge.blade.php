@@ -9,21 +9,30 @@
     $countryLabel = $session->marketer_country_label;
     $countryCode = $session->marketer_country_code;
     $isUk = ($botCtx?->is_uk_visitor ?? strtoupper((string) ($session->country ?? '')) === 'GB');
+    $sessionIp = trim((string) ($botCtx?->client_ip ?? $session->ip ?? ''));
 @endphp
 
-<div class="visitor-classification-badge {{ $mode === 'compact' ? 'flex items-center gap-1.5 flex-wrap' : '' }}">
-    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border {{ $badgeClass }}"
-          title="{{ $session->marketer_reason_help }}">
-        {{ $label }}
-        @if($mode === 'detailed' && $botCtx?->marketer_confidence_label)
-            <span class="opacity-75 font-normal">· {{ $botCtx->marketer_confidence_label }}</span>
-        @endif
-    </span>
-    @if($mode === 'compact' && $countryCode)
-        <span class="etd-country-tag {{ $isUk ? 'etd-country-tag--uk' : '' }}"
-              title="{{ $countryLabel ?? $countryCode }}">
-            {{ $countryCode }}
+<div @class([
+    'visitor-classification-badge',
+    'inline-flex flex-col items-start gap-0.5' => $mode === 'compact',
+])>
+    <div @class(['flex items-center gap-1.5 flex-wrap' => $mode === 'compact'])>
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border {{ $badgeClass }}"
+              title="{{ $session->marketer_reason_help }}">
+            {{ $label }}
+            @if($mode === 'detailed' && $botCtx?->marketer_confidence_label)
+                <span class="opacity-75 font-normal">· {{ $botCtx->marketer_confidence_label }}</span>
+            @endif
         </span>
+        @if($mode === 'compact' && $countryCode && ! $isUk)
+            <span class="etd-country-tag"
+                  title="{{ $countryLabel ?? $countryCode }}">
+                {{ $countryCode }}
+            </span>
+        @endif
+    </div>
+    @if($mode === 'compact' && filled($sessionIp))
+        <span class="etd-visitor-ip" title="Visitor IP">{{ $sessionIp }}</span>
     @endif
     @if($mode === 'detailed' && $subtitle)
         <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{{ $subtitle }}</div>

@@ -4,6 +4,7 @@
     'sortGroups' => [],
     'activityOptions' => [],
     'currentSort' => 'top_revenue',
+    'showSort' => true,
 ])
 
 @php
@@ -22,16 +23,6 @@
                value="{{ request('search') }}"
                placeholder="Product name, code or SKU"
                class="etd-filter-input etd-filter-input--sm">
-    </label>
-
-    <label class="etd-filter-compact-field">
-        <span class="etd-filter-compact-label">Category</span>
-        <select id="product-catalog-category" name="category" class="{{ $tomSelectClass }}" data-placeholder="All">
-            <option value="" @selected(request('category', '') === '')>All</option>
-            @foreach ($filterOptions['categories'] ?? [] as $category)
-                <option value="{{ $category }}" @selected(request('category') === $category)>{{ $category }}</option>
-            @endforeach
-        </select>
     </label>
 
     <label class="etd-filter-compact-field">
@@ -54,6 +45,7 @@
         </select>
     </label>
 
+    @if ($showSort)
     <label class="etd-filter-compact-field">
         <span class="etd-filter-compact-label">Sort</span>
         <select id="product-catalog-sort" name="sort_by" class="{{ $tomSelectClass }}" data-placeholder="All">
@@ -67,6 +59,7 @@
             @endforeach
         </select>
     </label>
+    @endif
 
     <label class="etd-filter-compact-field">
         <span class="etd-filter-compact-label">Funnel</span>

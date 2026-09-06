@@ -39,6 +39,51 @@ test('ecom tracker dashboard resolves today preset range', function () {
     Carbon::setTestNow();
 });
 
+test('activity funnel summary for unfiltered range does not require session ids', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $from = Carbon::parse('2026-07-20 00:00:00');
+    $to = Carbon::parse('2026-07-20 23:59:59');
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'add_to_cart',
+        'add_to_cart' => ['cart_total' => 20, 'qty' => 1],
+        'created_at' => $from->copy()->addHour(),
+        'start_time' => $from->copy()->addHour(),
+        'end_time' => $from->copy()->addHour()->addSeconds(5),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'payment_success' => ['amount_paid' => 20, 'qty' => 1],
+        'amount_paid' => 20,
+        'item_qty' => 1,
+        'created_at' => $from->copy()->addHours(2),
+        'start_time' => $from->copy()->addHours(2),
+        'end_time' => $from->copy()->addHours(2)->addSeconds(10),
+    ]);
+
+    $summary = $service->activityFunnelSummaryForFilters($from, $to, [], '7d');
+
+    expect($summary)->toBeArray()
+        ->and($summary['adds'])->toBe(1)
+        ->and($summary['purchases'])->toBe(1)
+        ->and($summary['qty'])->toBe(1)
+        ->and($summary['revenue'])->toBe(20.0);
+});
+
 test('ecom tracker dashboard sale amount sums payment_success amount_paid', function () {
     $service = app(EcomTrackerDashboardService::class);
     $from = Carbon::parse('2026-07-20 00:00:00');
@@ -271,6 +316,8 @@ test('ecom tracker dashboard category performance uses department and category l
 
     expect($data['categories'][0]['label'] ?? null)->toBe('Women -> Dresses');
     expect($data['categories'][0]['category_code'] ?? null)->toBe('DRS');
+    expect($data['categories'][0]['category_views'] ?? null)->toBe(1);
+    expect($data['categories'][0]['product_views'] ?? null)->toBe(0);
 });
 
 test('ecom tracker dashboard category performance counts product views with department and category', function () {
@@ -305,10 +352,63 @@ test('ecom tracker dashboard category performance counts product views with depa
         'date_to' => '2026-07-11',
     ]);
 
-    expect($data['categories'][0]['views'] ?? null)->toBe(1);
+    expect($data['categories'][0]['views'] ?? null)->toBe(1)
+        ->and($data['categories'][0]['category_views'] ?? null)->toBe(0)
+        ->and($data['categories'][0]['product_views'] ?? null)->toBe(1);
     expect($data['category_departments'][0]['name'] ?? null)->toBe('Women');
-    expect($data['category_departments'][0]['views'] ?? null)->toBe(1);
+    expect($data['category_departments'][0]['product_views'] ?? null)->toBe(1);
     expect($data['category_departments'][0]['categories'][0]['category_name'] ?? null)->toBe('Dresses');
+});
+
+test('ecom tracker dashboard category performance splits category and product views', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $sessionId = Str::uuid()->toString();
+    $from = Carbon::parse('2026-07-11 12:00:00');
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'category_view',
+        'department_name' => 'Women',
+        'category_name' => 'Dresses',
+        'category_code' => 'DRS',
+        'created_at' => $from,
+        'start_time' => $from,
+        'end_time' => $from->copy()->addSeconds(20),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'department_name' => 'Women',
+        'category_name' => 'Dresses',
+        'category_code' => 'DRS',
+        'product_name' => 'Summer Dress',
+        'created_at' => $from->copy()->addMinute(),
+        'start_time' => $from->copy()->addMinute(),
+        'end_time' => $from->copy()->addMinute()->addSeconds(20),
+    ]);
+
+    $data = $service->getDashboardData([
+        'period' => 'custom',
+        'date_from' => '2026-07-11',
+        'date_to' => '2026-07-11',
+    ]);
+
+    expect($data['categories'][0]['category_views'] ?? null)->toBe(1)
+        ->and($data['categories'][0]['product_views'] ?? null)->toBe(1)
+        ->and($data['categories'][0]['views'] ?? null)->toBe(2)
+        ->and($data['category_catalog_totals']['category_views'] ?? null)->toBe(1)
+        ->and($data['category_catalog_totals']['product_views'] ?? null)->toBe(1);
 });
 
 test('ecom tracker dashboard category performance attributes purchases across visitor sessions', function () {
@@ -491,7 +591,7 @@ test('ecom tracker dashboard matches product views and purchases by product name
 
     expect($product)->not->toBeNull();
     expect($product['code'])->toBe('WJEPI10009400');
-    expect($product['views'])->toBeGreaterThanOrEqual(1);
+    expect($product['views'])->toBe(1);
     expect($product['purchases'])->toBe(1);
     expect($product['revenue'])->toBe(22.99);
 });
@@ -1191,7 +1291,118 @@ test('ecom tracker dashboard includes visitor quality summary', function () {
     $data = $service->getDashboardData(['period' => '7d']);
 
     expect($data)->toHaveKey('visitor_quality');
-    expect($data['visitor_quality'])->toHaveKeys(['real_shoppers', 'automated_traffic', 'not_classified', 'uk_shoppers']);
+    expect($data['visitor_quality'])->toHaveKeys(['real_shoppers', 'automated_traffic', 'not_classified']);
+});
+
+test('ecom tracker dashboard includes session duration distribution', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-short',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-20 09:00:00',
+        'updated_at' => '2026-07-20 09:01:00',
+        'last_active_at' => '2026-07-20 09:01:00',
+        'session_duration_seconds' => 45,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-long',
+        'device_type' => 'mobile',
+        'created_at' => '2026-07-20 10:00:00',
+        'updated_at' => '2026-07-20 10:10:00',
+        'last_active_at' => '2026-07-20 10:10:00',
+        'session_duration_seconds' => 600,
+    ]);
+
+    $data = $service->getDashboardData(['period' => '24h']);
+    $distribution = $data['duration_distribution'];
+
+    expect($distribution)->toHaveKeys(['buckets', 'total_sessions', 'median_seconds', 'median_label'])
+        ->and($distribution['total_sessions'])->toBe(2);
+
+    $byLabel = collect($distribution['buckets'])->keyBy('label');
+    expect($byLabel['0–1 min']['count'])->toBe(1)
+        ->and($byLabel['9–11 min']['count'])->toBe(1)
+        ->and($byLabel['0–1 min']['pct'])->toBe(50.0);
+
+    $filtered = $service->getDashboardData(['period' => '24h', 'device_type' => 'mobile']);
+    expect($filtered['duration_distribution']['total_sessions'])->toBe(1);
+
+    Carbon::setTestNow();
+});
+
+test('ecom tracker dashboard includes unique vs returning aligned with audience kpis', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-new',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-20 09:00:00',
+        'updated_at' => '2026-07-20 09:30:00',
+        'last_active_at' => '2026-07-20 09:30:00',
+        'session_duration_seconds' => 1800,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-returning',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-10 10:00:00',
+        'updated_at' => '2026-07-10 10:30:00',
+        'last_active_at' => '2026-07-10 10:30:00',
+        'session_duration_seconds' => 1200,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-returning',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-20 11:00:00',
+        'updated_at' => '2026-07-20 11:45:00',
+        'last_active_at' => '2026-07-20 11:45:00',
+        'session_duration_seconds' => 2700,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-returning',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-20 12:00:00',
+        'updated_at' => '2026-07-20 12:20:00',
+        'last_active_at' => '2026-07-20 12:20:00',
+        'session_duration_seconds' => 900,
+    ]);
+
+    $data = $service->getDashboardData(['period' => '24h']);
+    $split = $data['new_returning'];
+    $kpiValue = fn (string $label) => collect($data['kpis'])->firstWhere('label', $label)['value'] ?? null;
+
+    expect($split)->toHaveKeys(['unique', 'returning', 'new', 'labels', 'values'])
+        ->and($split['unique'])->toBe($kpiValue('Unique visitors'))
+        ->and($split['unique'])->toBe(2)
+        ->and($split['returning'])->toBe(1)
+        ->and($split['values'])->toBe([2, 1])
+        ->and($split['unique'] + $split['returning'])->toBe($kpiValue('Sessions'))
+        ->and($split['unique'] + $split['returning'])->toBe($data['duration_distribution']['total_sessions']);
+
+    $filtered = $service->getDashboardData(['period' => '24h', 'device_type' => 'mobile']);
+    $filteredKpiValue = fn (string $label) => collect($filtered['kpis'])->firstWhere('label', $label)['value'] ?? null;
+
+    expect($filtered['new_returning']['unique'])->toBe($filteredKpiValue('Unique visitors'))
+        ->and($filtered['new_returning']['unique'] + $filtered['new_returning']['returning'])
+        ->toBe($filteredKpiValue('Sessions'))
+        ->and($filtered['new_returning']['unique'] + $filtered['new_returning']['returning'])
+        ->toBe($filtered['duration_distribution']['total_sessions']);
+
+    Carbon::setTestNow();
 });
 
 test('ecom tracker dashboard audience kpis align with user activity session scope', function () {
@@ -1631,6 +1842,78 @@ test('ecom tracker product catalog allows add to cart without a product view in 
 
     expect($catalog['products'][0]['views'])->toBe(0);
     expect($catalog['products'][0]['adds'])->toBe(1);
+});
+
+test('ecom tracker product catalog does not count views for purchased variants without product views', function () {
+    $service = app(EcomTrackerDashboardService::class);
+    $sessionId = Str::uuid()->toString();
+    $from = Carbon::parse('2026-07-15 14:00:00');
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'created_at' => $from,
+        'updated_at' => $from,
+        'last_active_at' => $from,
+    ]);
+
+    $productName = 'Red Ruched Side Seam T-Shirt';
+    $productCode = 'WS312259';
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'add_to_cart',
+        'product_name' => $productName,
+        'product_code' => $productCode,
+        'sku' => 'WLOPU14001245',
+        'general_color_name' => 'Purple',
+        'add_to_cart' => [
+            'product_code' => $productCode,
+            'product_name' => $productName,
+            'sku' => 'WLOPU14001245',
+            'color_name' => 'Purple',
+            'size_name' => '14',
+            'qty' => 1,
+        ],
+        'created_at' => $from,
+        'start_time' => $from,
+        'end_time' => $from->copy()->addSeconds(5),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'product_name' => $productName,
+        'product_code' => $productCode,
+        'payment_success' => [
+            'amount_paid' => 12.5,
+            'checkout_info' => [
+                'items' => [[
+                    'product_code' => $productCode,
+                    'product_name' => $productName,
+                    'sku' => 'WLOPU14001245',
+                    'color_name' => 'Purple',
+                    'size_name' => '14',
+                    'qty' => 1,
+                    'price' => 12.5,
+                ]],
+            ],
+        ],
+        'created_at' => $from->copy()->addMinute(),
+        'start_time' => $from->copy()->addMinute(),
+        'end_time' => $from->copy()->addMinute()->addSeconds(10),
+    ]);
+
+    $catalog = $service->buildProductCatalogPerformance($from, $from->copy()->endOfDay(), null, [], []);
+
+    expect($catalog['products'])->toHaveCount(1);
+    expect($catalog['products'][0]['views'])->toBe(0);
+    expect($catalog['products'][0]['adds'])->toBe(1);
+    expect($catalog['products'][0]['purchases'])->toBe(1);
+    expect($catalog['products'][0]['variants'][0]['views'])->toBe(0);
+    expect($catalog['products'][0]['variants'][0]['purchases'])->toBe(1);
 });
 
 test('ecom tracker product catalog merges view parent code with add variant sku product code', function () {

@@ -63,10 +63,24 @@ Follow these steps to set up EnoX ERP on your local machine:
 
 ## Requirements
 
-- PHP >= 8.2
+- **PHP 8.2.x** (production server target — use PHP 8.2 locally even if PHP 8.4 is installed)
 - Composer
 - Node.js & NPM
 - MySQL
+
+### PHP version (local vs server)
+
+This app is deployed on **PHP 8.2**. `composer.json` pins Composer’s platform to `8.2.28` so dependency resolution matches the server even when you run PHP 8.4 on your machine.
+
+If you use Homebrew on macOS:
+
+```bash
+brew install php@8.2
+brew link php@8.2 --force --overwrite
+php -v   # should show 8.2.x
+```
+
+The `.php-version` file is for tools like `asdf` / `phpenv` to auto-select PHP 8.2 in this directory.
 
 ## License
 

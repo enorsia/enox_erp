@@ -13,6 +13,22 @@
 @endphp
 
 <div class="etd-date-nav">
+    @can('ecom_tracker.dashboard.index')
+        @if ($showDashboardLink ?? false)
+            <div class="etd-segmented etd-segmented--compact etd-date-nav__shortcut">
+                <a href="{{ $dashboardUrl ?? EcomTrackerViewData::dashboardShortcutUrl(request()) }}" class="etd-segmented-btn no-underline">Dashboard</a>
+            </div>
+        @endif
+    @endcan
+
+    @can('ecom_tracker.activity.index')
+        @if ($showUserActivityLink ?? false)
+            <div class="etd-segmented etd-segmented--compact etd-date-nav__shortcut">
+                <a href="{{ EcomTrackerViewData::activityShortcutUrl(request()) }}" class="etd-segmented-btn no-underline">User Activity</a>
+            </div>
+        @endif
+    @endcan
+
     <a href="{{ $dayNav['previous_url'] }}"
        class="etd-segmented-btn etd-date-nav-btn no-underline"
        aria-label="Previous day"

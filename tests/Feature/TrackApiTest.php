@@ -76,6 +76,48 @@ test('track endpoint stores department name on category view', function () {
     expect($action->department_name)->toBe('Men');
 });
 
+test('track endpoint rejects more events than the ingest cap', function () {
+    $sessionId = Str::uuid()->toString();
+    $max = (int) config('tracker.ingest_max_events', 50);
+    $events = [];
+
+    for ($i = 0; $i < $max + 1; $i++) {
+        $events[] = [
+            'id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => 'category_view',
+            'category_name' => 'Women',
+        ];
+    }
+
+    $this->postJson('/api/track', trackPayload($sessionId, $events), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['events']);
+});
+
+test('track endpoint accepts a full ingest batch', function () {
+    $sessionId = Str::uuid()->toString();
+    $max = (int) config('tracker.ingest_max_events', 50);
+    $events = [];
+
+    for ($i = 0; $i < $max; $i++) {
+        $events[] = [
+            'id' => Str::uuid()->toString(),
+            'session_id' => $sessionId,
+            'action_type' => 'category_view',
+            'category_name' => 'Women',
+        ];
+    }
+
+    $this->postJson('/api/track', trackPayload($sessionId, $events), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])
+        ->assertOk()
+        ->assertJsonCount($max, 'accepted_ids');
+});
+
 test('track endpoint rejects invalid api key', function () {
     $response = $this->postJson('/api/track', trackPayload(Str::uuid()->toString(), [[
         'id' => Str::uuid()->toString(),
@@ -412,6 +454,74 @@ test('track endpoint accepts proceed checkout with product line details', functi
     expect($session->user_phone)->toBe('07123456789');
 });
 
+test('track endpoint accepts proceed checkout with shipping discount and grand total', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'proceed_checkout',
+        'proceed_to_checkout' => [
+            'cart_total' => 54.98,
+            'coupon_code' => 'SAVE10',
+            'delivery_type' => 'next_day',
+            'totals' => [
+                'subtotal' => 50,
+                'coupon_discount' => 5,
+                'shipping_cost' => 4.99,
+                'extra_handling_cost' => 4.99,
+                'service_charge' => 0,
+                'priority_charge' => 0,
+                'grand_total' => 54.98,
+            ],
+            'cart_items' => [[
+                'product_id' => '101',
+                'product_code' => 'GS123-M',
+                'product_name' => 'Dress',
+                'qty' => 1,
+                'price' => 50,
+            ]],
+        ],
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk();
+
+    $action = ActivityEcomUserAction::where('event_id', $eventId)->first();
+
+    expect($action->proceed_to_checkout['totals']['grand_total'])->toBe(54.98)
+        ->and($action->proceed_to_checkout['totals']['shipping_cost'])->toBe(4.99)
+        ->and($action->proceed_to_checkout['delivery_type'])->toBe('next_day');
+});
+
+test('track endpoint skips empty proceed checkout without cart data', function () {
+    $sessionId = Str::uuid()->toString();
+    $eventId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => $eventId,
+        'session_id' => $sessionId,
+        'action_type' => 'proceed_checkout',
+        'page_url' => 'https://enorsia.com/klarna/checkout/2726451663',
+        'proceed_to_checkout' => [
+            'cart_total' => 0,
+            'cart_items' => [],
+            'customer' => [
+                'shipping' => ['country' => 'United Kingdom'],
+            ],
+        ],
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ]);
+
+    $response->assertOk()
+        ->assertJson(['accepted_ids' => [$eventId]]);
+
+    expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeFalse();
+});
+
 test('track endpoint accepts payment success with checkout info', function () {
     $sessionId = Str::uuid()->toString();
     $eventId = Str::uuid()->toString();
@@ -545,6 +655,45 @@ test('payment success updates session user from checkout customer info', functio
     expect($session->user_name)->toBe('Sam Taylor');
     expect($session->user_email)->toBe('sam.taylor@example.com');
     expect($session->is_logged_in)->toBeFalse();
+});
+
+test('guest checkout identity is not cleared by later track payloads with null session user fields', function () {
+    $sessionId = Str::uuid()->toString();
+    $headers = ['Authorization' => 'Bearer ' . $this->apiKey];
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'proceed_checkout',
+        'proceed_to_checkout' => [
+            'customer' => [
+                'first_name' => 'Madina',
+                'last_name' => 'Burkhanova',
+                'email' => 'sargentczerny@gmail.com',
+                'phone' => '07795991557',
+            ],
+        ],
+    ]], [
+        'is_logged_in' => false,
+    ]), $headers)->assertOk();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'product_view',
+        'product_name' => 'Dress',
+        'product_code' => 'GS123',
+    ]], [
+        'user_name' => null,
+        'user_email' => null,
+        'is_logged_in' => false,
+    ]), $headers)->assertOk();
+
+    $session = ActivityEcomUser::where('session_id', $sessionId)->first();
+
+    expect($session->user_name)->toBe('Madina Burkhanova');
+    expect($session->user_email)->toBe('sargentczerny@gmail.com');
+    expect($session->user_phone)->toBe('07795991557');
 });
 
 test('proceed checkout updates session user from checkout customer info', function () {

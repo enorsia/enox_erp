@@ -42,7 +42,7 @@ class TrackController extends Controller
                 'session.utm_medium' => ['nullable', 'string', 'max:100'],
                 'session.utm_campaign' => ['nullable', 'string', 'max:100'],
                 'session.landing_page' => ['nullable', 'string', 'max:2048'],
-                'events' => ['required', 'array', 'min:1', 'max:50'],
+                'events' => ['required', 'array', 'min:1', 'max:' . max(1, (int) config('tracker.ingest_max_events', 50))],
                 'events.*.id' => ['required', 'uuid'],
                 'events.*.session_id' => ['required', 'string', 'max:64'],
                 'events.*.action_type' => ['required', 'string', 'in:' . implode(',', config('tracker.allowed_action_types'))],
