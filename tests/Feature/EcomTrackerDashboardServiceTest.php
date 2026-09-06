@@ -1336,6 +1336,75 @@ test('ecom tracker dashboard includes session duration distribution', function (
     Carbon::setTestNow();
 });
 
+test('ecom tracker dashboard includes unique vs returning aligned with audience kpis', function () {
+    $service = app(EcomTrackerDashboardService::class);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00', TrackerTime::timezone()));
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-new',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-20 09:00:00',
+        'updated_at' => '2026-07-20 09:30:00',
+        'last_active_at' => '2026-07-20 09:30:00',
+        'session_duration_seconds' => 1800,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-returning',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-10 10:00:00',
+        'updated_at' => '2026-07-10 10:30:00',
+        'last_active_at' => '2026-07-10 10:30:00',
+        'session_duration_seconds' => 1200,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-returning',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-20 11:00:00',
+        'updated_at' => '2026-07-20 11:45:00',
+        'last_active_at' => '2026-07-20 11:45:00',
+        'session_duration_seconds' => 2700,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => Str::uuid()->toString(),
+        'visitor_id' => 'visitor-returning',
+        'device_type' => 'desktop',
+        'created_at' => '2026-07-20 12:00:00',
+        'updated_at' => '2026-07-20 12:20:00',
+        'last_active_at' => '2026-07-20 12:20:00',
+        'session_duration_seconds' => 900,
+    ]);
+
+    $data = $service->getDashboardData(['period' => '24h']);
+    $split = $data['new_returning'];
+    $kpiValue = fn (string $label) => collect($data['kpis'])->firstWhere('label', $label)['value'] ?? null;
+
+    expect($split)->toHaveKeys(['unique', 'returning', 'new', 'labels', 'values'])
+        ->and($split['unique'])->toBe($kpiValue('Unique visitors'))
+        ->and($split['unique'])->toBe(2)
+        ->and($split['returning'])->toBe(1)
+        ->and($split['values'])->toBe([2, 1])
+        ->and($split['unique'] + $split['returning'])->toBe($kpiValue('Sessions'))
+        ->and($split['unique'] + $split['returning'])->toBe($data['duration_distribution']['total_sessions']);
+
+    $filtered = $service->getDashboardData(['period' => '24h', 'device_type' => 'mobile']);
+    $filteredKpiValue = fn (string $label) => collect($filtered['kpis'])->firstWhere('label', $label)['value'] ?? null;
+
+    expect($filtered['new_returning']['unique'])->toBe($filteredKpiValue('Unique visitors'))
+        ->and($filtered['new_returning']['unique'] + $filtered['new_returning']['returning'])
+        ->toBe($filteredKpiValue('Sessions'))
+        ->and($filtered['new_returning']['unique'] + $filtered['new_returning']['returning'])
+        ->toBe($filtered['duration_distribution']['total_sessions']);
+
+    Carbon::setTestNow();
+});
+
 test('ecom tracker dashboard audience kpis align with user activity session scope', function () {
     $service = app(EcomTrackerDashboardService::class);
 

@@ -2,6 +2,7 @@
     'distribution' => [],
     'showPanel' => true,
     'panelClass' => '',
+    'inGrid' => false,
     'activityDurationLink' => null,
 ])
 
@@ -12,7 +13,12 @@
 @endphp
 
 @if ($showPanel)
-    <div @class(['etd-panel mb-5', $panelClass => filled($panelClass)]) id="duration">
+    <div @class([
+        'etd-panel etd-panel--duration-distribution',
+        'mb-5' => ! $inGrid,
+        'etd-panel--in-grid' => $inGrid,
+        $panelClass => filled($panelClass),
+    ]) @unless($inGrid) id="duration" @endunless>
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Session duration distribution</h2>
         </div>

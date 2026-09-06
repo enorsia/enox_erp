@@ -460,6 +460,33 @@ if (dwellCtx && D.engagement) {
     });
 }
 
+const newReturningCtx = ctx('etdNewReturningChart');
+if (newReturningCtx && D.new_returning) {
+    new Chart(newReturningCtx, {
+        type: 'doughnut',
+        data: {
+            labels: D.new_returning.labels || [],
+            datasets: [{
+                data: D.new_returning.values || [],
+                backgroundColor: [accent(), '#64748b'],
+                borderWidth: 0,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '68%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 10, padding: 12 },
+                },
+                tooltip: tipStyle(),
+            },
+        },
+    });
+}
+
 function syncKpiPanelCardHeights() {
     const panel = document.querySelector('.etd-kpi-panel');
 

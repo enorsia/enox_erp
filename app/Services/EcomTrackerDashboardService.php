@@ -166,6 +166,7 @@ class EcomTrackerDashboardService
             'duration_distribution' => $isUnfiltered
                 ? $this->buildDurationDistributionFromQuery($range['from'], $range['to'], $period)
                 : $this->buildDurationDistribution($currentSessions),
+            'new_returning' => $this->buildNewReturningFromKpis($currentKpis),
         ];
     }
 
@@ -182,6 +183,7 @@ class EcomTrackerDashboardService
             'devices' => $data['devices'],
             'engagement' => $data['engagement'],
             'duration_distribution' => $data['duration_distribution'] ?? null,
+            'new_returning' => $data['new_returning'] ?? null,
         ];
     }
 
@@ -2853,6 +2855,30 @@ class EcomTrackerDashboardService
             'total_sessions' => $distribution['total_sessions'],
             'median_seconds' => $distribution['median_seconds'],
             'median_label' => $this->visitorAnalytics->formatDuration($distribution['median_seconds']),
+        ];
+    }
+
+    /**
+     * Unique vs returning split aligned with Audience & engagement KPIs.
+     *
+     * Unique = distinct visitor IDs in period (same as the Unique visitors KPI).
+     * Returning = repeat sessions in period (sessions minus unique visitors).
+     *
+     * @param  array<string, mixed>  $kpis
+     * @return array{unique: int, returning: int, new: int, labels: array<int, string>, values: array<int, int>}
+     */
+    private function buildNewReturningFromKpis(array $kpis): array
+    {
+        $uniqueVisitors = (int) ($kpis['unique_visitors'] ?? 0);
+        $sessions = (int) ($kpis['sessions'] ?? 0);
+        $returning = max(0, $sessions - $uniqueVisitors);
+
+        return [
+            'unique' => $uniqueVisitors,
+            'returning' => $returning,
+            'new' => $uniqueVisitors,
+            'labels' => ['Unique', 'Returning'],
+            'values' => [$uniqueVisitors, $returning],
         ];
     }
 
