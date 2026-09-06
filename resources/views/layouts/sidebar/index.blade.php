@@ -307,7 +307,7 @@
                                 @can('ecommerce.wh_stock_in_out.index')
                                     <a href="{{ route('admin.style.stock.index') }}"
                                         class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/style/stock*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
-                                        WH Stock In/Out
+                                        Stock Performance
                                     </a>
                                 @endcan
                             </div>
