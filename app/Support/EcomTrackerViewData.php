@@ -3,7 +3,6 @@
 namespace App\Support;
 
 use App\Models\TrackerUtmFilter;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 final class EcomTrackerViewData
@@ -60,105 +59,6 @@ final class EcomTrackerViewData
                 $back,
             ),
             'hasActiveFilters' => $activeFilterCount > 0,
-            'visitorDetailLink' => fn (string $section) => route('admin.ecom-tracker.visitors.details', $section).'?'.http_build_query(array_filter(
-                array_merge(self::visitorQueryFromDashboardFilters($filters), ['back' => $back]),
-                fn ($value) => filled($value),
-            )),
-        ];
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    public static function visitorQueryKeys(): array
-    {
-        return ['window', 'datetime_from', 'datetime_to'];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public static function forVisitors(Request $request, array $filters): array
-    {
-        $window = $filters['window'] ?? '24h';
-        $hasCustomRange = filled($filters['datetime_from'] ?? null) && filled($filters['datetime_to'] ?? null);
-        $datetimeFromValue = filled($filters['datetime_from'] ?? null)
-            ? TrackerTime::toLocal($filters['datetime_from'])?->format('Y-m-d\TH:i')
-            : '';
-        $datetimeToValue = filled($filters['datetime_to'] ?? null)
-            ? TrackerTime::toLocal($filters['datetime_to'])?->format('Y-m-d\TH:i')
-            : '';
-        $activeFilterCount = $hasCustomRange ? 0 : (($request->has('window') && ! in_array($window, ['24h', '7d', '30d', '90d'], true)) ? 1 : 0);
-        $exportQuery = array_filter($request->only(self::visitorQueryKeys()), fn ($value) => filled($value));
-        $back = $request->fullUrl();
-
-        return [
-            'window' => $window,
-            'activeWindow' => $hasCustomRange ? 'custom' : $window,
-            'hasCustomRange' => $hasCustomRange,
-            'datetimeFromValue' => $datetimeFromValue,
-            'datetimeToValue' => $datetimeToValue,
-            'activeFilterCount' => $activeFilterCount,
-            'rangeLabel' => $filters['window_label'] ?? TrackerTime::todayPresetLabel(),
-            'resetUrl' => route('admin.ecom-tracker.visitors'),
-            'resetActive' => count($request->query()) > 0,
-            'presetWindows' => [
-                '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => TrackerTime::todayPresetButtonLabel(),
-                '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year',
-            ],
-            'exportUrl' => route('admin.ecom-tracker.visitors.export', $exportQuery),
-            'detailLink' => fn (string $section) => route('admin.ecom-tracker.visitors.details', $section).'?'.http_build_query(array_merge($request->only(self::visitorQueryKeys()), ['back' => $back])),
-            'activityLink' => fn (string $visitorId) => route('admin.ecom-activity.index', ['search' => $visitorId]),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public static function forVisitorDetail(Request $request, array $filters, string $title, string $section, int $activeFilterCount): array
-    {
-        $window = $filters['window'] ?? '24h';
-        $hasCustomRange = filled($filters['datetime_from'] ?? null) && filled($filters['datetime_to'] ?? null);
-        $datetimeFromValue = filled($filters['datetime_from'] ?? null)
-            ? TrackerTime::toLocal($filters['datetime_from'])?->format('Y-m-d\TH:i')
-            : '';
-        $datetimeToValue = filled($filters['datetime_to'] ?? null)
-            ? TrackerTime::toLocal($filters['datetime_to'])?->format('Y-m-d\TH:i')
-            : '';
-        $queryParams = $request->only(array_merge(self::visitorQueryKeys(), [
-            'search', 'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium', 'sort_by',
-        ]));
-        $visitorsBack = EcomTrackerViewData::resolveBackUrl(
-            $request->input('back'),
-            route('admin.ecom-tracker.visitors', $queryParams),
-        );
-        $exportQuery = array_filter($request->only(self::visitorQueryKeys()), fn ($value) => filled($value));
-        $resetQuery = array_filter([
-            'section' => $section,
-            'back' => $request->input('back'),
-        ], fn ($value) => filled($value));
-
-        return [
-            'window' => $window,
-            'activeWindow' => $hasCustomRange ? 'custom' : $window,
-            'hasCustomRange' => $hasCustomRange,
-            'datetimeFromValue' => $datetimeFromValue,
-            'datetimeToValue' => $datetimeToValue,
-            'activeFilterCount' => $activeFilterCount,
-            'rangeLabel' => $filters['window_label'] ?? TrackerTime::todayPresetLabel(),
-            'exportUrl' => route('admin.ecom-tracker.visitors.export', $exportQuery),
-            'resetUrl' => route('admin.ecom-tracker.visitors.details', $resetQuery),
-            'resetActive' => count($request->query()) > 0,
-            'presetWindows' => [
-                '3h' => '3 hours', '6h' => '6 hours', '12h' => '12 hours', '24h' => TrackerTime::todayPresetButtonLabel(),
-                '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', '1y' => '1 year',
-            ],
-            'breadcrumbs' => [
-                ['label' => 'Visitor analytics', 'url' => $visitorsBack],
-                ['label' => $title],
-            ],
-            'backUrl' => $visitorsBack,
-            'activityLink' => fn (string $visitorId) => route('admin.ecom-activity.index', ['search' => $visitorId]),
         ];
     }
 
@@ -461,44 +361,6 @@ final class EcomTrackerViewData
         }
 
         return $query;
-    }
-
-    /**
-     * Map dashboard period/date filters to visitor analytics query params.
-     *
-     * @param  array<string, mixed>  $filters
-     * @return array<string, string>
-     */
-    public static function visitorQueryFromDashboardFilters(array $filters): array
-    {
-        $period = $filters['period'] ?? '24h';
-
-        if ($period === 'custom' && filled($filters['date_from'] ?? null) && filled($filters['date_to'] ?? null)) {
-            $fromLocal = TrackerTime::toLocal(Carbon::parse($filters['date_from'], TrackerTime::timezone())->startOfDay()->utc());
-            $toLocal = TrackerTime::toLocal(Carbon::parse($filters['date_to'], TrackerTime::timezone())->endOfDay()->utc());
-
-            return array_filter([
-                'datetime_from' => $fromLocal?->format('Y-m-d\TH:i'),
-                'datetime_to' => $toLocal?->format('Y-m-d\TH:i'),
-            ]);
-        }
-
-        if ($period === 'yesterday') {
-            $yesterday = TrackerTime::localNow()->copy()->subDay();
-
-            return [
-                'datetime_from' => $yesterday->copy()->startOfDay()->format('Y-m-d\TH:i'),
-                'datetime_to' => $yesterday->copy()->endOfDay()->format('Y-m-d\TH:i'),
-            ];
-        }
-
-        $window = match ($period) {
-            '7d' => '7d',
-            '30d', '90d' => '30d',
-            default => '24h',
-        };
-
-        return ['window' => $window];
     }
 
     /**

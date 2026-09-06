@@ -476,6 +476,10 @@
     gap: 0.35rem;
 }
 
+.etd-date-nav__shortcut .etd-segmented-btn {
+    font-weight: 600;
+}
+
 .etd-date-nav-btn {
     display: inline-flex;
     align-items: center;

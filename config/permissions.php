@@ -15,7 +15,6 @@ return [
         'resources' => [
             'ecom_tracker' => [
                 'dashboard' => 'Store Performance',
-                'visitors' => 'Visitor Analytics',
                 'activity' => 'User Activity',
             ],
         ],
@@ -96,10 +95,6 @@ return [
         // ECOM TRACKER MODULE
         'ecom_tracker' => [
             'dashboard' => [
-                'guard' => 'web',
-                'actions' => ['index'],
-            ],
-            'visitors' => [
                 'guard' => 'web',
                 'actions' => ['index'],
             ],

@@ -9,8 +9,4 @@
         <a href="{{ route('admin.ecom-activity.index') }}"
            class="etd-tracker-nav-link {{ $current === 'activity' ? 'active' : '' }}">User activity</a>
     @endcan
-    @can('ecom_tracker.visitors.index')
-    <a href="{{ route('admin.ecom-tracker.visitors') }}"
-       class="etd-tracker-nav-link {{ $current === 'visitors' ? 'active' : '' }}">Visitor analytics</a>
-    @endcan
 </div>

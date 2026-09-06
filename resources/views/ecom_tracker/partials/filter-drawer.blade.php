@@ -2,14 +2,8 @@
 @props([
     'action',
     'resetUrl' => null,
-    'presetWindows' => [],
-    'window' => '24h',
-    'hasCustomRange' => false,
-    'datetimeFromValue' => '',
-    'datetimeToValue' => '',
     'showDashboardFilters' => false,
     'showSessionFilters' => false,
-    'showVisitorFilters' => false,
     'showActivityFilters' => false,
     'activityFiltersIncludeDateRange' => true,
     'includeSessionSearch' => true,
@@ -74,9 +68,6 @@
                 <input type="hidden" name="date_from" value="{{ $dateFrom }}">
                 <input type="hidden" name="date_to" value="{{ $dateTo }}">
             @endif
-        @endif
-        @if ($showVisitorFilters && request('sort_by'))
-            <input type="hidden" name="sort_by" value="{{ request('sort_by') }}">
         @endif
 
         <div class="flex-1 overflow-y-auto px-5 py-2.5 space-y-3 etd-filter-drawer__body">
@@ -160,64 +151,15 @@
                 @endif
             @elseif ($preservePeriodParams)
                 {{-- Period/compare controlled in page header; hidden fields preserve them on apply --}}
-            @else
-                @php
-                    $drawerWindow = $hasCustomRange ? 'custom' : $window;
-                @endphp
-                <div x-data="{ drawerWindow: @js($drawerWindow) }">
-                    <label class="etd-filter-compact-field">
-                        <span class="etd-filter-compact-label">Quick window</span>
-                        <select name="window"
-                                class="tom-select etd-tom-select w-full"
-                                data-placeholder="All"
-                                @change="drawerWindow = $event.target.value">
-                            <option value="" @selected(! request()->filled('window'))>All</option>
-                            @foreach (array_merge($presetWindows, ['custom' => 'Custom']) as $windowKey => $windowOptionLabel)
-                                <option value="{{ $windowKey }}" @selected($drawerWindow === $windowKey)>{{ $windowOptionLabel }}</option>
-                            @endforeach
-                        </select>
-                    </label>
-
-                    <div x-show="drawerWindow === 'custom'"
-                         x-collapse
-                         x-effect="syncEtdFlatpickrEnabled($el, drawerWindow === 'custom')"
-                         class="etd-date-range space-y-2 mt-2"
-                         data-etd-date-range>
-                        <div>
-                            <label class="etd-filter-compact-label" for="filter-datetime-from">From</label>
-                            <input type="text"
-                                   id="filter-datetime-from"
-                                   name="datetime_from"
-                                   value="{{ $datetimeFromValue }}"
-                                   data-range="from"
-                                   data-default="{{ $datetimeFromValue }}"
-                                   placeholder="Select date & time"
-                                   readonly
-                                   class="etd-flatpickr-datetime etd-filter-input etd-filter-input--sm w-full">
-                        </div>
-                        <div>
-                            <label class="etd-filter-compact-label" for="filter-datetime-to">To</label>
-                            <input type="text"
-                                   id="filter-datetime-to"
-                                   name="datetime_to"
-                                   value="{{ $datetimeToValue }}"
-                                   data-range="to"
-                                   data-default="{{ $datetimeToValue }}"
-                                   placeholder="Select date & time"
-                                   readonly
-                                   class="etd-flatpickr-datetime etd-filter-input etd-filter-input--sm w-full">
-                        </div>
-                    </div>
-                </div>
             @endif
 
-            @if ($showSessionFilters || $showVisitorFilters || $showProductFilters)
+            @if ($showSessionFilters || $showProductFilters)
                 @if ($showSessionFilters)
                     @if ($sessionFiltersHeading)
                         <p class="etd-kpi-section-label mb-2">{{ $sessionFiltersHeading }}</p>
                     @endif
                     @include('ecom_tracker.partials.session-filters')
-                    @if ($showProductFilters || $showVisitorFilters)
+                    @if ($showProductFilters)
                         <hr class="etd-filter-divider"/>
                     @endif
                 @endif
@@ -235,12 +177,6 @@
                         'showSort' => $productCatalogShowSort ?? true,
                     ])
                     </div>
-                    @if ($showVisitorFilters)
-                        <hr class="etd-filter-divider"/>
-                    @endif
-                @endif
-                @if ($showVisitorFilters)
-                    @include('ecom_tracker.visitor_details.partials.visitor-filters')
                 @endif
             @endif
         </div>

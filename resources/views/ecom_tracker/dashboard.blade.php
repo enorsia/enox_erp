@@ -95,6 +95,7 @@
                     'baseQuery' => $baseQuery,
                     'range' => $d['range'],
                     'period' => $period,
+                    'showUserActivityLink' => true,
                 ])
 
                 <div class="etd-header-actions">
