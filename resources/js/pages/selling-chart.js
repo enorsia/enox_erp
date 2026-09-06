@@ -616,69 +616,60 @@ $(document).ready(function () {
                     tr.find('.sp-vat').text('£' + response.selling_price_and_vat.toFixed(2));
                     tr.find('.pm').text(response.profit_margin.toFixed(2) + '%');
                     tr.find('.np').text('£' + response.net_profit.toFixed(2));
+                    tr.find('.dis-perc').text(response.discount_percent.toFixed(2) + '%');
                 }
             });
         }
     });
 
     /* ══════════════════════════════════════════════════════
-       pp-form submit — discount save confirmation
+       Save all discount platforms — single button
     ══════════════════════════════════════════════════════ */
     $(document).on('submit', '.pp-form', function (e) {
-        const $form = $(this);
-        let anyChecked = false;
-
-        if ($form.hasClass('confirmed')) return true;
-
         e.preventDefault();
-        $form.find('.discount_price').removeClass('is-invalid').next('.custom-error').remove();
+    });
 
-        const saveType = $form.find('.save_type').val();
-        let invalidStatus = false;
+    $(document).on('click', '.save-all-discounts-btn', function () {
+        const $scope = $(this).closest('.discount-edit-panel');
+        const $forms = $scope.find('.pp-form');
+        if (!$forms.length) return;
+
+        const formsToSave = [];
+        let hasAnyDiscount = false;
         let hasError = false;
 
-        $form.find('input[name="sl_price_id[]"]:checked').each(function () {
-            anyChecked = true;
-            const chVal = $(this).val();
-            const isChecked = $form.find('.status' + chVal).prop('checked');
+        $forms.each(function () {
+            const $form = $(this);
+            $form.find('.discount_price').removeClass('is-invalid').next('.custom-error').remove();
 
-            if (saveType == 2 && isChecked) invalidStatus = true;
-            if (saveType == 3 && !isChecked) invalidStatus = true;
+            let hasDiscount = false;
+            $form.find('.discount_price').each(function () {
+                const val = $(this).val().trim();
+                if (val) {
+                    hasDiscount = true;
+                    if (isNaN(val)) {
+                        hasError = true;
+                        $(this).addClass('is-invalid');
+                    }
+                }
+            });
 
-            const $discountInput = $form.find('.discount_price' + chVal);
-            if (!$discountInput.val().trim()) {
-                hasError = true;
-                $discountInput.addClass('is-invalid');
-                $('<div class="custom-error text-danger text-start mt-1" style="font-size:12px;">This field is required.</div>')
-                    .insertAfter($discountInput);
+            if (hasDiscount) {
+                hasAnyDiscount = true;
+                formsToSave.push($form);
             }
         });
 
-        if (!anyChecked) {
-            Swal.fire({
-                title: 'No Option Selected',
-                text: 'Please select at least one price option before submitting.',
-                icon: 'warning'
-            });
-            return false;
-        }
+        if (hasError) return;
 
-        if (hasError) return false;
-
-        if (invalidStatus) {
-            Swal.fire({
-                title: 'Invalid Status',
-                text: saveType == 2
-                    ? 'All selected items must have Status OFF for Approval.'
-                    : 'All selected items must have Status ON for Executor.',
-                icon: 'error'
-            });
-            return false;
+        if (!hasAnyDiscount) {
+            Swal.fire({ title: 'No Discount', text: 'Enter at least one discount price to save.', icon: 'warning' });
+            return;
         }
 
         Swal.fire({
             title: 'Are you sure?',
-            text: 'Do you want to save this discount?',
+            text: 'Do you want to save discounts for all platforms?',
             icon: 'question',
             showCancelButton: true,
             confirmButtonText: 'Yes, Save it!',
@@ -686,11 +677,36 @@ $(document).ready(function () {
             confirmButtonColor: '#3085d6',
             cancelButtonColor: '#d33'
         }).then((result) => {
-            if (result.isConfirmed) {
-                $form.addClass('confirmed');
-                $form.find('.submit-btn').html(window.loader).prop('disabled', true);
-                $form.submit();
-            }
+            if (!result.isConfirmed) return;
+
+            const $btn = $scope.find('.save-all-discounts-btn');
+            const btnHtml = $btn.html();
+            $btn.html(window.loader || 'Saving...').prop('disabled', true);
+
+            const requests = formsToSave.map(($form) => $.ajax({
+                url: $form.attr('action'),
+                type: 'POST',
+                data: $form.serialize(),
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            }));
+
+            $.when.apply($, requests)
+                .done(function () {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Saved',
+                        text: 'Discount prices updated successfully.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                })
+                .fail(function (xhr) {
+                    const msg = xhr?.responseJSON?.message || 'Something went wrong. Please try again.';
+                    Swal.fire({ icon: 'error', title: 'Error', text: msg });
+                })
+                .always(function () {
+                    $btn.html(btnHtml).prop('disabled', false);
+                });
         });
     });
 
@@ -707,14 +723,15 @@ $(document).ready(function () {
     function createPriceCal($row) {
         const selectedVal = $('#season_select').val();
         const expInput = $('.season-exp' + selectedVal);
+        console.log(expInput);
         const conversionRate = parseFloat(expInput.data('conversion-rate')) || 0;
         const commercialExpense = parseFloat(expInput.data('commercial-expense')) || 0;
         const enorsiaBDExpense = parseFloat(expInput.data('enorsia-bd-expense')) || 0;
         const enorsiaUKExpense = parseFloat(expInput.data('enorsia-uk-expense')) || 0;
+        const expShippingCost = parseFloat(expInput.data('shipping-cost')) || 0;
         const priceFOB = parseFloat($row.find('.x_price_fob').val()) || 0;
-
         const unitPrice = priceFOB
-            ? (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense)
+            ? (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + expShippingCost)
             : 0;
         $row.find('.x_unit_price').val(unitPrice.toFixed(2));
     }
@@ -758,6 +775,9 @@ $(document).ready(function () {
 
             const priceFOB = parseFloat($row.find('.price_fob').val()) || 0;
             const shippingCost = parseFloat($row.find('.shipping_cost').val()) || 0;
+
+            // console.log((priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + (shippingCost || expShippingCost)));
+
             const unitPrice = (priceFOB * conversionRate) + (commercialExpense + enorsiaBDExpense + enorsiaUKExpense + (shippingCost || expShippingCost));
             $row.find('.unit_price').val(unitPrice.toFixed(2));
 

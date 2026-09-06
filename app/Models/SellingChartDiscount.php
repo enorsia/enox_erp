@@ -11,6 +11,8 @@ class SellingChartDiscount extends Model
         'platform_id',
         'price',
         'status',
+        'cost_basis',
+        'shipping_cost',
     ];
 
     public function sellingChartPrice()

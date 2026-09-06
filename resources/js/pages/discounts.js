@@ -1,34 +1,166 @@
 import $ from '$';
 
-// ── Read config from data attributes set in the blade ──
 const pageEl   = document.getElementById('discounts-page-content');
-const CALC_URL  = pageEl?.dataset.calculateUrl   ?? '';
-const VIEW_URL  = pageEl?.dataset.viewUrl        ?? '';
-const DEP_CATS  = pageEl?.dataset.depCatsUrl     ?? '';
-const CSRF      = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+const CALC_URL = pageEl?.dataset.calculateUrl ?? '';
+const SAVE_URL = pageEl?.dataset.saveUrl     ?? '';
+const DEP_CATS = pageEl?.dataset.depCatsUrl  ?? '';
+const CSRF     = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+
+function isGroupedDept(department_id) {
+    return department_id == 1926 || department_id == 1927;
+}
+
+function isGirlsBoysDept(department_id) {
+    return department_id == 1928 || department_id == 1929;
+}
+
+function getRowPriceId($row) {
+    return $row.data('price-id')
+        || $row.find('.cost-basis-radio').first().data('price-id')
+        || $row.find('.shipping-cost-input').first().data('price-id')
+        || $row.find('.discount_price').data('price-id');
+}
+
+function getDiscountInputForRow(form, ch_price_id) {
+    const $specific = form.find('.discount_price' + ch_price_id);
+    return $specific.length ? $specific : form.find('.discount_price').first();
+}
+
+function getCostBasis(form, ch_price_id) {
+    const $checked = form.find('input[name="cost_basis[' + ch_price_id + ']"]:checked');
+    if ($checked.length) return $checked.val();
+    return form.find('.cost-basis-radio:checked').first().val() || 'unit';
+}
+
+function getShippingValue(form, ch_price_id) {
+    const $input = form.find('.shipping-cost-input[data-price-id="' + ch_price_id + '"]');
+    if ($input.length) return $input.val();
+    return form.find('.shipping-cost-input').first().val() ?? form.data('default-shipping');
+}
+
+function applyProfitResponse($row, response) {
+    $row.find('.com').text('£' + response.commission.toFixed(2));
+    $row.find('.com-vat').text('£' + response.commission_vat.toFixed(2));
+    $row.find('.sp').text('£' + response.selling_price.toFixed(2));
+    $row.find('.sl-vat').text('£' + response.selling_vat.toFixed(2));
+    $row.find('.vat-val').text('£' + response.vat_value.toFixed(2));
+    $row.find('.sp-vat').text('£' + response.selling_price_and_vat.toFixed(2));
+    $row.find('.pm').text(response.profit_margin.toFixed(2) + '%');
+    $row.find('.np').text('£' + response.net_profit.toFixed(2));
+    $row.find('.dis-perc').text(response.discount_percent.toFixed(2) + '%');
+
+    const $adjusted = $row.find('.adjusted-unit-price');
+    if (response.adjusted_unit_price != null && response.cost_basis !== 'fob') {
+        $adjusted.text('£' + parseFloat(response.adjusted_unit_price).toFixed(2)).removeClass('hidden');
+    } else {
+        $adjusted.text('').addClass('hidden');
+    }
+}
+
+function applyOriginalProfit($row) {
+    const original = $row.data('original-profit');
+    if (original) {
+        applyProfitResponse($row, original);
+    }
+    $row.find('.adjusted-unit-price').text('').addClass('hidden');
+}
+
+function shouldUseOriginalCalc($row, form, ch_price_id) {
+    const shipping = parseFloat(getShippingValue(form, ch_price_id)) || 0;
+    const originalShipping = parseFloat($row.data('original-shipping')) || 0;
+    const cost_basis = getCostBasis(form, ch_price_id);
+    return cost_basis === 'unit' && Math.abs(shipping - originalShipping) <= 0.005;
+}
+
+function calculateProfitForRow(form, $row, ch_price_id) {
+    // if (shouldUseOriginalCalc($row, form, ch_price_id)) {
+    //     applyOriginalProfit($row);
+    //     return $.Deferred().resolve().promise();
+    // }
+
+    const platform_id = form.find('.platform_id').val();
+    const $discountInput = getDiscountInputForRow(form, ch_price_id);
+    const discount_price = parseFloat($discountInput.val()) || 0;
+    const cost_basis = getCostBasis(form, ch_price_id);
+    const shipping_cost = getShippingValue(form, ch_price_id);
+
+    return $.ajax({
+        url: CALC_URL,
+        type: 'POST',
+        data: {
+            platform_id,
+            discount_price,
+            ch_price_id,
+            cost_basis,
+            shipping_cost,
+            _token: CSRF,
+        },
+    }).done(function (response) {
+        console.log("response", response);
+        applyProfitResponse($row, response);
+    });
+}
+
+function recalculateAllRows(form) {
+    const department_id = form.find('.department_id').val();
+    const requests = [];
+
+    if (isGroupedDept(department_id)) {
+        const $row = form.find('tbody tr.discount-calc-row').first();
+        const ch_price_id = getRowPriceId($row);
+        if (ch_price_id) requests.push(calculateProfitForRow(form, $row, ch_price_id));
+    } else {
+        form.find('tbody tr.discount-calc-row').each(function () {
+            const $row = $(this);
+            const ch_price_id = getRowPriceId($row);
+            if (ch_price_id) requests.push(calculateProfitForRow(form, $row, ch_price_id));
+        });
+    }
+
+    return requests.length ? $.when.apply($, requests) : $.Deferred().resolve().promise();
+}
+
+function recalculateDiscountRow($context) {
+    const form = $context.closest('form');
+    const department_id = form.find('.department_id').val();
+
+    if (isGirlsBoysDept(department_id) && $context.hasClass('cost-basis-radio')) {
+        return recalculateAllRows(form);
+    }
+
+    if (isGroupedDept(department_id)) {
+        return recalculateAllRows(form);
+    }
+
+    const $row = $context.closest('tr.discount-calc-row');
+    const ch_price_id = getRowPriceId($row.length ? $row : $context);
+    if (!ch_price_id) return;
+
+    return calculateProfitForRow(form, $row.length ? $row : form, ch_price_id);
+}
+
+function syncCostBasisRadios($radio) {
+    const form = $radio.closest('form');
+    const basis = $radio.val();
+    form.find('.cost-basis-radio').each(function () {
+        $(this).prop('checked', $(this).val() === basis);
+    });
+}
 
 $(document).ready(function () {
 
-    /* ══════════════════════════════════════════════════════
-       Product Category — TomSelect
-       common.js already initialises ALL .tom-select elements
-       so we just grab the existing instance instead of
-       creating a new one (TomSelect throws if you double-init).
-    ══════════════════════════════════════════════════════ */
     let productCategoryTs = null;
 
     function initProductCategorySelect() {
         const el = document.querySelector('#product_category');
         if (!el) return;
-        if (productCategoryTs) return; // already have a reference
+        if (productCategoryTs) return;
 
-        // Reuse the instance that common.js already created
         if (el.tomselect) {
             productCategoryTs = el.tomselect;
             return;
         }
 
-        // Fallback: initialise ourselves if common.js missed it
         if (typeof TomSelect === 'undefined') { setTimeout(initProductCategorySelect, 100); return; }
         productCategoryTs = new TomSelect(el, {
             create: false,
@@ -38,13 +170,9 @@ $(document).ready(function () {
         });
     }
 
-    // Try immediately; if common.js DOMContentLoaded hasn't fired yet retry shortly
     initProductCategorySelect();
     if (!productCategoryTs) setTimeout(initProductCategorySelect, 200);
 
-    /* ══════════════════════════════════════════════════════
-       Department select — reload categories (unchanged logic)
-    ══════════════════════════════════════════════════════ */
     $('#department_select').change(function () {
         const id = $(this).val();
         $.ajax({
@@ -67,23 +195,15 @@ $(document).ready(function () {
         });
     });
 
-    /* ══════════════════════════════════════════════════════
-       CRITICAL — discount_price change / keyup handler
-       (logic unchanged — only Blade template vars replaced
-        with data-attribute-sourced constants)
-    ══════════════════════════════════════════════════════ */
     $(document).on('change keyup', '.discount_price', function () {
-        let input         = $(this);
-        let form          = input.closest('form');
-        let platform_id   = form.find('.platform_id').val();
-        let department_id = form.find('.department_id').val();
-        let ch_price_id   = input.data('price-id');
-        let csp           = parseFloat(input.data('csp')) || 0;
-        let tr            = (department_id == 1928 || department_id == 1929)
-                                ? input.parents('tr')
-                                : form;
+        let input = $(this);
+        let form  = input.closest('form');
+        let csp   = parseFloat(input.data('csp')) || 0;
 
         let rawValue = input.val().trim();
+        if (rawValue !== '') {
+            input.removeClass('is-invalid');
+        }
         if (rawValue !== '' && isNaN(rawValue)) {
             Swal.fire({ icon: 'error', title: 'Invalid Input', text: 'Please enter a numeric value only.' });
             input.val('');
@@ -103,158 +223,482 @@ $(document).ready(function () {
             input.focus();
         }
 
-        $.ajax({
-            url: CALC_URL,
-            type: 'POST',
-            data: {
-                platform_id:    platform_id,
-                discount_price: discount_price,
-                ch_price_id:    ch_price_id,
-                _token:         CSRF
-            },
-            success: function (response) {
-                tr.find('.com').text('£'     + response.commission.toFixed(2));
-                tr.find('.com-vat').text('£' + response.commission_vat.toFixed(2));
-                tr.find('.sp').text('£'      + response.selling_price.toFixed(2));
-                tr.find('.sl-vat').text('£'  + response.selling_vat.toFixed(2));
-                tr.find('.vat-val').text('£' + response.vat_value.toFixed(2));
-                tr.find('.sp-vat').text('£'  + response.selling_price_and_vat.toFixed(2));
-                tr.find('.pm').text(response.profit_margin.toFixed(2) + '%');
-                tr.find('.np').text('£'      + response.net_profit.toFixed(2));
-            }
-        });
+        recalculateDiscountRow(input);
     });
 
-    /* ══════════════════════════════════════════════════════
-       CRITICAL — pp-form submit handler
-       (logic unchanged)
-    ══════════════════════════════════════════════════════ */
-    $(document).on('submit', '.pp-form', function (e) {
-        let $form     = $(this);
-        let anyChecked = false;
+    $(document).on('change', '.cost-basis-radio', function () {
+        syncCostBasisRadios($(this));
+        recalculateAllRows($(this).closest('form'));
+    });
 
-        if ($form.hasClass('confirmed')) return true;
+    $(document).on('change keyup', '.shipping-cost-input', function () {
+        recalculateDiscountRow($(this));
+    });
 
-        e.preventDefault();
-        $form.find('.discount_price').removeClass('is-invalid');
+    function validateDiscountForm($form, options = {}) {
+        const requireDiscount = options.requireDiscount !== false;
+        let saveType   = $form.find('.save_type').val();
+        let hasError   = false;
+        let hasDiscount = false;
+        const department_id = $form.find('.department_id').val();
+        const isGirlsBoys = isGirlsBoysDept(department_id);
+        const isGrouped = isGroupedDept(department_id) || isGirlsBoys;
+        const groupStatus = $form.find('.group-status-toggle').prop('checked');
 
-        let saveType      = $form.find('.save_type').val();
-        let invalidStatus = false;
-        let hasError      = false;
+        $form.find('.discount_price').removeClass('is-invalid').next('.custom-error').remove();
 
-        $form.find('.discount_price')
-             .removeClass('is-invalid')
-             .next('.custom-error')
-             .remove();
+        if (requireDiscount && isGirlsBoys) {
+            let allFilled = true;
 
-        $form.find('input[name="sl_price_id[]"]:checked').each(function () {
-            anyChecked = true;
+            $form.find('.discount_price').each(function () {
+                const val = $(this).val().trim();
+                if (!val) {
+                    allFilled = false;
+                    $(this).addClass('is-invalid');
+                } else if (isNaN(val)) {
+                    hasError = true;
+                    $(this).addClass('is-invalid');
+                }
+            });
 
-            let chVal     = $(this).val();
-            let isChecked = $form.find('.status' + chVal).prop('checked');
+            if (!allFilled || hasError) {
+                return { valid: false, hasDiscount: false };
+            }
 
-            if (saveType == 2 && isChecked)  invalidStatus = true;
-            if (saveType == 3 && !isChecked) invalidStatus = true;
+            hasDiscount = true;
+        } else {
+            $form.find('.discount_price').each(function () {
+                const val = $(this).val().trim();
+                if (val) {
+                    hasDiscount = true;
+                }
+            });
 
-            let $discountInput = $form.find('.discount_price' + chVal);
-            if (!$discountInput.val().trim()) {
-                hasError = true;
-                $discountInput.addClass('is-invalid');
-                $('<div class="custom-error text-danger text-start mt-1" style="font-size:12px;">This field is required.</div>')
-                    .insertAfter($discountInput);
+            if (requireDiscount && !hasDiscount) {
+                $form.find('.discount_price').each(function () {
+                    if (!$(this).val().trim()) {
+                        $(this).addClass('is-invalid');
+                    }
+                });
+                return { valid: false, hasDiscount: false };
+            }
+
+            $form.find('.discount_price').each(function () {
+                const val = $(this).val().trim();
+                if (val !== '' && isNaN(val)) {
+                    hasError = true;
+                    $(this).addClass('is-invalid');
+                }
+            });
+
+            if (hasError) return { valid: false, hasDiscount };
+        }
+
+        if (isGrouped && saveType == 2 && groupStatus) {
+            Swal.fire({
+                title: 'Invalid Status',
+                text: 'All items must have Status OFF for Approval.',
+                icon: 'error'
+            });
+            return { valid: false, hasDiscount };
+        }
+
+        if (isGrouped && saveType == 3 && !groupStatus) {
+            Swal.fire({
+                title: 'Invalid Status',
+                text: 'All items must have Status ON for Executor.',
+                icon: 'error'
+            });
+            return { valid: false, hasDiscount };
+        }
+
+        if (!isGrouped) {
+            let invalidStatus = false;
+            $form.find('input[name^="statuses"]:checked').each(function () {
+                if (saveType == 2) invalidStatus = true;
+            });
+            $form.find('input[name^="statuses"]').each(function () {
+                const id = $(this).attr('name').match(/\[(\d+)\]/);
+                if (!id) return;
+                const chVal = id[1];
+                const $discount = $form.find('.discount_price' + chVal);
+                if ($discount.length && $discount.val().trim() && !$(this).prop('checked') && saveType == 3) {
+                    invalidStatus = true;
+                }
+            });
+            if (invalidStatus) {
+                Swal.fire({
+                    title: 'Invalid Status',
+                    text: saveType == 2
+                        ? 'Selected items must have Status OFF for Approval.'
+                        : 'Selected items must have Status ON for Executor.',
+                    icon: 'error'
+                });
+                return { valid: false, hasDiscount };
+            }
+        }
+
+        return { valid: true, hasDiscount };
+    }
+
+    // save summary
+    function parseFormRowProfit($row) {
+        return {
+            pm: ($row.find('.pm').first().text() || '').trim(),
+            np: ($row.find('.np').first().text() || '').trim(),
+        };
+    }
+
+    function buildDiscountSummaryLine(discountPrice, pmText, npText) {
+        return (
+            '<div class="plat-line plat-line-dis">' +
+                '<span class="plat-type plat-type-dis">Dis</span>' +
+                '<span class="plat-val"><span class="plat-key">CSP</span> £' + parseFloat(discountPrice).toFixed(2) + '</span>' +
+                '<span class="plat-sep">·</span>' +
+                '<span class="plat-val"><span class="plat-key">PM</span> ' + pmText + '</span>' +
+                '<span class="plat-sep">·</span>' +
+                '<span class="plat-val"><span class="plat-key">NP</span> ' + npText + '</span>' +
+            '</div>'
+        );
+    }
+
+    function updatePlatCardSummary($platCard, discountPrice, pmText, npText) {
+        if (!$platCard.length) return;
+
+        $platCard.find('.plat-line-dis').remove();
+
+        if (discountPrice > 0) {
+            $platCard.addClass('plat-card-disc');
+            $platCard.append(buildDiscountSummaryLine(discountPrice, pmText, npText));
+            return;
+        }
+
+        $platCard.removeClass('plat-card-disc');
+    }
+
+    function getSummaryUpdatesForForm($form) {
+        const department_id = $form.find('.department_id').val();
+        const updates = [];
+
+        if (isGroupedDept(department_id)) {
+            const $firstRow = $form.find('tbody tr.discount-calc-row').first();
+            const primaryId = getRowPriceId($firstRow);
+            const discount_price = parseFloat(getDiscountInputForRow($form, primaryId).val()) || 0;
+            const profit = parseFormRowProfit($firstRow);
+
+            $form.find('input.ch_price_id').each(function () {
+                updates.push({
+                    ch_price_id: $(this).val(),
+                    discount_price,
+                    profit,
+                });
+            });
+        } else {
+            $form.find('tbody tr.discount-calc-row').each(function () {
+                const $row = $(this);
+                const ch_price_id = getRowPriceId($row);
+                updates.push({
+                    ch_price_id,
+                    discount_price: parseFloat(getDiscountInputForRow($form, ch_price_id).val()) || 0,
+                    profit: parseFormRowProfit($row),
+                });
+            });
+        }
+
+        return updates;
+    }
+
+    function updateDiscountSummaryForForm($form) {
+        const $card = $form.closest('.discount-card');
+        const $summary = $card.find('.discount-summary-strip');
+        if (!$summary.length) return;
+
+        const platform_id = $form.find('.platform_id').val();
+
+        getSummaryUpdatesForForm($form).forEach(({ ch_price_id, discount_price, profit }) => {
+            const $platCard = $summary
+                .find('.discount-summary-color[data-price-id="' + ch_price_id + '"]')
+                .find('.plat-card[data-platform-id="' + platform_id + '"]');
+
+            updatePlatCardSummary($platCard, discount_price, profit.pm, profit.np);
+        });
+    }
+    // save summary
+
+    function formatPlatformCode(code) {
+        return String(code).replace(/_/g, ' ').toUpperCase();
+    }
+
+    function formatDiscountPrice(price) {
+        return '£' + parseFloat(price).toFixed(2);
+    }
+
+    function formHasDiscount($form) {
+        let hasDiscount = false;
+
+        $form.find('.discount_price').each(function () {
+            if ($(this).val().trim()) {
+                hasDiscount = true;
+                return false;
             }
         });
 
-        if (!anyChecked) {
-            Swal.fire({
-                title: 'No Option Selected',
-                text: 'Please select at least one price option before submitting.',
-                icon: 'warning'
+        return hasDiscount;
+    }
+
+    function getAllPlatformFormsWithDiscount($scope) {
+        const forms = [];
+
+        $scope.find('.pp-form').each(function () {
+            const $form = $(this);
+            if (formHasDiscount($form)) {
+                forms.push($form);
+            }
+        });
+
+        return forms;
+    }
+
+    function collectAppliedDiscountsFromForms(forms) {
+        if (!forms.length) return null;
+
+        const department_id = forms[0].find('.department_id').val();
+        const hasRange = isGirlsBoysDept(department_id);
+
+        if (hasRange) {
+            const platform_ranges = {};
+
+            forms.forEach(($form) => {
+                const code = $form.data('platform-code');
+                if (!code) return;
+
+                $form.find('tbody tr.discount-calc-row').each(function () {
+                    const $row = $(this);
+                    const ch_price_id = getRowPriceId($row);
+                    const discount_price = parseFloat(getDiscountInputForRow($form, ch_price_id).val()) || 0;
+                    if (discount_price <= 0) return;
+
+                    const range = $row.find('td').eq(1).text().trim();
+                    if (!platform_ranges[code]) platform_ranges[code] = [];
+                    platform_ranges[code].push({ range, price: discount_price });
+                });
             });
-            return false;
+
+            return { has_range: true, platform_ranges, platform_discounts: [] };
         }
 
-        if (hasError) return false;
+        const platform_discounts = [];
 
-        if (invalidStatus) {
-            Swal.fire({
-                title: 'Invalid Status',
-                text: saveType == 2
-                    ? 'All selected items must have Status OFF for Approval.'
-                    : 'All selected items must have Status ON for Executor.',
-                icon: 'error'
-            });
-            return false;
+        forms.forEach(($form) => {
+            const code = $form.data('platform-code');
+            if (!code) return;
+
+            const $firstRow = $form.find('tbody tr.discount-calc-row').first();
+            const ch_price_id = getRowPriceId($firstRow);
+            const discount_price = parseFloat(getDiscountInputForRow($form, ch_price_id).val()) || 0;
+
+            if (discount_price > 0) {
+                platform_discounts.push({ code, price: discount_price });
+            }
+        });
+
+        return { has_range: false, platform_ranges: {}, platform_discounts };
+    }
+
+    function buildAppliedDiscountsHtml(appliedDiscounts) {
+        if (!appliedDiscounts) return '';
+
+        const boxOpen =
+            '<div class="rounded-lg p-2 bg-slate-200 dark:bg-slate-700/50 border border-transparent dark:border-slate-600">';
+        const boxClose = '</div>';
+        const title =
+            '<p class="text-slate-800 dark:text-slate-200 text-[12px] font-medium mb-1">Applied Discounts:</p>';
+
+        if (appliedDiscounts.has_range) {
+            const items = Object.entries(appliedDiscounts.platform_ranges || {})
+                .map(([code, ranges]) => {
+                    const rangeLines = (ranges || [])
+                        .map((item) =>
+                            '<span class="block text-slate-600 dark:text-slate-400">' +
+                            (item.range || 'N/A') +
+                            ' — ' +
+                            formatDiscountPrice(item.price) +
+                            '</span>'
+                        )
+                        .join('');
+
+                    return (
+                        '<div class="ssr-product-meta text-slate-600 dark:text-slate-400">' +
+                        '<span class="font-medium text-slate-700 dark:text-slate-300">' +
+                        formatPlatformCode(code) +
+                        ':</span>' +
+                        rangeLines +
+                        '</div>'
+                    );
+                })
+                .join('');
+
+            return (
+                boxOpen +
+                title +
+                '<div class="grid grid-cols-2 gap-x-3 gap-y-1">' +
+                (items || '<p class="ssr-product-meta col-span-2 text-slate-600 dark:text-slate-400">No discounts applied</p>') +
+                '</div>' +
+                boxClose
+            );
+        }
+
+        const items = (appliedDiscounts.platform_discounts || [])
+            .map((discount) =>
+                '<p class="ssr-product-meta text-slate-600 dark:text-slate-400">' +
+                '<span class="font-medium text-slate-700 dark:text-slate-300">' +
+                formatPlatformCode(discount.code) +
+                ':</span> ' +
+                formatDiscountPrice(discount.price) +
+                '</p>'
+            )
+            .join('');
+
+        return (
+            boxOpen +
+            title +
+            '<div class="grid grid-cols-2 gap-x-3 gap-y-1">' +
+            (items || '<p class="ssr-product-meta col-span-2 text-slate-600 dark:text-slate-400">No discounts applied</p>') +
+            '</div>' +
+            boxClose
+        );
+    }
+
+    function updateStyleStockAppliedDiscounts($scope) {
+        if (!document.getElementById('enox_style_stock_report')) return;
+
+        const itemSlug = String($scope.data('item-slug') || '').trim();
+        if (!itemSlug) return;
+
+        const allFormsWithDiscount = getAllPlatformFormsWithDiscount($scope);
+        const appliedDiscounts = collectAppliedDiscountsFromForms(allFormsWithDiscount);
+        const html = buildAppliedDiscountsHtml(appliedDiscounts);
+        if (!html) return;
+
+        const $box = $('.applied-discounts-' + itemSlug);
+        if (!$box.length) return;
+
+        $box.html(html).removeClass('hidden');
+        $box.closest('.product-row').attr('data-has-discount', '1');
+    }
+
+    function submitDiscountForm($form) {
+        return $.ajax({
+            url:  SAVE_URL || $form.attr('action'),
+            type: 'POST',
+            data: $form.serialize(),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        });
+    }
+
+    function isVisiblePlatformForm($form) {
+        const $panel = $form.closest('[x-show]');
+        return !$panel.length || $panel.is(':visible');
+    }
+
+    function saveAllDiscountForms($scope) {
+        const $forms = $scope.find('.pp-form').filter(function () {
+            return isVisiblePlatformForm($(this));
+        });
+        if (!$forms.length) return;
+
+        const formsToSave = [];
+        let hasAnyDiscount = false;
+        let allValid = true;
+
+        for (let i = 0; i < $forms.length; i++) {
+            const $form = $($forms[i]);
+            const result = validateDiscountForm($form, { requireDiscount: true });
+            if (!result.valid) {
+                allValid = false;
+                continue;
+            }
+
+            if (result.hasDiscount) {
+                hasAnyDiscount = true;
+                formsToSave.push($form);
+            }
+        }
+
+        if (!allValid) return;
+
+        if (!hasAnyDiscount) {
+            Swal.fire({ title: 'No Discount', text: 'Enter at least one discount price to save.', icon: 'warning' });
+            return;
         }
 
         Swal.fire({
             title: 'Are you sure?',
-            text: 'Do you want to save this discount?',
+            text: 'Do you want to save discounts for all platforms?',
             icon: 'question',
-            showCancelButton:    true,
-            confirmButtonText:   'Yes, Save it!',
-            cancelButtonText:    'Cancel',
-            confirmButtonColor:  '#3085d6',
-            cancelButtonColor:   '#d33'
+            showCancelButton:   true,
+            confirmButtonText:  'Yes, Save it!',
+            cancelButtonText:   'Cancel',
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor:  '#d33'
         }).then((result) => {
-            if (result.isConfirmed) {
-                $form.addClass('confirmed');
-                $form.find('.submit-btn').html(window.loader).prop('disabled', true);
-                $form.submit();
-            }
+            if (!result.isConfirmed) return;
+
+            const $btn = $scope.find('.save-all-discounts-btn');
+            const btnHtml = $btn.html();
+            $btn.html(window.loader || 'Saving...').prop('disabled', true);
+
+            const requests = formsToSave.map(($form) => submitDiscountForm($form));
+
+            $.when
+                .apply($, requests)
+                .done(function () {
+                    formsToSave.forEach(($form) =>
+                        updateDiscountSummaryForForm($form),
+                    );
+
+                    updateStyleStockAppliedDiscounts($scope);
+
+                    if($('.pack-alert').length) {
+                        $('.pack-alert').remove();
+                    }
+
+                    iziToast.success({
+                        title: "Saved",
+                        message: "Discount prices updated successfully.",
+                        position: "topRight",
+                        timeout: 2000,
+                    });
+                })
+                .fail(function (xhr) {
+                    const msg =
+                        xhr?.responseJSON?.message ||
+                        "Something went wrong. Please try again.";
+                    Swal.fire({ icon: "error", title: "Error", text: msg });
+                })
+                .always(function () {
+                    $btn.html(btnHtml).prop("disabled", false);
+                });
         });
+    }
+
+    $(document).on('submit', '.pp-form', function (e) {
+        e.preventDefault();
     });
 
-    /* ══════════════════════════════════════════════════════
-       Toggle columns in view-item modal (unchanged)
-    ══════════════════════════════════════════════════════ */
+    $(document).on('click', '.save-all-discounts-btn', function () {
+        const $scope = $(this).closest('.discount-edit-panel');
+        saveAllDiscountForms($scope);
+    });
+
     $(document).on('change', '.toggle-column', function () {
         const target = $(this).val();
-        $('.' + target).toggle(this.checked);
+        const panel  = $(this).closest('.discount-edit-panel');
+        panel.find('.toogle-item.' + target).toggle(this.checked);
     });
 
 });
 
-/* ══════════════════════════════════════════════════════
-   CRITICAL — viewChart (unchanged logic)
-   Exposed globally so onclick="viewChart(...)" works
-══════════════════════════════════════════════════════ */
-window.viewChart = function (id, page = 1) {
-    let url = VIEW_URL.replace(':id', id);
-    $.ajax({
-        type: 'GET',
-        url:  url,
-        data: { page: page },
-        success: function (response) {
-            if (response.status == true) {
-                $('#viewSellingChartItemModal').remove();
-                $('.setViewSellingChartItemModal').html(response.data);
-                if (typeof window.initTomSelectElements === 'function') {
-                    const modalRoot = document.querySelector('.setViewSellingChartItemModal');
-                    if (modalRoot) window.initTomSelectElements(modalRoot);
-                }
-                // Init Alpine.js on the freshly injected markup
-                if (window.Alpine) {
-                    window.Alpine.initTree(document.querySelector('.setViewSellingChartItemModal'));
-                }
-                // Lock body scroll while modal is open
-                document.body.style.overflow = 'hidden';
-            }
-        },
-        error: function (data) {
-            console.log('Something went wrong.' + data);
-        }
-    });
-};
-
-window.closeDiscountModal = function () {
-    $('#viewSellingChartItemModal').remove();
-    document.body.style.overflow = '';
-};
-
-/* ══════════════════════════════════════════════════════
-   approveData — unchanged, exposed globally
-══════════════════════════════════════════════════════ */
 window.approveData = function (id, action = 'approve') {
     Swal.fire({
         title: 'Are you sure?',
@@ -276,4 +720,3 @@ window.approveData = function (id, action = 'approve') {
         }
     });
 };
-

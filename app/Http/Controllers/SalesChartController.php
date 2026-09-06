@@ -6,6 +6,7 @@ use App\ApiServices\FabricationService;
 use App\ApiServices\SellingChartApiService;
 use App\Exports\SellingChartExport;
 use App\Exports\SellingChartMismatchExport;
+use App\Http\Clients\EnoxApiClient;
 use App\Imports\SellingChartImport;
 use App\Jobs\CloudflareFileDeleteJob;
 use App\Jobs\CloudflareFileUploadJob;
@@ -13,6 +14,7 @@ use App\Mail\SellingChartDiscountMail;
 use App\Models\Platform;
 use App\Models\SellingChartBasicInfo;
 use App\Models\SellingChartDiscount;
+use App\Models\SellingChartDiscountHistory;
 use App\Models\SellingChartExpense;
 use App\Models\SellingChartPrice;
 use App\Models\SellingChartType;
@@ -34,7 +36,8 @@ class SalesChartController extends Controller
 
     public function __construct(
         protected SellingChartApiService $sellingChartApiService,
-        protected FabricationService $fabricationService
+        protected FabricationService $fabricationService,
+        protected EnoxApiClient $api
     ) {}
 
     public function index(Request $request)
@@ -134,6 +137,10 @@ class SalesChartController extends Controller
 
         $data["platform_ncs"] = Platform::selectedPlatforms();
         $data["platforms"] = Platform::all()->keyBy('code');
+
+        $seasonNames = $data['chartInfos']->pluck('season_name')->unique()->filter()->values()->all();
+        $data['expenseMapBySeason'] = SellingChartExpense::configMapForSeasons($seasonNames);
+        $data['expenseConfig'] = SellingChartExpense::configForSeason(null);
 
         return view('selling_chart.discounts.index', $data);
     }
@@ -1035,6 +1042,7 @@ class SalesChartController extends Controller
 
         $data["platform_ncs"] = Platform::selectedPlatforms();
         $data["platforms"] = Platform::all()->keyBy('code');
+        $data['expenseConfig'] = SellingChartExpense::configForSeason($data['chartInfo']->season_name);
 
         if ($request->page == 1) {
             $html = view('selling_chart.view-item', $data)->render();
@@ -1049,12 +1057,26 @@ class SalesChartController extends Controller
     public function calculateProfit(Request $request)
     {
         $platform = Platform::find($request->platform_id);
-        $price = SellingChartPrice::find($request->ch_price_id);
-        $price->confirm_selling_price = (float)$request->discount_price;
+        $price = SellingChartPrice::with('sellingChartBasicInfo')->findOrFail($request->ch_price_id);
+        $m_confirm_selling_price = $price->confirm_selling_price;
+        $price->confirm_selling_price = (float) $request->discount_price > 0 ? $request->discount_price : $price->confirm_selling_price;
+        $expenseConfig = SellingChartExpense::configForSeason(
+            $price->sellingChartBasicInfo?->season_name
+        );
+        $originalShipping = (float) ($price->product_shipping_cost ?: $expenseConfig['shipping_cost']);
 
         $profit_cal = calculatePlatformProfit(
             $price,
-            $platform
+            $platform,
+            [
+                'cost_basis' => $request->input('cost_basis', 'unit'),
+                'shipping_cost' => $request->input('shipping_cost'),
+                'original_shipping' => $originalShipping,
+                'conversion_rate' => $expenseConfig['conversion_rate'],
+                'default_shipping' => $expenseConfig['shipping_cost'],
+                'confirm_selling_price' => $m_confirm_selling_price,
+                'discount_price' => (float) $request->discount_price ?? 0,
+            ]
         );
 
         return response()->json($profit_cal);
@@ -1076,6 +1098,14 @@ class SalesChartController extends Controller
 
                 'discount_price' => ['nullable', 'array'],
                 'discount_price.*' => ['nullable', 'numeric', 'min:0'],
+
+                'cost_basis' => ['nullable', 'array'],
+                'cost_basis.*' => ['nullable', 'in:unit,fob'],
+
+                'shipping_cost' => ['nullable', 'array'],
+                'shipping_cost.*' => ['nullable', 'numeric', 'min:0'],
+
+                'group_status' => ['nullable'],
             ], [
                 'platform_id.required' => 'Platform is required.',
                 'platform_id.exists' => 'Selected platform is invalid.',
@@ -1085,23 +1115,33 @@ class SalesChartController extends Controller
             ]);
 
             $platform_id = $request->platform_id;
-            $sl_price_ids = $request->sl_price_id;
-            $ch_price_ids = $request->ch_price_id;
+            $ecom_product_id = $request->ecom_product_id;
+            $ecom_sku = $request->ecom_sku;
+            $ch_price_ids = array_values($request->ch_price_id ?? []);
             $department_id = $request->department_id;
             $statuses = $request->statuses;
+            $groupStatus = $request->has('group_status') ? ($request->boolean('group_status') ? 1 : 0) : null;
+            $primaryId = $ch_price_ids[0] ?? null;
+            $discountItems = [];
+            $discountVariants = [];
+            $ecom_discount_status = 0;
 
-            if (!$sl_price_ids) {
-                throw new Exception("Don't select any item.");
+            if (empty($ch_price_ids)) {
+                throw new Exception('No price items found.');
             }
 
             DB::beginTransaction();
 
-            if ($department_id == 1926 || $department_id == 1927) {
-                $sl_price_ids = $ch_price_ids;
-            }
-
+            $sl_price_ids = $ch_price_ids;
             $platform = Platform::findOrFail($platform_id);
             $sldIds = [];
+            $firstPriceRow = SellingChartPrice::with('sellingChartBasicInfo')->find($primaryId ?? $ch_price_ids[0]);
+            $expenseConfig = SellingChartExpense::configForSeason(
+                $firstPriceRow?->sellingChartBasicInfo?->season_name
+            );
+            $defaultShippingCost = $expenseConfig['shipping_cost'];
+            $savedAny = false;
+            $lastScd = null;
 
             foreach ($sl_price_ids as $sl_price_id) {
                 $sl_price = SellingChartPrice::findOrFail($sl_price_id);
@@ -1109,12 +1149,44 @@ class SalesChartController extends Controller
                     ->where('platform_id', $platform_id)
                     ->first();
 
-                if ($department_id == 1926 || $department_id == 1927) {
-                    $price = $request->discount_price[$request->sl_price_id[0]];
-                    $status = isset($statuses[$request->sl_price_id[0]]) && $statuses[$request->sl_price_id[0]] ? 1 : 0;
+                if (in_array($department_id, [1926, 1927])) {
+                    $price = $request->discount_price[$primaryId] ?? null;
+                    $status = $groupStatus ?? 0;
+                    $costBasis = $request->cost_basis[$primaryId] ?? 'unit';
+                    $shippingCost = $request->shipping_cost[$primaryId] ?? $defaultShippingCost;
+                } elseif (in_array($department_id, [1928, 1929])) {
+                    $price = $request->discount_price[$sl_price_id] ?? null;
+                    $status = $groupStatus ?? 0;
+                    $costBasis = $request->cost_basis[$sl_price_id] ?? 'unit';
+                    $shippingCost = $request->shipping_cost[$sl_price_id] ?? $defaultShippingCost;
                 } else {
-                    $price = $request->discount_price[$sl_price_id];
+                    $price = $request->discount_price[$sl_price_id] ?? null;
                     $status = isset($statuses[$sl_price_id]) && $statuses[$sl_price_id] ? 1 : 0;
+                    $costBasis = $request->cost_basis[$sl_price_id] ?? 'unit';
+                    $shippingCost = $request->shipping_cost[$sl_price_id] ?? $defaultShippingCost;
+                }
+
+                $price = $price !== null && $price !== '' ? $price : null;
+
+                if (!$price && !$scd) {
+                    continue;
+                }
+
+                $oldDiscountPrice = $scd?->price;
+                if ($price != $oldDiscountPrice) {
+                    $discountItems[] = [
+                        'color' => $sl_price->color_name,
+                        'range' => $sl_price->range ?? null,
+                        'discount' => $price,
+                    ];
+                    $discountVariants[] = [
+                        'color_id' => $sl_price->color_id,
+                        'range_id' => $sl_price->range_id,
+                        'discount' => $price,
+                    ];
+                }
+                if ($price > 0 && !$ecom_discount_status) {
+                    $ecom_discount_status = 1;
                 }
 
                 if ($scd) {
@@ -1123,16 +1195,37 @@ class SalesChartController extends Controller
                             throw new Exception("Discount must be less than confirm selling price.");
                         }
                         $scd->price =  $price;
-                        if (Auth::user()?->can('general.discounts.approve')) {
-                            $scd->status =  $status;
-                        }
+                        $scd->cost_basis = $costBasis;
+                        $scd->shipping_cost = $shippingCost;
+                        // if (Auth::user()?->can('general.discounts.approve')) {
+                        //     $scd->status =  $status;
+                        // }
                         $scd->save();
+                        $savedAny = true;
+                        $lastScd = $scd;
+
+                        if ($oldDiscountPrice !== null && (float) $oldDiscountPrice !== (float) $price) {
+                            activity()
+                                ->causedBy(Auth::user())
+                                ->performedOn($scd)
+                                ->withProperties([
+                                    'selling_chart_price_id' => $sl_price_id,
+                                    'platform' => $platform->name,
+                                    'old_discount_price' => $oldDiscountPrice,
+                                    'new_discount_price' => $price,
+                                    'cost_basis' => $costBasis,
+                                    'shipping_cost' => $shippingCost,
+                                ])
+                                ->log('Discount price changed from ' . $oldDiscountPrice . ' to ' . $price . ' for platform ' . $platform->name);
+                        }
                     } else {
                         $scd->delete();
+                        $savedAny = true;
+                        continue;
                     }
                 } else {
                     if (!$price) {
-                        throw new Exception("Discount must be greater than 0 to create.");
+                        continue;
                     }
                     if ($price > $sl_price->confirm_selling_price) {
                         throw new Exception("Discount must be less than confirm selling price.");
@@ -1141,70 +1234,125 @@ class SalesChartController extends Controller
                         "selling_chart_price_id" => $sl_price_id,
                         "platform_id" => $platform_id,
                         "price" => $price,
+                        "cost_basis" => $costBasis,
+                        "shipping_cost" => $shippingCost,
                     ]);
+                    $savedAny = true;
+                    $lastScd = $scd;
+
+                    activity()
+                        ->causedBy(Auth::user())
+                        ->performedOn($scd)
+                        ->withProperties([
+                            'selling_chart_price_id' => $sl_price_id,
+                            'platform' => $platform->name,
+                            'old_discount_price' => null,
+                            'new_discount_price' => $price,
+                            'cost_basis' => $costBasis,
+                            'shipping_cost' => $shippingCost,
+                        ])
+                        ->log('Discount price set to ' . $price . ' for platform ' . $platform->name);
                 }
 
-                $sldIds[] = $scd->id;
+                if (isset($scd) && $scd) {
+                    $sldIds[] = $scd->id;
+                }
+            }
+
+            if (!empty($discountItems) && $firstPriceRow) {
+                $scdhData = [
+                    "style" => $firstPriceRow?->sellingChartBasicInfo?->design_no,
+                    "product_code" => $ecom_sku,
+                    "platform" => $platform->name,
+                    "discounts" => $discountItems,
+                ];
+                $scdh = SellingChartDiscountHistory::create(
+                    [
+                        'basic_info_id' => $firstPriceRow->basic_info_id,
+                        'items' => json_encode($scdhData),
+                        'created_by' => Auth::user()->name,
+                    ]
+                );
+                $no_of_pending_discounts = SellingChartDiscountHistory::where('status', 0)->count() ?? 0;
+                $apiData = [
+                    'platform_code' => $platform->code,
+                    'ecom_product_id' => $ecom_product_id,
+                    'ecom_discount_status' => $ecom_discount_status,
+                    'discount_variants' => $discountVariants,
+                    'scdh_data' => $scdhData,
+                    'no_of_pending_discounts' => $no_of_pending_discounts,
+                ];
+                Log::info('ENOX DISCOUNT UPDATE API - Request', $apiData);
+
+                $response = $this->api->post(config('enox.endpoints.selling_chart_update_discount'), $apiData);
+
+                if (!$response['status']) {
+                    throw new Exception($response['message'] ? $response['message'] : 'Failed to update discount on Enox.');
+                }
+                $sender_emails = isset($response['data']['emails']) ? $response['data']['emails'] : [];
+
+                if ($platform->code == 'enox') {
+                    $scdh->updated_by = Auth::user()->name;
+                    $scdh->status = 1;
+                    $scdh->save();
+                }
             }
 
             DB::commit();
 
-            $save_type = $request->save_type;
-
             $delay = 0;
-            if ($save_type == 2) {
-                $approval_emails = SellingChartDiscount::approvalEmails();
-                $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
-                    ->whereIn('id', $sldIds)
-                    ->where('status', 0)
-                    ->get();
-                if ($sl_discounts->isNotEmpty()) {
-                    foreach ($approval_emails as $email) {
-                        Mail::to($email)
-                            ->queue(
-                                (new SellingChartDiscountMail($sl_discounts, 'approval'))
-                                    ->delay(now()->addSeconds($delay))
-                            );
-                        $delay += 10;
-                    }
-                }
-            } elseif ($save_type == 3) {
-                $executor_emails = SellingChartDiscount::executorEmails();
-                $sl_discounts = SellingChartDiscount::with(['sellingChartPrice.sellingChartBasicInfo', 'platform'])
-                    ->whereIn('id', $sldIds)
-                    ->where('status', 1)
-                    ->get();
-                if ($sl_discounts->isNotEmpty()) {
-                    foreach ($executor_emails as $email) {
-                        Mail::to($email)
-                            ->queue(
-                                (new SellingChartDiscountMail($sl_discounts, 'executor'))
-                                    ->delay(now()->addSeconds($delay))
-                            );
-                        $delay += 10;
-                    }
+            if (!empty($sender_emails) && $scdh) {
+                foreach ($sender_emails as $email) {
+                    Mail::to($email)
+                        ->queue(
+                            (new SellingChartDiscountMail($scdh))
+                                ->delay(now()->addSeconds($delay))
+                        );
+                    $delay += 10;
                 }
             }
 
-            activity()
-                ->causedBy(Auth::user())
-                ->performedOn($scd)
-                ->withProperties([
-                    'Price Id' => $scd->selling_chart_price_id,
-                    'Discount Price' => $scd->price,
-                    'Platform' => $platform->name,
-                ])
-                ->log('Selling chart discount updated: Last price Id: ' . $scd->selling_chart_price_id . ' Discount Price: ' . $scd->price . ' Platform: ' . $platform->name);
+            if ($lastScd) {
+                activity()
+                    ->causedBy(Auth::user())
+                    ->performedOn($lastScd)
+                    ->withProperties([
+                        'Price Id' => $lastScd->selling_chart_price_id,
+                        'Discount Price' => $lastScd->price,
+                        'Platform' => $platform->name,
+                    ])
+                    ->log('Selling chart discount updated: Last price Id: ' . $lastScd->selling_chart_price_id . ' Discount Price: ' . $lastScd->price . ' Platform: ' . $platform->name);
+            }
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'Discount prices updated successfully.',
+                ]);
+            }
 
             notify()->success("Discount prices updated Successfully.", "Success");
             return back();
         } catch (\Throwable $th) {
             DB::rollback();
-            notify()->error($th->getMessage(), "Error");
             Log::error('Discount prices update failed', [
                 'message'   => $th->getMessage()
             ]);
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => $th->getMessage(),
+                ], 422);
+            }
+
+            notify()->error($th->getMessage(), "Error");
             return back();
         }
+    }
+
+    protected function resolveExpenseConfig(?string $seasonName = null): array
+    {
+        return SellingChartExpense::configForSeason($seasonName);
     }
 }
