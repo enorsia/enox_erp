@@ -21,6 +21,7 @@ use App\Http\Controllers\EcomActivityController;
 use App\Http\Controllers\EcomTrackerDashboardController;
 use App\Http\Controllers\EcomTrackerDashboardDetailController;
 use App\Http\Controllers\SaleTrackingController;
+use App\Http\Controllers\StyleStockReportController;
 use Illuminate\Support\Facades\Auth;
 
 
@@ -90,6 +91,12 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
         // Route::post('profile/update', 'update')->name('profile.update');
         Route::get('change-password', 'changePassword')->name('change.password');
         Route::post('password/update', 'passwordUpdate')->name('password.update.post');
+    });
+
+
+    Route::controller(StyleStockReportController::class)->group(function () {
+        Route::get('style/stock', 'index')->name('style.stock.index');
+        Route::get('style/stock/{style}/discounts', 'viewDiscount')->name('style.stock.discounts');
     });
 
 

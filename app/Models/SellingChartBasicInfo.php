@@ -80,7 +80,7 @@ class SellingChartBasicInfo extends Model
             });
         })
             ->when(!$filters->filled('name') && $filters->filled('page_name') == 'discounts' , function ($q) use ($filters) {
-                $q->whereHas('sellingChartPrices.approveDiscounts');
+                $q->whereHas('sellingChartPrices.discounts');
             })
             ->when($filters->filled('department_id'), function ($q) use ($filters) {
                 $q->where('department_id', $filters->department_id);

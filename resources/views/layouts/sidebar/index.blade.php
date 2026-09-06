@@ -1,6 +1,6 @@
 <!-- ═══════ SIDEBAR ═══════ -->
 <aside id="sidebar"
-       class="w-[230px] min-w-[230px] bg-[#0c1521] flex flex-col overflow-y-auto sidebar-scroll z-50 lg:relative lg:translate-x-0">
+    class="w-[230px] min-w-[230px] bg-[#0c1521] flex flex-col overflow-y-auto sidebar-scroll z-50 lg:relative lg:translate-x-0">
 
     <!-- Logo -->
     <div class="px-[18px] py-5 border-b border-[rgba(255,255,255,0.07)] flex-shrink-0">
@@ -14,20 +14,19 @@
 
     <!-- Nav -->
     <nav class="flex-1 py-2">
-        @php($availablePermissions = avaiablePermissionsMap())
 
         {{-- Access --}}
-        @canany($availablePermissions['prefix']['authentication_'] ?? [])
+        @canany(Cache::get('permissions.available', [])['prefix']['authentication_'] ?? [])
             <div class="pt-4 pb-1">
                 <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Access</p>
 
                 @can('authentication.users.index')
                     <a href="{{ route('admin.users.index') }}"
-                       class="nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/users*') ? 'nav-active text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
-                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor"
-                             stroke-width="1.5" viewBox="0 0 24 24">
-                            <circle cx="12" cy="8" r="4"/>
-                            <path stroke-linecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+                        class="nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/users*') ? 'nav-active text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5"
+                            viewBox="0 0 24 24">
+                            <circle cx="12" cy="8" r="4" />
+                            <path stroke-linecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
                         </svg>
                         Admin Users
                     </a>
@@ -35,11 +34,11 @@
 
                 @can('authentication.roles.index')
                     <a href="{{ route('admin.roles.index') }}"
-                       class="nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/roles*') ? 'nav-active text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
-                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor"
-                             stroke-width="1.5" viewBox="0 0 24 24">
+                        class="nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/roles*') ? 'nav-active text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5"
+                            viewBox="0 0 24 24">
                             <path stroke-linecap="round"
-                                  d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+                                d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                         </svg>
                         Permissions
                     </a>
@@ -47,10 +46,10 @@
 
                 @can('authentication.activity_logs.index')
                     <a href="{{ route('admin.activity-logs.index') }}"
-                       class="nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/activity-logs*') ? 'nav-active text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
-                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor"
-                             stroke-width="1.5" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        class="nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/activity-logs*') ? 'nav-active text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         Activities
                     </a>
@@ -59,46 +58,47 @@
         @endcanany
 
         {{-- General --}}
-        @canany($availablePermissions['prefix']['general_'] ?? [])
+        @canany(Cache::get('permissions.available', [])['prefix']['general_'] ?? [])
             <div class="pt-4">
                 <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Main</p>
 
                 @can('general.dashboard.index')
                     <a href="{{ route('admin.dashboard') }}"
-                       class="nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::routeIs('admin.dashboard') ? 'nav-active text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                        class="nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::routeIs('admin.dashboard') ? 'nav-active text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
 
-                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor"
-                             stroke-width="1.5" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18V3H3zm2 2h14v14H5V5z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 9h6v6H9z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v6M15 3v6M3 9h6M15 9h6"/>
+                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18V3H3zm2 2h14v14H5V5z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 9h6v6H9z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v6M15 3v6M3 9h6M15 9h6" />
                         </svg>
                         Dashboard
                     </a>
                 @endcan
 
                 @canany([
-                    ...array_keys($availablePermissions['grouped']['general_chart'] ?? []),
-                    ...array_keys($availablePermissions['grouped']['general_fabrication'] ?? []),
-                    ...array_keys($availablePermissions['grouped']['general_expense'] ?? []),
-                    ...array_keys($availablePermissions['grouped']['general_forecasting'] ?? []),
-                    ...array_keys($availablePermissions['grouped']['general_discounts'] ?? []),
-                    'settings.platforms.index'
-                ])
+                        ...array_keys(Cache::get('permissions.available', [])['grouped']['general_chart'] ?? []),
+                        ...array_keys(Cache::get('permissions.available', [])['grouped']['general_fabrication'] ?? []),
+                        ...array_keys(Cache::get('permissions.available', [])['grouped']['general_expense'] ?? []),
+                        ...array_keys(Cache::get('permissions.available', [])['grouped']['general_forecasting'] ?? []),
+                        ...array_keys(Cache::get('permissions.available', [])['grouped']['general_discounts'] ?? []),
+                        'settings.platforms.index'
+                    ])
                     <!-- Selling Chart Dropdown -->
-                    <div x-data="{ open: {{ Request::is('admin/selling-chart/*') || Request::is('admin/platforms*') ? 'true' : 'false' }} }">
+                    <div
+                        x-data="{ open: {{ Request::is('admin/selling-chart/*') || Request::is('admin/platforms*') ? 'true' : 'false' }} }">
                         <button @click="open = !open"
-                                class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/selling-chart/*') || Request::is('admin/platforms*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
-                            <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor"
-                                 stroke-width="1.5" viewBox="0 0 24 24">
+                            class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/selling-chart/*') || Request::is('admin/platforms*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                            <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5"
+                                viewBox="0 0 24 24">
                                 <path stroke-linecap="round"
-                                      d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4"/>
+                                    d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4" />
                             </svg>
                             <span class="flex-1 text-left">Selling Chart</span>
                             <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
-                                 :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round" d="M19 9l-7 7-7-7"/>
+                                :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M19 9l-7 7-7-7" />
                             </svg>
                         </button>
 
@@ -107,42 +107,42 @@
                             <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
                                 @can('general.chart.index')
                                     <a href="{{ route('admin.selling_chart.index') }}"
-                                       class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/manage*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/manage*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                                         Chart
                                     </a>
                                 @endcan
 
                                 @can('general.forecasting.index')
                                     <a href="{{ route('admin.selling_chart.forecasting') }}"
-                                       class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/forecasting*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/forecasting*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                                         Forecasting
                                     </a>
                                 @endcan
 
                                 @can('general.discounts.index')
                                     <a href="{{ route('admin.selling_chart.discounts') }}"
-                                       class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/discounts*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/discounts*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                                         Discounts
                                     </a>
                                 @endcan
 
                                 @can('general.fabrication.index')
                                     <a href="{{ route('admin.selling_chart.fabrication.index') }}"
-                                       class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/fabrication*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/fabrication*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                                         Fabrication
                                     </a>
                                 @endcan
 
                                 @can('general.expense.index')
                                     <a href="{{ route('admin.selling_chart.expense.index') }}"
-                                       class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/expense*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/expense*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                                         Expense
                                     </a>
                                 @endcan
 
                                 @can('settings.platforms.index')
                                     <a href="{{ route('admin.platforms.index') }}"
-                                       class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/platforms*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/platforms*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
                                         Platforms
                                     </a>
                                 @endcan
@@ -154,19 +154,25 @@
         @endcanany
 
         {{-- Reports --}}
-        @canany($availablePermissions['prefix']['general_'] ?? [])
+        @canany(array_merge(
+                Cache::get('permissions.available', [])['prefix']['general_'] ?? [],
+                Cache::get('permissions.available', [])['prefix']['ecommerce_'] ?? [],
+                config('tracker.enabled') ? (Cache::get('permissions.available', [])['prefix']['ecom_tracker_'] ?? []) : []
+            ))
             <div class="pb-1">
                 <div x-data="{ open: {{ Request::is('admin/sales-spends/*') ? 'true' : 'false' }} }">
                     <button @click="open = !open"
-                            class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/sales-spends/*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
-                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/sales-spends/*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <span class="flex-1 text-left">Sales & Spends</span>
                         <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
-                             :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
-                             viewBox="0 0 24 24">
-                            <path stroke-linecap="round" d="M19 9l-7 7-7-7"/>
+                            :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M19 9l-7 7-7-7" />
                         </svg>
                     </button>
 
@@ -175,49 +181,49 @@
                         <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
                             @can('general.dashboard.index')
                                 <a href="{{ route('admin.sales.analytics') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/dashboard*') && !Request::is('admin/sales-spends/analytics-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/dashboard*') && !Request::is('admin/sales-spends/analytics-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Dashboard
                                 </a>
                             @endcan
 
                             @can('general.daily_sale.index')
                                 <a href="{{ route('admin.daily-sales.index') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/daily-sales*', 'admin/sales-spends/sales-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/daily-sales*', 'admin/sales-spends/sales-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Daily Sales
                                 </a>
                             @endcan
 
                             @can('general.daily_return.index')
                                 <a href="{{ route('admin.daily-returns.index') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/daily-returns*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/daily-returns*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Daily Return
                                 </a>
                             @endcan
 
                             @can('general.monthly_budget.index')
                                 <a href="{{ route('admin.monthly-budgets.index') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/monthly-budgets*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/monthly-budgets*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Monthly Budget
                                 </a>
                             @endcan
 
                             @can('general.sale_tracking.index')
                                 <a href="{{ route('admin.ads-performance.index') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/ads-performance*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/ads-performance*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Ads Performance
                                 </a>
                             @endcan
 
                             @can('general.return_reason_type.index')
                                 <a href="{{ route('admin.return-reason.index') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/return-reason*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/return-reason*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Return Reasons
                                 </a>
                             @endcan
 
                             @can('general.sale_platform.index')
                                 <a href="{{ route('admin.sale-platforms.index') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/sale-platforms*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/sale-platforms*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                     Platforms
                                 </a>
                             @endcan
@@ -226,45 +232,47 @@
                     </div>
                 </div>
 
-                @if (config('tracker.enabled'))
-                @canany($availablePermissions['prefix']['ecom_tracker_'] ?? [])
-                <div x-data="{ open: {{ Request::is('admin/ecom-tracker*') || Request::is('admin/ecom-activity*') ? 'true' : 'false' }} }">
-                    <button @click="open = !open"
-                            class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/ecom-tracker*') || Request::is('admin/ecom-activity*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
-                        <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor"
-                             stroke-width="1.5" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            <path stroke-linecap="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                        </svg>
-                        <span class="flex-1 text-left">Ecom Tracker</span>
-                        <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
-                             :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
-                             viewBox="0 0 24 24">
-                            <path stroke-linecap="round" d="M19 9l-7 7-7-7"/>
-                        </svg>
-                    </button>
+                @canany(array_merge(
+                    Cache::get('permissions.available', [])['prefix']['ecommerce_'] ?? [],
+                    config('tracker.enabled') ? (Cache::get('permissions.available', [])['prefix']['ecom_tracker_'] ?? []) : []
+                ))
+                    <div x-data="{ open: {{ Request::is('admin/style/stock*') || (config('tracker.enabled') && Request::is('admin/ecom-tracker*')) ? 'true' : 'false' }} }">
+                        <button @click="open = !open"
+                            class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/style/stock*') || (config('tracker.enabled') && Request::is('admin/ecom-tracker*')) ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                            <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                    d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25h9.75M5.106 5.106l-.383-1.437A1.125 1.125 0 003.636 3H2.25m0 0v16.5A2.25 2.25 0 004.5 21h15a2.25 2.25 0 002.25-2.25V3M9 10.5h6M9 14.25h3" />
+                            </svg>
+                            <span class="flex-1 text-left">Ecommerce</span>
+                            <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
+                                :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
 
-                    <div x-show="open" x-collapse>
-                        <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
-                            @can('ecom_tracker.dashboard.index')
-                                <a href="{{ route('admin.ecom-tracker.dashboard') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-tracker/dashboard*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
-                                    Dashboard
-                                </a>
-                            @endcan
+                        <div x-show="open" x-collapse>
+                            <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
+                                @if (config('tracker.enabled'))
+                                    @can('ecom_tracker.dashboard.index')
+                                        <a href="{{ route('admin.ecom-tracker.dashboard') }}"
+                                            class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-tracker/dashboard*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                            Tracking
+                                        </a>
+                                    @endcan
+                                @endif
 
-                            {{-- @can('ecom_tracker.activity.index')
-                                <a href="{{ route('admin.ecom-activity.index') }}"
-                                   class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecom-activity*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
-                                    User Activity
-                                </a>
-                            @endcan --}}
-
+                                @can('ecommerce.wh_stock_in_out.index')
+                                    <a href="{{ route('admin.style.stock.index') }}"
+                                        class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/style/stock*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                        Stock Performance
+                                    </a>
+                                @endcan
+                            </div>
                         </div>
                     </div>
-                </div>
                 @endcanany
-                @endif
             </div>
         @endcanany
 
