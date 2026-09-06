@@ -521,20 +521,4 @@ final class EcomTrackerViewData
             $back,
         );
     }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public static function forBotTraffic(Request $request, int $activeFilterCount): array
-    {
-        $queryParams = array_filter(
-            $request->only(['search', 'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium', 'period', 'date_from', 'date_to']),
-            fn ($value) => filled($value),
-        );
-
-        return [
-            'activityLink' => route('admin.ecom-activity.index', array_merge($queryParams, ['visitor_type' => 'bot'])),
-            'hasActiveFilters' => $activeFilterCount > 0,
-        ];
-    }
 }

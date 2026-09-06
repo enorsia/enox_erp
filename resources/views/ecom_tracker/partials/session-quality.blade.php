@@ -1,6 +1,5 @@
 @props([
     'visitorQuality' => [],
-    'botTrafficUrl' => null,
     'extraMetrics' => [],
     'gridClass' => '',
     'activityFocusLink' => null,
@@ -10,9 +9,6 @@
     <div class="mb-5">
         <div class="flex items-center justify-between mb-2">
             <p class="etd-kpi-section-label m-0">Session quality</p>
-            @can('ecom_tracker.bot_traffic.index')
-                <a href="{{ $botTrafficUrl ?? route('admin.ecom-tracker.bot-traffic') }}" class="text-[12px] text-accent-500 no-underline hover:underline">View bot traffic details →</a>
-            @endcan
         </div>
         <div @class(['etd-kpi-grid', $gridClass => filled($gridClass)])>
             @php

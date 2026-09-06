@@ -460,34 +460,6 @@ if (dwellCtx && D.engagement) {
     });
 }
 
-const botTrendCtx = ctx('botTrafficTrendChart');
-const botTrend = window.botTrafficTrendData || {};
-if (botTrendCtx && botTrend.labels) {
-    new Chart(botTrendCtx, {
-        type: 'bar',
-        data: {
-            labels: botTrend.labels,
-            datasets: [
-                {
-                    label: 'Automated traffic',
-                    data: botTrend.bot || [],
-                    backgroundColor: '#f59e0b8C',
-                    borderRadius: 3,
-                },
-            ],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { labels: { boxWidth: 10 } }, tooltip: tipStyle() },
-            scales: {
-                x: { grid: { display: false } },
-                y: { grid: { color: gridClr() }, beginAtZero: true },
-            },
-        },
-    });
-}
-
 function syncKpiPanelCardHeights() {
     const panel = document.querySelector('.etd-kpi-panel');
 

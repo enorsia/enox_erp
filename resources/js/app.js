@@ -43,7 +43,6 @@ if (has('#monthly-budget-page-content'))      import('./pages/monthly-budgets');
 if (has('#analytics-dashboard-content'))      import('./pages/analytics-dashboard');
 if (has('#ecom-tracker-dashboard-content'))   import('./pages/ecom-tracker-dashboard');
 if (has('#ecom-activity-page-content'))       import('./pages/ecom-activity-table');
-if (has('#ecom-tracker-bot-traffic-content')) import('./pages/ecom-tracker-dashboard');
 if (has('.etd-filter-drawer') || has('.etd-flatpickr-date') || has('.etd-flatpickr-datetime')) {
     import('./pages/ecom-tracker-filters');
 }
