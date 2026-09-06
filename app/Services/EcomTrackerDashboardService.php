@@ -5006,6 +5006,7 @@ class EcomTrackerDashboardService
             }
 
             match ((string) $line->funnel_stage) {
+                'product_view', 'product_view_popup' => $this->accumulateCatalogEvent($catalog, $identity, $variant, views: 1),
                 'add_to_cart' => $this->accumulateCatalogEvent($catalog, $identity, $variant, adds: 1),
                 'begin_checkout' => $this->accumulateCatalogEvent($catalog, $identity, $variant, begin_checkouts: 1),
                 'proceed_checkout' => $this->accumulateCatalogEvent($catalog, $identity, $variant, proceed_checkouts: 1),
@@ -5852,6 +5853,24 @@ class EcomTrackerDashboardService
             }
         }
 
+        foreach ($this->periodLineItems($from, $to, $sessionIds, $period) as $line) {
+            if (! in_array((string) $line->funnel_stage, ['product_view', 'product_view_popup'], true)) {
+                continue;
+            }
+
+            $sessionId = (string) $line->session_id;
+            $deviceLabel = $sessionDeviceMap[$sessionId] ?? null;
+            $browserLabel = $sessionBrowserMap[$sessionId] ?? null;
+
+            if ($deviceLabel !== null) {
+                $this->incrementDeviceBrowserBucket($deviceBuckets, $deviceLabel, 'views');
+            }
+
+            if ($browserLabel !== null) {
+                $this->incrementDeviceBrowserBucket($browserBuckets, $browserLabel, 'views');
+            }
+        }
+
         $ordersQuery = $this->periodOrders($from, $to, $sessionIds, $period);
 
         $devicePurchaseSeen = [];
@@ -6049,6 +6068,18 @@ class EcomTrackerDashboardService
             }
             if ($session->has_proceed_checkout) {
                 $this->incrementTrafficSourceBucket($buckets, $key, field: 'proceed_checkout');
+            }
+        }
+
+        foreach ($this->periodLineItems($from, $to, $sessionIds, $period) as $line) {
+            if (! in_array((string) $line->funnel_stage, ['product_view', 'product_view_popup'], true)) {
+                continue;
+            }
+
+            $bucketKey = $sessionBucketMap[(string) $line->session_id] ?? null;
+
+            if ($bucketKey !== null) {
+                $this->incrementTrafficSourceBucket($buckets, $bucketKey, field: 'views');
             }
         }
 

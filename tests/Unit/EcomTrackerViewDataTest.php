@@ -50,8 +50,39 @@ test('activity index back url falls back to dashboard for traffic focus without 
 
     expect($backUrl)->toContain('ecom-tracker/dashboard')
         ->and($backUrl)->toContain('period=24h')
-        ->and($backUrl)->not->toContain('utm_source')
+        ->and($backUrl)->toContain('utm_source')
         ->and($backUrl)->not->toContain('focus=');
+});
+
+test('dashboard and activity shortcut links preserve shared session filters', function () {
+    $request = Request::create('https://example.test/admin/ecom-tracker/dashboard', 'GET', [
+        'period' => '7d',
+        'device_type' => 'mobile',
+        'logged_in' => '1',
+        'utm_source' => 'google',
+        'search' => 'shirt',
+        'focus' => 'products',
+    ]);
+
+    $activityUrl = EcomTrackerViewData::activityShortcutUrl($request);
+    $dashboardUrl = EcomTrackerViewData::dashboardShortcutUrl($request);
+
+    parse_str((string) parse_url($activityUrl, PHP_URL_QUERY), $activityQuery);
+    parse_str((string) parse_url($dashboardUrl, PHP_URL_QUERY), $dashboardQuery);
+
+    expect($activityQuery)->toMatchArray([
+        'period' => '7d',
+        'device_type' => 'mobile',
+        'logged_in' => '1',
+        'utm_source' => 'google',
+    ])->and($activityQuery)->not->toHaveKey('search')
+        ->and($activityQuery)->not->toHaveKey('focus')
+        ->and($dashboardQuery)->toMatchArray([
+            'period' => '7d',
+            'device_type' => 'mobile',
+            'logged_in' => '1',
+            'utm_source' => 'google',
+        ]);
 });
 
 test('activity index back url is omitted when there is no dashboard focus', function () {

@@ -23,7 +23,7 @@
     @can('ecom_tracker.dashboard.index')
         @if ($showDashboardLink ?? false)
             <div class="etd-segmented etd-segmented--compact etd-date-nav__shortcut">
-                <a href="{{ route('admin.ecom-tracker.dashboard') }}" class="etd-segmented-btn no-underline">Dashboard</a>
+                <a href="{{ EcomTrackerViewData::dashboardShortcutUrl(request()) }}" class="etd-segmented-btn no-underline">Dashboard</a>
             </div>
         @endif
     @endcan
@@ -31,7 +31,7 @@
     @can('ecom_tracker.activity.index')
         @if ($showUserActivityLink ?? false)
             <div class="etd-segmented etd-segmented--compact etd-date-nav__shortcut">
-                <a href="{{ route('admin.ecom-activity.index') }}" class="etd-segmented-btn no-underline">User Activity</a>
+                <a href="{{ EcomTrackerViewData::activityShortcutUrl(request()) }}" class="etd-segmented-btn no-underline">User Activity</a>
             </div>
         @endif
     @endcan

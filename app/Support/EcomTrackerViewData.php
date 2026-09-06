@@ -164,6 +164,43 @@ final class EcomTrackerViewData
     }
 
     /**
+     * @return array<int, string>
+     */
+    public static function sharedNavigationQueryKeys(): array
+    {
+        return [
+            'period', 'date_from', 'date_to',
+            'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
+            'utm_source', 'utm_medium',
+        ];
+    }
+
+    /**
+     * Period and session filters shared when switching between dashboard and user activity.
+     *
+     * @return array<string, mixed>
+     */
+    public static function sharedNavigationQuery(Request $request): array
+    {
+        return self::activityIndexQueryFromFilters(
+            array_merge(
+                $request->only(self::sharedNavigationQueryKeys()),
+                ['period' => $request->input('period', '24h')],
+            ),
+        );
+    }
+
+    public static function dashboardShortcutUrl(Request $request): string
+    {
+        return route('admin.ecom-tracker.dashboard', self::sharedNavigationQuery($request));
+    }
+
+    public static function activityShortcutUrl(Request $request): string
+    {
+        return route('admin.ecom-activity.index', self::sharedNavigationQuery($request));
+    }
+
+    /**
      * Dashboard return URL for activity drill-downs.
      *
      * Prefer the explicit `back` query param from store-performance links.
@@ -182,11 +219,7 @@ final class EcomTrackerViewData
             return null;
         }
 
-        return route('admin.ecom-tracker.dashboard', array_filter([
-            'period' => $request->input('period'),
-            'date_from' => $request->input('date_from'),
-            'date_to' => $request->input('date_to'),
-        ], fn ($value) => filled($value)));
+        return route('admin.ecom-tracker.dashboard', self::sharedNavigationQuery($request));
     }
 
     /**
