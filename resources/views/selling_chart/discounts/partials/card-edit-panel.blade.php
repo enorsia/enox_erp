@@ -126,6 +126,7 @@
                       action="{{ route('admin.selling_chart.save.platform.discount.price') }}"
                       method="POST"
                       data-chart-id="{{ $chartInfo->id }}"
+                      data-platform-code="{{ $p_code }}"
                       data-conversion-rate="{{ $conversionRate }}"
                       data-default-shipping="{{ $defaultShippingCost }}">
                     @csrf

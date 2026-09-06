@@ -10,6 +10,12 @@
 @endphp
 
 <div class="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 mb-3">
+    @if (isset($ecommerceProduct['pack_all']) && !empty($ecommerceProduct['pack_all']) && $platform->code == 'enox')
+    <div class="pack-alert flex items-center gap-2 px-2.5 py-2 mb-2 rounded bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-200 text-[11px]">
+        <span class="font-semibold">Note:</span>
+        <span>This is a multipack product. Any applied discount will be removed from all items in the pack.</span>
+    </div>
+@endif
     <table class="w-full text-[11px] border-collapse discount-calc-table" style="min-width: max-content;">
         <thead>
             <tr class="bg-slate-50 dark:bg-slate-800/60">

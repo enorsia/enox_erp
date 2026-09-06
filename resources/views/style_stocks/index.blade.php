@@ -255,18 +255,20 @@
                                                         @endif --}}
                                                         <p class="ssr-product-meta">FOB Price: {{ $product['fob_price'] }}</p>
 
-                                                        <span data-url="{{ route('admin.style.stock.discounts', $product['style']) }}" type="button" @click="drawerOpen = true"
+                                                        <span data-url="{{ route('admin.style.stock.discounts', $product['style']) }}"
+                                                            data-item-slug="{{ Str::slug($product['item_no']) }}"
+                                                            type="button" @click="drawerOpen = true"
                                                             class="flex items-center gap-2 text-[12px] transition-colors underline cursor-pointer discount-btn">Apply
                                                             discount</span>
 
                                                     </div>
-                                                    @if ($product['has_discount'] && !empty($product['applied_discounts']))
-                                                        <div class="bg-slate-200 rounded-lg ms-5 p-2 min-w-[180px]">
+                                                    <div class="bg-slate-200 rounded-lg ms-5 p-2 min-w-[180px] applied-discounts-{{ Str::slug($product['item_no']) }} {{ ($product['has_discount'] && !empty($product['applied_discounts'])) ? '' : 'hidden' }}">
+                                                        @if ($product['has_discount'] && !empty($product['applied_discounts']))
                                                             @include('style_stocks.partials.applied-discounts', [
                                                                 'appliedDiscounts' => $product['applied_discounts'],
                                                             ])
-                                                        </div>
-                                                    @endif
+                                                        @endif
+                                                    </div>
                                                 </div>
                                             </td>
                                             <td class="text-right px-4">

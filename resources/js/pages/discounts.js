@@ -395,6 +395,157 @@ $(document).ready(function () {
     }
     // save summary
 
+    function formatPlatformCode(code) {
+        return String(code).replace(/_/g, ' ').toUpperCase();
+    }
+
+    function formatDiscountPrice(price) {
+        return '£' + parseFloat(price).toFixed(2);
+    }
+
+    function formHasDiscount($form) {
+        let hasDiscount = false;
+
+        $form.find('.discount_price').each(function () {
+            if ($(this).val().trim()) {
+                hasDiscount = true;
+                return false;
+            }
+        });
+
+        return hasDiscount;
+    }
+
+    function getAllPlatformFormsWithDiscount($scope) {
+        const forms = [];
+
+        $scope.find('.pp-form').each(function () {
+            const $form = $(this);
+            if (formHasDiscount($form)) {
+                forms.push($form);
+            }
+        });
+
+        return forms;
+    }
+
+    function collectAppliedDiscountsFromForms(forms) {
+        if (!forms.length) return null;
+
+        const department_id = forms[0].find('.department_id').val();
+        const hasRange = isGirlsBoysDept(department_id);
+
+        if (hasRange) {
+            const platform_ranges = {};
+
+            forms.forEach(($form) => {
+                const code = $form.data('platform-code');
+                if (!code) return;
+
+                $form.find('tbody tr.discount-calc-row').each(function () {
+                    const $row = $(this);
+                    const ch_price_id = getRowPriceId($row);
+                    const discount_price = parseFloat(getDiscountInputForRow($form, ch_price_id).val()) || 0;
+                    if (discount_price <= 0) return;
+
+                    const range = $row.find('td').eq(1).text().trim();
+                    if (!platform_ranges[code]) platform_ranges[code] = [];
+                    platform_ranges[code].push({ range, price: discount_price });
+                });
+            });
+
+            return { has_range: true, platform_ranges, platform_discounts: [] };
+        }
+
+        const platform_discounts = [];
+
+        forms.forEach(($form) => {
+            const code = $form.data('platform-code');
+            if (!code) return;
+
+            const $firstRow = $form.find('tbody tr.discount-calc-row').first();
+            const ch_price_id = getRowPriceId($firstRow);
+            const discount_price = parseFloat(getDiscountInputForRow($form, ch_price_id).val()) || 0;
+
+            if (discount_price > 0) {
+                platform_discounts.push({ code, price: discount_price });
+            }
+        });
+
+        return { has_range: false, platform_ranges: {}, platform_discounts };
+    }
+
+    function buildAppliedDiscountsHtml(appliedDiscounts) {
+        if (!appliedDiscounts) return '';
+
+        if (appliedDiscounts.has_range) {
+            const items = Object.entries(appliedDiscounts.platform_ranges || {})
+                .map(([code, ranges]) => {
+                    const rangeLines = (ranges || [])
+                        .map((item) =>
+                            '<span class="block">' +
+                            (item.range || 'N/A') +
+                            ' — ' +
+                            formatDiscountPrice(item.price) +
+                            '</span>'
+                        )
+                        .join('');
+
+                    return (
+                        '<div class="ssr-product-meta">' +
+                        '<span class="font-medium text-slate-700 dark:text-slate-300">' +
+                        formatPlatformCode(code) +
+                        ':</span>' +
+                        rangeLines +
+                        '</div>'
+                    );
+                })
+                .join('');
+
+            return (
+                '<p class="text-black dark:text-slate-200 text-[12px] font-medium mb-1">Applied Discounts:</p>' +
+                '<div class="grid grid-cols-2 gap-x-3 gap-y-1">' +
+                (items || '<p class="ssr-product-meta col-span-2">No discounts applied</p>') +
+                '</div>'
+            );
+        }
+
+        const items = (appliedDiscounts.platform_discounts || [])
+            .map((discount) =>
+                '<p class="ssr-product-meta">' +
+                formatPlatformCode(discount.code) +
+                ': ' +
+                formatDiscountPrice(discount.price) +
+                '</p>'
+            )
+            .join('');
+
+        return (
+            '<p class="text-black dark:text-slate-200 text-[12px] font-medium mb-1">Applied Discounts:</p>' +
+            '<div class="grid grid-cols-2 gap-x-3 gap-y-1">' +
+            (items || '<p class="ssr-product-meta col-span-2">No discounts applied</p>') +
+            '</div>'
+        );
+    }
+
+    function updateStyleStockAppliedDiscounts($scope) {
+        if (!document.getElementById('enox_style_stock_report')) return;
+
+        const itemSlug = String($scope.data('item-slug') || '').trim();
+        if (!itemSlug) return;
+
+        const allFormsWithDiscount = getAllPlatformFormsWithDiscount($scope);
+        const appliedDiscounts = collectAppliedDiscountsFromForms(allFormsWithDiscount);
+        const html = buildAppliedDiscountsHtml(appliedDiscounts);
+        if (!html) return;
+
+        const $box = $('.applied-discounts-' + itemSlug);
+        if (!$box.length) return;
+
+        $box.html(html).removeClass('hidden');
+        $box.closest('.product-row').attr('data-has-discount', '1');
+    }
+
     function submitDiscountForm($form) {
         return $.ajax({
             url:  SAVE_URL || $form.attr('action'),
@@ -458,6 +609,12 @@ $(document).ready(function () {
                     formsToSave.forEach(($form) =>
                         updateDiscountSummaryForForm($form),
                     );
+
+                    updateStyleStockAppliedDiscounts($scope);
+
+                    if($('.pack-alert').length) {
+                        $('.pack-alert').remove();
+                    }
 
                     iziToast.success({
                         title: "Saved",

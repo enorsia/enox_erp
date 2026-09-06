@@ -495,6 +495,7 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
         });
 
         $(document).on("click", ".discount-btn", function () {
+            const itemSlug = $(this).data("itemSlug");
             let url = $(this).data("url");
             $.ajax({
                 type: "GET",
@@ -532,6 +533,12 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
                 success: function (response) {
                     if (response.status) {
                         $("#discountContent").html(response.data);
+                        if (itemSlug) {
+                            $("#discountContent .discount-edit-panel").attr(
+                                "data-item-slug",
+                                itemSlug,
+                            );
+                        }
                         const ecomSku = $('p[identify="Ecom SKU"]')
                             .text()
                             .trim();
