@@ -15,6 +15,7 @@ use App\Support\EcomTrackerViewData;
 use App\Support\SessionDurationBuckets;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
+use App\Support\TrackerMultiSelectFilter;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -436,7 +437,7 @@ class EcomTrackerDashboardService
             array_intersect_key($filters, array_flip([
                 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium',
             ])),
-            fn ($value) => $value !== null && $value !== '',
+            static fn ($value) => is_array($value) ? $value !== [] : ($value !== null && $value !== ''),
         );
     }
 
@@ -450,7 +451,7 @@ class EcomTrackerDashboardService
             array_intersect_key($filters, array_flip([
                 'search', 'product_code', 'product_name', 'category', 'department', 'color', 'size', 'sort_by', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
             ])),
-            fn ($value) => $value !== null && $value !== '',
+            static fn ($value) => is_array($value) ? $value !== [] : ($value !== null && $value !== ''),
         );
     }
 
@@ -741,24 +742,25 @@ class EcomTrackerDashboardService
         Carbon $to,
         array $options = [],
     ): array {
-        $categoryFilter = trim((string) ($options['category'] ?? ''));
+        $categoryFilters = TrackerMultiSelectFilter::values($options['category'] ?? null);
         $departmentFilter = trim((string) ($options['department'] ?? ''));
         $metrics = [];
+        $primaryCategory = $categoryFilters[0] ?? '';
 
         foreach ($sessionIds as $sessionId) {
             $metrics[$sessionId] = [
-                'top_category' => $categoryFilter !== ''
-                    ? TrackerCategoryIdentity::label($departmentFilter, $categoryFilter)
+                'top_category' => $primaryCategory !== ''
+                    ? TrackerCategoryIdentity::label($departmentFilter, $primaryCategory)
                     : ($departmentFilter !== '' ? $departmentFilter : '—'),
                 'purchases' => 0,
             ];
         }
 
-        if ($sessionIds->isEmpty() || ($categoryFilter === '' && $departmentFilter === '')) {
+        if ($sessionIds->isEmpty() || ($categoryFilters === [] && $departmentFilter === '')) {
             return $metrics;
         }
 
-        if ($categoryFilter === '') {
+        if ($categoryFilters === []) {
             return $metrics;
         }
 
@@ -1118,32 +1120,36 @@ class EcomTrackerDashboardService
         array $filters = [],
         ?string $period = null,
     ): ?array {
-        $deviceType = strtolower(trim((string) ($filters['device_type'] ?? '')));
+        $deviceTypes = TrackerMultiSelectFilter::allowedValues(
+            $filters['device_type'] ?? null,
+            ['desktop', 'mobile', 'tablet'],
+        );
 
-        if (! in_array($deviceType, ['mobile', 'desktop', 'tablet'], true)) {
+        if ($deviceTypes === []) {
             return null;
         }
 
         $sessionFilters = $this->extractSessionFilters($filters);
         $breakdown = $this->buildDeviceBreakdown($from, $to, $sessionFilters, $period);
-        $label = ucfirst($deviceType);
 
-        $row = collect($breakdown['by_device'] ?? [])->first(
-            fn (array $deviceRow) => strcasecmp((string) ($deviceRow['label'] ?? ''), $label) === 0,
-        );
+        $rows = collect($breakdown['by_device'] ?? [])->filter(function (array $deviceRow) use ($deviceTypes) {
+            $label = strtolower((string) ($deviceRow['label'] ?? ''));
 
-        if ($row === null) {
+            return in_array($label, $deviceTypes, true);
+        });
+
+        if ($rows->isEmpty()) {
             return null;
         }
 
         return [
-            'views' => (int) ($row['views'] ?? 0),
-            'adds' => (int) ($row['add_to_cart'] ?? 0),
-            'begin_checkouts' => (int) ($row['begin_checkout'] ?? 0),
-            'proceed_checkouts' => (int) ($row['proceed_checkout'] ?? 0),
-            'purchases' => (int) ($row['purchases'] ?? 0),
-            'qty' => (int) ($row['sold_qty'] ?? 0),
-            'revenue' => round((float) ($row['revenue'] ?? 0), 2),
+            'views' => (int) $rows->sum(fn (array $row) => (int) ($row['views'] ?? 0)),
+            'adds' => (int) $rows->sum(fn (array $row) => (int) ($row['add_to_cart'] ?? 0)),
+            'begin_checkouts' => (int) $rows->sum(fn (array $row) => (int) ($row['begin_checkout'] ?? 0)),
+            'proceed_checkouts' => (int) $rows->sum(fn (array $row) => (int) ($row['proceed_checkout'] ?? 0)),
+            'purchases' => (int) $rows->sum(fn (array $row) => (int) ($row['purchases'] ?? 0)),
+            'qty' => (int) $rows->sum(fn (array $row) => (int) ($row['sold_qty'] ?? 0)),
+            'revenue' => round((float) $rows->sum(fn (array $row) => (float) ($row['revenue'] ?? 0)), 2),
         ];
     }
 
@@ -1159,40 +1165,48 @@ class EcomTrackerDashboardService
         array $filters = [],
         ?string $period = null,
     ): ?array {
-        $source = trim((string) ($filters['utm_source'] ?? ''));
+        $sources = TrackerMultiSelectFilter::values($filters['utm_source'] ?? null);
 
-        if ($source === '') {
+        if ($sources === []) {
             return null;
         }
 
-        $medium = trim((string) ($filters['utm_medium'] ?? ''));
+        $mediums = TrackerMultiSelectFilter::values($filters['utm_medium'] ?? null);
         $sessionFilters = $this->extractSessionFilters($filters);
-        $rows = $this->buildTrafficSources($from, $to, null, $sessionFilters, $period);
+        $rows = collect($this->buildTrafficSources($from, $to, null, $sessionFilters, $period))
+            ->filter(function (array $trafficRow) use ($sources, $mediums) {
+                $rowSource = (string) ($trafficRow['source'] ?? '');
+                $sourceMatch = collect($sources)->contains(
+                    fn (string $source) => strcasecmp($rowSource, $source) === 0,
+                );
 
-        $row = collect($rows)->first(function (array $trafficRow) use ($source, $medium) {
-            if (strcasecmp((string) ($trafficRow['source'] ?? ''), $source) !== 0) {
-                return false;
-            }
+                if (! $sourceMatch) {
+                    return false;
+                }
 
-            if ($medium === '') {
-                return true;
-            }
+                if ($mediums === []) {
+                    return true;
+                }
 
-            return strcasecmp((string) ($trafficRow['medium'] ?? ''), $medium) === 0;
-        });
+                $rowMedium = (string) ($trafficRow['medium'] ?? '');
 
-        if ($row === null) {
+                return collect($mediums)->contains(
+                    fn (string $medium) => strcasecmp($rowMedium, $medium) === 0,
+                );
+            });
+
+        if ($rows->isEmpty()) {
             return null;
         }
 
         return [
-            'views' => (int) ($row['views'] ?? 0),
-            'adds' => (int) ($row['add_to_cart'] ?? 0),
-            'begin_checkouts' => (int) ($row['begin_checkout'] ?? 0),
-            'proceed_checkouts' => (int) ($row['proceed_checkout'] ?? 0),
-            'purchases' => (int) ($row['payment_success'] ?? 0),
-            'qty' => (int) ($row['sold_qty'] ?? 0),
-            'revenue' => round((float) ($row['revenue'] ?? 0), 2),
+            'views' => (int) $rows->sum(fn (array $row) => (int) ($row['views'] ?? 0)),
+            'adds' => (int) $rows->sum(fn (array $row) => (int) ($row['add_to_cart'] ?? 0)),
+            'begin_checkouts' => (int) $rows->sum(fn (array $row) => (int) ($row['begin_checkout'] ?? 0)),
+            'proceed_checkouts' => (int) $rows->sum(fn (array $row) => (int) ($row['proceed_checkout'] ?? 0)),
+            'purchases' => (int) $rows->sum(fn (array $row) => (int) ($row['payment_success'] ?? 0)),
+            'qty' => (int) $rows->sum(fn (array $row) => (int) ($row['sold_qty'] ?? 0)),
+            'revenue' => round((float) $rows->sum(fn (array $row) => (float) ($row['revenue'] ?? 0)), 2),
         ];
     }
 
@@ -1631,11 +1645,13 @@ class EcomTrackerDashboardService
             }
         }
 
-        $categoryFilter = trim((string) ($options['category'] ?? ''));
+        $categoryFilters = TrackerMultiSelectFilter::values($options['category'] ?? null);
 
-        if ($categoryFilter !== '' && ! TrackerCategoryIdentity::categoryMatchesFilter(
-            (string) ($line['category'] ?? ''),
-            $categoryFilter,
+        if ($categoryFilters !== [] && ! collect($categoryFilters)->contains(
+            fn (string $categoryFilter) => TrackerCategoryIdentity::categoryMatchesFilter(
+                (string) ($line['category'] ?? ''),
+                $categoryFilter,
+            ),
         )) {
             return false;
         }
@@ -1670,7 +1686,7 @@ class EcomTrackerDashboardService
         $search = strtolower(trim((string) ($options['search'] ?? '')));
 
         return $search !== ''
-            || $categoryFilter !== ''
+            || $categoryFilters !== []
             || $departmentFilter !== ''
             || $colorFilter !== ''
             || $sizeFilter !== '';
@@ -1682,7 +1698,7 @@ class EcomTrackerDashboardService
     private function hasProductCatalogIdentityFilters(array $options): bool
     {
         foreach (['search', 'product_code', 'product_name', 'category', 'department', 'color', 'size'] as $key) {
-            if (filled($options[$key] ?? null)) {
+            if (TrackerMultiSelectFilter::values($options[$key] ?? null) !== []) {
                 return true;
             }
         }
@@ -1799,7 +1815,14 @@ class EcomTrackerDashboardService
     private function applyActivitySessionFilters($query, array $filters, ?Carbon $from = null, ?Carbon $to = null): void
     {
         if (! empty($filters['device_type'])) {
-            $query->where('device_type', $filters['device_type']);
+            $devices = TrackerMultiSelectFilter::allowedValues(
+                $filters['device_type'],
+                ['desktop', 'mobile', 'tablet'],
+            );
+
+            if ($devices !== []) {
+                $query->whereIn('device_type', $devices);
+            }
         }
 
         if (isset($filters['logged_in']) && $filters['logged_in'] !== '' && $filters['logged_in'] !== null) {
@@ -5240,7 +5263,7 @@ class EcomTrackerDashboardService
     private function finalizeProductCatalog(Collection $catalog, array $options, string $sortBy): array
     {
         $search = strtolower(trim((string) ($options['search'] ?? '')));
-        $categoryFilter = trim((string) ($options['category'] ?? ''));
+        $categoryFilters = TrackerMultiSelectFilter::values($options['category'] ?? null);
         $colorFilter = trim((string) ($options['color'] ?? ''));
         $sizeFilter = trim((string) ($options['size'] ?? ''));
         $hasPurchases = ($options['has_purchases'] ?? '') === '1';
@@ -5321,9 +5344,14 @@ class EcomTrackerDashboardService
             });
         }
 
-        if ($categoryFilter !== '') {
+        if ($categoryFilters !== []) {
             $products = $products->filter(
-                fn (array $product) => strcasecmp((string) $product['category'], $categoryFilter) === 0
+                fn (array $product) => collect($categoryFilters)->contains(
+                    fn (string $categoryFilter) => TrackerCategoryIdentity::categoryMatchesFilter(
+                        (string) $product['category'],
+                        $categoryFilter,
+                    ),
+                ),
             );
         }
 

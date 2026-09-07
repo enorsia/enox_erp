@@ -14,6 +14,21 @@ test('boolean mode prefix query strips operators that break mysql full text', fu
         ->and(CommerceLineItemQuery::booleanModePrefixQuery('ab'))->toBeNull();
 });
 
+test('apply catalog filters accepts multiple categories without array to string conversion', function () {
+    $query = Illuminate\Support\Facades\DB::table('activity_ecom_commerce_line_items as li');
+
+    CommerceLineItemQuery::applyCatalogFilters($query, [
+        'department' => 'Men',
+        'category' => ['Chinos', 'Co-ords'],
+    ]);
+
+    $sql = $query->toSql();
+
+    expect($sql)
+        ->toContain('category_name')
+        ->and($sql)->toContain('department_name');
+});
+
 test('catalog lines for action do not query when an event map is provided', function () {
     $action = (object) [
         'action_type' => 'add_to_cart',

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Concerns;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomTrackerDashboardService;
 use App\Support\EcomActivityFocus;
+use App\Support\TrackerMultiSelectFilter;
 use App\Support\VisitorClassificationLabels;
 use Illuminate\Http\Request;
 
@@ -59,8 +60,21 @@ trait CountsTrackerFilters
         );
         $filters = $request->only($keys);
 
-        $filters['utm_source'] = TrackerUtmFilter::resolveSource($filters['utm_source'] ?? null) ?? '';
-        $filters['utm_medium'] = TrackerUtmFilter::resolveMedium($filters['utm_medium'] ?? null) ?? '';
+        $sources = TrackerMultiSelectFilter::values($filters['utm_source'] ?? null);
+        $mediums = TrackerMultiSelectFilter::values($filters['utm_medium'] ?? null);
+
+        $filters['utm_source'] = $sources === []
+            ? ''
+            : (count($sources) === 1 ? (TrackerUtmFilter::resolveSource($sources[0]) ?? '') : array_values(array_filter(array_map(
+                static fn (string $value) => TrackerUtmFilter::resolveSource($value),
+                $sources,
+            ))));
+        $filters['utm_medium'] = $mediums === []
+            ? ''
+            : (count($mediums) === 1 ? (TrackerUtmFilter::resolveMedium($mediums[0]) ?? '') : array_values(array_filter(array_map(
+                static fn (string $value) => TrackerUtmFilter::resolveMedium($value),
+                $mediums,
+            ))));
 
         return $filters;
     }

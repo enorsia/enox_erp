@@ -74,6 +74,45 @@ final class SessionDurationBuckets
             return;
         }
 
+        self::applyDefinitionToQuery($query, $bucket);
+    }
+
+    /**
+     * @param  EloquentBuilder<*>|QueryBuilder  $query
+     * @param  list<string>  $keys
+     */
+    public static function applyManyToQuery($query, array $keys): void
+    {
+        $buckets = array_values(array_filter(array_map(
+            static fn (string $key) => self::definitionByKey($key),
+            TrackerMultiSelectFilter::values($keys),
+        )));
+
+        if ($buckets === []) {
+            return;
+        }
+
+        if (count($buckets) === 1) {
+            self::applyDefinitionToQuery($query, $buckets[0]);
+
+            return;
+        }
+
+        $query->where(function ($inner) use ($buckets) {
+            foreach ($buckets as $bucket) {
+                $inner->orWhere(function ($bucketQuery) use ($bucket) {
+                    self::applyDefinitionToQuery($bucketQuery, $bucket);
+                });
+            }
+        });
+    }
+
+    /**
+     * @param  EloquentBuilder<*>|QueryBuilder  $query
+     * @param  array{key: string, label: string, min: int, max: int}  $bucket
+     */
+    private static function applyDefinitionToQuery($query, array $bucket): void
+    {
         $table = $query instanceof EloquentBuilder ? $query->getModel()->getTable() : null;
         $column = $table ? "{$table}.session_duration_seconds" : 'session_duration_seconds';
         $expr = "COALESCE({$column}, 0)";

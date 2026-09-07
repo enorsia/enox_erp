@@ -345,7 +345,7 @@ final class EcomTrackerViewData
                 $query['utm_source'] = $resolved;
             }
         } elseif (filled($filters['utm_source'] ?? null)) {
-            $query['utm_source'] = (string) $filters['utm_source'];
+            $query['utm_source'] = $filters['utm_source'];
         }
 
         $period = $filters['period'] ?? '24h';

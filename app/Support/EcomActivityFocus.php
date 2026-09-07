@@ -311,34 +311,57 @@ final class EcomActivityFocus
 
     public static function drawerFunnelSelectedValue(Request $request): string
     {
-        if ($request->filled('funnel')) {
-            return (string) $request->input('funnel');
+        return self::drawerFunnelSelectedValues($request)[0] ?? '';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function drawerFunnelSelectedValues(Request $request): array
+    {
+        $selected = TrackerMultiSelectFilter::allowedValues(
+            $request->input('funnel'),
+            self::SIDEBAR_FUNNEL_FILTER_KEYS,
+        );
+
+        if ($selected !== []) {
+            return $selected;
         }
 
         $focus = $request->input('focus');
 
         if (self::isSidebarFunnelFilterKey($focus)) {
-            return (string) $focus;
+            return [(string) $focus];
         }
 
-        return '';
+        return [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function drawerFunnelFilterValues(Request $request): array
+    {
+        $focus = $request->input('focus');
+        $selected = self::drawerFunnelSelectedValues($request);
+
+        if ($selected === []) {
+            return [];
+        }
+
+        if (self::isValid($focus) && in_array($focus, $selected, true)) {
+            $selected = array_values(array_filter(
+                $selected,
+                static fn (string $value) => $value !== $focus,
+            ));
+        }
+
+        return $selected;
     }
 
     public static function shouldApplyDrawerFunnelFilter(Request $request): bool
     {
-        if (! $request->filled('funnel')) {
-            return false;
-        }
-
-        $funnel = (string) $request->input('funnel');
-
-        if (! self::isSidebarFunnelFilterKey($funnel)) {
-            return false;
-        }
-
-        $focus = $request->input('focus');
-
-        return ! (self::isValid($focus) && $focus === $funnel);
+        return self::drawerFunnelFilterValues($request) !== [];
     }
 
     public static function applyDrawerFunnelFilter(
@@ -352,9 +375,9 @@ final class EcomActivityFocus
             return;
         }
 
-        CommerceFunnelQuery::applySidebarFunnelKey(
+        CommerceFunnelQuery::applySidebarFunnelKeys(
             $query,
-            (string) $request->input('funnel'),
+            self::drawerFunnelFilterValues($request),
             $from,
             $to,
         );
@@ -449,7 +472,7 @@ final class EcomActivityFocus
 
         return array_filter(
             array_intersect_key($request->only($keys), array_flip($keys)),
-            fn ($value) => filled($value),
+            static fn ($value) => is_array($value) ? $value !== [] : filled($value),
         );
     }
 
@@ -554,7 +577,7 @@ final class EcomActivityFocus
 
         return array_filter(
             array_intersect_key($request->only($keys), array_flip($keys)),
-            fn ($value) => filled($value),
+            static fn ($value) => is_array($value) ? $value !== [] : filled($value),
         );
     }
 
@@ -734,14 +757,16 @@ final class EcomActivityFocus
     public static function activeFilterCount(Request $request): int
     {
         $count = collect(self::sidebarFilterQueryKeys($request))
-            ->filter(function (string $key) use ($request) {
-                if ($key === 'funnel' && ! self::shouldApplyDrawerFunnelFilter($request)) {
-                    return false;
+            ->sum(function (string $key) use ($request) {
+                if ($key === 'funnel') {
+                    return count(TrackerMultiSelectFilter::allowedValues(
+                        $request->input('funnel'),
+                        self::SIDEBAR_FUNNEL_FILTER_KEYS,
+                    ));
                 }
 
-                return filled($request->input($key));
-            })
-            ->count();
+                return count(TrackerMultiSelectFilter::requestValues($request, $key));
+            });
 
         if (self::resolvedProductDrillLabel($request) !== null) {
             $count++;
@@ -773,11 +798,11 @@ final class EcomActivityFocus
         ?string $period,
         array $filterOptions = [],
     ): ?string {
-        if (! $request->filled('category')) {
+        if (! TrackerMultiSelectFilter::requestFilled($request, 'category')) {
             return null;
         }
 
-        $category = trim((string) $request->input('category'));
+        $category = TrackerMultiSelectFilter::requestValues($request, 'category')[0] ?? '';
 
         if ($filterOptions !== []) {
             $departments = TrackerCategoryIdentity::departmentsForCategoryInFilterOptions($category, $filterOptions);
@@ -819,12 +844,49 @@ final class EcomActivityFocus
      */
     public static function reconcileCatalogFilters(Request $request, array $filterOptions): ?array
     {
-        $category = trim((string) $request->input('category', ''));
+        $categories = TrackerMultiSelectFilter::requestValues($request, 'category');
 
-        if ($category === '') {
+        if ($categories === []) {
             return null;
         }
 
+        if (count($categories) === 1) {
+            return self::reconcileSingleCatalogCategory($request, $filterOptions, $categories[0]);
+        }
+
+        $department = TrackerCategoryIdentity::normalizeDepartmentName((string) $request->input('department', ''));
+
+        if ($department === '') {
+            return null;
+        }
+
+        $validCategories = array_values(array_filter(
+            $categories,
+            static fn (string $category) => TrackerCategoryIdentity::categoryListedForDepartment(
+                $category,
+                $department,
+                $filterOptions,
+            ),
+        ));
+
+        if ($validCategories === $categories) {
+            return null;
+        }
+
+        return [
+            'department' => $department,
+            'category' => $validCategories === [] ? null : $validCategories,
+        ];
+    }
+
+    /**
+     * @return array{department?: string|null, category?: string|null}|null
+     */
+    private static function reconcileSingleCatalogCategory(
+        Request $request,
+        array $filterOptions,
+        string $category,
+    ): ?array {
         $department = TrackerCategoryIdentity::normalizeDepartmentName((string) $request->input('department', ''));
 
         if ($department !== ''
@@ -978,7 +1040,9 @@ final class EcomActivityFocus
         $criteria = self::filterCriteriaFromRequest($request);
 
         if ($summaryFocus === 'categories' && $request->filled('category') && $from !== null && $to !== null) {
-            $criteria = self::enrichCategoryDrillDownCriteria($request, $criteria, $from, $to, $period);
+            $criteria = self::dedupeCategoryDrillDownCriteria(
+                self::enrichCategoryDrillDownCriteria($request, $criteria, $from, $to, $period),
+            );
         }
 
         $metrics = self::summaryForFocus($summaryFocus, $sessionCount, $funnelMetrics, $request, $from, $to, $period);
@@ -990,6 +1054,7 @@ final class EcomActivityFocus
             'range_label' => $rangeLabel,
             'criteria' => $criteria,
             'metrics' => $metrics,
+            'filter_chips' => self::filterChipsFromCriteria($request, $criteria, $hasDashboardFocus),
             'clear_focus_url' => $hasDashboardFocus
                 ? $request->fullUrlWithQuery(['focus' => null, 'page' => null])
                 : self::sidebarFilterResetUrl($request),
@@ -1033,9 +1098,15 @@ final class EcomActivityFocus
         $scenarioOptions = $service->productCatalogEventScenarioOptions();
         $activityOptions = $service->productCatalogActivityFilterOptions();
 
-        $add = static function (string $label, mixed $value) use (&$criteria): void {
+        $add = static function (string $label, mixed $value, ?string $token = null) use (&$criteria): void {
             if (filled($value)) {
-                $criteria[] = ['label' => $label, 'value' => (string) $value];
+                $entry = ['label' => $label, 'value' => (string) $value];
+
+                if ($token !== null && $token !== '') {
+                    $entry['token'] = $token;
+                }
+
+                $criteria[] = $entry;
             }
         };
 
@@ -1054,13 +1125,16 @@ final class EcomActivityFocus
         }
 
         if ($request->filled('category')) {
-            $add(
-                'Category',
-                TrackerCategoryIdentity::label(
-                    (string) $request->input('department', ''),
-                    (string) $request->input('category'),
-                ),
-            );
+            foreach (TrackerMultiSelectFilter::requestValues($request, 'category') as $category) {
+                $add(
+                    'Category',
+                    TrackerCategoryIdentity::label(
+                        (string) $request->input('department', ''),
+                        $category,
+                    ),
+                    $category,
+                );
+            }
         } elseif ($request->filled('department')) {
             $add('Department', (string) $request->input('department'));
         }
@@ -1068,15 +1142,18 @@ final class EcomActivityFocus
         $add('Color', $request->input('color'));
         $add('Size', $request->input('size'));
 
-        if ($request->filled('device_type')) {
-            $add('Device', ucfirst((string) $request->device_type));
+        foreach (TrackerMultiSelectFilter::allowedValues(
+            $request->input('device_type'),
+            ['desktop', 'mobile', 'tablet'],
+        ) as $device) {
+            $add('Device', ucfirst($device), $device);
         }
 
-        if ($request->filled('duration_bucket')) {
+        foreach (TrackerMultiSelectFilter::requestValues($request, 'duration_bucket') as $durationBucket) {
             $add(
                 'Duration',
-                SessionDurationBuckets::labelForKey((string) $request->input('duration_bucket'))
-                    ?? (string) $request->input('duration_bucket'),
+                SessionDurationBuckets::labelForKey($durationBucket) ?? $durationBucket,
+                $durationBucket,
             );
         }
 
@@ -1089,8 +1166,9 @@ final class EcomActivityFocus
         }
 
         if (self::shouldApplyDrawerFunnelFilter($request)) {
-            $funnel = (string) $request->input('funnel');
-            $add('Funnel', self::sidebarFunnelFilterOptions()[$funnel] ?? $funnel);
+            foreach (self::drawerFunnelFilterValues($request) as $funnel) {
+                $add('Funnel', self::sidebarFunnelFilterOptions()[$funnel] ?? $funnel, $funnel);
+            }
         }
 
         if ($request->filled('visitor_type')) {
@@ -1100,13 +1178,17 @@ final class EcomActivityFocus
         $add('Country', $request->input('country'));
 
         if ($request->filled('utm_source')) {
-            $sourceLabel = TrackerUtmFilter::sources()[$request->utm_source] ?? $request->utm_source;
-            $add('Source', $sourceLabel);
+            foreach (TrackerMultiSelectFilter::requestValues($request, 'utm_source') as $source) {
+                $sourceLabel = TrackerUtmFilter::sources()[$source] ?? $source;
+                $add('Source', $sourceLabel, $source);
+            }
         }
 
         if ($request->filled('utm_medium')) {
-            $mediumLabel = TrackerUtmFilter::mediums()[$request->utm_medium] ?? $request->utm_medium;
-            $add('Medium', $mediumLabel);
+            foreach (TrackerMultiSelectFilter::requestValues($request, 'utm_medium') as $medium) {
+                $mediumLabel = TrackerUtmFilter::mediums()[$medium] ?? $medium;
+                $add('Medium', $mediumLabel, $medium);
+            }
         }
 
         if ($request->filled('activity')) {
@@ -1137,20 +1219,60 @@ final class EcomActivityFocus
         Carbon $to,
         ?string $period,
     ): array {
-        $categoryName = (string) $request->input('category');
-        $departmentName = self::resolvedCategoryDepartment($request, $from, $to, $period) ?? '';
-        $label = TrackerCategoryIdentity::label($departmentName, $categoryName);
+        $departmentName = self::resolvedCategoryDepartment($request, $from, $to, $period)
+            ?? TrackerCategoryIdentity::normalizeDepartmentName((string) $request->input('department', ''));
 
-        return collect($criteria)->map(function (array $criterion) use ($label) {
+        return collect($criteria)->map(function (array $criterion) use ($departmentName) {
             if (($criterion['label'] ?? '') !== 'Category') {
                 return $criterion;
             }
 
-            return [
+            $categoryName = trim((string) ($criterion['token'] ?? ''));
+
+            if ($categoryName === '') {
+                return $criterion;
+            }
+
+            $entry = [
                 'label' => 'Category',
-                'value' => $label,
+                'value' => TrackerCategoryIdentity::label($departmentName, $categoryName),
+                'token' => $categoryName,
             ];
+
+            return $entry;
         })->all();
+    }
+
+    /**
+     * @param  array<int, array{label: string, value: string, token?: string}>  $criteria
+     * @return array<int, array{label: string, value: string, token?: string}>
+     */
+    private static function dedupeCategoryDrillDownCriteria(array $criteria): array
+    {
+        $seenTokens = [];
+        $deduped = [];
+
+        foreach ($criteria as $criterion) {
+            if (($criterion['label'] ?? '') !== 'Category') {
+                $deduped[] = $criterion;
+
+                continue;
+            }
+
+            $token = mb_strtolower(trim((string) ($criterion['token'] ?? '')));
+
+            if ($token !== '' && isset($seenTokens[$token])) {
+                continue;
+            }
+
+            if ($token !== '') {
+                $seenTokens[$token] = true;
+            }
+
+            $deduped[] = $criterion;
+        }
+
+        return $deduped;
     }
 
     /**
@@ -1158,80 +1280,133 @@ final class EcomActivityFocus
      */
     public static function filterChipsFromRequest(Request $request): array
     {
+        return self::filterChipsFromCriteria(
+            $request,
+            self::filterCriteriaFromRequest($request),
+            includeFocus: true,
+        );
+    }
+
+    /**
+     * @param  array<int, array{label: string, value: string, token?: string}>  $criteria
+     * @return array<int, array{label: string, remove_url: string}>
+     */
+    public static function filterChipsFromCriteria(
+        Request $request,
+        array $criteria,
+        bool $includeFocus = false,
+    ): array {
         $chips = [];
 
-        if ($request->filled('focus') && self::isValid($request->input('focus'))) {
+        if ($includeFocus && $request->filled('focus') && self::isValid($request->input('focus'))) {
             $chips[] = [
                 'label' => 'Section: '.self::label($request->input('focus')),
                 'remove_url' => $request->fullUrlWithQuery(['focus' => null, 'page' => null]),
             ];
         }
 
-        foreach (self::filterCriteriaFromRequest($request) as $criterion) {
-            $key = match ($criterion['label']) {
-                'Product' => 'product',
-                'Product code' => 'product',
-                'Product search' => 'search',
-                'Search' => 'search',
-                'Category' => 'category',
-                'Department' => 'department',
-                'Color' => 'color',
-                'Size' => 'size',
-                'Device' => 'device_type',
-                'Duration' => 'duration_bucket',
-                'Login' => 'logged_in',
-                'Orders' => 'has_order',
-                'Funnel' => 'funnel',
-                'Visitor type' => 'visitor_type',
-                'Country' => 'country',
-                'Source' => 'utm_source',
-                'Medium' => 'utm_medium',
-                'Activity' => 'activity',
-                'Funnel step' => 'event_scenario',
-                'Has purchases' => 'has_purchases',
-                'Has views' => 'has_views',
-                'Has cart adds' => 'has_adds',
-                default => null,
-            };
+        foreach ($criteria as $criterion) {
+            $chip = self::filterChipFromCriterion($request, $criterion);
 
-            if ($key === null) {
-                continue;
+            if ($chip !== null) {
+                $chips[] = $chip;
             }
-
-            if ($key === 'category') {
-                $chips[] = [
-                    'label' => $criterion['label'].': '.$criterion['value'],
-                    'remove_url' => $request->fullUrlWithQuery(['category' => null, 'department' => null, 'page' => null]),
-                ];
-
-                continue;
-            }
-
-            if ($key === 'department') {
-                $chips[] = [
-                    'label' => $criterion['label'].': '.$criterion['value'],
-                    'remove_url' => $request->fullUrlWithQuery(['department' => null, 'category' => null, 'page' => null]),
-                ];
-
-                continue;
-            }
-
-            if ($key === 'product') {
-                $chips[] = [
-                    'label' => 'Product: '.$criterion['value'],
-                    'remove_url' => $request->fullUrlWithQuery(['product_code' => null, 'product_name' => null, 'page' => null]),
-                ];
-
-                continue;
-            }
-
-            $chips[] = [
-                'label' => $criterion['label'].': '.$criterion['value'],
-                'remove_url' => $request->fullUrlWithQuery([$key => null, 'page' => null]),
-            ];
         }
 
         return $chips;
+    }
+
+    /**
+     * @param  array{label: string, value: string, token?: string}  $criterion
+     * @return array{label: string, remove_url: string}|null
+     */
+    private static function filterChipFromCriterion(Request $request, array $criterion): ?array
+    {
+        $key = self::filterChipKeyForCriterionLabel($criterion['label'] ?? '');
+
+        if ($key === null) {
+            return null;
+        }
+
+        $label = self::filterChipDisplayLabel($criterion);
+
+        if ($key === 'category') {
+            return [
+                'label' => $label,
+                'remove_url' => $request->fullUrlWithQuery(array_merge(
+                    self::filterChipRemoveQuery($request, 'category', $criterion['token'] ?? null),
+                    ['page' => null],
+                )),
+            ];
+        }
+
+        if ($key === 'department') {
+            return [
+                'label' => $label,
+                'remove_url' => $request->fullUrlWithQuery(['department' => null, 'category' => null, 'page' => null]),
+            ];
+        }
+
+        if ($key === 'product') {
+            return [
+                'label' => $label,
+                'remove_url' => $request->fullUrlWithQuery(['product_code' => null, 'product_name' => null, 'page' => null]),
+            ];
+        }
+
+        return [
+            'label' => $label,
+            'remove_url' => $request->fullUrlWithQuery(array_merge(
+                self::filterChipRemoveQuery($request, $key, $criterion['token'] ?? null),
+                ['page' => null],
+            )),
+        ];
+    }
+
+    /**
+     * @param  array{label: string, value: string, token?: string}  $criterion
+     */
+    private static function filterChipDisplayLabel(array $criterion): string
+    {
+        $label = trim((string) ($criterion['label'] ?? ''));
+        $value = trim((string) ($criterion['value'] ?? ''));
+
+        if ($label === 'Product') {
+            return 'Product: '.$value;
+        }
+
+        if ($value === '') {
+            return $label;
+        }
+
+        return $label !== '' ? $label.': '.$value : $value;
+    }
+
+    private static function filterChipKeyForCriterionLabel(string $label): ?string
+    {
+        return match ($label) {
+            'Product', 'Product code' => 'product',
+            'Product search', 'Search' => 'search',
+            'Category' => 'category',
+            'Department' => 'department',
+            'Color' => 'color',
+            'Size' => 'size',
+            'Device' => 'device_type',
+            'Duration' => 'duration_bucket',
+            'Login' => 'logged_in',
+            'Orders' => 'has_order',
+            'Funnel' => 'funnel',
+            'Visitor type' => 'visitor_type',
+            'Country' => 'country',
+            'Source' => 'utm_source',
+            'Medium' => 'utm_medium',
+            'Activity' => 'activity',
+            'Funnel step' => 'event_scenario',
+            'Has purchases' => 'has_purchases',
+            'Has views' => 'has_views',
+            'Has cart adds' => 'has_adds',
+            default => null,
+        };
     }
 
     /**
@@ -1337,7 +1512,10 @@ final class EcomActivityFocus
             if ($key === 'category') {
                 $chips[] = [
                     'label' => $label.': '.$criterion['value'],
-                    'remove_url' => $request->fullUrlWithQuery(['category' => null, 'department' => null, 'page' => null]),
+                    'remove_url' => $request->fullUrlWithQuery(array_merge(
+                        self::filterChipRemoveQuery($request, 'category', $criterion['token'] ?? null),
+                        ['page' => null],
+                    )),
                 ];
 
                 continue;
@@ -1363,11 +1541,46 @@ final class EcomActivityFocus
 
             $chips[] = [
                 'label' => $label.': '.$criterion['value'],
-                'remove_url' => $request->fullUrlWithQuery([$key => null, 'page' => null]),
+                'remove_url' => $request->fullUrlWithQuery(array_merge(
+                    self::filterChipRemoveQuery($request, $key, $criterion['token'] ?? null),
+                    ['page' => null],
+                )),
             ];
         }
 
         return $chips;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function filterChipRemoveQuery(Request $request, string $key, ?string $token = null): array
+    {
+        $multiKeys = ['device_type', 'duration_bucket', 'utm_source', 'utm_medium', 'funnel', 'category'];
+
+        if ($token !== null && $token !== '' && in_array($key, $multiKeys, true)) {
+            $query = TrackerMultiSelectFilter::queryWithoutValue(
+                $key,
+                TrackerMultiSelectFilter::requestValues($request, $key),
+                $token,
+            );
+
+            if ($key === 'category' && ($query['category'] ?? null) === null) {
+                $query['department'] = null;
+            }
+
+            return $query;
+        }
+
+        if ($key === 'category' || $key === 'department') {
+            return ['department' => null, 'category' => null];
+        }
+
+        if ($key === 'product') {
+            return ['product_code' => null, 'product_name' => null];
+        }
+
+        return [$key => null];
     }
 
     private static function drillDownDescription(?string $focus): ?string
@@ -1524,19 +1737,9 @@ final class EcomActivityFocus
             return [];
         }
 
-        $row = app(EcomTrackerDashboardService::class)->categoryPerformanceForName(
-            $from,
-            $to,
-            (string) $request->input('category'),
-            array_merge(
-                self::sessionFiltersFromRequest($request),
-                self::productCatalogFiltersFromRequest($request),
-            ),
-            $period,
-            self::resolvedCategoryDepartment($request, $from, $to, $period),
-        );
+        $categories = TrackerMultiSelectFilter::requestValues($request, 'category');
 
-        if ($row === null) {
+        if ($categories === []) {
             return [];
         }
 
@@ -1546,6 +1749,45 @@ final class EcomActivityFocus
         );
         $catalogOptions = self::productCatalogFiltersFromRequest($request);
         $dashboard = app(EcomTrackerDashboardService::class);
+        $departmentName = self::resolvedCategoryDepartment($request, $from, $to, $period)
+            ?? TrackerCategoryIdentity::normalizeDepartmentName((string) $request->input('department', ''));
+
+        $row = [
+            'views' => 0,
+            'adds' => 0,
+            'begin_checkouts' => 0,
+            'proceed_checkouts' => 0,
+            'purchases' => 0,
+            'sale_items' => 0,
+            'sale_amount' => 0.0,
+        ];
+        $matchedCategories = 0;
+
+        foreach ($categories as $categoryName) {
+            $categoryRow = $dashboard->categoryPerformanceForName(
+                $from,
+                $to,
+                $categoryName,
+                $filters,
+                $period,
+                $departmentName !== '' ? $departmentName : null,
+            );
+
+            if ($categoryRow === null) {
+                continue;
+            }
+
+            $matchedCategories++;
+            $row['views'] += (int) ($categoryRow['views'] ?? 0);
+            $row['adds'] += (int) ($categoryRow['adds'] ?? $categoryRow['add_to_cart'] ?? 0);
+            $row['begin_checkouts'] += (int) ($categoryRow['begin_checkouts'] ?? $categoryRow['begin_checkout'] ?? 0);
+            $row['proceed_checkouts'] += (int) ($categoryRow['proceed_checkouts'] ?? $categoryRow['proceed_checkout'] ?? 0);
+        }
+
+        if ($matchedCategories === 0) {
+            return [];
+        }
+
         $sessionIds = $dashboard->productCatalogSessionIds($from, $to, $filters, $period);
         $commerceTotals = $dashboard->categoryCatalogCommerceTotalsForSessions(
             $sessionIds,

@@ -10,6 +10,7 @@ use App\Support\EcomActivityCommerceSummary;
 use App\Support\EcomActivitySessionSort;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
+use App\Support\TrackerMultiSelectFilter;
 use App\Support\TrackerProductCatalogIdentity;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -396,14 +397,19 @@ class EcomActivityRowMetrics
         Carbon $to,
         array $catalogOptions,
     ): void {
-        if (! filled($catalogOptions['department'] ?? null) && ! filled($catalogOptions['category'] ?? null)) {
+        if (
+            ! filled($catalogOptions['department'] ?? null)
+            && TrackerMultiSelectFilter::values($catalogOptions['category'] ?? null) === []
+        ) {
             return;
         }
 
-        if (filled($catalogOptions['department'] ?? null) && filled($catalogOptions['category'] ?? null)) {
+        $categoryFilters = TrackerMultiSelectFilter::values($catalogOptions['category'] ?? null);
+
+        if (filled($catalogOptions['department'] ?? null) && count($categoryFilters) === 1) {
             $catalogPath = TrackerCategoryIdentity::label(
                 (string) $catalogOptions['department'],
-                (string) $catalogOptions['category'],
+                $categoryFilters[0],
             );
 
             foreach ($sessionIds as $sessionId) {

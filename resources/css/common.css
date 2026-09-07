@@ -322,7 +322,7 @@ button {
     width: 100%;
 }
 
-.ts-wrapper .ts-control {
+.ts-wrapper:not(.multi) .ts-control {
     min-height: 2.05rem !important;
     height: 2.05rem !important;
     max-height: 2.05rem !important;
@@ -344,8 +344,53 @@ button {
     white-space: nowrap;
 }
 
+.ts-wrapper.multi:not(.has-items) .ts-control {
+    min-height: 2.05rem !important;
+    height: 2.05rem !important;
+    max-height: 2.05rem !important;
+    padding: 0.4rem 0.75rem !important;
+    font-size: 0.8125rem !important;
+    line-height: 1.25rem !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid #e2e8f0 !important;
+    background: #fff !important;
+    color: #334155 !important;
+    box-shadow: none !important;
+    font-family: 'DM Sans', sans-serif;
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    cursor: pointer;
+}
+
+.ts-wrapper.multi.has-items .ts-control {
+    height: auto !important;
+    min-height: 2.05rem !important;
+    max-height: none !important;
+    padding: 0.4rem 0.55rem !important;
+    font-size: 0.8125rem !important;
+    line-height: 1.35 !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid #e2e8f0 !important;
+    background: #fff !important;
+    color: #334155 !important;
+    box-shadow: none !important;
+    font-family: 'DM Sans', sans-serif;
+    display: flex !important;
+    align-items: flex-start !important;
+    align-content: flex-start !important;
+    flex-wrap: wrap !important;
+    gap: 0.35rem !important;
+    overflow: visible !important;
+    white-space: normal !important;
+    cursor: text;
+}
+
 .ts-wrapper .ts-control > [data-value],
-.ts-wrapper .ts-control > input {
+.ts-wrapper:not(.multi) .ts-control > input {
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
@@ -358,18 +403,53 @@ button {
     max-width: calc(100% - 1.25rem);
 }
 
-.ts-wrapper.multi .ts-control {
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: thin;
+.ts-wrapper.multi.has-items .ts-control > .item,
+.ts-wrapper.multi.has-items .ts-control > div:not(input) {
+    display: inline-flex !important;
+    align-items: center !important;
+    flex: 0 1 auto !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
 }
 
-.ts-wrapper.multi .ts-control > [data-value] {
-    flex: 0 0 auto;
-    max-width: none;
+.ts-wrapper.multi:not(.has-items) .ts-control > input {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }
 
-.ts-wrapper .ts-control input {
+.ts-wrapper.multi.has-items .ts-control > input {
+    flex: 1 1 5rem !important;
+    min-width: 5rem !important;
+    width: auto !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.ts-wrapper.multi.plugin-remove_button:not(.rtl) .item .remove {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 1rem !important;
+    min-width: 1rem !important;
+    height: 1rem !important;
+    margin-left: 0.25rem !important;
+    padding: 0 !important;
+    font-size: 12px !important;
+    line-height: 1 !important;
+}
+
+.ts-wrapper:not(.multi) .ts-control input {
     font-size: 0.8125rem !important;
     line-height: 1.25rem !important;
     color: #334155 !important;
@@ -378,8 +458,38 @@ button {
     height: 1.25rem !important;
 }
 
+.ts-wrapper.multi:not(.has-items) .ts-control input {
+    font-size: 0.8125rem !important;
+    line-height: 1.25rem !important;
+    color: #334155 !important;
+    padding: 0 !important;
+    min-height: unset !important;
+    height: 1.25rem !important;
+}
+
+.ts-wrapper.multi.has-items .ts-control input {
+    font-size: 0.8125rem !important;
+    line-height: 1.25rem !important;
+    color: #334155 !important;
+    padding: 0 !important;
+    min-height: unset !important;
+    height: 1.35rem !important;
+}
+
 .ts-wrapper .ts-control input::placeholder {
     color: #94a3b8 !important;
+}
+
+.ts-wrapper.multi.has-items .ts-control > input::placeholder {
+    color: transparent !important;
+}
+
+.ts-wrapper.multi.input-hidden .ts-control > input {
+    position: absolute !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    opacity: 0 !important;
 }
 
 .ts-wrapper.focus .ts-control,
@@ -416,13 +526,20 @@ button {
 }
 
 /* Dark mode */
-.dark .ts-wrapper .ts-control {
+.dark .ts-wrapper:not(.multi) .ts-control {
     border-color: #475569 !important;
     background: #1e293b !important;
     color: #e2e8f0 !important;
 }
 
-.dark .ts-wrapper .ts-control input {
+.dark .ts-wrapper.multi .ts-control {
+    border-color: #475569 !important;
+    background: #1e293b !important;
+    color: #e2e8f0 !important;
+}
+
+.dark .ts-wrapper:not(.multi) .ts-control input,
+.dark .ts-wrapper.multi .ts-control input {
     color: #e2e8f0 !important;
     background: transparent !important;
 }

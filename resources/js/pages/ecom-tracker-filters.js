@@ -120,13 +120,46 @@ function initEtdFlatpickr(root = document) {
 
 window.initEtdFlatpickr = initEtdFlatpickr;
 
+function selectValues(select) {
+    const value = select.tomselect ? select.tomselect.getValue() : select.value;
+
+    if (Array.isArray(value)) {
+        return value.filter((entry) => entry !== '');
+    }
+
+    return value === '' ? [] : [value];
+}
+
 function selectValue(select) {
-    return select.tomselect ? select.tomselect.getValue() : select.value;
+    const values = selectValues(select);
+
+    return values[0] ?? '';
 }
 
 function setSelectValue(select, value) {
     if (select.tomselect) {
+        if (select.multiple) {
+            const nextValues = Array.isArray(value)
+                ? value
+                : (value === '' || value === null || value === undefined ? [] : [value]);
+            select.tomselect.setValue(nextValues, true);
+
+            return;
+        }
+
         select.tomselect.setValue(value ?? '', true);
+
+        return;
+    }
+
+    if (select.multiple) {
+        const nextValues = Array.isArray(value)
+            ? value
+            : (value === '' || value === null || value === undefined ? [] : [value]);
+
+        Array.from(select.options).forEach((option) => {
+            option.selected = nextValues.includes(option.value);
+        });
 
         return;
     }
@@ -214,28 +247,31 @@ function matchingCategoryOptions(options, department) {
 function writeCategorySelectOptions(categorySelect, options, department, emptyLabel) {
     const matching = matchingCategoryOptions(options, department);
 
-    categorySelect.innerHTML = [
-        `<option value="">${escapeHtml(emptyLabel)}</option>`,
-        ...matching.map((option) => (
-            `<option value="${escapeHtml(option.value)}" data-department="${escapeHtml(option.department)}">${escapeHtml(option.text)}</option>`
-        )),
-    ].join('');
+    categorySelect.innerHTML = matching.map((option) => (
+        `<option value="${escapeHtml(option.value)}" data-department="${escapeHtml(option.department)}">${escapeHtml(option.text)}</option>`
+    )).join('');
 }
 
-function syncNativeCategoryOptions(categorySelect, options, department, selectedValue, emptyLabel) {
+function syncNativeCategoryOptions(categorySelect, options, department, selectedValues, emptyLabel) {
     writeCategorySelectOptions(categorySelect, options, department, emptyLabel);
     categorySelect.disabled = department === '';
-    categorySelect.value = selectedValue;
+
+    const values = Array.isArray(selectedValues)
+        ? selectedValues
+        : (selectedValues ? [selectedValues] : []);
+
+    Array.from(categorySelect.options).forEach((option) => {
+        option.selected = values.includes(option.value);
+    });
 }
 
-function syncTomSelectCategoryOptions(categorySelect, options, department, selectedValue, emptyLabel) {
+function syncTomSelectCategoryOptions(categorySelect, options, department, selectedValues, emptyLabel) {
     const ts = categorySelect.tomselect;
     const matching = matchingCategoryOptions(options, department);
 
     writeCategorySelectOptions(categorySelect, options, department, emptyLabel);
 
     ts.clearOptions();
-    ts.addOption({ value: '', text: emptyLabel });
     matching.forEach((option) => {
         ts.addOption({
             value: option.value,
@@ -245,8 +281,11 @@ function syncTomSelectCategoryOptions(categorySelect, options, department, selec
     ts.refreshOptions(false);
     setSelectDisabled(categorySelect, department === '');
 
-    const nextValue = matching.some((option) => option.value === selectedValue) ? selectedValue : '';
-    ts.setValue(nextValue, true);
+    const values = Array.isArray(selectedValues)
+        ? selectedValues
+        : (selectedValues ? [selectedValues] : []);
+    const nextValues = values.filter((value) => matching.some((option) => option.value === value));
+    ts.setValue(nextValues, true);
 }
 
 function initDepartmentCategoryFilters(root) {
@@ -277,17 +316,17 @@ function initDepartmentCategoryFilters(root) {
 
         const syncCategoryOptions = (resetCategory = false) => {
             const department = selectValue(departmentSelect);
-            const previousValue = resetCategory ? '' : selectValue(categorySelect);
-            const keepSelection = matchingCategoryOptions(categoryOptions, department)
-                .some((option) => option.value === previousValue && previousValue !== '');
-            const selectedValue = keepSelection ? previousValue : '';
+            const previousValues = resetCategory ? [] : selectValues(categorySelect);
+            const selectedValues = matchingCategoryOptions(categoryOptions, department)
+                .filter((option) => previousValues.includes(option.value))
+                .map((option) => option.value);
 
             if (categorySelect.tomselect) {
                 syncTomSelectCategoryOptions(
                     categorySelect,
                     categoryOptions,
                     department,
-                    selectedValue,
+                    selectedValues,
                     emptyLabel,
                 );
             } else {
@@ -295,7 +334,7 @@ function initDepartmentCategoryFilters(root) {
                     categorySelect,
                     categoryOptions,
                     department,
-                    selectedValue,
+                    selectedValues,
                     emptyLabel,
                 );
             }

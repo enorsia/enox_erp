@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
 use App\Models\TrackerUtmFilter;
+use App\Support\TrackerMultiSelectFilter;
 use App\Support\TrackerRedisCache;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -473,7 +474,14 @@ class VisitorAnalyticsService
         }
 
         if (! empty($filters['device_type'])) {
-            $query->where('device_type', $filters['device_type']);
+            $devices = TrackerMultiSelectFilter::allowedValues(
+                $filters['device_type'],
+                ['desktop', 'mobile', 'tablet'],
+            );
+
+            if ($devices !== []) {
+                $query->whereIn('device_type', $devices);
+            }
         }
 
         if (isset($filters['logged_in']) && $filters['logged_in'] !== '' && $filters['logged_in'] !== null) {

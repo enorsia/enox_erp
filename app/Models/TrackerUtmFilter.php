@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\EcomActivityFilterCounts;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerMultiSelectFilter;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -140,15 +141,26 @@ final class TrackerUtmFilter
 
     /**
      * @param  array<string, int>  $counts
-     * @return array{sources: array<string, string>, mediums: array<string, string>, selected_source: string, selected_medium: string}
+     * @return array{sources: array<string, string>, mediums: array<string, string>, selected_source: string, selected_medium: string, selected_sources: list<string>, selected_mediums: list<string>}
      */
-    public static function formState(?string $source = null, ?string $medium = null, array $sourceCounts = [], array $mediumCounts = []): array
+    public static function formState(mixed $source = null, mixed $medium = null, array $sourceCounts = [], array $mediumCounts = []): array
     {
+        $selectedSources = array_values(array_filter(array_map(
+            static fn (?string $value) => self::resolveSource($value),
+            TrackerMultiSelectFilter::values($source),
+        )));
+        $selectedMediums = array_values(array_filter(array_map(
+            static fn (?string $value) => self::resolveMedium($value),
+            TrackerMultiSelectFilter::values($medium),
+        )));
+
         return [
             'sources' => self::labeledOptions($sourceCounts, 'source'),
             'mediums' => self::labeledOptions($mediumCounts, 'medium'),
-            'selected_source' => self::resolveSource($source) ?? '',
-            'selected_medium' => self::resolveMedium($medium) ?? '',
+            'selected_source' => $selectedSources[0] ?? '',
+            'selected_medium' => $selectedMediums[0] ?? '',
+            'selected_sources' => $selectedSources,
+            'selected_mediums' => $selectedMediums,
         ];
     }
 
@@ -235,14 +247,48 @@ final class TrackerUtmFilter
     /**
      * @param  Builder<ActivityEcomUser>  $query
      */
-    public static function applySourceFilter(Builder $query, ?string $source): void
+    public static function applySourceFilter(Builder $query, mixed $source): void
     {
-        $source = self::resolveSource($source);
+        self::applySourceFilters($query, TrackerMultiSelectFilter::values($source));
+    }
 
-        if ($source === null) {
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     * @param  list<string>  $sources
+     */
+    public static function applySourceFilters(Builder $query, array $sources): void
+    {
+        $sources = array_values(array_filter(array_map(
+            static fn (string $value) => self::resolveSource($value),
+            TrackerMultiSelectFilter::values($sources),
+        )));
+
+        if ($sources === []) {
             return;
         }
 
+        if (count($sources) === 1) {
+            self::applyResolvedSourceFilter($query, $sources[0]);
+
+            return;
+        }
+
+        $query->where(function (Builder $inner) use ($sources) {
+            foreach ($sources as $index => $source) {
+                $method = $index === 0 ? 'where' : 'orWhere';
+
+                $inner->{$method}(function (Builder $branch) use ($source) {
+                    self::applyResolvedSourceFilter($branch, $source);
+                });
+            }
+        });
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function applyResolvedSourceFilter(Builder $query, string $source): void
+    {
         if ($source === '(direct)') {
             $query->where(function (Builder $inner) {
                 $inner->whereNull('utm_source')->orWhere('utm_source', '');
@@ -286,14 +332,48 @@ final class TrackerUtmFilter
     /**
      * @param  Builder<ActivityEcomUser>  $query
      */
-    public static function applyMediumFilter(Builder $query, ?string $medium): void
+    public static function applyMediumFilter(Builder $query, mixed $medium): void
     {
-        $medium = self::resolveMedium($medium);
+        self::applyMediumFilters($query, TrackerMultiSelectFilter::values($medium));
+    }
 
-        if ($medium === null) {
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     * @param  list<string>  $mediums
+     */
+    public static function applyMediumFilters(Builder $query, array $mediums): void
+    {
+        $mediums = array_values(array_filter(array_map(
+            static fn (string $value) => self::resolveMedium($value),
+            TrackerMultiSelectFilter::values($mediums),
+        )));
+
+        if ($mediums === []) {
             return;
         }
 
+        if (count($mediums) === 1) {
+            self::applyResolvedMediumFilter($query, $mediums[0]);
+
+            return;
+        }
+
+        $query->where(function (Builder $inner) use ($mediums) {
+            foreach ($mediums as $index => $medium) {
+                $method = $index === 0 ? 'where' : 'orWhere';
+
+                $inner->{$method}(function (Builder $branch) use ($medium) {
+                    self::applyResolvedMediumFilter($branch, $medium);
+                });
+            }
+        });
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function applyResolvedMediumFilter(Builder $query, string $medium): void
+    {
         if ($medium === 'none') {
             $query->where(function (Builder $inner) {
                 $inner->whereNull('utm_medium')->orWhere('utm_medium', '');
