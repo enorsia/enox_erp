@@ -6,7 +6,7 @@
 @endphp
 
 <div @class([
-    'etd-panel etd-panel--abandonment etd-panel--recoverable',
+    'etd-panel etd-panel--abandonment etd-panel--recoverable etd-print-unit',
     'etd-panel--recoverable-cart' => $panelTone === 'cart',
     'etd-panel--recoverable-begin' => $panelTone === 'begin',
     'etd-panel--recoverable-proceed' => $panelTone === 'proceed',

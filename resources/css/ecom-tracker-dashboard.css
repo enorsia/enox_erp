@@ -1778,6 +1778,14 @@
     margin: -0.25rem 0 0.875rem;
 }
 
+.etd-section-intro .etd-section-title {
+    margin-bottom: 0.75rem;
+}
+
+.etd-section-intro .etd-section-note {
+    margin: -0.25rem 0 0.875rem;
+}
+
 .etd-panel-subtitle {
     color: #94a3b8;
     font-size: 12px;
@@ -5723,4 +5731,727 @@ main:has(> .etd-page--activity) {
 
 .etd-table--activity th .etd-tip-trigger {
     pointer-events: auto;
+}
+
+/* Mirror print layout while measuring pagination before the print dialog opens. */
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-grid-4-8 {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 0.45rem !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-grid-4-8 > #categories,
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-grid-4-8 > #products {
+    grid-column: auto !important;
+    width: 100% !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-grid-4--recoverable {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 0.35rem !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-grid-2--acquisition-insights {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.45rem !important;
+    width: 100% !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-grid-2--acquisition-insights > .etd-panel--new-returning,
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-panel--new-returning {
+    width: min(50%, 42mm) !important;
+    max-width: min(50%, 42mm) !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-panel--new-returning .etd-chart-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    aspect-ratio: 1 / 1 !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-chart-wrap,
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-chart-wrap--trend {
+    height: 200px !important;
+    min-height: 200px !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-table-scroll,
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-table-scroll--fixed {
+    max-height: none !important;
+    height: auto !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-grid-4--recoverable > .etd-panel--recoverable {
+    display: block !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-panel--abandonment,
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-panel--recoverable {
+    overflow: visible !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-panel--recoverable .etd-table-scroll--abandonment {
+    flex: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-category-departments.etd-print-categories-expanded .etd-category-child-row {
+    display: table-row !important;
+}
+
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-category-departments.etd-print-categories-expanded .etd-catalog-expand-col,
+body.etd-print-measure #ecom-tracker-dashboard-content .etd-category-departments.etd-print-categories-expanded .etd-catalog-expand-btn {
+    display: none !important;
+}
+
+/* ── Dashboard print (A4 portrait, cross-browser) ── */
+@media print {
+    @page {
+        size: 210mm 297mm;
+        margin: 10mm;
+    }
+
+    @page :first {
+        margin: 10mm;
+    }
+
+    html,
+    body {
+        height: auto !important;
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        background: #f1f5f9 !important;
+    }
+
+    .dark html,
+    .dark body {
+        background: #0f172a !important;
+    }
+
+    body > div.flex.h-screen,
+    body > div.flex.h-screen > div.flex-1,
+    main {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        background: #f1f5f9 !important;
+    }
+
+    .dark body > div.flex.h-screen,
+    .dark body > div.flex.h-screen > div.flex-1,
+    .dark main {
+        background: #0f172a !important;
+    }
+
+    #sidebar,
+    #sidebarBackdrop,
+    body > div.flex.h-screen > div.flex-1.flex.flex-col.overflow-hidden.min-w-0 > header,
+    .etd-filter-drawer,
+    .etd-print-hide,
+    .etd-page-header-right,
+    .etd-page-meta,
+    .etd-header-sep--meta,
+    .etd-filter-active-note,
+    .etd-page-header > .flex.items-center.flex-wrap,
+    .etd-trend-chart-scroll-hint,
+    .etd-tip-trigger,
+    .etd-panel-head-actions,
+    .etd-panel-head-meta,
+    .etd-view-details-btn {
+        display: none !important;
+    }
+
+    body > div.flex.h-screen,
+    body > div.flex.h-screen > div.flex-1,
+    main {
+        display: block !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    #ecom-tracker-dashboard-content,
+    #ecom-tracker-dashboard-content * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    #ecom-tracker-dashboard-content {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        box-sizing: border-box !important;
+        background: transparent !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-page-header {
+        background: #fff !important;
+        border: none !important;
+        border-bottom: 1px solid #cbd5e1 !important;
+        border-radius: 0 !important;
+        padding: 0 0 0.45rem !important;
+        margin-bottom: 0.65rem !important;
+    }
+
+    .dark #ecom-tracker-dashboard-content .etd-page-header {
+        background: #1e293b !important;
+        border-bottom-color: #475569 !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-page-header-bar {
+        display: block !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-page-header-left {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: baseline !important;
+        gap: 0.3rem !important;
+        min-width: 0 !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-page-title {
+        font-size: 14pt !important;
+        line-height: 1.2 !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-page-range {
+        font-size: 10pt !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-kpi-panel {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin-bottom: 0.65rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-kpi-groups {
+        gap: 0.45rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-kpi-group-grid,
+    #ecom-tracker-dashboard-content .etd-kpi-grid,
+    #ecom-tracker-dashboard-content .etd-kpi-grid--5,
+    #ecom-tracker-dashboard-content .etd-kpi-grid--6 {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 0.35rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-kpi-section-label {
+        font-size: 8pt !important;
+        margin-bottom: 0.2rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-kpi {
+        padding: 0.35rem 0.45rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-kpi-label {
+        font-size: 7pt !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-kpi-value {
+        font-size: 11pt !important;
+    }
+
+    /* ── Print units: titles stay with their table/chart; browser fills pages naturally ── */
+    #ecom-tracker-dashboard-content .etd-print-section {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-section-print-block {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-section-intro {
+        display: block !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        break-after: avoid-page !important;
+        page-break-after: avoid !important;
+        margin-bottom: 0.35rem !important;
+        orphans: 4;
+        widows: 4;
+    }
+
+    #ecom-tracker-dashboard-content .etd-section-print-body {
+        display: block !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-print-unit {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-print-unit .etd-panel-head,
+    #ecom-tracker-dashboard-content .etd-print-unit .etd-panel-head--abandonment {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        break-after: avoid-page !important;
+        page-break-after: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-print-unit .etd-panel-head + *,
+    #ecom-tracker-dashboard-content .etd-print-unit .etd-panel-head--abandonment + *,
+    #ecom-tracker-dashboard-content .etd-print-unit .etd-panel-head--device-browser + * {
+        break-before: avoid-page !important;
+        page-break-before: avoid !important;
+    }
+
+    /* Section intro sticks with its first panel/table in the section */
+    #ecom-tracker-dashboard-content .etd-print-section:has(#categories) .etd-section-intro,
+    #ecom-tracker-dashboard-content .etd-print-section:has(.etd-recoverable-section) .etd-section-intro {
+        break-after: avoid-page !important;
+        page-break-after: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-print-section:has(#categories) #categories,
+    #ecom-tracker-dashboard-content .etd-print-section:has(.etd-recoverable-section) .etd-recoverable-section > .etd-grid-4--recoverable > .etd-print-unit:first-child {
+        break-before: avoid-page !important;
+        page-break-before: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-print-section:has(.etd-panel#device) .etd-section-intro {
+        break-after: avoid-page !important;
+        page-break-after: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-print-section:has(.etd-panel#device) #device {
+        break-before: avoid-page !important;
+        page-break-before: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content #categories {
+        width: 100% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-section-print-block:has(#categories) .etd-section-intro {
+        margin-bottom: 0.25rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-dashboard-section {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-section-intro .etd-section-title {
+        font-size: 11pt !important;
+        margin: 0 0 0.2rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-section-intro .etd-section-note {
+        font-size: 8pt !important;
+        line-height: 1.35 !important;
+        margin: 0 0 0.35rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-section-num {
+        font-size: 8pt !important;
+        padding: 0 0.25rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-print-lead,
+    #ecom-tracker-dashboard-content #trend {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel-title,
+    #ecom-tracker-dashboard-content .etd-section-title {
+        white-space: normal !important;
+        word-break: normal !important;
+        overflow-wrap: normal !important;
+        hyphens: manual !important;
+    }
+
+    /* Device + traffic: title sticks to table; long tables may continue on next page */
+    #ecom-tracker-dashboard-content #device.etd-print-unit,
+    #ecom-tracker-dashboard-content #traffic.etd-print-unit {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+    }
+
+    #ecom-tracker-dashboard-content #device .etd-panel-head,
+    #ecom-tracker-dashboard-content #traffic .etd-panel-head {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        break-after: avoid-page !important;
+        page-break-after: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content #device .etd-panel-head + *,
+    #ecom-tracker-dashboard-content #traffic .etd-panel-head + * {
+        break-before: avoid-page !important;
+        page-break-before: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content #device .etd-table-scroll,
+    #ecom-tracker-dashboard-content #traffic .etd-table-scroll,
+    #ecom-tracker-dashboard-content #device .etd-table,
+    #ecom-tracker-dashboard-content #traffic .etd-table {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+    }
+
+    /* Session duration starts naturally after traffic; full-width unit */
+    #ecom-tracker-dashboard-content .etd-grid-2--acquisition-insights {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.45rem !important;
+        margin-top: 0.45rem !important;
+        margin-bottom: 0.45rem !important;
+        width: 100% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--duration-distribution.etd-print-unit {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        order: 1 !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--duration-distribution .etd-panel-head {
+        break-after: avoid-page !important;
+        page-break-after: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--duration-distribution .etd-panel-body {
+        break-before: avoid-page !important;
+        page-break-before: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--new-returning.etd-print-unit {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        order: 2 !important;
+        width: min(50%, 42mm) !important;
+        max-width: min(50%, 42mm) !important;
+        align-self: flex-start !important;
+    }
+
+    /* Large merchandising tables may continue across pages, but never orphan the panel title */
+    #ecom-tracker-dashboard-content #categories.etd-print-unit,
+    #ecom-tracker-dashboard-content #products.etd-print-unit {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+    }
+
+    #ecom-tracker-dashboard-content #categories .etd-panel-head,
+    #ecom-tracker-dashboard-content #products .etd-panel-head {
+        break-after: avoid-page !important;
+        page-break-after: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content #categories .etd-table-scroll,
+    #ecom-tracker-dashboard-content #products .etd-table-scroll {
+        break-before: avoid-page !important;
+        page-break-before: avoid !important;
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-recoverable-section {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-grid-4--recoverable {
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 0.35rem !important;
+        align-items: start !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-grid-4--recoverable > .etd-panel--recoverable {
+        display: block !important;
+        width: 100% !important;
+        grid-column: 1 / -1 !important;
+        min-height: 0 !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--abandonment {
+        overflow: visible !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--recoverable {
+        min-height: 0 !important;
+        margin-bottom: 0 !important;
+        overflow: visible !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--recoverable .etd-table-scroll--fixed,
+    #ecom-tracker-dashboard-content .etd-panel--recoverable .etd-table-scroll--abandonment {
+        flex: none !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-category-departments.etd-print-categories-expanded .etd-category-child-row {
+        display: table-row !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-category-departments.etd-print-categories-expanded .etd-catalog-expand-col,
+    #ecom-tracker-dashboard-content .etd-category-departments.etd-print-categories-expanded .etd-catalog-expand-btn {
+        display: none !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-category-departments .etd-category-dept-row td.etd-col-category,
+    #ecom-tracker-dashboard-content .etd-category-departments .etd-category-child-label,
+    #ecom-tracker-dashboard-content .etd-category-departments th.etd-col-category,
+    #ecom-tracker-dashboard-content .etd-category-departments td.etd-col-category {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        overflow-wrap: anywhere !important;
+        word-break: normal !important;
+        max-width: none !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-category-departments .etd-table {
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-category-departments th.etd-col-category,
+    #ecom-tracker-dashboard-content .etd-category-departments td.etd-col-category {
+        width: 28% !important;
+    }
+
+    #ecom-tracker-dashboard-content #categories .etd-table-scroll--fixed {
+        overflow: visible !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel {
+        padding: 0.45rem 0.5rem !important;
+        margin-bottom: 0.45rem !important;
+        box-shadow: none !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel-head {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 0.35rem !important;
+        margin-bottom: 0.35rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel-head--abandonment {
+        align-items: flex-start !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel-title {
+        font-size: 9.5pt !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel-subtitle {
+        font-size: 7.5pt !important;
+        margin-top: 0.15rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-grid-2,
+    #ecom-tracker-dashboard-content .etd-grid-3,
+    #ecom-tracker-dashboard-content .etd-grid-4,
+    #ecom-tracker-dashboard-content .etd-grid-4-8 {
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 0.45rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--new-returning .etd-panel-body {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding: 0 !important;
+        width: 100% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--new-returning .etd-chart-wrap {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        aspect-ratio: 1 / 1 !important;
+        flex: 0 0 auto !important;
+        margin: 0 !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--new-returning .etd-chart-wrap canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--new-returning {
+        padding: 0.35rem 0.45rem !important;
+        align-self: flex-start !important;
+        width: min(50%, 42mm) !important;
+        max-width: min(50%, 42mm) !important;
+        box-sizing: border-box !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-grid-4-8 > #categories,
+    #ecom-tracker-dashboard-content .etd-grid-4-8 > #products,
+    #ecom-tracker-dashboard-content .etd-grid-3--abandonment > .etd-panel:last-child {
+        grid-column: auto !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-trend-chart-scroll {
+        overflow: hidden !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-chart-wrap,
+    #ecom-tracker-dashboard-content .etd-chart-wrap--trend {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        height: 200px !important;
+        min-height: 200px !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-chart-wrap.xl {
+        height: 220px !important;
+        min-height: 220px !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-chart-wrap.sm {
+        height: 165px !important;
+        min-height: 165px !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-chart-wrap.lg {
+        height: 190px !important;
+        min-height: 190px !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--new-returning .etd-chart-wrap.xs {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        aspect-ratio: 1 / 1 !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--new-returning .etd-panel-head {
+        margin-bottom: 0.1rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--new-returning .etd-panel-title {
+        font-size: 7.5pt !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-panel--new-returning .etd-new-returning-summary {
+        font-size: 6pt !important;
+        line-height: 1.25 !important;
+        margin-bottom: 0.15rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table tbody tr {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-print-unit .etd-table,
+    #ecom-tracker-dashboard-content .etd-print-unit .etd-table-scroll {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    #ecom-tracker-dashboard-content #device .etd-table,
+    #ecom-tracker-dashboard-content #device .etd-table-scroll,
+    #ecom-tracker-dashboard-content #traffic .etd-table,
+    #ecom-tracker-dashboard-content #traffic .etd-table-scroll,
+    #ecom-tracker-dashboard-content #categories .etd-table,
+    #ecom-tracker-dashboard-content #categories .etd-table-scroll,
+    #ecom-tracker-dashboard-content #products .etd-table,
+    #ecom-tracker-dashboard-content #products .etd-table-scroll {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic {
+        font-size: 6pt !important;
+        table-layout: fixed !important;
+        width: 100% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic th,
+    #ecom-tracker-dashboard-content .etd-table--traffic td {
+        padding: 0.1rem 0.12rem !important;
+        font-size: 6pt !important;
+        line-height: 1.2 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic th:first-child,
+    #ecom-tracker-dashboard-content .etd-table--traffic td:first-child {
+        width: 18% !important;
+        white-space: normal !important;
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic th:nth-child(2),
+    #ecom-tracker-dashboard-content .etd-table--traffic td:nth-child(2) {
+        width: 11% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table-scroll--traffic {
+        overflow: visible !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table-scroll,
+    #ecom-tracker-dashboard-content .etd-table-scroll--fixed {
+        max-height: none !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table {
+        width: 100% !important;
+        font-size: 7pt !important;
+        table-layout: fixed !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table thead {
+        display: table-header-group;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table th,
+    #ecom-tracker-dashboard-content .etd-table td {
+        padding: 0.15rem 0.2rem !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-col-product {
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+    }
+
+    #ecom-tracker-dashboard-content a {
+        color: inherit !important;
+        text-decoration: none !important;
+    }
 }

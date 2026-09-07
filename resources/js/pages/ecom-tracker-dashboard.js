@@ -630,7 +630,213 @@ function restoreDashboardScroll() {
 
 const dashboardRoot = document.getElementById('ecom-tracker-dashboard-content');
 
+const DASHBOARD_CHART_IDS = ['etdTrendChart', 'etdNewReturningChart', 'etdDwellChart'];
+
+let dashboardPrintSession = null;
+
+function resizeDashboardChartsForPrint() {
+    DASHBOARD_CHART_IDS.forEach((id) => {
+        const chart = Chart.getChart(id);
+
+        if (chart) {
+            chart.resize();
+        }
+    });
+}
+
+function resetNewReturningChartForPrint() {
+    const chart = Chart.getChart('etdNewReturningChart');
+
+    if (!chart) {
+        return;
+    }
+
+    chart.options.maintainAspectRatio = true;
+    chart.options.aspectRatio = 1;
+    chart.options.plugins.legend.display = false;
+    chart.options.layout = { padding: 4 };
+    chart.update('none');
+}
+
+function restoreNewReturningChartAfterPrint() {
+    const chart = Chart.getChart('etdNewReturningChart');
+
+    if (!chart) {
+        return;
+    }
+
+    chart.options.maintainAspectRatio = false;
+    chart.options.aspectRatio = undefined;
+    chart.options.plugins.legend.display = true;
+    chart.options.layout = { padding: 0 };
+    chart.update('none');
+}
+
+function expandCategoryDepartmentsForPrint() {
+    const root = document.getElementById('ecom-tracker-dashboard-content');
+
+    if (!root) {
+        return;
+    }
+
+    root.querySelectorAll('.etd-category-departments').forEach((wrap) => {
+        wrap.classList.add('etd-print-categories-expanded');
+    });
+
+    root.querySelectorAll('.etd-category-child-row').forEach((row) => {
+        row.dataset.printRestoreDisplay = row.style.display;
+        row.style.setProperty('display', 'table-row', 'important');
+    });
+}
+
+function restoreCategoryDepartmentsAfterPrint() {
+    const root = document.getElementById('ecom-tracker-dashboard-content');
+
+    if (!root) {
+        return;
+    }
+
+    root.querySelectorAll('.etd-category-departments').forEach((wrap) => {
+        wrap.classList.remove('etd-print-categories-expanded');
+    });
+
+    root.querySelectorAll('.etd-category-child-row').forEach((row) => {
+        row.style.display = row.dataset.printRestoreDisplay || '';
+        delete row.dataset.printRestoreDisplay;
+    });
+}
+
+function resetTrendChartForPrint() {
+    const wrap = document.getElementById('etdTrendChartWrap');
+    const hint = document.getElementById('etdTrendChartScrollHint');
+    const labels = D.trend?.labels || [];
+    const chart = Chart.getChart('etdTrendChart');
+
+    if (wrap) {
+        wrap.dataset.printRestoreMinWidth = wrap.style.minWidth;
+        wrap.style.minWidth = '';
+    }
+
+    if (hint) {
+        hint.hidden = true;
+    }
+
+    if (!chart || labels.length === 0) {
+        return;
+    }
+
+    chart.options.scales.x.ticks.autoSkip = labels.length > 12;
+    chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, false);
+    chart.options.scales.x.ticks.maxRotation = labels.length > 10 ? 45 : 0;
+    chart.options.scales.x.ticks.minRotation = labels.length > 10 ? 35 : 0;
+    chart.options.layout.padding.right = 0;
+    chart.options.plugins.legend.display = true;
+    chart.update('none');
+}
+
+function restoreTrendChartAfterPrint() {
+    const wrap = document.getElementById('etdTrendChartWrap');
+    const labels = D.trend?.labels || [];
+    const chart = Chart.getChart('etdTrendChart');
+
+    if (wrap) {
+        wrap.style.minWidth = wrap.dataset.printRestoreMinWidth || '';
+        delete wrap.dataset.printRestoreMinWidth;
+    }
+
+    if (labels.length === 0) {
+        return;
+    }
+
+    applyTrendChartLayout(labels.length);
+
+    if (!chart) {
+        return;
+    }
+
+    const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
+
+    chart.options.scales.x.ticks.autoSkip = !useHorizontalScroll && labels.length > 24;
+    chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, useHorizontalScroll);
+    chart.options.scales.x.ticks.maxRotation = useHorizontalScroll || labels.length > 20 ? 45 : 0;
+    chart.options.scales.x.ticks.minRotation = useHorizontalScroll ? 35 : 0;
+    chart.options.layout.padding.right = useHorizontalScroll ? 8 : 0;
+    chart.options.plugins.legend.display = !isCompactChart();
+    chart.update('none');
+}
+
+function beginDashboardPrintSession() {
+    const main = document.querySelector('main');
+
+    if (!main || dashboardPrintSession) {
+        return dashboardPrintSession;
+    }
+
+    dashboardPrintSession = {
+        scrollTop: main.scrollTop,
+        scrollLeft: main.scrollLeft,
+    };
+
+    return dashboardPrintSession;
+}
+
+function prepareDashboardForPrint() {
+    const main = document.querySelector('main');
+
+    beginDashboardPrintSession();
+    document.body.classList.add('etd-print-measure');
+
+    if (main) {
+        main.scrollTop = 0;
+        main.scrollLeft = 0;
+    }
+
+    resetTrendChartForPrint();
+    resetNewReturningChartForPrint();
+    expandCategoryDepartmentsForPrint();
+    resizeDashboardChartsForPrint();
+}
+
+function restoreDashboardAfterPrint() {
+    const main = document.querySelector('main');
+
+    document.body.classList.remove('etd-print-measure');
+    restoreCategoryDepartmentsAfterPrint();
+    restoreTrendChartAfterPrint();
+    restoreNewReturningChartAfterPrint();
+    resizeDashboardChartsForPrint();
+
+    if (main && dashboardPrintSession) {
+        main.scrollTop = dashboardPrintSession.scrollTop;
+        main.scrollLeft = dashboardPrintSession.scrollLeft;
+    } else if (main) {
+        main.scrollLeft = 0;
+    }
+
+    dashboardPrintSession = null;
+}
+
+function printEcomTrackerDashboard() {
+    beginDashboardPrintSession();
+    prepareDashboardForPrint();
+
+    requestAnimationFrame(() => {
+        resizeDashboardChartsForPrint();
+
+        requestAnimationFrame(() => {
+            window.print();
+        });
+    });
+}
+
+window.printEcomTrackerDashboard = printEcomTrackerDashboard;
+
 if (dashboardRoot) {
+    window.addEventListener('beforeprint', prepareDashboardForPrint);
+    window.addEventListener('afterprint', restoreDashboardAfterPrint);
+
+    document.getElementById('etdDashboardPrintBtn')?.addEventListener('click', printEcomTrackerDashboard);
+
     const rememberDashboardScrollForLink = (event) => {
         const link = event.target.closest('a[href]');
 

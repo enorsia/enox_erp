@@ -110,6 +110,7 @@
                             <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
                         @endif
                     </button>
+                    @include('ecom_tracker.partials.header-print-button')
                 </div>
             </div>
 
@@ -215,7 +216,7 @@
         </div>
     </div>
 
-    <div class="mb-3">
+    <div class="etd-print-lead mb-3 etd-print-unit">
         <div class="etd-panel" id="trend">
             <div class="etd-panel-head">
                 <h2 class="etd-panel-title">Shopper journey over time</h2>
@@ -232,11 +233,16 @@
         </div>
     </div>
 
-    <h2 class="etd-section-title"><span class="etd-section-num">01</span> Merchandising decisions</h2>
-    <p class="etd-section-note">Where traffic goes vs where money is made — use to reorder homepage, deprioritize dead categories, and flag products that get eyeballs but not carts.</p>
+    <section class="etd-dashboard-section">
+        <div class="etd-section-print-block etd-print-section">
+            <div class="etd-section-intro">
+                <h2 class="etd-section-title"><span class="etd-section-num">01</span> Merchandising decisions</h2>
+                <p class="etd-section-note">Where traffic goes vs where money is made — use to reorder homepage, deprioritize dead categories, and flag products that get eyeballs but not carts.</p>
+            </div>
 
-    <div class="etd-grid-4-8 mb-3">
-        <div class="etd-panel" id="categories">
+            <div class="etd-section-print-body">
+                <div class="etd-grid-4-8 mb-3">
+        <div class="etd-panel etd-print-unit" id="categories">
             <div class="etd-panel-head">
                 <div>
                     <h2 class="etd-panel-title">Category performance</h2>
@@ -260,7 +266,7 @@
             </div>
         </div>
 
-        <div class="etd-panel" id="products">
+        <div class="etd-panel etd-print-unit" id="products">
             <div class="etd-panel-head">
                 <div>
                     <h2 class="etd-panel-title">Product performance</h2>
@@ -335,11 +341,19 @@
             </div>
         </div>
     </div>
+            </div>
+        </div>
+    </section>
 
-    <h2 class="etd-section-title"><span class="etd-section-num">02</span> Recoverable sale</h2>
-    <p class="etd-section-note">Sessions at each funnel step plus completed payments — click a session to review activity.</p>
+    <section class="etd-dashboard-section">
+        <div class="etd-section-print-block etd-print-section">
+            <div class="etd-section-intro">
+                <h2 class="etd-section-title"><span class="etd-section-num">02</span> Recoverable sale</h2>
+                <p class="etd-section-note">Sessions at each funnel step plus completed payments — click a session to review activity.</p>
+            </div>
 
-    <div class="etd-recoverable-section mb-3">
+            <div class="etd-section-print-body">
+                <div class="etd-recoverable-section mb-3">
         <div class="etd-grid-4 etd-grid-4--recoverable">
         @include('ecom_tracker.partials.abandonment-panel', [
             'd' => $d,
@@ -386,11 +400,19 @@
         ])
         </div>
     </div>
+            </div>
+        </div>
+    </section>
 
-    <h2 class="etd-section-title"><span class="etd-section-num">03</span> Acquisition &amp; audience</h2>
-    <p class="etd-section-note">Device mix and where sessions originate.</p>
+    <section class="etd-dashboard-section">
+        <div class="etd-section-print-block etd-print-section">
+            <div class="etd-section-intro">
+                <h2 class="etd-section-title"><span class="etd-section-num">03</span> Acquisition &amp; audience</h2>
+                <p class="etd-section-note">Device mix and where sessions originate.</p>
+            </div>
 
-    <div class="etd-panel etd-panel--acquisition etd-panel--device-browser-full mb-3" id="device">
+            <div class="etd-section-print-body">
+                <div class="etd-panel etd-panel--acquisition etd-panel--device-browser-full etd-print-unit mb-3" id="device">
         <div class="etd-panel-head etd-panel-head--device-browser">
             <h2 class="etd-panel-title">Device &amp; browser</h2>
             <div class="etd-panel-head-actions">
@@ -405,7 +427,7 @@
         ])
     </div>
 
-    <div class="etd-panel mb-3" id="traffic">
+    <div class="etd-panel etd-print-unit mb-3" id="traffic">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Traffic sources</h2>
             @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('traffic-sources')])
@@ -423,6 +445,9 @@
             ? $activityFocusLink('duration', ['duration_bucket' => $bucket['key']])
             : null,
     ])
+            </div>
+        </div>
+    </section>
 </div>
 
 <script>

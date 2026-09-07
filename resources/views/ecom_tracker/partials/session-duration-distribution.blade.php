@@ -14,7 +14,7 @@
 
 @if ($showPanel)
     <div @class([
-        'etd-panel etd-panel--duration-distribution',
+        'etd-panel etd-panel--duration-distribution etd-print-unit',
         'mb-5' => ! $inGrid,
         'etd-panel--in-grid' => $inGrid,
         $panelClass => filled($panelClass),
