@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\SellingChartBasicInfo;
+use App\Models\SellingChartDiscount;
 use App\Models\SellingChartDiscountHistory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -11,6 +13,42 @@ use Illuminate\Support\Facades\Validator;
 
 class SellingChartController extends Controller
 {
+    public function getDiscountStyles(Request $request)
+    {
+        try {
+            $discount_status = $request->discount_status;
+
+            $designNos = SellingChartBasicInfo::query()
+                ->when(
+                    $discount_status == 2,
+                    fn($q) =>
+                    $q->whereHas('sellingChartPrices.discounts')
+                )
+                ->when(
+                    $discount_status == 3,
+                    fn($q) =>
+                    $q->doesntHave('sellingChartPrices.discounts')
+                )
+                ->pluck('design_no');
+
+            $response = [
+                'status' => true,
+                'message' => 'Selling chart discount styles fetch successfully.',
+                'data' => $designNos,
+            ];
+
+            // dd($response);
+            return response()->json($response);
+        } catch (\Throwable $th) {
+            Log::error('Selling chart discount styles fetch failed', ['error' => $th->getMessage()]);
+            return response()->json([
+                'status' => false,
+                'message' => 'Selling chart discount styles fetch failed',
+                'error' => $th->getMessage()
+            ], 500);
+        }
+    }
+
     public function getDiscountHistories(Request $request)
     {
         try {

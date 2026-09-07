@@ -21,7 +21,8 @@
             @endif
 
             {{-- ─── Page Header ─── --}}
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <form method="get" action="{{ route('admin.style.stock.index') }}">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                 <div>
                     <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                         <span class="w-8 h-8 bg-violet-500/15 rounded-lg flex items-center justify-center shrink-0">
@@ -37,7 +38,6 @@
                 </div>
 
                 @can('ecommerce.wh_stock_in_out.export')
-                    <form method="get" action="{{ route('admin.style.stock.index') }}">
                         <button type="submit" name="action" value="export_stock_analysis"
                             class="flex items-center gap-2 px-3.5 py-2 text-[13px] font-semibold rounded-xl bg-accent-400 hover:bg-accent-600 text-white transition-colors shadow-sm">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -46,7 +46,6 @@
                             </svg>
                             Export Report
                         </button>
-                    </form>
                 @endcan
             </div>
 
@@ -64,7 +63,7 @@
                 <div class="grid grid-cols-1 xl:grid-cols-5 gap-4 items-end">
                     <div>
                         <label class="f-label" for="search_department">Department</label>
-                        <select id="search_department" class="f-input custom-select">
+                        <select id="search_department" name="search_department" class="f-input custom-select">
                             <option value="">-- Select Department --</option>
                             @foreach ($style_stocks as $deptKey => $department)
                                 <option value="{{ $deptKey }}">{{ $department['department_name'] }}</option>
@@ -74,19 +73,19 @@
 
                     <div>
                         <label class="f-label" for="search_category">Category</label>
-                        <select id="search_category" class="f-input custom-select" disabled>
+                        <select id="search_category" name="search_category" class="f-input custom-select" disabled>
                             <option value="">-- Select Category --</option>
                         </select>
                     </div>
 
                     <div>
                         <label class="f-label" for="search_product">Product Code</label>
-                        <input type="text" id="search_product" class="f-input" placeholder="Enter product code">
+                        <input type="text" id="search_product" name="search_product" class="f-input" placeholder="Enter product code">
                     </div>
 
                     <div>
                         <label class="f-label" for="discount_status">Discount</label>
-                        <select id="discount_status" class="f-input custom-select">
+                        <select id="discount_status" name="discount_status" class="f-input custom-select">
                             <option value="1">All items</option>
                             <option value="2">Non discount items</option>
                             <option value="3">Discount items</option>
@@ -113,6 +112,7 @@
                     </div>
                 </div>
             </div>
+            </form>
 
             @if (!$style_stocks->isEmpty())
                 {{-- ─── Discount Items Summary (collapsible, JS-rendered) ─── --}}
