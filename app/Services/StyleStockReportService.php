@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\ApiServices\StyleStockService;
+use App\Models\SellingChartBasicInfo;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -48,6 +49,7 @@ class StyleStockReportService
     public function exportReport(array $filters = []): array
     {
         $filters['action'] = 'export_stock_analysis';
+        $filters = $this->resolveDiscountStyleFilters($filters);
 
         try {
             $response = $this->apiService->export($filters);
@@ -134,5 +136,28 @@ class StyleStockReportService
         }
 
         return 'Style Stock Report.xlsx';
+    }
+
+    protected function resolveDiscountStyleFilters(array $filters): array
+    {
+        $discountStatus = (int) ($filters['discount_status'] ?? 1);
+
+        if (in_array($discountStatus, [2, 3], true)) {
+            $filters['discount_styles'] = SellingChartBasicInfo::query()
+                ->when(
+                    $discountStatus === 3,
+                    fn ($query) => $query->whereHas('sellingChartPrices.discounts')
+                )
+                ->when(
+                    $discountStatus === 2,
+                    fn ($query) => $query->doesntHave('sellingChartPrices.discounts')
+                )
+                ->pluck('design_no')
+                ->all();
+        }
+
+        unset($filters['discount_status']);
+
+        return $filters;
     }
 }

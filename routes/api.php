@@ -16,7 +16,6 @@ Route::middleware(['throttle:120,1', VerifyTrackerApiKey::class])
 Route::middleware('internal.api')->group(function () {
     Route::controller(SellingChartController::class)->group(function () {
         Route::get('selling-chart/get-discount-histories', 'getDiscountHistories');
-        Route::get('selling-chart/get-discount-styles', 'getDiscountStyles');
         Route::post('selling-chart/update-discount-history', 'updateDiscountHistory');
     });
 });
