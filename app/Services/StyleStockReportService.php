@@ -49,9 +49,7 @@ class StyleStockReportService
     public function exportReport(array $filters = []): array
     {
         $filters['action'] = 'export_stock_analysis';
-        $filters = $this->resolveDiscountStyleFilters($filters);
         $filters['platform_discounts_by_style'] = $this->buildPlatformDiscountsByStyle();
-
         try {
             $response = $this->apiService->export($filters);
 
@@ -139,44 +137,37 @@ class StyleStockReportService
         return 'Style Stock Report.xlsx';
     }
 
-    protected function resolveDiscountStyleFilters(array $filters): array
-    {
-        $discountStatus = (int) ($filters['discount_status'] ?? 1);
-
-        if (in_array($discountStatus, [2, 3], true)) {
-            $filters['discount_styles'] = SellingChartBasicInfo::query()
-                ->when(
-                    $discountStatus === 3,
-                    fn ($query) => $query->whereHas('sellingChartPrices.discounts')
-                )
-                ->when(
-                    $discountStatus === 2,
-                    fn ($query) => $query->doesntHave('sellingChartPrices.discounts')
-                )
-                ->pluck('design_no')
-                ->all();
-        }
-
-        unset($filters['discount_status']);
-
-        return $filters;
-    }
-
     protected function buildPlatformDiscountsByStyle(): array
     {
-        return SellingChartBasicInfo::select('id', 'design_no')->with([
-            'sellingChartPrices:id,basic_info_id,range',
-            'sellingChartPrices.discounts:id,selling_chart_price_id,platform_id,price',
-            'sellingChartPrices.discounts.platform:id,code',
-        ])->get()->mapWithKeys(function (SellingChartBasicInfo $scInfo) {
-            $appliedDiscounts = $this->buildAppliedDiscounts($scInfo);
+        return SellingChartBasicInfo::select('id', 'design_no')
+            ->whereHas('sellingChartPrices.discounts', function ($query) {
+                $query->where('price', '>', 0);
+            })
+            ->with([
+                'sellingChartPrices:id,basic_info_id,range',
+                'sellingChartPrices.discounts:id,selling_chart_price_id,platform_id,price',
+                'sellingChartPrices.discounts.platform:id,code',
+            ])
+            ->get()
+            ->sortByDesc(fn (SellingChartBasicInfo $scInfo) => $this->chartHasDiscounts($scInfo))
+            ->unique('design_no')
+            ->mapWithKeys(function (SellingChartBasicInfo $scInfo) {
+                $appliedDiscounts = $this->buildAppliedDiscounts($scInfo);
 
-            if ($appliedDiscounts === null) {
-                return [];
-            }
+                if ($appliedDiscounts === null) {
+                    return [];
+                }
 
-            return [$scInfo->design_no => $appliedDiscounts];
-        })->all();
+                return [$scInfo->design_no => $appliedDiscounts];
+            })
+            ->all();
+    }
+
+    protected function chartHasDiscounts(SellingChartBasicInfo $scInfo): bool
+    {
+        return $scInfo->sellingChartPrices
+            ?->flatMap->discounts
+            ?->contains(fn ($discount) => $discount->price && $discount->platform) ?? false;
     }
 
     protected function buildAppliedDiscounts(SellingChartBasicInfo $scInfo): ?array
@@ -204,6 +195,10 @@ class StyleStockReportService
                 }
             }
 
+            if ($platformRanges === []) {
+                return null;
+            }
+
             return [
                 'has_range' => true,
                 'platform_ranges' => $platformRanges,
@@ -219,6 +214,10 @@ class StyleStockReportService
             ])
             ->values()
             ->all();
+
+        if ($platformDiscounts === []) {
+            return null;
+        }
 
         return [
             'has_range' => false,
