@@ -172,7 +172,7 @@ class SalesChartController extends Controller
                 $shippingCost = 2.6;
                 $platformIds = [1, 2];
 
-                if($priceValue <= 0) continue;
+                if($priceValue <= 0 || $priceValue == $poH['selling_price']) continue;
 
                 foreach($platformIds as $platformId) {
                     if(SellingChartDiscount::where('selling_chart_price_id', $sl_price_id)->where('platform_id', $platformId)->exists()) {

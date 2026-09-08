@@ -50,6 +50,7 @@ class StyleStockReportService
     {
         $filters['action'] = 'export_stock_analysis';
         $filters = $this->resolveDiscountStyleFilters($filters);
+        $filters['platform_discounts_by_style'] = $this->buildPlatformDiscountsByStyle();
 
         try {
             $response = $this->apiService->export($filters);
@@ -159,5 +160,70 @@ class StyleStockReportService
         unset($filters['discount_status']);
 
         return $filters;
+    }
+
+    protected function buildPlatformDiscountsByStyle(): array
+    {
+        return SellingChartBasicInfo::select('id', 'design_no')->with([
+            'sellingChartPrices:id,basic_info_id,range',
+            'sellingChartPrices.discounts:id,selling_chart_price_id,platform_id,price',
+            'sellingChartPrices.discounts.platform:id,code',
+        ])->get()->mapWithKeys(function (SellingChartBasicInfo $scInfo) {
+            $appliedDiscounts = $this->buildAppliedDiscounts($scInfo);
+
+            if ($appliedDiscounts === null) {
+                return [];
+            }
+
+            return [$scInfo->design_no => $appliedDiscounts];
+        })->all();
+    }
+
+    protected function buildAppliedDiscounts(SellingChartBasicInfo $scInfo): ?array
+    {
+        $firstPrice = $scInfo->sellingChartPrices?->first();
+
+        if (! $firstPrice) {
+            return null;
+        }
+
+        if ($firstPrice->range) {
+            $platformRanges = [];
+
+            foreach ($scInfo->sellingChartPrices as $price) {
+                foreach ($price->discounts as $discount) {
+                    if (! $discount->price || ! $discount->platform) {
+                        continue;
+                    }
+
+                    $code = $discount->platform->code;
+                    $platformRanges[$code][] = [
+                        'range' => $price->range,
+                        'price' => $discount->price,
+                    ];
+                }
+            }
+
+            return [
+                'has_range' => true,
+                'platform_ranges' => $platformRanges,
+                'platform_discounts' => [],
+            ];
+        }
+
+        $platformDiscounts = $firstPrice->discounts
+            ->filter(fn ($discount) => $discount->price && $discount->platform)
+            ->map(fn ($discount) => [
+                'code' => $discount->platform->code,
+                'price' => $discount->price,
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'has_range' => false,
+            'platform_ranges' => [],
+            'platform_discounts' => $platformDiscounts,
+        ];
     }
 }
