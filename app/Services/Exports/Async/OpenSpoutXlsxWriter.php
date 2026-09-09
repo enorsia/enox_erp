@@ -199,6 +199,10 @@ class OpenSpoutXlsxWriter implements StreamingExportWriter
             return $this->castNumericValue($value);
         }
 
+        if ($this->layout !== null && $this->layout->shouldFormatAsQuantity($index)) {
+            return $this->castIntegerValue($value);
+        }
+
         if ($index === $this->profile->quantityColumn || $index === 0 || $index === $this->profile->orderNumberColumn) {
             return $this->castIntegerValue($value);
         }

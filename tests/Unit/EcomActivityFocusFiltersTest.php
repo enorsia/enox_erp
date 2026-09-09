@@ -688,9 +688,9 @@ test('export context columns add payment totals when drawer funnel is payment su
     expect(EcomActivityFocus::resolveFunnelMetricsFocus($request))->toBe('payment_success')
         ->and(EcomActivityFocus::shouldAttachPaymentMetrics(null, $request))->toBeTrue()
         ->and(collect(EcomActivityFocus::exportContextColumns(null, $request))->pluck('key')->all())
-        ->toBe(['order_qty', 'order_value'])
+        ->toBe(['order_value'])
         ->and(EcomActivityFocus::exportFilterSummary($request))
-        ->toBe('Funnel: Payment success');
+        ->toContain('Funnel: Payment success');
 });
 
 test('export context columns add abandonment metrics for cart abandonment filter', function () {

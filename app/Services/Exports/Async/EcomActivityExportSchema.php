@@ -30,8 +30,8 @@ final class EcomActivityExportSchema
     private const EVENT_MERGE_HEADINGS = [
         'Commerce stage',
         'Order ID',
+        'Sum qty',
         'Order total',
-        'Commerce detail',
     ];
 
     /**
@@ -52,20 +52,17 @@ final class EcomActivityExportSchema
             'Phone',
             'Commerce stage',
             'Order ID',
-            'Order total',
         ];
-
-        if (! self::shouldOmitCommerceDetailColumn($request)) {
-            $headings[] = 'Commerce detail';
-        }
 
         $headings = array_merge($headings, [
             'Product title',
             'Size',
             'Color',
             'Product qty',
+            'Sum qty',
             'Unit price',
             'Line total',
+            'Order total',
         ]);
 
         if ($request->filled('department') || $request->filled('category')) {
@@ -92,7 +89,40 @@ final class EcomActivityExportSchema
      */
     public static function trafficColumnIndices(array $headings): array
     {
-        return self::indicesForLabels($headings, ['UTM source', 'Traffic type', 'Paid click ID']);
+        return self::indicesForLabels($headings, ['Paid click ID']);
+    }
+
+    /**
+     * @param  array<int, string>  $headings
+     * @return array<int, int>
+     */
+    public static function centerAlignedColumnIndices(array $headings): array
+    {
+        return self::indicesForLabels($headings, [
+            'Size',
+            'Color',
+            'Product qty',
+            'Sum qty',
+            'Unit price',
+            'Line total',
+            'Order total',
+            'Order value',
+            'Duration',
+            'UTM source',
+            'Traffic type',
+        ]);
+    }
+
+    /**
+     * @param  array<int, string>  $headings
+     * @return array<int, int>
+     */
+    public static function quantityColumnIndices(array $headings): array
+    {
+        return self::indicesForLabels($headings, [
+            'Product qty',
+            'Sum qty',
+        ]);
     }
 
     /**
@@ -158,8 +188,9 @@ final class EcomActivityExportSchema
                 $session,
                 $metrics,
                 $request,
-                self::fallbackCommerceValues($metrics),
+                self::fallbackEventHeaderValues($metrics),
                 self::emptyProductValues(),
+                self::fallbackEventSummaryValues($metrics),
                 $sessionSerial,
             );
 
@@ -171,7 +202,8 @@ final class EcomActivityExportSchema
         }
 
         foreach ($events as $event) {
-            $eventValues = self::eventValues($event);
+            $eventHeaderValues = self::eventHeaderValues($event);
+            $eventSummaryValues = self::eventSummaryValues($event);
             $products = is_array($event['products'] ?? null) ? $event['products'] : [];
             $eventRows = [];
 
@@ -180,8 +212,9 @@ final class EcomActivityExportSchema
                     $session,
                     $metrics,
                     $request,
-                    $eventValues,
+                    $eventHeaderValues,
                     self::emptyProductValues(),
+                    $eventSummaryValues,
                     $sessionSerial,
                 );
             } else {
@@ -190,8 +223,9 @@ final class EcomActivityExportSchema
                         $session,
                         $metrics,
                         $request,
-                        $eventValues,
+                        $eventHeaderValues,
                         self::productValues($product),
+                        $eventSummaryValues,
                         $sessionSerial,
                     );
                 }
@@ -284,44 +318,20 @@ final class EcomActivityExportSchema
         return $ranges;
     }
 
-    public static function shouldOmitCommerceDetailColumn(Request $request): bool
-    {
-        $funnelKeys = EcomActivityFocus::drawerFunnelFilterValues($request);
-        $focus = $request->input('focus');
-
-        if (EcomActivityFocus::isValid($focus)) {
-            if (in_array($focus, ['payment_success', 'conversion'], true)) {
-                return true;
-            }
-
-            if (! empty(EcomActivityFocus::definition($focus)['funnel'])) {
-                return false;
-            }
-        }
-
-        if ($funnelKeys === ['payment_success']) {
-            return true;
-        }
-
-        if ($request->filled('has_order') && $request->has_order === '1' && $funnelKeys === []) {
-            return true;
-        }
-
-        return false;
-    }
-
     /**
      * @param  array<string, mixed>  $metrics
-     * @param  array<int, mixed>  $eventValues
+     * @param  array<int, mixed>  $eventHeaderValues
      * @param  array<int, mixed>  $productValues
+     * @param  array<int, mixed>  $eventSummaryValues
      * @return array<int, mixed>
      */
     private static function buildRow(
         ActivityEcomUser $session,
         array $metrics,
         Request $request,
-        array $eventValues,
+        array $eventHeaderValues,
         array $productValues,
+        array $eventSummaryValues,
         int $serial,
     ): array {
         $user = self::userValues($session);
@@ -333,14 +343,16 @@ final class EcomActivityExportSchema
             $user['name'] !== '' ? $user['name'] : '—',
             $user['email'] !== '' ? $user['email'] : '—',
             $user['phone'] !== '' ? $user['phone'] : '—',
-            ...$eventValues,
+            ...$eventHeaderValues,
+            $productValues[0],
+            $productValues[1],
+            $productValues[2],
+            $productValues[3],
+            $eventSummaryValues[0],
+            $productValues[4],
+            $productValues[5],
+            $eventSummaryValues[1],
         ];
-
-        if (! self::shouldOmitCommerceDetailColumn($request)) {
-            $row[] = self::formatCommerceDetail($metrics);
-        }
-
-        $row = array_merge($row, $productValues);
 
         if ($request->filled('department') || $request->filled('category')) {
             $catalogPath = trim((string) ($metrics['catalog_path'] ?? ''));
@@ -405,10 +417,23 @@ final class EcomActivityExportSchema
      * @param  array<string, mixed>  $event
      * @return array<int, mixed>
      */
-    private static function eventValues(array $event): array
+    private static function eventHeaderValues(array $event): array
     {
         $stage = (string) ($event['stage_label'] ?? $event['stage'] ?? '—');
         $orderId = self::orderIdFromEvent($event);
+
+        return [
+            $stage !== '' ? $stage : '—',
+            $orderId !== '' ? $orderId : '—',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     * @return array<int, mixed>
+     */
+    private static function eventSummaryValues(array $event): array
+    {
         $eventTotal = self::parseMoney($event['cart_total'] ?? null);
 
         if ($eventTotal === null) {
@@ -417,8 +442,7 @@ final class EcomActivityExportSchema
         }
 
         return [
-            $stage !== '' ? $stage : '—',
-            $orderId !== '' ? $orderId : '—',
+            self::sumQtyFromEvent($event),
             $eventTotal ?? '—',
         ];
     }
@@ -427,17 +451,30 @@ final class EcomActivityExportSchema
      * @param  array<string, mixed>  $metrics
      * @return array<int, mixed>
      */
-    private static function fallbackCommerceValues(array $metrics): array
+    private static function fallbackEventHeaderValues(array $metrics): array
     {
         $label = trim((string) ($metrics['commerce_label'] ?? ''));
         $stage = $label !== '' ? $label : self::stageFromDisplay((string) ($metrics['commerce_display'] ?? ''));
-        $total = is_numeric($metrics['commerce_value'] ?? null)
-            ? round((float) $metrics['commerce_value'], 2)
-            : self::parseMoney($metrics['commerce_display'] ?? null);
 
         return [
             $stage !== '' ? $stage : '—',
             '—',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $metrics
+     * @return array<int, mixed>
+     */
+    private static function fallbackEventSummaryValues(array $metrics): array
+    {
+        $total = is_numeric($metrics['commerce_value'] ?? null)
+            ? round((float) $metrics['commerce_value'], 2)
+            : self::parseMoney($metrics['commerce_display'] ?? null);
+        $sumQty = is_numeric($metrics['order_qty'] ?? null) ? (int) $metrics['order_qty'] : '—';
+
+        return [
+            $sumQty,
             $total ?? '—',
         ];
     }
@@ -477,16 +514,6 @@ final class EcomActivityExportSchema
     /**
      * @param  array<string, mixed>  $metrics
      */
-    private static function formatCommerceDetail(array $metrics): string
-    {
-        $meta = trim((string) ($metrics['commerce_meta'] ?? ''));
-
-        return $meta !== '' ? $meta : '—';
-    }
-
-    /**
-     * @param  array<string, mixed>  $metrics
-     */
     private static function formatMetric(string $key, array $metrics): mixed
     {
         $value = $metrics[$key] ?? '—';
@@ -500,6 +527,41 @@ final class EcomActivityExportSchema
         }
 
         return $value;
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private static function sumQtyFromEvent(array $event): mixed
+    {
+        $products = is_array($event['products'] ?? null) ? $event['products'] : [];
+        $sum = 0;
+        $hasQty = false;
+
+        foreach ($products as $product) {
+            if (! is_array($product) || ! is_numeric($product['qty'] ?? null)) {
+                continue;
+            }
+
+            $sum += (int) $product['qty'];
+            $hasQty = true;
+        }
+
+        if ($hasQty) {
+            return $sum;
+        }
+
+        if (is_numeric($event['cart_qty'] ?? null)) {
+            return (int) $event['cart_qty'];
+        }
+
+        $fromGroups = self::fieldValueFromInfoGroups($event, 'Quantity');
+
+        if ($fromGroups !== null && is_numeric($fromGroups)) {
+            return (int) $fromGroups;
+        }
+
+        return '—';
     }
 
     /**
@@ -669,10 +731,7 @@ final class EcomActivityExportSchema
 
     private static function exportContextHeadingLabel(string $label): string
     {
-        return match ($label) {
-            'Orders' => 'Order qty',
-            default => $label,
-        };
+        return $label;
     }
 
     /**

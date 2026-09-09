@@ -65,7 +65,7 @@ final class OpenSpoutSpreadsheetStyler
             ->setCellAlignment($dataAlignment)
             ->setShouldWrapText(false)
             ->setBorder(new Border(
-                new BorderPart(Border::BOTTOM, Color::BLACK, Border::WIDTH_THICK, Border::STYLE_SOLID),
+                new BorderPart(Border::BOTTOM, Color::BLACK, Border::WIDTH_MEDIUM, Border::STYLE_SOLID),
             ));
 
         $this->totalsRowStyle = (new Style)
@@ -92,10 +92,11 @@ final class OpenSpoutSpreadsheetStyler
     public function cellStyleForColumn(int $columnIndex, bool $isOrderEnd, bool $verticallyCentered = false): Style
     {
         $rightAligned = $this->layout->shouldRightAlignColumn($columnIndex);
+        $centerAligned = $this->layout->shouldCenterAlignColumn($columnIndex);
         $cacheKey = ($isOrderEnd ? 'order' : 'row')
             .':'.$columnIndex
             .':'.($verticallyCentered ? 'vc' : 'vt')
-            .':'.($rightAligned ? 'r' : 'l')
+            .':'.($rightAligned ? 'r' : ($centerAligned ? 'c' : 'l'))
             .':'.$this->numberFormatForColumn($columnIndex);
 
         if (isset($this->cellStyleCache[$cacheKey])) {
@@ -105,7 +106,11 @@ final class OpenSpoutSpreadsheetStyler
         $style = new Style;
         $baseStyle = $this->baseDataStyle($isOrderEnd);
 
-        $style->setCellAlignment($rightAligned ? CellAlignment::RIGHT : $baseStyle->getCellAlignment());
+        $style->setCellAlignment(match (true) {
+            $rightAligned => CellAlignment::RIGHT,
+            $centerAligned => CellAlignment::CENTER,
+            default => $baseStyle->getCellAlignment(),
+        });
         $style->setShouldWrapText(false);
 
         if ($verticallyCentered) {
@@ -140,6 +145,10 @@ final class OpenSpoutSpreadsheetStyler
     {
         if ($this->layout->discountColumn === $columnIndex) {
             return self::DISCOUNT_FORMAT;
+        }
+
+        if ($this->layout->shouldFormatAsQuantity($columnIndex)) {
+            return '0';
         }
 
         if (in_array($columnIndex, $this->layout->extraMoneyColumns, true)) {

@@ -381,7 +381,7 @@ final class EcomActivityFocus
 
         foreach (self::resolveExportFunnelKeys($focus, $request) as $funnelKey) {
             $keys = array_merge($keys, match ($funnelKey) {
-                'payment_success' => ['order_qty', 'order_value'],
+                'payment_success' => ['order_value'],
                 'cart_abandonment' => ['cart_qty', 'cart_value', 'abandoned_at'],
                 'begin_checkout_abandonment', 'proceed_checkout_abandonment' => ['checkout_qty', 'checkout_value', 'abandoned_at'],
                 default => [],

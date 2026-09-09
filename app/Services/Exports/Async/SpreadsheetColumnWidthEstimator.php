@@ -221,6 +221,7 @@ final class SpreadsheetColumnWidthEstimator
             'Line total' => 12.0,
             'Orders' => 12.0,
             'Order qty' => 10.0,
+            'Sum qty' => 10.0,
             'Order value' => 14.0,
             'Cart qty' => 12.0,
             'Cart value' => 14.0,

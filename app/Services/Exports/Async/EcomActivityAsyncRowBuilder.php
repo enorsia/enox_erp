@@ -22,7 +22,11 @@ class EcomActivityAsyncRowBuilder
      * @param  Collection<int, ActivityEcomUser>  $sessions
      * @param  array<string, array<string, mixed>>  $rowMetrics
      * @param  array<string, mixed>  $queryParams
-     * @return array{rows: array<int, array<int|string, mixed>>, merge_ranges: array<int, array{column: int, start_row: int, end_row: int}>}
+     * @return array{
+     *     rows: array<int, array<int|string, mixed>>,
+     *     merge_ranges: array<int, array{column: int, start_row: int, end_row: int}>,
+     *     order_last_indices: array<int, int>
+     * }
      */
     public static function fromSessions(
         Collection $sessions,
@@ -35,6 +39,7 @@ class EcomActivityAsyncRowBuilder
         $headings = self::headings($queryParams);
         $rows = [];
         $mergeRanges = [];
+        $orderLastIndices = [];
         $currentRow = $dataRowStart;
 
         foreach ($sessions as $session) {
@@ -66,12 +71,14 @@ class EcomActivityAsyncRowBuilder
                 $rows[] = $row;
             }
 
+            $orderLastIndices[] = count($rows) - 1;
             $currentRow += $sessionRowCount;
         }
 
         return [
             'rows' => $rows,
             'merge_ranges' => $mergeRanges,
+            'order_last_indices' => $orderLastIndices,
         ];
     }
 }

@@ -18,13 +18,14 @@ test('export headings focus on management columns', function () {
             'Paid click ID',
             'Commerce stage',
             'Order ID',
-            'Order total',
             'Product title',
             'Size',
             'Color',
             'Product qty',
+            'Sum qty',
             'Unit price',
             'Line total',
+            'Order total',
             'Duration',
         )
         ->and($headings)->not->toContain(
@@ -46,18 +47,18 @@ test('payment success filter omits commerce detail and adds order context column
         'funnel' => ['payment_success'],
     ]);
 
-    expect($headings)->not->toContain('Commerce detail')
-        ->and($headings)->toContain('Order qty', 'Order value')
-        ->and($headings)->not->toContain('Orders');
+    expect($headings)->not->toContain('Commerce detail', 'Order qty')
+        ->and($headings)->toContain('Sum qty', 'Order total', 'Order value');
 });
 
-test('cart abandonment filter keeps commerce detail column', function () {
+test('cart abandonment filter keeps abandonment context columns', function () {
     $headings = EcomActivityExportSchema::headings([
         'period' => '7d',
         'funnel' => ['cart_abandonment'],
     ]);
 
-    expect($headings)->toContain('Commerce detail', 'Cart qty', 'Cart value', 'Abandoned');
+    expect($headings)->not->toContain('Commerce detail')
+        ->and($headings)->toContain('Cart qty', 'Cart value', 'Abandoned');
 });
 
 test('registered user columns are populated separately', function () {
@@ -192,11 +193,13 @@ test('payment event expands to one row per product line', function () {
         ->and($rows[1][0])->toBe('')
         ->and($rows[0][7])->toBe('104521')
         ->and($rows[1][7])->toBe('')
-        ->and($rows[0][8])->toBe(89.99)
-        ->and($rows[0][9])->toBe('Silk Blouse (SKU1)')
+        ->and($rows[0][8])->toBe('Silk Blouse (SKU1)')
+        ->and($rows[0][12])->toBe(2)
+        ->and($rows[1][12])->toBe('')
         ->and($rows[0][13])->toBe(45.0)
         ->and($rows[0][14])->toBe(45.0)
-        ->and($rows[1][9])->toBe('Trousers (SKU2)')
+        ->and($rows[0][15])->toBe(89.99)
+        ->and($rows[1][8])->toBe('Trousers (SKU2)')
         ->and($rows[1][14])->toBe(44.99)
         ->and($serial)->toBe(2);
 });
@@ -235,7 +238,8 @@ test('async row builder increments serial per session and builds merge ranges', 
         ->and($built['rows'][0][0])->toBe(1)
         ->and($built['rows'][1][0])->toBe('')
         ->and($serial)->toBe(2)
-        ->and($built['merge_ranges'])->not->toBeEmpty();
+        ->and($built['merge_ranges'])->not->toBeEmpty()
+        ->and($built['order_last_indices'])->toBe([1]);
 
     $sessionMerge = collect($built['merge_ranges'])->first(
         fn (array $range) => $range['column'] === 0 && $range['start_row'] === 7 && $range['end_row'] === 8,
@@ -280,9 +284,10 @@ test('product view commerce event expands to export rows with product columns', 
 
     expect($expanded['rows'])->toHaveCount(1)
         ->and($expanded['rows'][0][6])->toBe('View')
-        ->and($expanded['rows'][0][10])->toBe('Silk Blouse (SKU1)')
-        ->and($expanded['rows'][0][11])->toBe('M')
-        ->and($expanded['rows'][0][12])->toBe('Red')
+        ->and($expanded['rows'][0][8])->toBe('Silk Blouse (SKU1)')
+        ->and($expanded['rows'][0][9])->toBe('M')
+        ->and($expanded['rows'][0][10])->toBe('Red')
+        ->and($expanded['rows'][0][13])->toBe(45.0)
         ->and($expanded['rows'][0][14])->toBe(45.0);
 });
 
@@ -321,7 +326,7 @@ test('category view commerce event expands with category title in product column
 
     expect($expanded['rows'])->toHaveCount(1)
         ->and($expanded['rows'][0][6])->toBe('Category view')
-        ->and($expanded['rows'][0][10])->toBe('Women → Dresses');
+        ->and($expanded['rows'][0][8])->toBe('Women → Dresses');
 });
 
 test('merge ranges include event level columns for multi product orders', function () {
@@ -466,5 +471,56 @@ test('traffic columns are placed on the far right after duration', function () {
         'UTM source',
         'Traffic type',
         'Paid click ID',
+    ]);
+});
+
+test('center aligned columns include only requested export columns', function () {
+    $headings = EcomActivityExportSchema::headings([
+        'period' => '30d',
+        'funnel' => ['payment_success'],
+    ]);
+
+    expect(EcomActivityExportSchema::centerAlignedColumnIndices($headings))->toContain(
+        array_search('Size', $headings, true),
+        array_search('Color', $headings, true),
+        array_search('Product qty', $headings, true),
+        array_search('Sum qty', $headings, true),
+        array_search('Unit price', $headings, true),
+        array_search('Line total', $headings, true),
+        array_search('Order total', $headings, true),
+        array_search('Order value', $headings, true),
+        array_search('Duration', $headings, true),
+        array_search('UTM source', $headings, true),
+        array_search('Traffic type', $headings, true),
+    );
+});
+
+test('quantity columns are excluded from decimal formatting', function () {
+    $headings = EcomActivityExportSchema::headings([
+        'period' => '30d',
+        'funnel' => ['payment_success'],
+    ]);
+
+    $layout = \App\Services\Exports\Async\SpreadsheetExportLayout::fromProfile(
+        \App\Services\Exports\Async\SpreadsheetWriterProfile::ecomActivity($headings),
+        $headings,
+    );
+
+    expect($layout->shouldFormatAsQuantity(array_search('Product qty', $headings, true)))->toBeTrue()
+        ->and($layout->shouldFormatAsQuantity(array_search('Sum qty', $headings, true)))->toBeTrue()
+        ->and($layout->shouldFormatAsQuantity(array_search('Unit price', $headings, true)))->toBeFalse();
+});
+
+test('product columns are ordered qty sum price line total then order total', function () {
+    $headings = EcomActivityExportSchema::headings(['period' => '7d']);
+
+    $productQtyIndex = array_search('Product qty', $headings, true);
+
+    expect(array_slice($headings, $productQtyIndex, 5))->toBe([
+        'Product qty',
+        'Sum qty',
+        'Unit price',
+        'Line total',
+        'Order total',
     ]);
 });

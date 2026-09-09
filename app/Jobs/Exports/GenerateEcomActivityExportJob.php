@@ -269,6 +269,7 @@ class GenerateEcomActivityExportJob implements ShouldQueue
 
         $writer->writeRows($built['rows'], [
             'merge_ranges' => $built['merge_ranges'],
+            'order_last_indices' => $built['order_last_indices'] ?? [],
         ]);
 
         $currentDataRow += count($built['rows']);

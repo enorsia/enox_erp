@@ -31,6 +31,8 @@ final class SpreadsheetExportLayout
         public readonly array $extraMoneyColumns = [],
         public readonly array $verticallyCenteredColumns = [],
         public readonly array $rightAlignedColumns = [],
+        public readonly array $centerAlignedColumns = [],
+        public readonly array $quantityColumns = [],
     ) {}
 
     public function shouldVerticallyCenterColumn(int $columnIndex): bool
@@ -41,6 +43,16 @@ final class SpreadsheetExportLayout
     public function shouldRightAlignColumn(int $columnIndex): bool
     {
         return in_array($columnIndex, $this->rightAlignedColumns, true);
+    }
+
+    public function shouldCenterAlignColumn(int $columnIndex): bool
+    {
+        return in_array($columnIndex, $this->centerAlignedColumns, true);
+    }
+
+    public function shouldFormatAsQuantity(int $columnIndex): bool
+    {
+        return in_array($columnIndex, $this->quantityColumns, true);
     }
 
     /**
@@ -165,9 +177,11 @@ final class SpreadsheetExportLayout
                 discountColumn: null,
                 totalsRow: null,
                 companyStyleEndColumn: $profile->columnCount - 1,
-                hasOrderSeparators: false,
+                hasOrderSeparators: true,
                 verticallyCenteredColumns: EcomActivityExportSchema::mergeColumnIndices($headings)['all'],
                 rightAlignedColumns: EcomActivityExportSchema::trafficColumnIndices($headings),
+                centerAlignedColumns: EcomActivityExportSchema::centerAlignedColumnIndices($headings),
+                quantityColumns: EcomActivityExportSchema::quantityColumnIndices($headings),
             ),
             default => new self(
                 profile: $profile,
