@@ -89,11 +89,11 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
             @canany([
-                ...array_keys(Cache::get('permissions.available', [])['grouped']['general_chart'] ?? []),
-                ...array_keys(Cache::get('permissions.available', [])['grouped']['general_fabrication'] ?? []),
-                ...array_keys(Cache::get('permissions.available', [])['grouped']['general_expense'] ?? []),
-                ...array_keys(Cache::get('permissions.available', [])['grouped']['general_forecasting'] ?? []),
-                ...array_keys(Cache::get('permissions.available', [])['grouped']['general_discounts'] ?? [])
+                ...array_keys(avaiablePermissionsMap()['grouped']['general_chart'] ?? []),
+                ...array_keys(avaiablePermissionsMap()['grouped']['general_fabrication'] ?? []),
+                ...array_keys(avaiablePermissionsMap()['grouped']['general_expense'] ?? []),
+                ...array_keys(avaiablePermissionsMap()['grouped']['general_forecasting'] ?? []),
+                ...array_keys(avaiablePermissionsMap()['grouped']['general_discounts'] ?? [])
             ])
                 <!-- Selling Chart -->
                 <a href="{{ route('admin.selling_chart.index') }}"

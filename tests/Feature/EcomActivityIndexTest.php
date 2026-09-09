@@ -25,21 +25,113 @@ test('ecom activity index searches by user name and email', function () {
 
     $this->actingAs($user);
 
+    $sessionId = Str::uuid()->toString();
+
     ActivityEcomUser::query()->create([
-        'session_id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
         'user_name' => 'Jane Shopper',
         'user_email' => 'jane@example.com',
         'device_type' => 'desktop',
         'last_active_at' => now(),
     ]);
 
-    $this->get(route('admin.ecom-activity.index', ['search' => 'jane@example.com']))
+    $this->get(route('admin.ecom-activity.index', ['search' => 'jane@example.com', 'period' => 'all']))
         ->assertOk()
         ->assertSee('jane@example.com');
 
-    $this->get(route('admin.ecom-activity.index', ['search' => 'Jane Shopper']))
+    $this->get(route('admin.ecom-activity.index', ['search' => 'Jane Shopper', 'period' => 'all']))
         ->assertOk()
         ->assertSee('Jane Shopper');
+});
+
+test('ecom activity keyword search does not treat search as catalog-only filter', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    $emailSession = Str::uuid()->toString();
+    $decoySession = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $emailSession,
+        'user_email' => 'dumiemaunde@gmail.com',
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $decoySession,
+        'user_email' => 'other@example.com',
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+    ]);
+
+    $this->get(route('admin.ecom-activity.index', [
+        'search' => 'dumiemaunde@gmail.com',
+        'period' => 'all',
+    ]))
+        ->assertOk()
+        ->assertSee('dumiemaunde@gmail.com')
+        ->assertDontSee('other@example.com');
+});
+
+test('ecom activity keyword search finds sessions by product name sku and category', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    $productSession = Str::uuid()->toString();
+    $categorySession = Str::uuid()->toString();
+    $decoySession = Str::uuid()->toString();
+
+    foreach ([$productSession, $categorySession, $decoySession] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'last_active_at' => now(),
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $productSession,
+        'action_type' => 'product_view',
+        'product_name' => 'Blue Hoodie',
+        'product_code' => 'BH-100',
+        'sku' => 'BH-100-RED-M',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $categorySession,
+        'action_type' => 'category_view',
+        'category_name' => 'Hoodies',
+        'department_name' => 'Boys',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $this->get(route('admin.ecom-activity.index', ['search' => 'hoodie', 'period' => 'all']))
+        ->assertOk()
+        ->assertSee($productSession)
+        ->assertSee($categorySession)
+        ->assertDontSee($decoySession);
+
+    $this->get(route('admin.ecom-activity.index', ['search' => 'BH-100-RED-M', 'period' => 'all']))
+        ->assertOk()
+        ->assertSee($productSession)
+        ->assertDontSee($decoySession);
+
+    $this->get(route('admin.ecom-activity.index', ['search' => 'Boys', 'period' => 'all']))
+        ->assertOk()
+        ->assertSee($categorySession)
+        ->assertDontSee($decoySession);
 });
 
 test('ecom activity index filters sessions with orders', function () {
@@ -389,4 +481,101 @@ test('ecom activity index shows visitor quality summary strip', function () {
         ->assertSee('real visitors')
         ->assertSee('automated')
         ->assertSee('not classified');
+});
+
+test('ecom activity product code search only shows sessions with matching product activity', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $this->actingAs($user);
+
+    $viewedSession = Str::uuid()->toString();
+    $crossSellSession = Str::uuid()->toString();
+    $otherOrderSession = Str::uuid()->toString();
+    $decoySession = Str::uuid()->toString();
+
+    foreach ([$viewedSession, $crossSellSession, $otherOrderSession, $decoySession] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'device_type' => 'desktop',
+            'last_active_at' => now(),
+        ]);
+    }
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $viewedSession,
+        'action_type' => 'product_view',
+        'product_name' => 'Target Tee',
+        'product_code' => 'MS31262181',
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $crossSellSession,
+        'action_type' => 'product_view',
+        'product_name' => 'Target Tee',
+        'product_code' => 'MS31262181',
+        'created_at' => now()->subMinutes(2),
+        'start_time' => now()->subMinutes(2),
+        'end_time' => now()->subMinutes(2),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $crossSellSession,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'amount_paid' => 45.0,
+            'checkout_info' => [
+                'items' => [[
+                    'product_name' => 'Other Tee',
+                    'product_code' => 'MS99999999',
+                    'qty' => 1,
+                    'price' => 45.0,
+                ]],
+            ],
+        ],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => Str::uuid()->toString(),
+        'session_id' => $otherOrderSession,
+        'action_type' => 'payment_success',
+        'payment_success' => [
+            'amount_paid' => 30.0,
+            'checkout_info' => [
+                'items' => [[
+                    'product_name' => 'Other Tee',
+                    'product_code' => 'MS99999999',
+                    'qty' => 1,
+                    'price' => 30.0,
+                ]],
+            ],
+        ],
+        'created_at' => now(),
+        'start_time' => now(),
+        'end_time' => now(),
+    ]);
+
+    $response = $this->get(route('admin.ecom-activity.index', [
+        'search' => 'MS31262181',
+        'period' => 'all',
+    ]));
+
+    $response->assertOk()
+        ->assertSee($viewedSession)
+        ->assertSee($crossSellSession)
+        ->assertDontSee($otherOrderSession)
+        ->assertDontSee($decoySession);
+
+    $html = $response->getContent();
+
+    expect($html)->not->toContain('MS99999999');
 });

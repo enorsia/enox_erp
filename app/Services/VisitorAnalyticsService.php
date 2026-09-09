@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
-use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
 use App\Support\TrackerRedisCache;
 use App\Support\TrackerTime;
@@ -482,14 +481,17 @@ class VisitorAnalyticsService
         }
 
         if (isset($filters['has_order']) && $filters['has_order'] !== '' && $filters['has_order'] !== null) {
-            $orderSessionIds = ActivityEcomUserAction::query()
-                ->where('action_type', 'payment_success')
-                ->pluck('session_id');
+            $hasOrder = (bool) $filters['has_order'];
+            $exists = fn ($sub) => $sub->selectRaw('1')
+                ->from('activity_ecom_user as purchase_sessions')
+                ->whereColumn('purchase_sessions.visitor_id', 'activity_ecom_user.visitor_id')
+                ->where('purchase_sessions.has_payment_success', true)
+                ->whereBetween('purchase_sessions.first_payment_at', TrackerTime::storageRange($from, $to));
 
-            if ((bool) $filters['has_order']) {
-                $query->whereIn('session_id', $orderSessionIds);
+            if ($hasOrder) {
+                $query->whereExists($exists);
             } else {
-                $query->whereNotIn('session_id', $orderSessionIds);
+                $query->whereNotExists($exists);
             }
         }
 
@@ -572,11 +574,10 @@ class VisitorAnalyticsService
     private function visitorOrderQtySubquery(Carbon $from, Carbon $to): \Closure
     {
         return function ($sub) use ($from, $to): void {
-            $sub->from('activity_ecom_user_actions as orders')
+            $sub->from('activity_ecom_orders as orders')
                 ->join('activity_ecom_user as order_sessions', 'order_sessions.session_id', '=', 'orders.session_id')
                 ->whereColumn('order_sessions.visitor_id', 'activity_ecom_user.visitor_id')
-                ->where('orders.action_type', 'payment_success')
-                ->whereBetween('orders.created_at', [
+                ->whereBetween('orders.ordered_at', [
                     TrackerTime::formatUtc($from),
                     TrackerTime::formatUtc($to),
                 ])
@@ -596,29 +597,34 @@ class VisitorAnalyticsService
             ->selectRaw($durationSql.' as duration_seconds')
             ->pluck('duration_seconds');
 
-        $buckets = [
-            ['label' => '0–1 min', 'min' => 0, 'max' => 60, 'count' => 0],
-            ['label' => '1–5 min', 'min' => 61, 'max' => 300, 'count' => 0],
-            ['label' => '5–15 min', 'min' => 301, 'max' => 900, 'count' => 0],
-            ['label' => '15–30 min', 'min' => 901, 'max' => 1800, 'count' => 0],
-            ['label' => '30+ min', 'min' => 1801, 'max' => PHP_INT_MAX, 'count' => 0],
+        return \App\Support\SessionDurationBuckets::withCounts($sessions)['buckets'];
+    }
+
+    /**
+     * @return array{
+     *     buckets: array<int, array{label: string, min: int, max: int, count: int, pct: float}>,
+     *     total_sessions: int,
+     *     median_seconds: int,
+     *     median_label: string
+     * }
+     */
+    public function buildDurationDistribution(Carbon $from, ?Carbon $until = null): array
+    {
+        $durationSql = $this->effectiveDurationSecondsSql();
+
+        $sessions = $this->applyLastActiveRange(ActivityEcomUser::query(), $from, $until)
+            ->whereNotNull('visitor_id')
+            ->selectRaw($durationSql.' as duration_seconds')
+            ->pluck('duration_seconds');
+
+        $distribution = \App\Support\SessionDurationBuckets::withCounts($sessions);
+
+        return [
+            'buckets' => $distribution['buckets'],
+            'total_sessions' => $distribution['total_sessions'],
+            'median_seconds' => $distribution['median_seconds'],
+            'median_label' => $this->formatDuration($distribution['median_seconds']),
         ];
-
-        foreach ($sessions as $seconds) {
-            $seconds = (int) $seconds;
-
-            foreach ($buckets as &$bucket) {
-                if ($seconds >= $bucket['min'] && $seconds <= $bucket['max']) {
-                    $bucket['count']++;
-                    break;
-                }
-            }
-        }
-
-        return array_map(fn (array $bucket) => [
-            'label' => $bucket['label'],
-            'count' => $bucket['count'],
-        ], $buckets);
     }
 
     /**

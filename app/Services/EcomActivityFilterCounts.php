@@ -3,6 +3,10 @@
 namespace App\Services;
 
 use App\Models\TrackerUtmFilter;
+use App\Services\EcomTrackerDashboardService;
+use App\Support\CommerceHasOrderFilter;
+use App\Support\EcomActivityFocus;
+use App\Support\TrackerTime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -13,21 +17,26 @@ class EcomActivityFilterCounts
         'device_type',
         'logged_in',
         'has_order',
-        'visitor_type',
         'utm_source',
         'utm_medium',
     ];
 
     /**
      * @param  callable(Request, array<int, string>): Builder  $queryBuilder
+     * @param  null|callable(Request, array<int, string>): array<string, int>  $deferredHasOrderCounter
      * @return array<string, array<string, int>>
      */
-    public function counts(Request $request, callable $queryBuilder): array
+    public function counts(Request $request, callable $queryBuilder, ?callable $deferredHasOrderCounter = null): array
     {
         $counts = [];
 
         foreach (self::DIMENSIONS as $dimension) {
-            $counts[$dimension] = $this->countDimension($request, $queryBuilder, $dimension);
+            $counts[$dimension] = $this->countDimension(
+                $request,
+                $queryBuilder,
+                $dimension,
+                $deferredHasOrderCounter,
+            );
         }
 
         return $counts;
@@ -35,31 +44,69 @@ class EcomActivityFilterCounts
 
     /**
      * @param  callable(Request, array<int, string>): Builder  $queryBuilder
+     * @param  null|callable(Request, array<int, string>): array<string, int>  $deferredHasOrderCounter
      * @return array<string, int>
      */
-    private function countDimension(Request $request, callable $queryBuilder, string $dimension): array
-    {
+    private function countDimension(
+        Request $request,
+        callable $queryBuilder,
+        string $dimension,
+        ?callable $deferredHasOrderCounter = null,
+    ): array {
         $query = $queryBuilder($request, [$dimension]);
 
         return match ($dimension) {
             'device_type' => $this->groupCount($query, 'device_type'),
-            'logged_in' => [
-                '1' => (clone $query)->where('is_logged_in', true)->count(),
-                '0' => (clone $query)->where('is_logged_in', false)->count(),
-            ],
-            'has_order' => [
-                '1' => (clone $query)->whereHas('actions', fn (Builder $actions) => $actions->where('action_type', 'payment_success'))->count(),
-                '0' => (clone $query)->whereDoesntHave('actions', fn (Builder $actions) => $actions->where('action_type', 'payment_success'))->count(),
-            ],
-            'visitor_type' => [
-                'human' => (clone $query)->whereHas('botContext', fn (Builder $bot) => $bot->where('is_bot', false))->count(),
-                'bot' => (clone $query)->whereHas('botContext', fn (Builder $bot) => $bot->where('is_bot', true))->count(),
-                'unclassified' => (clone $query)->whereDoesntHave('botContext')->count(),
-            ],
+            'logged_in' => $this->groupLoggedInCount($query),
+            'has_order' => $this->countHasOrder($request, $query, $deferredHasOrderCounter),
             'utm_source' => TrackerUtmFilter::sourceCountsFrom($query),
             'utm_medium' => TrackerUtmFilter::mediumCountsFrom($query),
             default => [],
         };
+    }
+
+    /**
+     * @param  null|callable(Request, array<int, string>): array<string, int>  $deferredHasOrderCounter
+     * @return array<string, int>
+     */
+    private function countHasOrder(Request $request, Builder $query, ?callable $deferredHasOrderCounter = null): array
+    {
+        if ($deferredHasOrderCounter !== null && EcomActivityFocus::shouldDeferHasOrderFilter($request)) {
+            return $deferredHasOrderCounter($request, ['has_order']);
+        }
+
+        $range = app(EcomTrackerDashboardService::class)->resolveDateRange(
+            $request->only(['period', 'date_from', 'date_to']),
+        );
+
+        $withOrder = clone $query;
+        CommerceHasOrderFilter::apply($withOrder, true, $range['from'], $range['to']);
+
+        $withoutOrder = clone $query;
+        CommerceHasOrderFilter::apply($withoutOrder, false, $range['from'], $range['to']);
+
+        return [
+            '1' => $withOrder->count(),
+            '0' => $withoutOrder->count(),
+        ];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function groupLoggedInCount(Builder $query): array
+    {
+        $table = $query->getModel()->getTable();
+
+        $rows = self::aggregateQuery($query)
+            ->selectRaw("CASE WHEN {$table}.is_logged_in = 1 THEN '1' ELSE '0' END as bucket, COUNT(*) as total")
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+
+        return [
+            '1' => (int) ($rows['1'] ?? 0),
+            '0' => (int) ($rows['0'] ?? 0),
+        ];
     }
 
     /**

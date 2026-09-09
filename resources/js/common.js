@@ -134,7 +134,7 @@ window.initTomSelectElements = function (root) {
             searchField: 'text',
             sortField: [{ field: '$order' }, { field: '$score' }],
             placeholder: element.dataset.placeholder || 'All',
-            maxOptions: 50,
+            maxOptions: element.dataset.maxOptions ? Number(element.dataset.maxOptions) : 50,
         };
 
         if (element.dataset.dropdownParent === 'body') {

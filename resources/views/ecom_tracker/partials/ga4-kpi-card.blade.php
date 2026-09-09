@@ -7,6 +7,7 @@
     'sparkline' => [],
     'comparison_label' => null,
     'compact' => false,
+    'href' => null,
 ])
 
 @php
@@ -15,11 +16,14 @@
     $max = max(1, max($points));
 @endphp
 
+@if (filled($href))
+    <a href="{{ $href }}" class="etd-kpi-drilldown-link no-underline text-inherit">
+@endif
 <div @class(['etd-kpi ga4-kpi-card', 'ga4-kpi-card--compact' => $compact])>
     <div class="ga4-kpi-card__label">{{ $label }}</div>
     <div class="ga4-kpi-card__value">{{ is_numeric($value) ? number_format((int) $value) : $value }}</div>
 
-  @if ($delta_pct !== null && is_numeric($delta_pct))
+    @if ($delta_pct !== null && is_numeric($delta_pct))
         <div @class([
             'ga4-kpi-card__delta',
             'ga4-kpi-card__delta--up' => $delta_direction === 'up',
@@ -52,3 +56,6 @@
         </div>
     @endif
 </div>
+@if (filled($href))
+    </a>
+@endif

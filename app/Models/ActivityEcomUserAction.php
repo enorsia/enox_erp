@@ -34,6 +34,16 @@ class ActivityEcomUserAction extends Model
         'start_time',
         'end_time',
         'created_at',
+        'commerce_total',
+        'commerce_subtotal',
+        'commerce_shipping',
+        'commerce_discount',
+        'coupon_code',
+        'discount_type',
+        'line_count',
+        'order_id',
+        'amount_paid',
+        'item_qty',
     ];
 
     protected function casts(): array
@@ -44,6 +54,11 @@ class ActivityEcomUserAction extends Model
             'proceed_to_checkout' => 'array',
             'payment_success' => 'array',
             'product_price' => 'decimal:2',
+            'commerce_total' => 'decimal:2',
+            'commerce_subtotal' => 'decimal:2',
+            'commerce_shipping' => 'decimal:2',
+            'commerce_discount' => 'decimal:2',
+            'amount_paid' => 'decimal:2',
             'start_time' => 'datetime',
             'end_time' => 'datetime',
             'created_at' => 'datetime',

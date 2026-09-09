@@ -9,8 +9,8 @@
     $dateFrom = $filters['date_from'] ?? '';
     $dateTo = $filters['date_to'] ?? '';
     $queryParams = $page['queryParams'];
-    $exportUrl = $page['exportUrl'];
     $detailLink = $page['detailLink'];
+    $activityFocusLink = $page['activityFocusLink'];
     $hasActiveFilters = $page['hasActiveFilters'];
 
     $kpiByLabel = collect($d['kpis'])->keyBy('label');
@@ -47,6 +47,7 @@
         'preservePeriodParams' => true,
         'showSessionFilters' => true,
         'sessionFiltersHeading' => 'Sessions & audience',
+        'includeCountry' => false,
         'period' => $period,
         'dateFrom' => $dateFrom,
         'dateTo' => $dateTo,
@@ -94,6 +95,7 @@
                     'baseQuery' => $baseQuery,
                     'range' => $d['range'],
                     'period' => $period,
+                    'showUserActivityLink' => true,
                 ])
 
                 <div class="etd-header-actions">
@@ -108,10 +110,6 @@
                             <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
                         @endif
                     </button>
-                    <a href="{{ $exportUrl }}" class="etd-header-btn etd-header-btn--primary no-underline" title="Export Excel">
-                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l4-4m-4 4L8 11M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg>
-                        <span class="etd-header-btn-text">Export</span>
-                    </a>
                 </div>
             </div>
 
@@ -160,17 +158,19 @@
                         @foreach ($group['labels'] as $label)
                             @if ($kpiByLabel->has($label))
                                 @php $kpi = $kpiByLabel->get($label); @endphp
-                                <div class="etd-kpi etd-kpi--compact">
-                                    @include('ecom_tracker.partials.kpi-label-with-tip', [
-                                        'label' => $kpi['label'],
-                                        'tip' => $kpi['tip'] ?? null,
-                                    ])
-                                    @include('ecom_tracker.partials.kpi-value-with-comparison', [
-                                        'formatted' => $kpi['formatted'],
-                                        'comparison' => $kpi['comparison'] ?? null,
-                                        'valueClass' => $kpi['value_class'] ?? '',
-                                    ])
-                                </div>
+                                <a href="{{ $activityFocusLink('audience') }}" class="etd-kpi-drilldown-link no-underline text-inherit">
+                                    <div class="etd-kpi etd-kpi--compact">
+                                        @include('ecom_tracker.partials.kpi-label-with-tip', [
+                                            'label' => $kpi['label'],
+                                            'tip' => $kpi['tip'] ?? null,
+                                        ])
+                                        @include('ecom_tracker.partials.kpi-value-with-comparison', [
+                                            'formatted' => $kpi['formatted'],
+                                            'comparison' => $kpi['comparison'] ?? null,
+                                            'valueClass' => $kpi['value_class'] ?? '',
+                                        ])
+                                    </div>
+                                </a>
                             @endif
                         @endforeach
                     </div>
@@ -182,6 +182,10 @@
                     'title' => 'Sale & conversion',
                     'modifier' => 'etd-kpi-group--sale',
                     'cols' => 2,
+                    'metricHrefs' => [
+                        $activityFocusLink('conversion'),
+                        $activityFocusLink('conversion'),
+                    ],
                     'metrics' => [
                         $saleConversion['item_qty'] ?? null,
                         $saleConversion['revenue'] ?? null,
@@ -194,6 +198,12 @@
                     'title' => 'Funnel drop-off',
                     'modifier' => 'etd-kpi-group--funnel',
                     'cols' => 4,
+                    'metricHrefs' => [
+                        $activityFocusLink('cart_abandonment'),
+                        $activityFocusLink('begin_checkout_abandonment'),
+                        $activityFocusLink('proceed_checkout_abandonment'),
+                        $activityFocusLink('payment_success'),
+                    ],
                     'metrics' => [
                         $funnelDropoff['cart_drop'] ?? null,
                         $funnelDropoff['checkout_drop'] ?? null,
@@ -228,20 +238,42 @@
     <div class="etd-grid-4-8 mb-3">
         <div class="etd-panel" id="categories">
             <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Category performance</h2>
+                <div>
+                    <h2 class="etd-panel-title">Category performance</h2>
+                    @php $categoryTotals = $d['category_catalog_totals'] ?? null; @endphp
+                    @if ($categoryTotals && ($categoryTotals['category_count'] ?? 0) > 0)
+                        <p class="etd-panel-subtitle text-slate-500 dark:text-slate-400 text-sm mt-1 mb-0">
+                            {{ number_format($categoryTotals['category_views'] ?? 0) }} category views · {{ number_format($categoryTotals['product_views'] ?? 0) }} product views across {{ number_format($categoryTotals['category_count']) }} categories
+                        </p>
+                    @endif
+                </div>
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
                 @include('ecom_tracker.partials.category-performance-table', [
                     'departments' => $d['category_departments'] ?? [],
                     'showCurrency' => true,
+                    'categoryActivityLink' => fn (array $category) => $activityFocusLink('categories', [
+                        'category' => $category['category_name'] ?? '',
+                        'department' => $category['department_name'] ?? '',
+                    ]),
                 ])
             </div>
         </div>
 
         <div class="etd-panel" id="products">
             <div class="etd-panel-head">
-                <h2 class="etd-panel-title">Product performance</h2>
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('products')])
+                <div>
+                    <h2 class="etd-panel-title">Product performance</h2>
+                    @php $productTotals = $d['product_catalog_totals'] ?? null; @endphp
+                    @if ($productTotals && ($productTotals['product_count'] ?? 0) > 0)
+                        <p class="etd-panel-subtitle text-slate-500 text-sm mt-1 mb-0">
+                            {{ number_format($productTotals['views']) }} views across {{ number_format($productTotals['product_count']) }} products
+                            @if (($productTotals['product_count'] ?? 0) > count($d['products']))
+                                · showing top {{ count($d['products']) }}
+                            @endif
+                        </p>
+                    @endif
+                </div>
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
             <table class="etd-table etd-table--product-catalog etd-table--performance-metrics">
@@ -276,7 +308,16 @@
                 <tbody>
                     @forelse ($d['products'] as $product)
                         <tr>
-                            <td class="etd-col-product">{{ $product['name'] }}</td>
+                            <td class="etd-col-product">
+                                @php
+                                    $productDrillQuery = array_filter([
+                                        'product_code' => $product['code'] ?? ($product['product_code'] ?? null),
+                                    ]);
+                                @endphp
+                                <a href="{{ $activityFocusLink('products', $productDrillQuery) }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
+                                    {{ $product['name'] }}
+                                </a>
+                            </td>
                             <td class="etd-num etd-col-metric">{{ number_format($product['views']) }}</td>
                             <td class="etd-num etd-col-metric">{{ number_format($product['adds']) }}</td>
                             <td class="etd-num etd-col-metric">{{ number_format($product['proceed_checkouts'] ?? 0) }}</td>
@@ -358,6 +399,9 @@
         </div>
         @include('ecom_tracker.partials.device-browser-breakdown', [
             'devices' => $d['devices'],
+            'deviceActivityLink' => fn (string $label) => $activityFocusLink('devices', array_filter([
+                'device_type' => in_array(strtolower($label), ['mobile', 'desktop', 'tablet'], true) ? strtolower($label) : null,
+            ])),
         ])
     </div>
 
@@ -371,6 +415,14 @@
             'activitySourceLink' => $page['activitySourceLink'],
         ])
     </div>
+
+    @include('ecom_tracker.partials.acquisition-insights', [
+        'distribution' => $d['duration_distribution'] ?? [],
+        'newReturning' => $d['new_returning'] ?? [],
+        'activityDurationLink' => fn (array $bucket) => filled($bucket['key'] ?? null)
+            ? $activityFocusLink('duration', ['duration_bucket' => $bucket['key']])
+            : null,
+    ])
 </div>
 
 <script>

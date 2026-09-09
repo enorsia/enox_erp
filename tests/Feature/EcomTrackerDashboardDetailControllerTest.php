@@ -10,52 +10,6 @@ beforeEach(function () {
     Permission::findOrCreate('ecom_tracker.dashboard.index', 'web');
 });
 
-test('visitor analytics export downloads excel for authorized users', function () {
-    Permission::findOrCreate('ecom_tracker.visitors.index', 'web');
-
-    $user = User::factory()->create();
-    $user->givePermissionTo('ecom_tracker.visitors.index');
-
-    $this->actingAs($user)
-        ->get(route('admin.ecom-tracker.visitors.export', ['window' => '7d']))
-        ->assertOk()
-        ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-});
-
-test('visitor analytics detail pages are accessible for authorized users', function () {
-    Permission::findOrCreate('ecom_tracker.visitors.index', 'web');
-
-    $user = User::factory()->create();
-    $user->givePermissionTo('ecom_tracker.visitors.index');
-
-    $this->actingAs($user)
-        ->get(route('admin.ecom-tracker.visitors'))
-        ->assertOk()
-        ->assertSee('Visitor analytics');
-
-    $this->actingAs($user)
-        ->get(route('admin.ecom-tracker.visitors.details', ['section' => 'trend', 'window' => '7d']))
-        ->assertOk()
-        ->assertSee('Unique visitors vs sessions')
-        ->assertSee('7 days', false)
-        ->assertSee('Export')
-        ->assertSee('Back');
-
-    $visitorsUrl = route('admin.ecom-tracker.visitors', ['window' => '7d']);
-    $this->actingAs($user)
-        ->get(route('admin.ecom-tracker.visitors.details', ['section' => 'trend', 'window' => '7d', 'back' => urlencode($visitorsUrl)]))
-        ->assertOk()
-        ->assertSee(route('admin.ecom-tracker.visitors', ['window' => '7d'], false), false);
-
-    $this->actingAs($user)
-        ->get(route('admin.ecom-tracker.visitors.details', ['section' => 'visitors', 'window' => '7d']))
-        ->assertOk()
-        ->assertSee('All visitors')
-        ->assertSee('Sort by')
-        ->assertSee('Last active · newest first')
-        ->assertSee('Reset');
-});
-
 test('dashboard detail pages are accessible for authorized users', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.dashboard.index');

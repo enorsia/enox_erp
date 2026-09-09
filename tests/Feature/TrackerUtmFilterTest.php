@@ -58,23 +58,16 @@ test('tracker utm filter applies direct and none sentinels', function () {
     expect($googleQuery->pluck('session_id')->all())->toBe(['google-session']);
 });
 
-test('tracker utm filter matches google ads sessions from click ids in action urls', function () {
+test('tracker utm filter matches google ads sessions from click ids in landing page', function () {
     ActivityEcomUser::query()->create([
         'session_id' => 'google-ads-session',
         'device_type' => 'desktop',
         'utm_source' => null,
         'utm_medium' => null,
+        'landing_page' => 'https://enorsia.com/style/test?gad_source=1&gad_campaignid=23588680250&gclid=abc123',
         'created_at' => now(),
         'updated_at' => now(),
         'last_active_at' => now(),
-    ]);
-
-    \App\Models\ActivityEcomUserAction::query()->create([
-        'session_id' => 'google-ads-session',
-        'action_type' => 'product_view',
-        'page_url' => 'https://enorsia.com/style/test?gad_source=1&gad_campaignid=23588680250&gclid=abc123',
-        'referer' => 'https://www.google.com/',
-        'created_at' => now(),
     ]);
 
     $sourceQuery = ActivityEcomUser::query();
@@ -105,17 +98,10 @@ test('tracker utm filter matches facebook sessions from fbclid and aliases', fun
         'device_type' => 'desktop',
         'utm_source' => null,
         'utm_medium' => null,
+        'landing_page' => 'https://enorsia.com/style/test?fbclid=abc123',
         'created_at' => now(),
         'updated_at' => now(),
         'last_active_at' => now(),
-    ]);
-
-    \App\Models\ActivityEcomUserAction::query()->create([
-        'session_id' => 'facebook-ads-session',
-        'action_type' => 'product_view',
-        'page_url' => 'https://enorsia.com/style/test?fbclid=abc123',
-        'referer' => 'https://www.facebook.com/',
-        'created_at' => now(),
     ]);
 
     ActivityEcomUser::query()->create([

@@ -2,16 +2,19 @@
 
 namespace App\Services;
 
+use App\Support\CheckoutPayloadTotals;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
+use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -21,6 +24,8 @@ class TrackIngestService
         private VisitorSessionResolver $visitorSessionResolver,
         private TrackerClientContextResolver $clientContextResolver,
         private BotContextPersister $botContextPersister,
+        private TrackerPaymentCheckoutEnricher $paymentCheckoutEnricher,
+        private CommerceIngestWriter $commerceIngestWriter,
     ) {}
 
     /**
@@ -88,7 +93,23 @@ class TrackIngestService
 
             $this->validatePaymentSuccessPayload($event);
 
+            if (! $this->hasMeaningfulCheckoutPayload($event)) {
+                $acceptedIds[] = $eventId;
+
+                $this->logWarning('ingest.skip_empty_checkout', 'Skipped checkout action without cart data', [
+                    'session_id' => $sessionId,
+                    'event_id' => $eventId,
+                    'action_type' => $event['action_type'] ?? null,
+                    'page_url' => $event['page_url'] ?? null,
+                ]);
+
+                continue;
+            }
+
             if ($this->isDuplicatePaymentSuccess($event)) {
+                $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
+                $this->ensureCanonicalCommerceOrder($event);
+
                 $acceptedIds[] = $eventId;
 
                 $this->logWarning('ingest.skip_duplicate_payment', 'Skipped duplicate payment_success for order', [
@@ -101,11 +122,51 @@ class TrackIngestService
             }
 
             $row = $this->mapEventToRow($sessionId, $event);
+            $actionAlreadyStored = ActivityEcomUserAction::query()
+                ->where('event_id', $eventId)
+                ->exists();
 
-            ActivityEcomUserAction::query()->updateOrInsert(
-                ['event_id' => $eventId],
-                $row
-            );
+            try {
+                if (CommerceIngestWriter::isSyncableActionType($event['action_type'] ?? '')) {
+                    DB::transaction(function () use ($eventId, $row, $event, $actionAlreadyStored, $sessionId) {
+                        ActivityEcomUserAction::query()->updateOrInsert(
+                            ['event_id' => $eventId],
+                            $row
+                        );
+
+                        if (! $actionAlreadyStored) {
+                            ActivityEcomUser::query()
+                                ->where('session_id', $sessionId)
+                                ->increment('actions_count');
+                        }
+
+                        $action = ActivityEcomUserAction::query()->where('event_id', $eventId)->first();
+                        if ($action !== null) {
+                            $this->commerceIngestWriter->syncFromAction($action);
+                        }
+                    });
+                } else {
+                    ActivityEcomUserAction::query()->updateOrInsert(
+                        ['event_id' => $eventId],
+                        $row
+                    );
+
+                    if (! $actionAlreadyStored) {
+                        ActivityEcomUser::query()
+                            ->where('session_id', $sessionId)
+                            ->increment('actions_count');
+                    }
+                }
+            } catch (Throwable $e) {
+                EcomTrackerLogger::frontend()->error('commerce.ingest.failed', 'Commerce ingest failed', [
+                    'session_id' => $sessionId,
+                    'event_id' => $eventId,
+                    'action_type' => $event['action_type'] ?? null,
+                    'message' => $e->getMessage(),
+                ]);
+
+                throw $e;
+            }
 
             $this->backfillSessionAttribution(
                 $sessionId,
@@ -169,17 +230,7 @@ class TrackIngestService
             $attributes['country'] = $clientContext['ip_country'];
         }
 
-        foreach (['user_id', 'user_name', 'user_email', 'user_phone'] as $field) {
-            if (array_key_exists($field, $sessionData)) {
-                $attributes[$field] = $sessionData[$field];
-            }
-        }
-
-        if (! empty($sessionData['user_id'])) {
-            $attributes['is_logged_in'] = true;
-        } elseif (array_key_exists('is_logged_in', $sessionData)) {
-            $attributes['is_logged_in'] = ! empty($sessionData['user_id']) && (bool) $sessionData['is_logged_in'];
-        }
+        $attributes = array_merge($attributes, $this->sessionIdentityUpdates($sessionData, $existing));
 
         if (! empty($sessionData['visitor_id'])) {
             $attributes['visitor_id'] = $sessionData['visitor_id'];
@@ -361,7 +412,13 @@ class TrackIngestService
         }
 
         if ($actionType === 'payment_success' && isset($event['payment_success'])) {
-            $row['payment_success'] = json_encode($event['payment_success']);
+            $payload = is_array($event['payment_success']) ? $event['payment_success'] : [];
+            $payload = $this->paymentCheckoutEnricher->enrichPayload(
+                $sessionId,
+                $payload,
+                TrackerTime::formatUtc($event['created_at'] ?? TrackerTime::nowUtc()),
+            );
+            $row['payment_success'] = json_encode($payload);
         }
 
         if (($row['department_name'] ?? '') === '' && ($actionType === 'category_view' || ! empty($row['category_name']))) {
@@ -399,6 +456,38 @@ class TrackIngestService
         }
 
         return $row;
+    }
+
+    /**
+     * @param  array<string, mixed>  $sessionData
+     * @return array<string, mixed>
+     */
+    private function sessionIdentityUpdates(array $sessionData, ?ActivityEcomUser $existing = null): array
+    {
+        $updates = [];
+
+        if (! empty($sessionData['user_id'])) {
+            $updates['user_id'] = $sessionData['user_id'];
+            $updates['is_logged_in'] = true;
+        } elseif (array_key_exists('is_logged_in', $sessionData) && ($existing === null || ! $existing->isRegisteredUser())) {
+            $updates['is_logged_in'] = ! empty($sessionData['user_id']) && (bool) $sessionData['is_logged_in'];
+        }
+
+        foreach (['user_name', 'user_email', 'user_phone'] as $field) {
+            if (! array_key_exists($field, $sessionData)) {
+                continue;
+            }
+
+            $value = trim((string) ($sessionData[$field] ?? ''));
+
+            if ($value === '') {
+                continue;
+            }
+
+            $updates[$field] = $value;
+        }
+
+        return $updates;
     }
 
     /**
@@ -450,26 +539,7 @@ class TrackIngestService
      */
     private function syncSessionCustomerInfo(string $sessionId, array $customer, mixed $eventCreatedAt = null): void
     {
-        $firstName = trim((string) ($customer['first_name'] ?? ''));
-        $lastName = trim((string) ($customer['last_name'] ?? ''));
-        $fullName = trim((string) ($customer['full_name'] ?? ''));
-        $email = trim((string) ($customer['email'] ?? ''));
-        $phone = $this->extractCustomerPhone($customer);
-        $name = trim($fullName !== '' ? $fullName : implode(' ', array_filter([$firstName, $lastName])));
-
-        $updates = [];
-
-        if ($name !== '') {
-            $updates['user_name'] = $name;
-        }
-
-        if ($email !== '') {
-            $updates['user_email'] = $email;
-        }
-
-        if ($phone !== null) {
-            $updates['user_phone'] = $phone;
-        }
+        $updates = $this->customerFieldsFromPayload($customer);
 
         if ($updates === []) {
             return;
@@ -491,13 +561,43 @@ class TrackIngestService
 
         $session->update($updates);
 
-        $this->logInfo('ingest.checkout_user_sync', 'Logged-in user updated from checkout', [
+        $this->logInfo('ingest.checkout_user_sync', 'Session customer updated from checkout', [
             'session_id' => $sessionId,
             'user_name' => $updates['user_name'] ?? $session->user_name,
             'user_email' => $updates['user_email'] ?? $session->user_email,
             'user_phone' => $updates['user_phone'] ?? $session->user_phone,
             'is_logged_in' => $updates['is_logged_in'] ?? $session->is_logged_in,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $customer
+     * @return array<string, string>
+     */
+    private function customerFieldsFromPayload(array $customer): array
+    {
+        $firstName = trim((string) ($customer['first_name'] ?? $customer['firstName'] ?? ''));
+        $lastName = trim((string) ($customer['last_name'] ?? $customer['lastName'] ?? ''));
+        $fullName = trim((string) ($customer['full_name'] ?? $customer['fullName'] ?? ''));
+        $email = trim((string) ($customer['email'] ?? ''));
+        $phone = $this->extractCustomerPhone($customer);
+        $name = trim($fullName !== '' ? $fullName : implode(' ', array_filter([$firstName, $lastName])));
+
+        $updates = [];
+
+        if ($name !== '') {
+            $updates['user_name'] = $name;
+        }
+
+        if ($email !== '') {
+            $updates['user_email'] = $email;
+        }
+
+        if ($phone !== null) {
+            $updates['user_phone'] = $phone;
+        }
+
+        return $updates;
     }
 
     /**
@@ -518,22 +618,43 @@ class TrackIngestService
 
     public function backfillSessionPhonesFromCheckoutActions(int $chunkSize = 100): int
     {
+        return $this->backfillSessionCustomerFromCheckoutActions($chunkSize);
+    }
+
+    public function backfillSessionCustomerFromCheckoutActions(int $chunkSize = 100): int
+    {
         $updated = 0;
 
         ActivityEcomUser::query()
             ->where(function ($query) {
-                $query->whereNull('user_phone')->orWhere('user_phone', '');
+                $query->whereNull('user_name')->orWhere('user_name', '')
+                    ->orWhereNull('user_email')->orWhere('user_email', '')
+                    ->orWhereNull('user_phone')->orWhere('user_phone', '');
             })
             ->orderBy('id')
             ->chunkById($chunkSize, function ($sessions) use (&$updated) {
                 foreach ($sessions as $session) {
-                    $phone = $this->phoneFromCheckoutActions($session->session_id);
+                    $fields = $this->customerFieldsFromCheckoutActions($session->session_id);
 
-                    if ($phone === null) {
+                    if ($fields === []) {
                         continue;
                     }
 
-                    $session->update(['user_phone' => $phone]);
+                    $updates = [];
+
+                    foreach (['user_name', 'user_email', 'user_phone'] as $field) {
+                        if (filled($session->{$field}) || empty($fields[$field] ?? null)) {
+                            continue;
+                        }
+
+                        $updates[$field] = $fields[$field];
+                    }
+
+                    if ($updates === []) {
+                        continue;
+                    }
+
+                    $session->update($updates);
                     $updated++;
                 }
             });
@@ -541,7 +662,10 @@ class TrackIngestService
         return $updated;
     }
 
-    private function phoneFromCheckoutActions(string $sessionId): ?string
+    /**
+     * @return array<string, string>
+     */
+    private function customerFieldsFromCheckoutActions(string $sessionId): array
     {
         $actions = ActivityEcomUserAction::query()
             ->where('session_id', $sessionId)
@@ -549,6 +673,8 @@ class TrackIngestService
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->get();
+
+        $fields = [];
 
         foreach ($actions as $action) {
             foreach ([
@@ -559,15 +685,20 @@ class TrackIngestService
                     continue;
                 }
 
-                $phone = $this->extractCustomerPhone($customer);
-
-                if ($phone !== null) {
-                    return $phone;
+                foreach ($this->customerFieldsFromPayload($customer) as $field => $value) {
+                    if (! isset($fields[$field]) && filled($value)) {
+                        $fields[$field] = $value;
+                    }
                 }
             }
         }
 
-        return null;
+        return $fields;
+    }
+
+    private function phoneFromCheckoutActions(string $sessionId): ?string
+    {
+        return $this->customerFieldsFromCheckoutActions($sessionId)['user_phone'] ?? null;
     }
 
     private function sessionDurationSeconds(ActivityEcomUser $session): int
@@ -712,6 +843,40 @@ class TrackIngestService
     /**
      * @param  array<string, mixed>  $event
      */
+    private function ensureCanonicalCommerceOrder(array $event): void
+    {
+        $orderId = $this->paymentSuccessOrderId($event);
+
+        if ($orderId === '' || DB::table('activity_ecom_orders')->where('order_id', $orderId)->exists()) {
+            return;
+        }
+
+        $canonicalId = $this->findCanonicalPaymentSuccessActionId($orderId);
+
+        if ($canonicalId === null) {
+            return;
+        }
+
+        $canonical = ActivityEcomUserAction::query()->find($canonicalId);
+
+        if ($canonical === null) {
+            return;
+        }
+
+        try {
+            $this->commerceIngestWriter->syncFromAction($canonical);
+        } catch (Throwable $e) {
+            $this->logWarning('commerce.ingest.canonical_backfill_failed', 'Failed to backfill canonical order row', [
+                'order_id' => $orderId,
+                'event_id' => $canonical->event_id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
     private function isDuplicatePaymentSuccess(array $event): bool
     {
         if (($event['action_type'] ?? '') !== 'payment_success') {
@@ -724,14 +889,77 @@ class TrackIngestService
             return false;
         }
 
-        return ActivityEcomUserAction::query()
+        return $this->paymentSuccessExistsForOrder($orderId);
+    }
+
+    private function paymentSuccessExistsForOrder(string $orderId): bool
+    {
+        if (DB::table('activity_ecom_orders')->where('order_id', $orderId)->exists()) {
+            return true;
+        }
+
+        return DB::table('activity_ecom_user_actions')
             ->where('action_type', 'payment_success')
-            ->where(function ($query) use ($orderId) {
-                $query->where('payment_success->order_id', $orderId)
-                    ->orWhere('payment_success->checkout_info->order_number', $orderId)
-                    ->orWhere('payment_success->checkout_info->order_pk', $orderId);
-            })
+            ->where('order_id', $orderId)
             ->exists();
+    }
+
+    private function findCanonicalPaymentSuccessActionId(string $orderId): ?int
+    {
+        $id = DB::table('activity_ecom_user_actions')
+            ->where('action_type', 'payment_success')
+            ->where('order_id', $orderId)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->value('id');
+
+        return $id !== null ? (int) $id : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function hasMeaningfulCheckoutPayload(array $event): bool
+    {
+        $actionType = (string) ($event['action_type'] ?? '');
+
+        if (! in_array($actionType, ['begin_checkout', 'proceed_checkout'], true)) {
+            return true;
+        }
+
+        $payloadKey = $actionType === 'begin_checkout' ? 'begin_checkout' : 'proceed_to_checkout';
+        $payload = $event[$payloadKey] ?? null;
+
+        if (! is_array($payload)) {
+            return false;
+        }
+
+        $total = (float) (CheckoutPayloadTotals::commerceAmount($payload) ?? 0);
+
+        if ($total > 0) {
+            return true;
+        }
+
+        $items = $payload['cart_items'] ?? $payload['items'] ?? [];
+
+        if (! is_array($items) || $items === []) {
+            return false;
+        }
+
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $qty = (float) ($item['qty'] ?? $item['quantity'] ?? 0);
+            $identity = trim((string) ($item['product_code'] ?? $item['sku'] ?? $item['product_name'] ?? $item['name'] ?? ''));
+
+            if ($qty > 0 || $identity !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

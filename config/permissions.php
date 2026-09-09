@@ -19,7 +19,6 @@ return [
             ],
             'ecom_tracker' => [
                 'dashboard' => 'Store Performance',
-                'visitors' => 'Visitor Analytics',
                 'activity' => 'User Activity',
             ],
         ],
@@ -111,17 +110,9 @@ return [
                 'guard' => 'web',
                 'actions' => ['index'],
             ],
-            'visitors' => [
-                'guard' => 'web',
-                'actions' => ['index'],
-            ],
             'activity' => [
                 'guard' => 'web',
                 'actions' => ['index', 'show'],
-            ],
-            'bot_traffic' => [
-                'guard' => 'web',
-                'actions' => ['index'],
             ],
         ],
 

@@ -4,82 +4,62 @@
 
 @section('content')
 @php
-    use App\Support\SessionTrafficAttribution;
-    use App\Support\TrackerTime;
-    use Carbon\Carbon;
-
-    $today = TrackerTime::localNow()->copy()->startOfDay();
-    $todayStr = $today->toDateString();
-    $dateFrom = request('date_from');
-    $dateTo = request('date_to');
-    $period = request('period', '24h');
-    $activePreset = $period === 'all' ? 'all' : '24h';
-    $rangeLabel = $period === 'all' ? 'All sessions' : \App\Support\TrackerTime::todayPresetLabel();
-
-    if ($period !== 'all' && filled($dateFrom) && filled($dateTo)) {
-        $from = Carbon::parse($dateFrom, TrackerTime::timezone())->startOfDay();
-        $to = Carbon::parse($dateTo, TrackerTime::timezone())->startOfDay();
-
-        if ($from->equalTo($today->copy()->subDays(6)) && $to->equalTo($today)) {
-            $activePreset = '7d';
-            $rangeLabel = 'Last 7 days';
-        } elseif ($from->equalTo($today->copy()->subDays(29)) && $to->equalTo($today)) {
-            $activePreset = '30d';
-            $rangeLabel = 'Last 30 days';
-        } elseif ($from->equalTo($today->copy()->subDays(89)) && $to->equalTo($today)) {
-            $activePreset = '90d';
-            $rangeLabel = 'Last 90 days';
-        } else {
-            $activePreset = 'custom';
-            $rangeLabel = $from->format('d M Y').' – '.$to->format('d M Y');
-        }
-    } elseif (filled($dateFrom) || filled($dateTo)) {
-        $activePreset = 'custom';
-        $rangeLabel = 'Custom range';
-    }
-
-    $baseQuery = request()->except(['date_from', 'date_to', 'page', 'period']);
-    $presetUrl = fn (string $preset) => match ($preset) {
-        '24h' => route('admin.ecom-activity.index', $baseQuery),
-        'all' => route('admin.ecom-activity.index', array_merge($baseQuery, ['period' => 'all'])),
-        '7d' => route('admin.ecom-activity.index', array_merge($baseQuery, [
-            'date_from' => $today->copy()->subDays(6)->toDateString(),
-            'date_to' => $todayStr,
-        ])),
-        '30d' => route('admin.ecom-activity.index', array_merge($baseQuery, [
-            'date_from' => $today->copy()->subDays(29)->toDateString(),
-            'date_to' => $todayStr,
-        ])),
-        '90d' => route('admin.ecom-activity.index', array_merge($baseQuery, [
-            'date_from' => $today->copy()->subDays(89)->toDateString(),
-            'date_to' => $todayStr,
-        ])),
-        default => route('admin.ecom-activity.index', $baseQuery),
+    $period = $period ?? request('period', '24h');
+    $activePreset = match ($period) {
+        'yesterday', '7d', '30d', 'custom' => $period,
+        default => '24h',
     };
+    $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d'], true) ? $period : '24h';
+    $baseQuery = request()->except(['date_from', 'date_to', 'period', 'page']);
+    $dateFrom = $dateFrom ?? request('date_from', '');
+    $dateTo = $dateTo ?? request('date_to', '');
+    $rangeLabel = $rangeLabel ?? ($range['label'] ?? '');
 
-    $activeFilterCount = collect(['search', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type', 'utm_source', 'utm_medium'])
-        ->filter(fn (string $key) => filled(request($key)))
-        ->count();
+    $sidebarFilterCount = $sidebarFilterCount ?? \App\Support\EcomActivityFocus::activeFilterCount(request());
+    $showCatalogFilters = $showCatalogFilters ?? in_array(request('focus'), ['products', 'categories'], true);
+    $showProductCatalogExtras = \App\Support\EcomActivityFocus::showProductCatalogExtrasInDrawer(request());
 @endphp
 
-<div class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
+<div class="etd-page etd-page--activity" id="ecom-activity-page-content" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
     @include('ecom_tracker.partials.filter-drawer', [
         'action' => route('admin.ecom-activity.index'),
-        'resetUrl' => route('admin.ecom-activity.index'),
+        'resetUrl' => $filterResetUrl ?? route('admin.ecom-activity.index'),
         'showActivityFilters' => true,
+        'activityFiltersIncludeDateRange' => false,
+        'preservePeriodParams' => true,
+        'period' => $period,
+        'dateFrom' => $dateFrom,
+        'dateTo' => $dateTo,
+        'drawerWide' => true,
+        'includeVisitorTrust' => false,
+        'includeSessionSearch' => \App\Support\EcomActivityFocus::showActivitySearchInDrawer(request()),
+        'showProductFilters' => $showProductCatalogExtras,
+        'productFiltersHeading' => $showProductCatalogExtras ? 'Additional product filters' : null,
+        'productFilterOptions' => $productFilterOptions ?? ['categories' => [], 'colors' => [], 'sizes' => []],
+        'eventScenarioOptions' => $eventScenarioOptions ?? [],
+        'productSortGroups' => $productSortGroups ?? [],
+        'productActivityOptions' => $productActivityOptions ?? [],
+        'currentProductSort' => request('sort_by', ''),
+        'productCatalogShowSort' => false,
         'filterOptionCounts' => $filterOptionCounts ?? [],
         'utmFilterState' => $utmFilterState ?? null,
+        'categoryFilterOptions' => $categoryFilterOptions ?? ['departments' => [], 'categories_by_department' => []],
     ])
 
     <header class="etd-page-header">
         <div class="etd-page-header-bar"
              x-data="{
                 presetKey: '{{ $activePreset }}',
-                dateFrom: '{{ $dateFrom ?? '' }}',
-                dateTo: '{{ $dateTo ?? '' }}',
+                basePreset: '{{ $basePreset }}',
+                dateFrom: '{{ $dateFrom }}',
+                dateTo: '{{ $dateTo }}',
+                toggleCustom() {
+                    this.presetKey = this.presetKey === 'custom' ? this.basePreset : 'custom';
+                },
                 applyCustom() {
                     const url = new URL(window.location.href);
                     url.searchParams.delete('page');
+                    url.searchParams.set('period', 'custom');
                     if (this.dateFrom) {
                         url.searchParams.set('date_from', this.dateFrom);
                     } else {
@@ -94,34 +74,46 @@
                 }
              }">
             <div class="etd-page-header-left">
-                <h1 class="etd-page-title">User activity</h1>
-                <span class="etd-header-sep" aria-hidden="true">·</span>
-                <span class="etd-page-range">{{ $rangeLabel }}</span>
-                <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
-                <div class="etd-page-meta">
-                    @include('ecom_tracker.partials.timezone-notice')
+                @if (! empty($breadcrumbs))
+                    <div class="mb-2">
+                        @include('ecom_tracker.partials.breadcrumbs', ['items' => $breadcrumbs])
+                    </div>
+                @endif
+                <div class="flex items-center flex-wrap gap-x-2 gap-y-1">
+                    <h1 class="etd-page-title">User activity</h1>
+                    @if (filled($focusLabel ?? null) && empty($activityListContext ?? $drillDownContext ?? null))
+                        <span class="etd-header-sep" aria-hidden="true">·</span>
+                        <span class="etd-page-range">{{ $focusLabel }}</span>
+                    @endif
+                    <span class="etd-header-sep" aria-hidden="true">·</span>
+                    <span class="etd-page-range">{{ $rangeLabel }}</span>
+                    <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
+                    <div class="etd-page-meta">
+                        @include('ecom_tracker.partials.timezone-notice')
+                    </div>
                 </div>
             </div>
 
             <div class="etd-page-header-right">
-                <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Session date range">
-                    <a href="{{ $presetUrl('24h') }}" class="etd-segmented-btn {{ $activePreset === '24h' ? 'active' : '' }} no-underline" aria-label="{{ \App\Support\TrackerTime::todayPresetLabel() }}">{{ \App\Support\TrackerTime::todayPresetButtonLabel() }}</a>
-                    <a href="{{ $presetUrl('7d') }}" class="etd-segmented-btn {{ $activePreset === '7d' ? 'active' : '' }} no-underline" aria-label="Last 7 days">7d</a>
-                    <a href="{{ $presetUrl('30d') }}" class="etd-segmented-btn {{ $activePreset === '30d' ? 'active' : '' }} no-underline" aria-label="Last 30 days">30d</a>
-                    <a href="{{ $presetUrl('90d') }}" class="etd-segmented-btn {{ $activePreset === '90d' ? 'active' : '' }} no-underline" aria-label="Last 90 days">90d</a>
-                    <button type="button" class="etd-segmented-btn {{ $activePreset === 'custom' ? 'active' : '' }}" aria-label="Custom date range" @click="presetKey = 'custom'">Custom</button>
-                </div>
+                @include('ecom_tracker.partials.dashboard-period-controls', [
+                    'baseQuery' => $baseQuery,
+                    'range' => $range,
+                    'period' => $period,
+                    'routeName' => 'admin.ecom-activity.index',
+                    'showDashboardLink' => true,
+                    'dashboardUrl' => $backUrl ?? null,
+                ])
 
                 <div class="etd-header-actions">
                     @include('ecom_tracker.partials.header-reset-button', [
                         'url' => route('admin.ecom-activity.index'),
                         'active' => count(request()->except('page')) > 0,
                     ])
-                    <button type="button" @click="drawerOpen = true" class="etd-header-btn etd-header-btn--icon {{ $activeFilterCount > 0 ? 'etd-header-btn--filtered' : '' }}" aria-label="Filters">
+                    <button type="button" @click="drawerOpen = true" class="etd-header-btn etd-header-btn--icon {{ $sidebarFilterCount > 0 ? 'etd-header-btn--filtered' : '' }}" aria-label="Filters">
                         <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
                         <span class="etd-header-btn-text">Filters</span>
-                        @if ($activeFilterCount > 0)
-                            <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
+                        @if ($sidebarFilterCount > 0)
+                            <span class="etd-header-btn-badge">{{ $sidebarFilterCount }}</span>
                         @endif
                     </button>
                 </div>
@@ -131,12 +123,13 @@
                  x-collapse
                  x-effect="if (presetKey === 'custom') { $nextTick(() => window.refreshEtdFilterControls?.($el)) }"
                  class="etd-custom-dates etd-custom-dates--inline etd-date-range"
-                 data-etd-date-range>
+                 data-etd-date-range
+                 @if ($activePreset !== 'custom') style="display: none" @endif>
                 <input type="text"
                        x-model="dateFrom"
                        data-range="from"
-                       data-default="{{ $dateFrom ?? '' }}"
-                       value="{{ $dateFrom ?? '' }}"
+                       data-default="{{ $dateFrom }}"
+                       value="{{ $dateFrom }}"
                        placeholder="From date"
                        readonly
                        class="etd-flatpickr-date f-input etd-date-input"
@@ -145,8 +138,8 @@
                 <input type="text"
                        x-model="dateTo"
                        data-range="to"
-                       data-default="{{ $dateTo ?? '' }}"
-                       value="{{ $dateTo ?? '' }}"
+                       data-default="{{ $dateTo }}"
+                       value="{{ $dateTo }}"
                        placeholder="To date"
                        readonly
                        class="etd-flatpickr-date f-input etd-date-input"
@@ -155,96 +148,47 @@
             </div>
         </div>
 
-        @if ($activeFilterCount > 0)
-            <p class="etd-filter-active-note etd-filter-active-note--compact">Filters applied — open Filters to change or reset.</p>
+        @if (! empty($activityListContext ?? $drillDownContext ?? null))
+            @include('ecom_activity.partials.drill-down-context', ['context' => $activityListContext ?? $drillDownContext])
+        @elseif (! empty($filterChips))
+            @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
         @endif
 
-        @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
-
-        @if (! empty($visitorQualitySummary))
+        @if (empty($activityListContext ?? $drillDownContext ?? null) && ! empty($summaryCards))
+            <div class="etd-kpi-grid mt-3 mb-1">
+                @foreach ($summaryCards as $card)
+                    @include('ecom_tracker.partials.ga4-kpi-card', [
+                        'label' => $card['label'],
+                        'value' => $card['value'],
+                        'compact' => true,
+                    ])
+                @endforeach
+            </div>
+        @elseif (! empty($visitorQualitySummary) && ! ($hasFocus ?? false))
             <p class="text-[12px] text-slate-500 dark:text-slate-400 mt-2 mb-0">
                 <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['real_shoppers']) }}</span> real visitors ·
                 <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['automated_traffic']) }}</span> automated ·
                 <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['not_classified']) }}</span> not classified
-                @can('ecom_tracker.bot_traffic.index')
-                    · <a href="{{ route('admin.ecom-tracker.bot-traffic') }}" class="text-accent-500 no-underline hover:underline">View bot traffic details</a>
-                @endcan
             </p>
         @endif
     </header>
 
-    <div class="etd-panel">
-        <div class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity">
-            <table class="etd-table etd-table--activity w-full">
-                <thead>
-                    <tr>
-                        <th class="etd-col-session">Session</th>
-                        <th class="etd-col-user">User</th>
-                        <th class="etd-col-trust">
-                            @include('ecom_tracker.partials.column-header-with-tip', [
-                                'label' => 'Visitor trust',
-                                'tip' => 'Whether this session looks like a real visitor, automated traffic, or could not be checked',
-                            ])
-                        </th>
-                        <th>Device</th>
-                        <th>IP</th>
-                        <th class="etd-num">Order</th>
-                        <th class="etd-num">Actions</th>
-                        <th>Duration</th>
-                        <th>Last active</th>
-                        <th class="etd-col-action">View</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($sessions as $session)
-                        @php($traffic = SessionTrafficAttribution::listRowSummary($session))
-                        <tr>
-                            <td class="etd-col-session">
-                                @include('ecom_tracker.partials.session-id-chip', ['sessionId' => $session->session_id])
-                                <div class="etd-subtle mt-0.5">{{ TrackerTime::formatFromStorage($session->created_at) }}</div>
-                                @include('ecom_tracker.partials.session-traffic-lines', [
-                                    'source' => $traffic['source'],
-                                    'utm' => $traffic['utm'],
-                                    'referer' => $traffic['referer'],
-                                ])
-                            </td>
-                            <td class="etd-col-user">
-                                @include('ecom_tracker.partials.session-identity', ['session' => $session])
-                            </td>
-                            <td class="etd-col-trust">
-                                @include('ecom_tracker.partials.visitor-classification-badge', ['session' => $session, 'mode' => 'compact'])
-                            </td>
-                            <td>
-                                {{ ucfirst($session->device_type ?? '—') }}
-                                <div class="etd-subtle">{{ $session->browser }} · {{ $session->os }}</div>
-                            </td>
-                            <td>{{ $session->botContext?->client_ip ?? $session->ip ?? '—' }}</td>
-                            <td class="etd-num">
-                                @if (($session->order_qty ?? 0) > 0)
-                                    {{ number_format($session->order_qty) }}
-                                @else
-                                    <span class="etd-subtle">—</span>
-                                @endif
-                            </td>
-                            <td class="etd-num">{{ $session->actions_count }}</td>
-                            <td>{{ format_duration((int) ($session->session_duration_seconds ?? 0)) }}</td>
-                            <td>{{ TrackerTime::diffForHumansLatestActivity($session->updated_at, $session->last_active_at, $session->created_at) ?? '—' }}</td>
-                            <td class="etd-col-action">
-                                @can('ecom_tracker.activity.show')
-                                    <a href="{{ \App\Support\EcomTrackerViewData::activityShowUrl($session->session_id) }}" class="etd-link">View session</a>
-                                @endcan
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="10" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
+    <div class="etd-activity-table-block" data-etd-activity-table-block>
+        <div class="etd-panel">
+            @include('ecom_activity.partials.activity-sort-toolbar')
+            @include('ecom_activity.partials.sessions-table', [
+                'sessions' => $sessions,
+                'focusColumns' => $focusColumns ?? [],
+                'rowMetrics' => $rowMetrics ?? [],
+                'emptyMessage' => $emptyMessage ?? 'No visitor sessions found.',
+                'clearFocusUrl' => $clearFocusUrl ?? null,
+                'hasFocus' => $hasFocus ?? false,
+            ])
+        </div>
+
+        <div class="etd-activity-pagination">
+            @include('layouts.pagination', ['paginator' => $sessions])
         </div>
     </div>
-
-    @include('layouts.pagination', ['paginator' => $sessions])
 </div>
 @endsection

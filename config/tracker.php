@@ -15,6 +15,12 @@ return [
 
     'api_key_hash' => env('TRACKER_API_KEY_HASH'),
 
+    /*
+    | Max events accepted in a single /api/track payload. The storefront
+    | tracker must chunk larger queues to this size (MAX_EVENTS_PER_FLUSH).
+    */
+    'ingest_max_events' => (int) env('TRACKER_INGEST_MAX_EVENTS', 50),
+
     'logging_enabled' => (bool) env('TRACKER_LOGGING', env('APP_DEBUG', false)),
 
     'log_channel' => env('TRACKER_LOG_CHANNEL', 'ecom_tracker'),
@@ -88,6 +94,10 @@ return [
     'analytics_cache_enabled' => (bool) env('TRACKER_ANALYTICS_CACHE_ENABLED', true),
 
     'analytics_cache_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_SECONDS', 300),
+
+    'commerce_sync_batch_size' => (int) env('TRACKER_COMMERCE_SYNC_BATCH_SIZE', 100),
+
+    'commerce_sync_chunk_days' => (int) env('TRACKER_COMMERCE_SYNC_CHUNK_DAYS', 7),
 
     'analytics_windows' => [
         'hours' => [1, 3, 6, 12, 24],

@@ -2,10 +2,10 @@
 
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
-use App\Models\ActivityEcomUserAction;
 use App\Services\VisitorAnalyticsService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -244,12 +244,18 @@ test('visitor breakdown includes order qty and can sort by orders', function () 
     ]);
 
     foreach (range(1, 2) as $index) {
-        ActivityEcomUserAction::query()->create([
+        $orderedAt = Carbon::parse('2026-07-16 12:'.str_pad((string) (10 + $index), 2, '0', STR_PAD_LEFT).':00');
+
+        DB::table('activity_ecom_orders')->insert([
+            'order_id' => 'ORD-'.$buyerSession.'-'.$index,
             'event_id' => (string) Str::uuid(),
             'session_id' => $buyerSession,
-            'action_type' => 'payment_success',
-            'payment_success' => ['amount_paid' => 50 * $index],
-            'created_at' => Carbon::parse('2026-07-16 12:'.str_pad((string) (10 + $index), 2, '0', STR_PAD_LEFT).':00'),
+            'visitor_id' => $buyer,
+            'amount_paid' => 50 * $index,
+            'item_qty' => 1,
+            'ordered_at' => $orderedAt,
+            'created_at' => $orderedAt,
+            'updated_at' => $orderedAt,
         ]);
     }
 
@@ -287,4 +293,36 @@ test('visitor breakdown includes latest session for classification badge', funct
 
     expect($breakdown->items()[0]['latest_session'])->not->toBeNull();
     expect($breakdown->items()[0]['latest_session']->marketer_type_label)->toBe('Real visitor');
+});
+
+test('duration buckets include percentage and distribution summary', function () {
+    $service = app(VisitorAnalyticsService::class);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => (string) Str::uuid(),
+        'created_at' => Carbon::parse('2026-07-16 12:00:00', 'Europe/London'),
+        'updated_at' => Carbon::parse('2026-07-16 12:01:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 12:01:00', 'Europe/London'),
+        'session_duration_seconds' => 30,
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => (string) Str::uuid(),
+        'visitor_id' => (string) Str::uuid(),
+        'created_at' => Carbon::parse('2026-07-16 13:00:00', 'Europe/London'),
+        'updated_at' => Carbon::parse('2026-07-16 13:10:00', 'Europe/London'),
+        'last_active_at' => Carbon::parse('2026-07-16 13:10:00', 'Europe/London'),
+        'session_duration_seconds' => 600,
+    ]);
+
+    $since = $service->resolveWindow('24h');
+    $buckets = $service->buildDurationBuckets($since);
+    $distribution = $service->buildDurationDistribution($since);
+
+    expect($buckets)->toHaveCount(10)
+        ->and($buckets[0])->toHaveKeys(['label', 'count', 'pct', 'min', 'max'])
+        ->and(collect($buckets)->sum('count'))->toBe(2)
+        ->and($distribution['total_sessions'])->toBe(2)
+        ->and($distribution['median_seconds'])->toBe(315);
 });

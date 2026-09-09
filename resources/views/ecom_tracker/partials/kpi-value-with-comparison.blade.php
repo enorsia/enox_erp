@@ -16,9 +16,8 @@
             $previousFormatted = $comparison['previous_formatted'] ?? '0';
             $hasDelta = $deltaPct !== null && is_numeric($deltaPct);
             $hasBaseline = $previousFormatted !== ''
-                && ! in_array($deltaLabel, ['no_prior_data', 'new'], true)
-                && ($comparison['previous'] ?? null) != 0;
-            $showDivider = $hasBaseline && ($hasDelta || $deltaLabel === 'new');
+                && ($comparison['delta_label'] ?? null) !== 'no_prior_data';
+            $showDivider = $hasBaseline && ($hasDelta || ($deltaDirection === 'up' && $deltaPct === null));
         @endphp
         <div class="etd-kpi-compare">
             <div class="etd-kpi-compare__main">
@@ -36,7 +35,11 @@
                     </span>
                 @elseif ($deltaLabel === 'new')
                     <span class="etd-kpi-compare__change etd-kpi-compare__change--new">New</span>
-                @elseif (! $hasBaseline)
+                @elseif ($deltaDirection === 'up' && $deltaPct === null && $hasBaseline)
+                    <span class="etd-kpi-compare__change etd-kpi-compare__change--up" aria-label="Up from zero in previous period">
+                        <span class="etd-kpi-compare__arrow" aria-hidden="true">↑</span>
+                    </span>
+                @elseif (($comparison['delta_label'] ?? null) === 'no_prior_data')
                     <span class="etd-kpi-compare__change etd-kpi-compare__change--muted">No prior data</span>
                 @endif
 
