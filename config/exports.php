@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'report_chunk_size' => (int) env('EXPORT_REPORT_CHUNK_SIZE', 250),
+    'report_chunk_size' => (int) env('EXPORT_REPORT_CHUNK_SIZE', 75),
 
     'queue' => env('EXPORT_QUEUE', 'default'),
     'queue_connection' => env('EXPORT_QUEUE_CONNECTION', 'database'),

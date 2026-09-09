@@ -748,6 +748,125 @@ final class SessionTrafficAttribution
             ->value('referer');
     }
 
+    /**
+     * @return array{utm_source: string, traffic_type: string, paid_click_id: string}
+     */
+    public static function exportTrafficFields(ActivityEcomUser $session): array
+    {
+        $attribution = self::attributionFromSessionRecord($session);
+        $sourceKey = filled($session->utm_source ?? null)
+            ? (self::normalizeSource((string) $session->utm_source) ?? (string) $session->utm_source)
+            : (isset($attribution['utm_source'])
+                ? (self::normalizeSource($attribution['utm_source']) ?? $attribution['utm_source'])
+                : null);
+        $medium = filled($session->utm_medium ?? null)
+            ? strtolower(trim((string) $session->utm_medium))
+            : strtolower(trim((string) ($attribution['utm_medium'] ?? '')));
+        $isPaid = self::isPaidTraffic($medium, $attribution);
+        $isOrganic = ! $isPaid && $medium === 'organic';
+
+        $trafficType = $isPaid
+            ? 'Paid'
+            : ($isOrganic ? 'Organic' : (filled($medium) && $medium !== 'none' ? ucfirst($medium) : '—'));
+
+        return [
+            'utm_source' => self::displaySourceLabel($sourceKey) ?? '—',
+            'traffic_type' => $trafficType,
+            'paid_click_id' => $isPaid ? (self::resolvePaidClickId($attribution, $sourceKey) ?? '—') : '—',
+        ];
+    }
+
+    /**
+     * Resolve attribution from persisted session fields only (no action queries).
+     *
+     * @return array<string, string>
+     */
+    private static function attributionFromSessionRecord(ActivityEcomUser $session): array
+    {
+        $merged = self::parseFromUrl($session->landing_page ?? null);
+
+        foreach (['utm_source', 'utm_medium', 'utm_campaign'] as $key) {
+            $columnValue = $session->{$key} ?? null;
+
+            if (filled($columnValue)) {
+                $merged[$key] = $key === 'utm_source'
+                    ? (self::normalizeSource((string) $columnValue) ?? (string) $columnValue)
+                    : (string) $columnValue;
+            }
+        }
+
+        return $merged;
+    }
+
+    private static function isPaidTraffic(string $medium, array $attribution): bool
+    {
+        if (in_array($medium, ['paid', 'cpc'], true)) {
+            return true;
+        }
+
+        foreach ([
+            'gclid',
+            'gbraid',
+            'wbraid',
+            'fbclid',
+            'msclkid',
+            'ttclid',
+            'twclid',
+            'li_fat_id',
+            'epik',
+            'sc_cid',
+        ] as $key) {
+            if (filled($attribution[$key] ?? null)) {
+                return true;
+            }
+        }
+
+        return isset($attribution['gad_campaignid']) || isset($attribution['gad_source']);
+    }
+
+    /**
+     * @param  array<string, string>  $attribution
+     */
+    private static function resolvePaidClickId(array $attribution, ?string $sourceKey): ?string
+    {
+        $sourceKey = self::normalizeSource($sourceKey ?? '') ?? $sourceKey;
+
+        if ($sourceKey === 'google') {
+            return $attribution['gclid']
+                ?? $attribution['gad_campaignid']
+                ?? $attribution['gbraid']
+                ?? $attribution['wbraid']
+                ?? null;
+        }
+
+        if (in_array($sourceKey, ['facebook', 'instagram'], true)) {
+            return $attribution['fbclid']
+                ?? $attribution['utm_id']
+                ?? null;
+        }
+
+        return match ($sourceKey) {
+            'bing' => $attribution['msclkid'] ?? null,
+            'tiktok' => $attribution['ttclid'] ?? null,
+            'twitter' => $attribution['twclid'] ?? null,
+            'linkedin' => $attribution['li_fat_id'] ?? null,
+            'pinterest' => $attribution['epik'] ?? null,
+            'snapchat' => $attribution['sc_cid'] ?? null,
+            'awin' => $attribution['awc'] ?? null,
+            default => $attribution['utm_id']
+                ?? $attribution['gclid']
+                ?? $attribution['fbclid']
+                ?? $attribution['msclkid']
+                ?? $attribution['ttclid']
+                ?? $attribution['twclid']
+                ?? $attribution['li_fat_id']
+                ?? $attribution['epik']
+                ?? $attribution['sc_cid']
+                ?? $attribution['gad_campaignid']
+                ?? null,
+        };
+    }
+
     private static function label(string $key): string
     {
         return match ($key) {

@@ -8,7 +8,9 @@ use App\Services\EcomActivityExportQuery;
 use App\Services\EcomActivityRowMetrics;
 use App\Services\Exports\Async\AsyncEcomActivityExportService;
 use App\Services\Exports\Async\EcomActivityAsyncRowBuilder;
+use App\Services\Exports\Async\SpreadsheetExportLayout;
 use App\Support\EcomActivityFocus;
+use App\Support\TrackerQueryParams;
 use App\Support\ExportLogger;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -54,7 +56,7 @@ class GenerateEcomActivityExportJob implements ShouldQueue
         }
 
         $filters = $export->filters ?? [];
-        $queryParams = $filters['query'] ?? [];
+        $queryParams = TrackerQueryParams::normalize($filters['query'] ?? []);
         $range = $exportQuery->resolveRange($queryParams);
         $focus = $queryParams['focus'] ?? null;
 
@@ -101,8 +103,9 @@ class GenerateEcomActivityExportJob implements ShouldQueue
         $progressUpdateInterval = (float) config('exports.progress_update_interval_seconds', 1);
         $processedRows = 0;
         $pendingProgressUpdate = false;
-        $chunkSize = max(25, (int) config('exports.report_chunk_size', 250));
+        $chunkSize = max(25, (int) config('exports.report_chunk_size', 75));
         $batch = collect();
+        $currentDataRow = SpreadsheetExportLayout::FIRST_DATA_ROW;
 
         $flushProgress = function () use ($export, &$processedRows, &$lastProgressUpdate, &$pendingProgressUpdate): void {
             $progress = $export->total_rows > 0
@@ -144,6 +147,7 @@ class GenerateEcomActivityExportJob implements ShouldQueue
                     $catalogOptions,
                     $queryParams,
                     $serialStart,
+                    $currentDataRow,
                 );
 
                 $batch = collect();
@@ -169,6 +173,7 @@ class GenerateEcomActivityExportJob implements ShouldQueue
                     $catalogOptions,
                     $queryParams,
                     $serialStart,
+                    $currentDataRow,
                 );
                 $pendingProgressUpdate = true;
             }
@@ -242,6 +247,7 @@ class GenerateEcomActivityExportJob implements ShouldQueue
         array $catalogOptions,
         array $queryParams,
         int &$serialStart,
+        int &$currentDataRow,
     ): int {
         $metrics = $rowMetrics->forSessions(
             $batch,
@@ -250,23 +256,28 @@ class GenerateEcomActivityExportJob implements ShouldQueue
             $range['to'],
             $funnelMetrics,
             $catalogOptions,
-            Request::create('/', 'GET', $queryParams),
+            TrackerQueryParams::request($queryParams),
         );
 
-        $rows = EcomActivityAsyncRowBuilder::fromSessions(
+        $built = EcomActivityAsyncRowBuilder::fromSessions(
             $batch,
             $metrics,
             $queryParams,
             $serialStart,
+            $currentDataRow,
         );
 
-        $writer->writeRows($rows);
+        $writer->writeRows($built['rows'], [
+            'merge_ranges' => $built['merge_ranges'],
+        ]);
+
+        $currentDataRow += count($built['rows']);
 
         foreach ($batch as $session) {
             $session->unsetRelations();
         }
 
-        unset($metrics, $rows);
+        unset($metrics, $built);
 
         return $batch->count();
     }

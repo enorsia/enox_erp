@@ -364,6 +364,11 @@ final class EcomActivityFocus
             $parts[] = 'Search: '.Str::limit(trim((string) $request->search), 40);
         }
 
+        $sortBy = EcomActivitySessionSort::effectiveSortBy($request);
+        $sortLabel = EcomActivitySessionSort::sortOptions()[$sortBy] ?? $sortBy;
+        $sortDir = strtoupper(EcomActivitySessionSort::resolveSortDir($request, $sortBy));
+        $parts[] = 'Sort: '.$sortLabel.' ('.$sortDir.')';
+
         return implode(' · ', array_values(array_filter($parts)));
     }
 

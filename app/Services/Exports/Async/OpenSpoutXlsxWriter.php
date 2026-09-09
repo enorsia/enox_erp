@@ -84,9 +84,12 @@ class OpenSpoutXlsxWriter implements StreamingExportWriter
     public function writeRows(array $rows, array $meta = []): void
     {
         $orderLastIndices = $meta['order_last_indices'] ?? [];
+        $batchMergeRanges = $this->normalizeMergeRanges($meta['merge_ranges'] ?? []);
 
         foreach ($rows as $index => $row) {
             if ($this->rowsInCurrentSheet >= self::MAX_ROWS_PER_SHEET) {
+                $this->applyMergeRanges($batchMergeRanges);
+                $batchMergeRanges = [];
                 $this->startNewSheet();
             }
 
@@ -96,7 +99,11 @@ class OpenSpoutXlsxWriter implements StreamingExportWriter
             $columnStyles = [];
 
             foreach ($normalized as $columnIndex => $value) {
-                $columnStyles[$columnIndex] = $this->styler->cellStyleForColumn($columnIndex, $isOrderEnd);
+                $columnStyles[$columnIndex] = $this->styler->cellStyleForColumn(
+                    $columnIndex,
+                    $isOrderEnd,
+                    $this->layout->shouldVerticallyCenterColumn($columnIndex),
+                );
             }
 
             $this->writer->addRow(Row::fromValuesWithStyles($normalized, null, $columnStyles));
@@ -105,6 +112,8 @@ class OpenSpoutXlsxWriter implements StreamingExportWriter
             $this->lastDataRow = $this->currentRow;
             $this->currentRow++;
         }
+
+        $this->applyMergeRanges($batchMergeRanges);
     }
 
     public function close(): void
@@ -325,6 +334,61 @@ class OpenSpoutXlsxWriter implements StreamingExportWriter
             $sheet->setColumnWidth(
                 SpreadsheetColumnWidthEstimator::widthFromCharacterCount($length),
                 $index + 1,
+            );
+        }
+    }
+
+    /**
+     * @param  array<int, mixed>  $ranges
+     * @return array<int, array{column: int, start_row: int, end_row: int}>
+     */
+    private function normalizeMergeRanges(array $ranges): array
+    {
+        $normalized = [];
+
+        foreach ($ranges as $range) {
+            if (! is_array($range)) {
+                continue;
+            }
+
+            $column = (int) ($range['column'] ?? -1);
+            $startRow = (int) ($range['start_row'] ?? 0);
+            $endRow = (int) ($range['end_row'] ?? 0);
+
+            if ($column < 0 || $startRow <= 0 || $endRow <= $startRow) {
+                continue;
+            }
+
+            $normalized[] = [
+                'column' => $column,
+                'start_row' => $startRow,
+                'end_row' => $endRow,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Apply merge ranges immediately so they are not kept in memory for the full export.
+     *
+     * @param  array<int, array{column: int, start_row: int, end_row: int}>  $ranges
+     */
+    private function applyMergeRanges(array $ranges, ?int $sheetIndex = null): void
+    {
+        if ($ranges === []) {
+            return;
+        }
+
+        $sheetIndex ??= $this->currentSheet - 1;
+
+        foreach ($ranges as $range) {
+            $this->options->mergeCells(
+                $range['column'],
+                $range['start_row'],
+                $range['column'],
+                $range['end_row'],
+                $sheetIndex,
             );
         }
     }

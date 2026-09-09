@@ -15,6 +15,13 @@ final class EcomActivityCommerceEvents
         'add_to_cart' => 1,
     ];
 
+    /** @var array<string, string> */
+    private const VIEW_STAGE_LABELS = [
+        'product_view' => 'View',
+        'product_view_popup' => 'Popup view',
+        'category_view' => 'Category view',
+    ];
+
     /**
      * @param  Collection<int, ActivityEcomUserAction>  $actions
      * @param  array<string, mixed>  $catalogOptions
@@ -88,6 +95,7 @@ final class EcomActivityCommerceEvents
                 'proceed_checkout' => self::funnelEventFromRows($eventLines, 'proceed_checkout', 'Proceed'),
                 'begin_checkout' => self::funnelEventFromRows($eventLines, 'begin_checkout', 'Checkout'),
                 'add_to_cart' => self::funnelEventFromRows($eventLines, 'add_to_cart', 'Cart'),
+                'product_view', 'product_view_popup', 'category_view' => self::viewEventFromRows($eventLines, $stage),
                 default => null,
             };
 
@@ -230,6 +238,50 @@ final class EcomActivityCommerceEvents
     }
 
     /**
+     * @param  Collection<int, object>  $lines
+     * @return array<string, mixed>|null
+     */
+    private static function viewEventFromRows(Collection $lines, string $stage): ?array
+    {
+        $products = CommerceReadSupport::displayProductsFromLines($lines);
+
+        if ($products === []) {
+            return null;
+        }
+
+        $latest = $lines
+            ->sortByDesc(fn (object $line) => [
+                strtotime((string) ($line->staged_at ?? '')) ?: 0,
+                (int) ($line->id ?? 0),
+            ])
+            ->first();
+
+        $label = self::VIEW_STAGE_LABELS[$stage] ?? 'View';
+        $eventId = (string) ($latest->event_id ?? $stage);
+        $itemQty = (int) max(0, $lines->sum(fn (object $line) => (float) ($line->qty ?? 0)));
+
+        return [
+            'id' => $stage.':'.$eventId,
+            'stage' => $stage,
+            'stage_label' => $label,
+            'trigger_label' => $label,
+            'title' => $stage === 'category_view' ? 'Category view' : 'Product view',
+            'sort_at' => strtotime((string) ($latest->staged_at ?? '')) ?: 0,
+            'occurred_at' => TrackerTime::formatFromStorage($latest->staged_at ?? null),
+            'layout' => 'compact',
+            'cart_qty' => $itemQty > 0 ? $itemQty : count($products),
+            'cart_total' => null,
+            'footer_note' => null,
+            'products' => $products,
+        ];
+    }
+
+    private static function isViewStage(string $stage): bool
+    {
+        return array_key_exists($stage, self::VIEW_STAGE_LABELS);
+    }
+
+    /**
      * Keep every distinct order; otherwise only the latest funnel action.
      *
      * @param  list<array<string, mixed>>  $events
@@ -241,9 +293,14 @@ final class EcomActivityCommerceEvents
             $events,
             fn (array $event) => ($event['stage'] ?? '') === 'payment_success',
         ));
+        $views = array_values(array_filter(
+            $events,
+            fn (array $event) => self::isViewStage((string) ($event['stage'] ?? '')),
+        ));
         $funnel = array_values(array_filter(
             $events,
-            fn (array $event) => ($event['stage'] ?? '') !== 'payment_success',
+            fn (array $event) => ($event['stage'] ?? '') !== 'payment_success'
+                && ! self::isViewStage((string) ($event['stage'] ?? '')),
         ));
 
         if ($payments !== []) {
@@ -252,22 +309,28 @@ final class EcomActivityCommerceEvents
             return $payments;
         }
 
-        if ($funnel === []) {
-            return [];
+        if ($funnel !== []) {
+            usort($funnel, function (array $left, array $right) {
+                $leftTime = (int) ($left['sort_at'] ?? 0);
+                $rightTime = (int) ($right['sort_at'] ?? 0);
+
+                if ($leftTime !== $rightTime) {
+                    return $rightTime <=> $leftTime;
+                }
+
+                return (self::STAGE_PRIORITY[$right['stage']] ?? 0) <=> (self::STAGE_PRIORITY[$left['stage']] ?? 0);
+            });
+
+            return [$funnel[0]];
         }
 
-        usort($funnel, function (array $left, array $right) {
-            $leftTime = (int) ($left['sort_at'] ?? 0);
-            $rightTime = (int) ($right['sort_at'] ?? 0);
+        if ($views !== []) {
+            usort($views, fn (array $left, array $right) => ($right['sort_at'] ?? 0) <=> ($left['sort_at'] ?? 0));
 
-            if ($leftTime !== $rightTime) {
-                return $rightTime <=> $leftTime;
-            }
+            return $views;
+        }
 
-            return (self::STAGE_PRIORITY[$right['stage']] ?? 0) <=> (self::STAGE_PRIORITY[$left['stage']] ?? 0);
-        });
-
-        return [$funnel[0]];
+        return [];
     }
 
     /**

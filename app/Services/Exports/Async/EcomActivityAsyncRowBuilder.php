@@ -3,8 +3,7 @@
 namespace App\Services\Exports\Async;
 
 use App\Models\ActivityEcomUser;
-use App\Support\EcomActivityFocus;
-use App\Support\TrackerTime;
+use App\Support\TrackerQueryParams;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -16,202 +15,63 @@ class EcomActivityAsyncRowBuilder
      */
     public static function headings(array $queryParams): array
     {
-        $request = Request::create('/', 'GET', $queryParams);
-        $focus = $request->input('focus');
-
-        $headings = self::baseHeadings($request);
-
-        if ($request->filled('department') || $request->filled('category')) {
-            $headings[] = 'Category';
-        }
-
-        foreach (EcomActivityFocus::exportContextColumns($focus, $request) as $column) {
-            $headings[] = (string) ($column['label'] ?? $column['key'] ?? '');
-        }
-
-        $headings[] = 'Duration';
-        $headings[] = 'Last active';
-
-        return $headings;
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private static function baseHeadings(Request $request): array
-    {
-        $headings = [
-            'SL',
-            'Session ID',
-            'Session started',
-            'User',
-            'Visitor trust',
-            'Commerce',
-        ];
-
-        if (! self::shouldOmitCommerceDetailColumn($request)) {
-            $headings[] = 'Commerce detail';
-        }
-
-        $headings[] = 'Actions';
-
-        return $headings;
-    }
-
-    private static function shouldOmitCommerceDetailColumn(Request $request): bool
-    {
-        $funnelKeys = EcomActivityFocus::drawerFunnelFilterValues($request);
-        $focus = $request->input('focus');
-
-        if (EcomActivityFocus::isValid($focus)) {
-            if (in_array($focus, ['payment_success', 'conversion'], true)) {
-                return true;
-            }
-
-            if (! empty(EcomActivityFocus::definition($focus)['funnel'])) {
-                return false;
-            }
-        }
-
-        if ($funnelKeys === ['payment_success']) {
-            return true;
-        }
-
-        if ($request->filled('has_order') && $request->has_order === '1' && $funnelKeys === []) {
-            return true;
-        }
-
-        return false;
+        return EcomActivityExportSchema::headings($queryParams);
     }
 
     /**
      * @param  Collection<int, ActivityEcomUser>  $sessions
      * @param  array<string, array<string, mixed>>  $rowMetrics
      * @param  array<string, mixed>  $queryParams
-     * @return array<int, array<int|string, mixed>>
+     * @return array{rows: array<int, array<int|string, mixed>>, merge_ranges: array<int, array{column: int, start_row: int, end_row: int}>}
      */
     public static function fromSessions(
         Collection $sessions,
         array $rowMetrics,
         array $queryParams,
         int &$serialStart = 1,
+        int $dataRowStart = 0,
     ): array {
-        $request = Request::create('/', 'GET', $queryParams);
-        $focus = $request->input('focus');
-        $focusColumns = EcomActivityFocus::exportContextColumns($focus, $request);
-        $showCatalogColumn = $request->filled('department') || $request->filled('category');
-        $includeCommerceDetail = ! self::shouldOmitCommerceDetailColumn($request);
+        $request = TrackerQueryParams::request($queryParams);
+        $headings = self::headings($queryParams);
         $rows = [];
+        $mergeRanges = [];
+        $currentRow = $dataRowStart;
 
         foreach ($sessions as $session) {
             $metrics = $rowMetrics[$session->session_id] ?? [];
-            $row = [
+            $expanded = EcomActivityExportSchema::expandSession(
+                $session,
+                $metrics,
+                $request,
                 $serialStart,
-                (string) $session->session_id,
-                TrackerTime::formatFromStorage($session->created_at) ?? '—',
-                self::formatUser($session),
-                self::formatVisitorTrust($session),
-                (string) ($metrics['commerce_display'] ?? '—'),
-            ];
+            );
 
-            if ($includeCommerceDetail) {
-                $row[] = self::formatCommerceDetail($metrics);
+            $sessionRows = $expanded['rows'];
+            $sessionRowCount = count($sessionRows);
+
+            if ($sessionRowCount === 0) {
+                continue;
             }
 
-            $row[] = (int) ($session->actions_count ?? $metrics['actions_count'] ?? 0);
+            $mergeRanges = EcomActivityExportSchema::mergeRangesForSessionBlock(
+                $mergeRanges,
+                $currentRow,
+                $sessionRowCount,
+                $expanded['event_row_counts'],
+                $headings,
+                $expanded['product_title_merges'] ?? [],
+            );
 
-            if ($showCatalogColumn) {
-                $catalogPath = trim((string) ($metrics['catalog_path'] ?? ''));
-                $row[] = ($catalogPath !== '' && $catalogPath !== '—') ? $catalogPath : '—';
+            foreach ($sessionRows as $row) {
+                $rows[] = $row;
             }
 
-            foreach ($focusColumns as $column) {
-                $row[] = self::formatMetric($column['key'] ?? '', $metrics);
-            }
-
-            $row[] = format_duration((int) ($session->session_duration_seconds ?? 0));
-            $row[] = TrackerTime::diffForHumansLatestActivity(
-                $session->updated_at,
-                $session->last_active_at,
-                $session->created_at,
-            ) ?? '—';
-
-            $rows[] = $row;
-            $serialStart++;
+            $currentRow += $sessionRowCount;
         }
 
-        return $rows;
-    }
-
-    private static function formatUser(ActivityEcomUser $session): string
-    {
-        if ($session->isRegisteredUser()) {
-            $parts = array_filter([
-                $session->user_name ?: 'User #'.$session->user_id,
-                $session->user_email,
-                $session->user_phone,
-            ]);
-
-            return implode(' · ', $parts) ?: '—';
-        }
-
-        if ($session->isGuestCheckout()) {
-            $parts = array_filter([
-                ($session->user_name ?: '—').' (Guest checkout)',
-                $session->user_email,
-                $session->user_phone,
-            ]);
-
-            return implode(' · ', $parts) ?: 'Guest checkout';
-        }
-
-        if ($session->is_logged_in && $session->user_id) {
-            return 'User #'.$session->user_id;
-        }
-
-        return 'Guest';
-    }
-
-    private static function formatVisitorTrust(ActivityEcomUser $session): string
-    {
-        $label = $session->marketer_type_label;
-        $botCtx = $session->botContext;
-        $subtitle = $botCtx?->marketer_user_agent_hint
-            ?? $botCtx?->marketer_reason_label
-            ?? ($session->visitorClassification() === 'unclassified' ? null : $session->marketer_reason_label);
-
-        if (filled($subtitle)) {
-            return $label.' · '.$subtitle;
-        }
-
-        return $label;
-    }
-
-    /**
-     * @param  array<string, mixed>  $metrics
-     */
-    private static function formatCommerceDetail(array $metrics): string
-    {
-        $meta = trim((string) ($metrics['commerce_meta'] ?? ''));
-
-        return $meta !== '' ? $meta : '—';
-    }
-
-    /**
-     * @param  array<string, mixed>  $metrics
-     */
-    private static function formatMetric(string $key, array $metrics): mixed
-    {
-        $value = $metrics[$key] ?? '—';
-
-        if (is_numeric($value) && in_array($key, ['cart_value', 'checkout_value', 'order_value'], true)) {
-            return round((float) $value, 2);
-        }
-
-        if (is_numeric($value) && ! in_array($key, ['purchased'], true)) {
-            return (int) $value;
-        }
-
-        return $value;
+        return [
+            'rows' => $rows,
+            'merge_ranges' => $mergeRanges,
+        ];
     }
 }

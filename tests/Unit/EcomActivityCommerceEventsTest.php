@@ -324,3 +324,59 @@ test('commerce events from orders keep separate payments and hide earlier funnel
         ->and($events[0]['stage'])->toBe('payment_success')
         ->and($events[0]['trigger_label'])->toBe('#ORD-1 · £20.00');
 });
+
+test('commerce events from view lines include product details', function () {
+    $lines = collect([
+        (object) [
+            'event_id' => 'view-1',
+            'funnel_stage' => 'product_view',
+            'product_name' => 'Silk Blouse',
+            'product_code' => 'SKU1',
+            'size_name' => 'M',
+            'color_name' => 'Red',
+            'unit_price' => 45,
+            'qty' => 1,
+            'staged_at' => now()->toDateTimeString(),
+            'id' => 1,
+        ],
+    ]);
+
+    $events = EcomActivityCommerceEvents::fromCommerceRows($lines, collect());
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]['stage'])->toBe('product_view')
+        ->and($events[0]['stage_label'])->toBe('View')
+        ->and($events[0]['products'][0]['title'])->toContain('Silk Blouse')
+        ->and($events[0]['products'][0]['size'])->toBe('M')
+        ->and($events[0]['products'][0]['price'])->toBe('£45.00');
+});
+
+test('commerce events from popup and category view lines use distinct stage labels', function () {
+    $lines = collect([
+        (object) [
+            'event_id' => 'popup-1',
+            'funnel_stage' => 'product_view_popup',
+            'product_name' => 'Popup Dress',
+            'product_code' => 'PD-1',
+            'qty' => 1,
+            'unit_price' => 29.99,
+            'staged_at' => now()->subMinute()->toDateTimeString(),
+            'id' => 1,
+        ],
+        (object) [
+            'event_id' => 'cat-1',
+            'funnel_stage' => 'category_view',
+            'department_name' => 'Women',
+            'category_name' => 'Dresses',
+            'qty' => 1,
+            'staged_at' => now()->toDateTimeString(),
+            'id' => 2,
+        ],
+    ]);
+
+    $events = EcomActivityCommerceEvents::fromCommerceRows($lines, collect());
+
+    expect($events)->toHaveCount(2)
+        ->and(collect($events)->pluck('stage_label')->all())->toBe(['Category view', 'Popup view'])
+        ->and(collect($events)->firstWhere('stage', 'category_view')['products'][0]['title'])->toBe('Women -> Dresses');
+});

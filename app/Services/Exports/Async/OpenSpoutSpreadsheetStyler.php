@@ -89,9 +89,14 @@ final class OpenSpoutSpreadsheetStyler
         return $this->totalsRowStyle;
     }
 
-    public function cellStyleForColumn(int $columnIndex, bool $isOrderEnd): Style
+    public function cellStyleForColumn(int $columnIndex, bool $isOrderEnd, bool $verticallyCentered = false): Style
     {
-        $cacheKey = ($isOrderEnd ? 'order' : 'row').':'.$columnIndex.':'.$this->numberFormatForColumn($columnIndex);
+        $rightAligned = $this->layout->shouldRightAlignColumn($columnIndex);
+        $cacheKey = ($isOrderEnd ? 'order' : 'row')
+            .':'.$columnIndex
+            .':'.($verticallyCentered ? 'vc' : 'vt')
+            .':'.($rightAligned ? 'r' : 'l')
+            .':'.$this->numberFormatForColumn($columnIndex);
 
         if (isset($this->cellStyleCache[$cacheKey])) {
             return $this->cellStyleCache[$cacheKey];
@@ -100,8 +105,12 @@ final class OpenSpoutSpreadsheetStyler
         $style = new Style;
         $baseStyle = $this->baseDataStyle($isOrderEnd);
 
-        $style->setCellAlignment($baseStyle->getCellAlignment());
+        $style->setCellAlignment($rightAligned ? CellAlignment::RIGHT : $baseStyle->getCellAlignment());
         $style->setShouldWrapText(false);
+
+        if ($verticallyCentered) {
+            $style->setCellVerticalAlignment(CellVerticalAlignment::CENTER);
+        }
 
         if ($baseStyle->getBorder() !== null) {
             $style->setBorder($baseStyle->getBorder());

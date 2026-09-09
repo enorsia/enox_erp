@@ -231,8 +231,25 @@ class EcomActivityRowMetrics
                 }
             }
 
+            $linesForEvents = $eventLines;
+
+            if ($linesForEvents->isEmpty()) {
+                $viewSessionLines = $viewLinesBySession->get($sessionId, collect());
+
+                if ($useCatalogScope) {
+                    $viewSessionLines = TrackerProductCatalogIdentity::filterLinesMatchingCatalogOptions(
+                        $viewSessionLines,
+                        $catalogOptions,
+                    );
+                }
+
+                if ($viewSessionLines->isNotEmpty()) {
+                    $linesForEvents = $viewSessionLines;
+                }
+            }
+
             $metrics[$sessionId] = array_merge($metrics[$sessionId] ?? [], $summary, [
-                'commerce_events' => EcomActivityCommerceEvents::fromCommerceRows($eventLines, $eventOrders),
+                'commerce_events' => EcomActivityCommerceEvents::fromCommerceRows($linesForEvents, $eventOrders),
             ]);
         }
     }

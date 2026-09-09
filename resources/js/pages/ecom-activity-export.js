@@ -200,6 +200,44 @@
         return response.json();
     }
 
+    function appendQueryValue(result, key, value) {
+        if (!Object.prototype.hasOwnProperty.call(result, key) || !Array.isArray(result[key])) {
+            result[key] = [];
+        }
+
+        if (Array.isArray(value)) {
+            result[key].push(...value);
+            return;
+        }
+
+        result[key].push(value);
+    }
+
+    function parseQueryParamKey(rawKey) {
+        const indexedMatch = rawKey.match(/^([^\[]+)\[(\d*)\]$/);
+        if (indexedMatch) {
+            return {
+                key: indexedMatch[1],
+                isArray: true,
+                index: indexedMatch[2] === "" ? null : Number(indexedMatch[2]),
+            };
+        }
+
+        if (rawKey.endsWith("[]")) {
+            return {
+                key: rawKey.slice(0, -2),
+                isArray: true,
+                index: null,
+            };
+        }
+
+        return {
+            key: rawKey,
+            isArray: false,
+            index: null,
+        };
+    }
+
     function currentQueryParams() {
         const params = new URLSearchParams(window.location.search);
         params.delete("page");
@@ -208,27 +246,37 @@
         const result = {};
 
         for (const [rawKey, value] of params.entries()) {
-            const isArrayKey = rawKey.endsWith("[]");
-            const key = isArrayKey ? rawKey.slice(0, -2) : rawKey;
+            const parsed = parseQueryParamKey(rawKey);
 
-            if (isArrayKey) {
-                if (!Array.isArray(result[key])) {
-                    result[key] = [];
+            if (parsed.isArray) {
+                if (parsed.index === null) {
+                    appendQueryValue(result, parsed.key, value);
+                    continue;
                 }
 
-                result[key].push(value);
+                if (!Object.prototype.hasOwnProperty.call(result, parsed.key) || !Array.isArray(result[parsed.key])) {
+                    result[parsed.key] = [];
+                }
+
+                result[parsed.key][parsed.index] = value;
                 continue;
             }
 
-            if (Object.prototype.hasOwnProperty.call(result, key)) {
-                if (key === "period" && value === "custom") {
-                    result[key] = value;
+            if (Object.prototype.hasOwnProperty.call(result, parsed.key)) {
+                if (parsed.key === "period" && value === "custom") {
+                    result[parsed.key] = value;
                 }
 
                 continue;
             }
 
-            result[key] = value;
+            result[parsed.key] = value;
+        }
+
+        for (const [key, value] of Object.entries(result)) {
+            if (Array.isArray(value)) {
+                result[key] = value.filter((item) => item !== undefined);
+            }
         }
 
         return result;

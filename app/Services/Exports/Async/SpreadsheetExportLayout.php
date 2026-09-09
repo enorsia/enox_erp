@@ -29,7 +29,19 @@ final class SpreadsheetExportLayout
         public readonly int $companyStyleEndColumn,
         public readonly bool $hasOrderSeparators,
         public readonly array $extraMoneyColumns = [],
+        public readonly array $verticallyCenteredColumns = [],
+        public readonly array $rightAlignedColumns = [],
     ) {}
+
+    public function shouldVerticallyCenterColumn(int $columnIndex): bool
+    {
+        return in_array($columnIndex, $this->verticallyCenteredColumns, true);
+    }
+
+    public function shouldRightAlignColumn(int $columnIndex): bool
+    {
+        return in_array($columnIndex, $this->rightAlignedColumns, true);
+    }
 
     /**
      * @param  array<int, string>  $headings
@@ -154,6 +166,8 @@ final class SpreadsheetExportLayout
                 totalsRow: null,
                 companyStyleEndColumn: $profile->columnCount - 1,
                 hasOrderSeparators: false,
+                verticallyCenteredColumns: EcomActivityExportSchema::mergeColumnIndices($headings)['all'],
+                rightAlignedColumns: EcomActivityExportSchema::trafficColumnIndices($headings),
             ),
             default => new self(
                 profile: $profile,

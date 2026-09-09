@@ -234,10 +234,22 @@ final class SpreadsheetWriterProfile
     public static function ecomActivity(array $headings): self
     {
         $columnCount = max(1, count($headings));
-        $moneyLabels = ['Order value', 'Cart value', 'Value'];
+        $moneyLabels = [
+            'Order total',
+            'Unit price',
+            'Line total',
+            'Order value',
+            'Cart value',
+            'Value',
+        ];
         $moneyIndices = [];
+        $phoneColumn = 0;
 
         foreach ($headings as $index => $heading) {
+            if ($heading === 'Phone') {
+                $phoneColumn = $index;
+            }
+
             if (in_array($heading, $moneyLabels, true)) {
                 $moneyIndices[] = $index;
             }
@@ -250,7 +262,7 @@ final class SpreadsheetWriterProfile
             layoutKey: 'ecom_activity',
             columnCount: $columnCount,
             mergeEndColumn: min(max(1, $columnCount - 1), 6),
-            phoneColumn: 0,
+            phoneColumn: $phoneColumn,
             orderNumberColumn: 0,
             sizeColumn: 0,
             quantityColumn: 0,

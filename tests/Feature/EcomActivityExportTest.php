@@ -9,6 +9,22 @@ beforeEach(function () {
     Permission::findOrCreate('ecom_tracker.activity.index', 'web');
 });
 
+test('ecom activity export normalizes bracket notation funnel filters', function () {
+
+    $response->assertAccepted()
+        ->assertJsonStructure(['export_id', 'status', 'total_rows']);
+
+    $export = UserExport::query()->first();
+
+    expect($export)->not->toBeNull()
+        ->and($export->type)->toBe(UserExport::TYPE_ECOM_ACTIVITY_REPORT)
+        ->and($export->format)->toBe('xlsx')
+        ->and($export->status)->toBe(UserExport::STATUS_QUEUED)
+        ->and($export->filters['query']['funnel'] ?? null)->toBe(['payment_success'])
+        ->and($export->filters['query']['period'] ?? null)->toBe('7d')
+        ->and($export->notify_browser)->toBeFalse();
+});
+
 test('ecom activity export can be queued with current filters', function () {
     Queue::fake();
 

@@ -34,6 +34,8 @@ class UserExportController extends Controller
             ->except(['page', 'fragment'])
             ->all();
 
+        $queryParams = $this->exportQuery->normalizeQueryParams($queryParams);
+
         $range = $this->exportQuery->resolveRange($queryParams);
 
         $filters = [

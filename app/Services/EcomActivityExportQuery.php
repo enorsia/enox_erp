@@ -10,6 +10,7 @@ use App\Support\EcomActivityKeywordSearch;
 use App\Support\EcomActivitySessionSort;
 use App\Support\SessionDurationBuckets;
 use App\Support\TrackerMultiSelectFilter;
+use App\Support\TrackerQueryParams;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -28,7 +29,8 @@ class EcomActivityExportQuery
      */
     public function resolveRange(array $queryParams): array
     {
-        $request = $this->requestFromParams($queryParams);
+        $normalized = TrackerQueryParams::normalize($queryParams);
+        $request = Request::create('/', 'GET', $normalized);
 
         if ($request->input('period') === 'all') {
             return [
@@ -55,23 +57,94 @@ class EcomActivityExportQuery
 
     /**
      * @param  array<string, mixed>  $queryParams
+     * @return array<string, mixed>
+     */
+    public function normalizeQueryParams(array $queryParams): array
+    {
+        return TrackerQueryParams::normalize($queryParams);
+    }
+
+    /**
+     * Normalize URL-style query params and apply the same request prep as the activity index.
+     *
+     * @param  array<string, mixed>  $queryParams
+     */
+    public function prepareRequest(array $queryParams): Request
+    {
+        $normalized = TrackerQueryParams::normalize($queryParams);
+        $request = Request::create('/', 'GET', $normalized);
+
+        if (! TrackerMultiSelectFilter::requestFilled($request, 'category')) {
+            return $request;
+        }
+
+        $range = $this->resolveRange($normalized);
+        $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
+            $range['from'],
+            $range['to'],
+            [],
+            $range['period'],
+        );
+
+        $reconciledCatalogFilters = EcomActivityFocus::reconcileCatalogFilters($request, $categoryFilterOptions);
+
+        if ($reconciledCatalogFilters !== null) {
+            $request->merge($reconciledCatalogFilters);
+        }
+
+        $resolvedDepartment = EcomActivityFocus::resolvedCategoryDepartment(
+            $request,
+            $range['from'],
+            $range['to'],
+            $range['period'],
+            $categoryFilterOptions,
+        );
+
+        if ($resolvedDepartment !== null && ! $request->filled('department')) {
+            $request->merge(['department' => $resolvedDepartment]);
+        }
+
+        return $request;
+    }
+
+    /**
+     * @param  array<string, mixed>  $queryParams
+     */
+    public function requestFromParams(array $queryParams): Request
+    {
+        return $this->prepareRequest($queryParams);
+    }
+
+    /**
+     * @param  array<string, mixed>  $queryParams
+     * @return Builder<ActivityEcomUser>
+     */
+    public function buildIndexQuery(array $queryParams): Builder
+    {
+        $request = $this->prepareRequest($queryParams);
+        $range = $this->resolveRange($queryParams);
+
+        return $this->buildFilteredQuery($request, $range);
+    }
+
+    /**
+     * @param  array<string, mixed>  $queryParams
      * @return Builder<ActivityEcomUser>
      */
     public function buildSortedQuery(array $queryParams): Builder
     {
-        $request = $this->requestFromParams($queryParams);
+        $request = $this->prepareRequest($queryParams);
         $range = $this->resolveRange($queryParams);
         $focus = $request->input('focus');
-        $query = $this->buildIndexQuery($request, $range);
+        $query = $this->buildFilteredQuery($request, $range);
         $scope = $this->sessionSortScope($request, $range, $focus);
+
+        $sortBy = EcomActivitySessionSort::effectiveSortBy($request);
 
         return EcomActivitySessionSort::apply(
             $query,
-            EcomActivitySessionSort::resolveSortBy($request),
-            EcomActivitySessionSort::resolveSortDir(
-                $request,
-                EcomActivitySessionSort::resolveSortBy($request) ?? EcomActivitySessionSort::DEFAULT_SORT_KEY,
-            ),
+            $sortBy,
+            EcomActivitySessionSort::resolveSortDir($request, $sortBy),
             $scope,
         );
     }
@@ -82,7 +155,7 @@ class EcomActivityExportQuery
      */
     public function funnelMetricsForExport(array $queryParams): array
     {
-        $request = $this->requestFromParams($queryParams);
+        $request = $this->prepareRequest($queryParams);
         $metricsFocus = EcomActivityFocus::resolveFunnelMetricsFocus($request);
 
         if ($metricsFocus === null) {
@@ -107,7 +180,7 @@ class EcomActivityExportQuery
      */
     public function productCatalogOptions(array $queryParams): array
     {
-        $request = $this->requestFromParams($queryParams);
+        $request = $this->prepareRequest($queryParams);
         $focus = $request->input('focus');
 
         return in_array($focus, ['products', 'categories'], true)
@@ -116,17 +189,9 @@ class EcomActivityExportQuery
     }
 
     /**
-     * @param  array<string, mixed>  $queryParams
-     */
-    public function requestFromParams(array $queryParams): Request
-    {
-        return Request::create('/', 'GET', $queryParams);
-    }
-
-    /**
      * @return Builder<ActivityEcomUser>
      */
-    private function buildIndexQuery(Request $request, array $range): Builder
+    private function buildFilteredQuery(Request $request, array $range): Builder
     {
         $query = ActivityEcomUser::query()->with(['botContext']);
         $focus = $request->input('focus');
