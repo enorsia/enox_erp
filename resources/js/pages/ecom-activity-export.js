@@ -205,7 +205,33 @@
         params.delete("page");
         params.delete("fragment");
 
-        return Object.fromEntries(params.entries());
+        const result = {};
+
+        for (const [rawKey, value] of params.entries()) {
+            const isArrayKey = rawKey.endsWith("[]");
+            const key = isArrayKey ? rawKey.slice(0, -2) : rawKey;
+
+            if (isArrayKey) {
+                if (!Array.isArray(result[key])) {
+                    result[key] = [];
+                }
+
+                result[key].push(value);
+                continue;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(result, key)) {
+                if (key === "period" && value === "custom") {
+                    result[key] = value;
+                }
+
+                continue;
+            }
+
+            result[key] = value;
+        }
+
+        return result;
     }
 
     function filterSummaryLabel() {

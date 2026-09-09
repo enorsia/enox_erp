@@ -95,10 +95,11 @@ class EcomActivityController extends EcomTrackerAdminController
         $sessions = $this->paginateSessions($query, $request, $focus, $range);
 
         $funnelMetrics = [];
+        $metricsFocus = EcomActivityFocus::resolveFunnelMetricsFocus($request);
 
-        if (EcomActivityFocus::isValid($focus) && ! $isTableFragment) {
+        if ($metricsFocus !== null && ! $isTableFragment) {
             $funnelContext = EcomActivityFocus::resolveFunnelContext(
-                $focus,
+                $metricsFocus,
                 $range['from'],
                 $range['to'],
                 EcomActivityFocus::sessionFiltersFromRequest($request),
@@ -117,6 +118,7 @@ class EcomActivityController extends EcomTrackerAdminController
             in_array($focus, ['products', 'categories'], true)
                 ? EcomActivityFocus::productCatalogFiltersFromRequest($request)
                 : EcomActivityFocus::indexCatalogFiltersFromRequest($request),
+            $request,
         );
 
         $tableViewData = [

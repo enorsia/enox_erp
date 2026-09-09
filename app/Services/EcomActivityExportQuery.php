@@ -83,15 +83,16 @@ class EcomActivityExportQuery
     public function funnelMetricsForExport(array $queryParams): array
     {
         $request = $this->requestFromParams($queryParams);
-        $focus = $request->input('focus');
-        $range = $this->resolveRange($queryParams);
+        $metricsFocus = EcomActivityFocus::resolveFunnelMetricsFocus($request);
 
-        if (! EcomActivityFocus::isValid($focus)) {
+        if ($metricsFocus === null) {
             return [];
         }
 
+        $range = $this->resolveRange($queryParams);
+
         return EcomActivityFocus::resolveFunnelContext(
-            $focus,
+            $metricsFocus,
             $range['from'],
             $range['to'],
             EcomActivityFocus::sessionFiltersFromRequest($request),

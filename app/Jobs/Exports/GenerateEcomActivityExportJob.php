@@ -13,6 +13,7 @@ use App\Support\ExportLogger;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Http\Request;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Collection;
@@ -86,6 +87,9 @@ class GenerateEcomActivityExportJob implements ShouldQueue
             'start_date' => $range['from']->toDateString(),
             'end_date' => $range['to']->toDateString(),
             'range_label' => $filters['range_label'] ?? $range['label'],
+            'filter_summary' => EcomActivityFocus::exportFilterSummary(
+                $exportQuery->requestFromParams($queryParams),
+            ),
         ];
         $writer->writeHeader(EcomActivityAsyncRowBuilder::headings($queryParams), $headerContext);
 
@@ -246,6 +250,7 @@ class GenerateEcomActivityExportJob implements ShouldQueue
             $range['to'],
             $funnelMetrics,
             $catalogOptions,
+            Request::create('/', 'GET', $queryParams),
         );
 
         $rows = EcomActivityAsyncRowBuilder::fromSessions(

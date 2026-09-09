@@ -13,6 +13,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 final class EcomActivityFocus
 {
@@ -225,6 +226,223 @@ final class EcomActivityFocus
         }
 
         return $columns;
+    }
+
+    /**
+     * Focus key used to load per-session funnel metrics (orders, abandonment, etc.).
+     */
+    public static function resolveFunnelMetricsFocus(Request $request): ?string
+    {
+        $focus = $request->input('focus');
+
+        if (self::isValid($focus)) {
+            $definition = self::definition($focus);
+
+            if (! empty($definition['payment_success']) || ! empty($definition['funnel'])) {
+                return $focus;
+            }
+        }
+
+        $drawerFunnels = self::drawerFunnelFilterValues($request);
+
+        return count($drawerFunnels) === 1 ? $drawerFunnels[0] : null;
+    }
+
+    /**
+     * Whether per-session payment totals should be loaded for the activity table/export.
+     */
+    public static function shouldAttachPaymentMetrics(?string $focus, Request $request, array $funnelMetrics = []): bool
+    {
+        if ($funnelMetrics !== []) {
+            return false;
+        }
+
+        if (in_array($focus, ['conversion', 'payment_success'], true)) {
+            return true;
+        }
+
+        if ($request->filled('has_order') && $request->has_order === '1') {
+            return true;
+        }
+
+        return in_array('payment_success', self::drawerFunnelFilterValues($request), true);
+    }
+
+    /**
+     * Extra export columns driven by focus and active drawer filters.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function exportContextColumns(?string $focus, ?Request $request = null): array
+    {
+        $request ??= request();
+        $columns = self::tableColumns($focus, $request);
+        $existingKeys = collect($columns)->pluck('key')->all();
+
+        foreach (self::exportFunnelColumnKeys($focus, $request) as $key) {
+            $columns = self::appendExportColumn($columns, $existingKeys, $key);
+        }
+
+        if (
+            TrackerMultiSelectFilter::requestFilled($request, 'device_type')
+            && ! in_array('device', $existingKeys, true)
+            && ! in_array('device_detail', $existingKeys, true)
+        ) {
+            $columns = self::appendExportColumn($columns, $existingKeys, 'device');
+        }
+
+        if (
+            (TrackerMultiSelectFilter::requestFilled($request, 'utm_source')
+                || TrackerMultiSelectFilter::requestFilled($request, 'utm_medium'))
+            && ! in_array('traffic_source', $existingKeys, true)
+        ) {
+            $columns = self::appendExportColumn($columns, $existingKeys, 'traffic_source');
+            $columns = self::appendExportColumn($columns, $existingKeys, 'traffic_medium');
+        }
+
+        if ($request->filled('has_order') && $request->has_order === '1') {
+            $columns = self::appendExportColumn($columns, $existingKeys, 'order_qty');
+            $columns = self::appendExportColumn($columns, $existingKeys, 'order_value');
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Human-readable active filter summary for export headers.
+     */
+    public static function exportFilterSummary(Request $request): string
+    {
+        $parts = [];
+
+        if (self::isValid($request->input('focus'))) {
+            $parts[] = 'Section: '.self::label($request->input('focus'));
+        }
+
+        foreach (self::drawerFunnelFilterValues($request) as $funnelKey) {
+            $parts[] = 'Funnel: '.(self::sidebarFunnelFilterOptions()[$funnelKey] ?? $funnelKey);
+        }
+
+        if ($request->filled('has_order')) {
+            $parts[] = $request->has_order === '1' ? 'Has order' : 'No order';
+        }
+
+        if ($request->filled('logged_in')) {
+            $parts[] = $request->logged_in === '1' ? 'Logged in' : 'Guest';
+        }
+
+        if (TrackerMultiSelectFilter::requestFilled($request, 'device_type')) {
+            $devices = TrackerMultiSelectFilter::allowedValues(
+                $request->input('device_type'),
+                ['desktop', 'mobile', 'tablet'],
+            );
+            $parts[] = 'Device: '.implode(', ', array_map('ucfirst', $devices));
+        }
+
+        if (TrackerMultiSelectFilter::requestFilled($request, 'duration_bucket')) {
+            $parts[] = 'Duration filtered';
+        }
+
+        if (TrackerMultiSelectFilter::requestFilled($request, 'utm_source')) {
+            $parts[] = 'Source filtered';
+        }
+
+        if (TrackerMultiSelectFilter::requestFilled($request, 'utm_medium')) {
+            $parts[] = 'Medium filtered';
+        }
+
+        if ($request->filled('department')) {
+            $parts[] = 'Department: '.$request->department;
+        }
+
+        if ($request->filled('category')) {
+            $categories = TrackerMultiSelectFilter::requestValues($request, 'category');
+            $parts[] = 'Category: '.implode(', ', $categories);
+        }
+
+        if ($request->filled('search')) {
+            $parts[] = 'Search: '.Str::limit(trim((string) $request->search), 40);
+        }
+
+        return implode(' · ', array_values(array_filter($parts)));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function exportFunnelColumnKeys(?string $focus, Request $request): array
+    {
+        $keys = [];
+
+        foreach (self::resolveExportFunnelKeys($focus, $request) as $funnelKey) {
+            $keys = array_merge($keys, match ($funnelKey) {
+                'payment_success' => ['order_qty', 'order_value'],
+                'cart_abandonment' => ['cart_qty', 'cart_value', 'abandoned_at'],
+                'begin_checkout_abandonment', 'proceed_checkout_abandonment' => ['checkout_qty', 'checkout_value', 'abandoned_at'],
+                default => [],
+            });
+        }
+
+        return array_values(array_unique($keys));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function resolveExportFunnelKeys(?string $focus, Request $request): array
+    {
+        if (self::isValid($focus)) {
+            $definition = self::definition($focus);
+
+            if (! empty($definition['payment_success']) || ! empty($definition['funnel'])) {
+                return [(string) $focus];
+            }
+        }
+
+        return self::drawerFunnelFilterValues($request);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $columns
+     * @param  array<int, string>  $existingKeys
+     * @return array<int, array<string, mixed>>
+     */
+    private static function appendExportColumn(array $columns, array &$existingKeys, string $key): array
+    {
+        if (in_array($key, $existingKeys, true)) {
+            return $columns;
+        }
+
+        $column = self::exportColumnDefinition($key);
+
+        if ($column === null) {
+            return $columns;
+        }
+
+        $columns[] = $column;
+        $existingKeys[] = $key;
+
+        return $columns;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function exportColumnDefinition(string $key): ?array
+    {
+        return match ($key) {
+            'device' => ['key' => 'device', 'label' => 'Device'],
+            'order_qty' => ['key' => 'order_qty', 'label' => 'Orders', 'class' => 'etd-num'],
+            'order_value' => ['key' => 'order_value', 'label' => 'Order value', 'class' => 'etd-num'],
+            'cart_qty' => ['key' => 'cart_qty', 'label' => 'Cart qty', 'class' => 'etd-num'],
+            'cart_value' => ['key' => 'cart_value', 'label' => 'Cart value', 'class' => 'etd-num'],
+            'checkout_qty' => ['key' => 'checkout_qty', 'label' => 'Qty', 'class' => 'etd-num'],
+            'checkout_value' => ['key' => 'checkout_value', 'label' => 'Value', 'class' => 'etd-num'],
+            'abandoned_at' => ['key' => 'abandoned_at', 'label' => 'Abandoned'],
+            'traffic_source' => ['key' => 'traffic_source', 'label' => 'Source'],
+            'traffic_medium' => ['key' => 'traffic_medium', 'label' => 'Medium'],
+            default => null,
+        };
     }
 
     /**
@@ -1007,8 +1225,14 @@ final class EcomActivityFocus
             return 'duration';
         }
 
-        if ($request->filled('utm_source')) {
+        if ($request->filled('utm_source') || $request->filled('utm_medium')) {
             return 'traffic';
+        }
+
+        $drawerFunnels = self::drawerFunnelFilterValues($request);
+
+        if (count($drawerFunnels) === 1 && self::isValid($drawerFunnels[0])) {
+            return $drawerFunnels[0];
         }
 
         if (self::activeFilterCount($request) > 0) {

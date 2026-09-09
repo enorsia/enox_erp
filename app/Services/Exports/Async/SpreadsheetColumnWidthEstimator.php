@@ -200,6 +200,23 @@ final class SpreadsheetColumnWidthEstimator
             'Product Code' => 18.0,
             'Rating' => 12.0,
         ],
+        'ecom_activity' => [
+            'Session ID' => 24.0,
+            'Session started' => 20.0,
+            'User' => 34.0,
+            'Visitor trust' => 24.0,
+            'Commerce' => 18.0,
+            'Commerce detail' => 18.0,
+            'Orders' => 12.0,
+            'Order value' => 14.0,
+            'Cart qty' => 12.0,
+            'Cart value' => 14.0,
+            'Abandoned' => 18.0,
+            'Source' => 18.0,
+            'Medium' => 16.0,
+            'Duration' => 14.0,
+            'Last active' => 16.0,
+        ],
     ];
 
     /**

@@ -154,24 +154,29 @@
             </div>
         </div>
 
-        @if (! empty($activityListContext ?? $drillDownContext ?? null))
-            @include('ecom_activity.partials.drill-down-context', ['context' => $activityListContext ?? $drillDownContext])
-        @elseif (! empty($filterChips))
-            @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
-        @endif
-
         @php
-            $showVisitorQualitySummary = empty($activityListContext ?? $drillDownContext ?? null)
-                && empty($filterChips)
+            $hasActivityContext = ! empty($activityListContext ?? $drillDownContext ?? null);
+            $hasFilterChips = ! $hasActivityContext && ! empty($filterChips);
+            $showVisitorQualitySummary = ! $hasActivityContext
+                && ! $hasFilterChips
                 && empty($summaryCards)
                 && ! empty($visitorQualitySummary)
                 && ! ($hasFocus ?? false);
+            $metaRowHasLeftContent = $hasActivityContext || $hasFilterChips || $showVisitorQualitySummary;
         @endphp
 
-        @if (empty($activityListContext ?? $drillDownContext ?? null))
-            <div @class(['etd-page-header-meta-row', 'etd-page-header-meta-row--empty' => ! $showVisitorQualitySummary])>
+        @if ($hasActivityContext)
+            @include('ecom_activity.partials.drill-down-context', [
+                'context' => $activityListContext ?? $drillDownContext,
+                'export_key' => 'activity',
+                'export' => $activityExport ?? null,
+            ])
+        @else
+            <div @class(['etd-page-header-meta-row', 'etd-page-header-meta-row--empty' => ! $metaRowHasLeftContent])>
                 <div class="etd-page-header-meta-row__left">
-                    @if ($showVisitorQualitySummary)
+                    @if ($hasFilterChips)
+                        @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
+                    @elseif ($showVisitorQualitySummary)
                         <p class="etd-visitor-quality-summary text-[12px] text-slate-500 dark:text-slate-400 mb-0">
                             <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['real_shoppers']) }}</span> real visitors ·
                             <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['automated_traffic']) }}</span> automated ·
@@ -186,18 +191,18 @@
                     ])
                 </div>
             </div>
+        @endif
 
-            @if (! empty($summaryCards))
-                <div class="etd-kpi-grid mt-3 mb-1">
-                    @foreach ($summaryCards as $card)
-                        @include('ecom_tracker.partials.ga4-kpi-card', [
-                            'label' => $card['label'],
-                            'value' => $card['value'],
-                            'compact' => true,
-                        ])
-                    @endforeach
-                </div>
-            @endif
+        @if (! $hasActivityContext && ! empty($summaryCards))
+            <div class="etd-kpi-grid mt-3 mb-1">
+                @foreach ($summaryCards as $card)
+                    @include('ecom_tracker.partials.ga4-kpi-card', [
+                        'label' => $card['label'],
+                        'value' => $card['value'],
+                        'compact' => true,
+                    ])
+                @endforeach
+            </div>
         @endif
     </header>
 

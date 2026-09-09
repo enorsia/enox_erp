@@ -145,11 +145,11 @@ final class SpreadsheetExportLayout
                 companyHeaderLines: 3,
                 includeDateRangeLine: true,
                 headerCenterAligned: true,
-                dataCenterAligned: true,
+                dataCenterAligned: false,
                 customerColumnStart: null,
                 customerColumnEnd: null,
-                moneyFormatStart: null,
-                moneyFormatEnd: null,
+                moneyFormatStart: $profile->moneyColumnEnd > 0 ? $profile->moneyColumnStart : null,
+                moneyFormatEnd: $profile->moneyColumnEnd > 0 ? $profile->moneyColumnEnd : null,
                 discountColumn: null,
                 totalsRow: null,
                 companyStyleEndColumn: $profile->columnCount - 1,
@@ -180,6 +180,25 @@ final class SpreadsheetExportLayout
      */
     public function companyHeaderTexts(array $context): array
     {
+        if ($this->profile->layoutKey === 'ecom_activity') {
+            $lines = [$this->profile->reportTitle];
+
+            if (! empty($context['start_date']) && ! empty($context['end_date'])) {
+                $lines[] = 'FROM '.Carbon::parse($context['start_date'])->format('m/d/Y')
+                    .' TO '.Carbon::parse($context['end_date'])->format('m/d/Y');
+            } elseif (! empty($context['range_label'])) {
+                $lines[] = strtoupper((string) $context['range_label']);
+            } else {
+                $lines[] = '';
+            }
+
+            $lines[] = filled($context['filter_summary'] ?? null)
+                ? strtoupper((string) $context['filter_summary'])
+                : 'ALL SESSIONS';
+
+            return $lines;
+        }
+
         $lines = ['PFD ENORSIA UK LTD', $this->profile->reportTitle];
 
         if ($this->companyHeaderLines === 3 && $this->includeDateRangeLine) {

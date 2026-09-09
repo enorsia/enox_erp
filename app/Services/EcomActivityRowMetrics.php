@@ -7,6 +7,7 @@ use App\Support\CommerceLineItemQuery;
 use App\Support\CommerceReadSupport;
 use App\Support\EcomActivityCommerceEvents;
 use App\Support\EcomActivityCommerceSummary;
+use App\Support\EcomActivityFocus;
 use App\Support\EcomActivitySessionSort;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
@@ -14,6 +15,7 @@ use App\Support\TrackerMultiSelectFilter;
 use App\Support\TrackerProductCatalogIdentity;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
 /**
@@ -38,6 +40,7 @@ class EcomActivityRowMetrics
         Carbon $to,
         array $funnelMetrics = [],
         array $productCatalogOptions = [],
+        ?Request $request = null,
     ): array {
         if ($sessions->isEmpty()) {
             return [];
@@ -68,7 +71,7 @@ class EcomActivityRowMetrics
             }
         }
 
-        if (in_array($focus, ['conversion', 'payment_success'], true) && $funnelMetrics === []) {
+        if ($request !== null && EcomActivityFocus::shouldAttachPaymentMetrics($focus, $request, $funnelMetrics)) {
             $this->attachPaymentMetrics($metrics, $sessionIds, $from, $to);
         }
 
@@ -80,7 +83,7 @@ class EcomActivityRowMetrics
             $this->attachCategoryMetrics($metrics, $sessionIds, $from, $to, $productCatalogOptions);
         }
 
-        if ($focus === 'traffic') {
+        if ($focus === 'traffic' || self::shouldAttachTrafficMetrics($focus, $request)) {
             foreach ($sessions as $session) {
                 $traffic = SessionTrafficAttribution::listRowSummary($session);
                 $metrics[$session->session_id]['traffic_source'] = $traffic['source'] ?? '—';
@@ -107,7 +110,7 @@ class EcomActivityRowMetrics
             $metrics[$session->session_id]['actions_count'] = $session->actions_count ?? 0;
         }
 
-        if ($focus === 'audience' || $focus === null) {
+        if ($focus === 'audience' || $focus === null || self::shouldAttachDeviceMetric($focus, $request)) {
             foreach ($sessions as $session) {
                 $metrics[$session->session_id]['device'] = ucfirst((string) ($session->device_type ?? '—'));
             }
@@ -448,5 +451,24 @@ class EcomActivityRowMetrics
 
             $metrics[$sessionId]['catalog_path'] = $rowCatalogPath ?? '—';
         }
+    }
+
+    private static function shouldAttachTrafficMetrics(?string $focus, ?Request $request): bool
+    {
+        if ($request === null || $focus === 'traffic') {
+            return false;
+        }
+
+        return TrackerMultiSelectFilter::requestFilled($request, 'utm_source')
+            || TrackerMultiSelectFilter::requestFilled($request, 'utm_medium');
+    }
+
+    private static function shouldAttachDeviceMetric(?string $focus, ?Request $request): bool
+    {
+        if ($request === null || in_array($focus, ['audience', 'devices'], true)) {
+            return false;
+        }
+
+        return TrackerMultiSelectFilter::requestFilled($request, 'device_type');
     }
 }

@@ -678,3 +678,34 @@ test('categories focus keeps top category column when only department filter is 
 
     expect(collect($columns)->pluck('key')->all())->toBe(['top_category', 'purchases']);
 });
+
+test('export context columns add payment totals when drawer funnel is payment success', function () {
+    $request = Request::create('/', 'GET', [
+        'period' => '30d',
+        'funnel' => ['payment_success'],
+    ]);
+
+    expect(EcomActivityFocus::resolveFunnelMetricsFocus($request))->toBe('payment_success')
+        ->and(EcomActivityFocus::shouldAttachPaymentMetrics(null, $request))->toBeTrue()
+        ->and(collect(EcomActivityFocus::exportContextColumns(null, $request))->pluck('key')->all())
+        ->toBe(['order_qty', 'order_value'])
+        ->and(EcomActivityFocus::exportFilterSummary($request))
+        ->toBe('Funnel: Payment success');
+});
+
+test('export context columns add abandonment metrics for cart abandonment filter', function () {
+    $request = Request::create('/', 'GET', [
+        'funnel' => ['cart_abandonment'],
+    ]);
+
+    expect(collect(EcomActivityFocus::exportContextColumns(null, $request))->pluck('key')->all())
+        ->toBe(['cart_qty', 'cart_value', 'abandoned_at']);
+});
+
+test('resolve filter summary focus uses single drawer funnel key', function () {
+    $request = Request::create('/', 'GET', [
+        'funnel' => ['payment_success'],
+    ]);
+
+    expect(EcomActivityFocus::resolveFilterSummaryFocus($request))->toBe('payment_success');
+});

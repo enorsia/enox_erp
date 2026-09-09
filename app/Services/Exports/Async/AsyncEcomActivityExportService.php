@@ -109,7 +109,7 @@ class AsyncEcomActivityExportService
         $filters = $export->filters ?? [];
         $queryParams = $filters['query'] ?? [];
         $headings = EcomActivityAsyncRowBuilder::headings($queryParams);
-        $profile = SpreadsheetWriterProfile::ecomActivity(count($headings));
+        $profile = SpreadsheetWriterProfile::ecomActivity($headings);
 
         return $export->format === 'csv'
             ? new OpenSpoutCsvWriter($absolutePath, $profile)

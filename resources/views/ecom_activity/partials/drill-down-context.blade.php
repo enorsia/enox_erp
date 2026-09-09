@@ -1,4 +1,8 @@
-@props(['context'])
+@props([
+    'context',
+    'export_key' => null,
+    'export' => null,
+])
 
 @if (! empty($context))
     @php
@@ -32,6 +36,15 @@
                     </span>
                 @endforeach
             </div>
+
+            @if (filled($export_key))
+                <div class="etd-activity-context__export">
+                    @include('ecom_tracker.partials.exports.export-header-status', [
+                        'export_key' => $export_key,
+                        'export' => $export,
+                    ])
+                </div>
+            @endif
         </div>
 
         @if ($filterChips->isNotEmpty())

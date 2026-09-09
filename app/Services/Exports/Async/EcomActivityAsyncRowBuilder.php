@@ -19,22 +19,13 @@ class EcomActivityAsyncRowBuilder
         $request = Request::create('/', 'GET', $queryParams);
         $focus = $request->input('focus');
 
-        $headings = [
-            'SL',
-            'Session ID',
-            'Session started',
-            'User',
-            'Visitor trust',
-            'Commerce',
-            'Commerce detail',
-            'Actions',
-        ];
+        $headings = self::baseHeadings($request);
 
         if ($request->filled('department') || $request->filled('category')) {
             $headings[] = 'Category';
         }
 
-        foreach (EcomActivityFocus::tableColumns($focus, $request) as $column) {
+        foreach (EcomActivityFocus::exportContextColumns($focus, $request) as $column) {
             $headings[] = (string) ($column['label'] ?? $column['key'] ?? '');
         }
 
@@ -42,6 +33,55 @@ class EcomActivityAsyncRowBuilder
         $headings[] = 'Last active';
 
         return $headings;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function baseHeadings(Request $request): array
+    {
+        $headings = [
+            'SL',
+            'Session ID',
+            'Session started',
+            'User',
+            'Visitor trust',
+            'Commerce',
+        ];
+
+        if (! self::shouldOmitCommerceDetailColumn($request)) {
+            $headings[] = 'Commerce detail';
+        }
+
+        $headings[] = 'Actions';
+
+        return $headings;
+    }
+
+    private static function shouldOmitCommerceDetailColumn(Request $request): bool
+    {
+        $funnelKeys = EcomActivityFocus::drawerFunnelFilterValues($request);
+        $focus = $request->input('focus');
+
+        if (EcomActivityFocus::isValid($focus)) {
+            if (in_array($focus, ['payment_success', 'conversion'], true)) {
+                return true;
+            }
+
+            if (! empty(EcomActivityFocus::definition($focus)['funnel'])) {
+                return false;
+            }
+        }
+
+        if ($funnelKeys === ['payment_success']) {
+            return true;
+        }
+
+        if ($request->filled('has_order') && $request->has_order === '1' && $funnelKeys === []) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -58,8 +98,9 @@ class EcomActivityAsyncRowBuilder
     ): array {
         $request = Request::create('/', 'GET', $queryParams);
         $focus = $request->input('focus');
-        $focusColumns = EcomActivityFocus::tableColumns($focus, $request);
+        $focusColumns = EcomActivityFocus::exportContextColumns($focus, $request);
         $showCatalogColumn = $request->filled('department') || $request->filled('category');
+        $includeCommerceDetail = ! self::shouldOmitCommerceDetailColumn($request);
         $rows = [];
 
         foreach ($sessions as $session) {
@@ -71,9 +112,13 @@ class EcomActivityAsyncRowBuilder
                 self::formatUser($session),
                 self::formatVisitorTrust($session),
                 (string) ($metrics['commerce_display'] ?? '—'),
-                self::formatCommerceDetail($metrics),
-                (int) ($session->actions_count ?? $metrics['actions_count'] ?? 0),
             ];
+
+            if ($includeCommerceDetail) {
+                $row[] = self::formatCommerceDetail($metrics);
+            }
+
+            $row[] = (int) ($session->actions_count ?? $metrics['actions_count'] ?? 0);
 
             if ($showCatalogColumn) {
                 $catalogPath = trim((string) ($metrics['catalog_path'] ?? ''));

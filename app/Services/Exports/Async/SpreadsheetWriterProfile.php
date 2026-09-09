@@ -231,18 +231,31 @@ final class SpreadsheetWriterProfile
         );
     }
 
-    public static function ecomActivity(int $columnCount): self
+    public static function ecomActivity(array $headings): self
     {
+        $columnCount = max(1, count($headings));
+        $moneyLabels = ['Order value', 'Cart value', 'Value'];
+        $moneyIndices = [];
+
+        foreach ($headings as $index => $heading) {
+            if (in_array($heading, $moneyLabels, true)) {
+                $moneyIndices[] = $index;
+            }
+        }
+
+        $moneyStart = $moneyIndices !== [] ? min($moneyIndices) : 0;
+        $moneyEnd = $moneyIndices !== [] ? max($moneyIndices) : 0;
+
         return new self(
             layoutKey: 'ecom_activity',
-            columnCount: max(1, $columnCount),
+            columnCount: $columnCount,
             mergeEndColumn: min(max(1, $columnCount - 1), 6),
             phoneColumn: 0,
             orderNumberColumn: 0,
             sizeColumn: 0,
             quantityColumn: 0,
-            moneyColumnStart: 0,
-            moneyColumnEnd: 0,
+            moneyColumnStart: $moneyStart,
+            moneyColumnEnd: $moneyEnd,
             couponPercentColumn: 0,
             totalLabelColumn: 0,
             reportTitle: 'USER ACTIVITY REPORT',
