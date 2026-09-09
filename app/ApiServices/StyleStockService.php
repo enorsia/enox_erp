@@ -27,6 +27,6 @@ class StyleStockService
         ]))
             ->timeout(config('enox.timeout'))
             ->retry(config('enox.retry'), 200)
-            ->get($baseUrl . $uri, $filters);
+            ->post($baseUrl . $uri, $filters);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\ApiServices\StyleStockService;
+use App\Models\SellingChartBasicInfo;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -48,7 +49,7 @@ class StyleStockReportService
     public function exportReport(array $filters = []): array
     {
         $filters['action'] = 'export_stock_analysis';
-
+        $filters['platform_discounts_by_style'] = $this->buildPlatformDiscountsByStyle();
         try {
             $response = $this->apiService->export($filters);
 
@@ -134,5 +135,103 @@ class StyleStockReportService
         }
 
         return 'Style Stock Report.xlsx';
+    }
+
+    protected function buildPlatformDiscountsByStyle(): array
+    {
+        return SellingChartBasicInfo::select('id', 'design_no')
+            ->whereHas('sellingChartPrices.discounts', function ($query) {
+                $query->where('price', '>', 0);
+            })
+            ->with([
+                'sellingChartPrices:id,basic_info_id,range',
+                'sellingChartPrices.discounts:id,selling_chart_price_id,platform_id,price',
+                'sellingChartPrices.discounts.platform:id,code',
+            ])
+            ->get()
+            ->sortByDesc(fn (SellingChartBasicInfo $scInfo) => $this->chartHasDiscounts($scInfo))
+            ->unique('design_no')
+            ->mapWithKeys(function (SellingChartBasicInfo $scInfo) {
+                $appliedDiscounts = $this->buildAppliedDiscounts($scInfo);
+
+                if ($appliedDiscounts === null) {
+                    return [];
+                }
+
+                return [$scInfo->design_no => $appliedDiscounts];
+            })
+            ->all();
+    }
+
+    protected function chartHasDiscounts(SellingChartBasicInfo $scInfo): bool
+    {
+        return $scInfo->sellingChartPrices
+            ?->flatMap->discounts
+            ?->contains(fn ($discount) => $discount->price && $discount->platform) ?? false;
+    }
+
+    protected function buildAppliedDiscounts(SellingChartBasicInfo $scInfo): ?array
+    {
+        $firstPrice = $scInfo->sellingChartPrices?->first();
+
+        if (! $firstPrice) {
+            return null;
+        }
+
+        if ($firstPrice->range) {
+            $platformRanges = [];
+
+            foreach ($scInfo->sellingChartPrices as $price) {
+                foreach ($price->discounts as $discount) {
+                    if (! $discount->price || ! $discount->platform) {
+                        continue;
+                    }
+
+                    $code = $discount->platform->code;
+                    $priceValue = (float) $discount->price;
+
+                    if (! isset($platformRanges[$code])) {
+                        $platformRanges[$code] = [
+                            'min' => $priceValue,
+                            'max' => $priceValue,
+                        ];
+
+                        continue;
+                    }
+
+                    $platformRanges[$code]['min'] = min($platformRanges[$code]['min'], $priceValue);
+                    $platformRanges[$code]['max'] = max($platformRanges[$code]['max'], $priceValue);
+                }
+            }
+
+            if ($platformRanges === []) {
+                return null;
+            }
+
+            return [
+                'has_range' => true,
+                'platform_ranges' => $platformRanges,
+                'platform_discounts' => [],
+            ];
+        }
+
+        $platformDiscounts = $firstPrice->discounts
+            ->filter(fn ($discount) => $discount->price && $discount->platform)
+            ->map(fn ($discount) => [
+                'code' => $discount->platform->code,
+                'price' => $discount->price,
+            ])
+            ->values()
+            ->all();
+
+        if ($platformDiscounts === []) {
+            return null;
+        }
+
+        return [
+            'has_range' => false,
+            'platform_ranges' => [],
+            'platform_discounts' => $platformDiscounts,
+        ];
     }
 }

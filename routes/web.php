@@ -66,6 +66,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
         Route::get('selling-chart/manage/view/{id}', 'viewSingleChart')->name('selling_chart.view.single.chart');
         Route::get('selling-chart/forecasting', 'forecasting')->name('selling_chart.forecasting');
         Route::get('selling-chart/discounts', 'discounts')->name('selling_chart.discounts');
+        Route::get('selling-chart/save-existing-discounts', 'saveExistingDiscounts')->name('selling_chart.save.existing.discounts');
         Route::post('selling-chart/calculate-platform-profit', 'calculateProfit')
             ->name('selling_chart.calculate.platform.profit');
         Route::post('selling-chart/save-platform-discount-price', 'savePlatformDiscountPrice')
