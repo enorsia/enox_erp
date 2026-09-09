@@ -3,7 +3,6 @@
 namespace App\Services\Exports\Async;
 
 use App\Models\ActivityEcomUser;
-use App\Support\EcomActivityFocus;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerQueryParams;
 use App\Support\TrackerTime;
@@ -41,7 +40,6 @@ final class EcomActivityExportSchema
     public static function headings(array $queryParams): array
     {
         $request = TrackerQueryParams::request($queryParams);
-        $focus = $request->input('focus');
 
         $headings = [
             'SL',
@@ -67,12 +65,6 @@ final class EcomActivityExportSchema
 
         if ($request->filled('department') || $request->filled('category')) {
             $headings[] = 'Category';
-        }
-
-        foreach (EcomActivityFocus::exportContextColumns($focus, $request) as $column) {
-            $headings[] = self::exportContextHeadingLabel(
-                (string) ($column['label'] ?? $column['key'] ?? ''),
-            );
         }
 
         $headings[] = 'Duration';
@@ -106,7 +98,6 @@ final class EcomActivityExportSchema
             'Unit price',
             'Line total',
             'Order total',
-            'Order value',
             'Duration',
             'UTM source',
             'Traffic type',
@@ -359,12 +350,6 @@ final class EcomActivityExportSchema
             $row[] = ($catalogPath !== '' && $catalogPath !== '—') ? $catalogPath : '—';
         }
 
-        $focus = $request->input('focus');
-
-        foreach (EcomActivityFocus::exportContextColumns($focus, $request) as $column) {
-            $row[] = self::formatMetric($column['key'] ?? '', $metrics);
-        }
-
         $row[] = format_duration((int) ($session->session_duration_seconds ?? 0));
         $row[] = $traffic['utm_source'];
         $row[] = $traffic['traffic_type'];
@@ -509,24 +494,6 @@ final class EcomActivityExportSchema
             $unitPrice ?? '—',
             $lineTotal ?? '—',
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $metrics
-     */
-    private static function formatMetric(string $key, array $metrics): mixed
-    {
-        $value = $metrics[$key] ?? '—';
-
-        if (is_numeric($value) && in_array($key, ['cart_value', 'checkout_value', 'order_value'], true)) {
-            return round((float) $value, 2);
-        }
-
-        if (is_numeric($value) && ! in_array($key, ['purchased'], true)) {
-            return (int) $value;
-        }
-
-        return $value;
     }
 
     /**
@@ -727,11 +694,6 @@ final class EcomActivityExportSchema
                 $rows[$rowIndex][$columnIndex] = '';
             }
         }
-    }
-
-    private static function exportContextHeadingLabel(string $label): string
-    {
-        return $label;
     }
 
     /**

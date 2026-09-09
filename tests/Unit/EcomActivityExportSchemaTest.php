@@ -41,24 +41,38 @@ test('export headings focus on management columns', function () {
         );
 });
 
-test('payment success filter omits commerce detail and adds order context columns', function () {
+test('payment success filter omits redundant context columns', function () {
     $headings = EcomActivityExportSchema::headings([
         'period' => '30d',
         'funnel' => ['payment_success'],
     ]);
 
-    expect($headings)->not->toContain('Commerce detail', 'Order qty')
-        ->and($headings)->toContain('Sum qty', 'Order total', 'Order value');
+    expect($headings)->not->toContain(
+        'Commerce detail',
+        'Order value',
+        'Cart qty',
+        'Cart value',
+        'Abandoned',
+        'Qty',
+        'Value',
+    )->and($headings)->toContain('Sum qty', 'Order total');
 });
 
-test('cart abandonment filter keeps abandonment context columns', function () {
+test('cart abandonment filter omits redundant context columns', function () {
     $headings = EcomActivityExportSchema::headings([
         'period' => '7d',
         'funnel' => ['cart_abandonment'],
     ]);
 
-    expect($headings)->not->toContain('Commerce detail')
-        ->and($headings)->toContain('Cart qty', 'Cart value', 'Abandoned');
+    expect($headings)->not->toContain(
+        'Commerce detail',
+        'Order value',
+        'Cart qty',
+        'Cart value',
+        'Abandoned',
+        'Qty',
+        'Value',
+    )->and($headings)->toContain('Sum qty', 'Order total');
 });
 
 test('registered user columns are populated separately', function () {
@@ -488,7 +502,6 @@ test('center aligned columns include only requested export columns', function ()
         array_search('Unit price', $headings, true),
         array_search('Line total', $headings, true),
         array_search('Order total', $headings, true),
-        array_search('Order value', $headings, true),
         array_search('Duration', $headings, true),
         array_search('UTM source', $headings, true),
         array_search('Traffic type', $headings, true),
