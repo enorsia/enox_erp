@@ -116,10 +116,6 @@
                             <span class="etd-header-btn-badge">{{ $sidebarFilterCount }}</span>
                         @endif
                     </button>
-                    @include('ecom_tracker.partials.exports.export-header-status', [
-                        'export_key' => 'activity',
-                        'export' => $activityExport ?? null,
-                    ])
                     <button type="button" onclick="window.openActivityExportModal && window.openActivityExportModal()" class="etd-header-btn etd-header-btn--icon" aria-label="Export">
                         <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V3m0 0L7.5 7.5M12 3l4.5 4.5M4.5 19.5h15"/>
@@ -164,22 +160,44 @@
             @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
         @endif
 
-        @if (empty($activityListContext ?? $drillDownContext ?? null) && ! empty($summaryCards))
-            <div class="etd-kpi-grid mt-3 mb-1">
-                @foreach ($summaryCards as $card)
-                    @include('ecom_tracker.partials.ga4-kpi-card', [
-                        'label' => $card['label'],
-                        'value' => $card['value'],
-                        'compact' => true,
+        @php
+            $showVisitorQualitySummary = empty($activityListContext ?? $drillDownContext ?? null)
+                && empty($filterChips)
+                && empty($summaryCards)
+                && ! empty($visitorQualitySummary)
+                && ! ($hasFocus ?? false);
+        @endphp
+
+        @if (empty($activityListContext ?? $drillDownContext ?? null))
+            <div @class(['etd-page-header-meta-row', 'etd-page-header-meta-row--empty' => ! $showVisitorQualitySummary])>
+                <div class="etd-page-header-meta-row__left">
+                    @if ($showVisitorQualitySummary)
+                        <p class="etd-visitor-quality-summary text-[12px] text-slate-500 dark:text-slate-400 mb-0">
+                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['real_shoppers']) }}</span> real visitors ·
+                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['automated_traffic']) }}</span> automated ·
+                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['not_classified']) }}</span> not classified
+                        </p>
+                    @endif
+                </div>
+                <div class="etd-page-header-meta-row__right">
+                    @include('ecom_tracker.partials.exports.export-header-status', [
+                        'export_key' => 'activity',
+                        'export' => $activityExport ?? null,
                     ])
-                @endforeach
+                </div>
             </div>
-        @elseif (! empty($visitorQualitySummary) && ! ($hasFocus ?? false))
-            <p class="text-[12px] text-slate-500 dark:text-slate-400 mt-2 mb-0">
-                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['real_shoppers']) }}</span> real visitors ·
-                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['automated_traffic']) }}</span> automated ·
-                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQualitySummary['not_classified']) }}</span> not classified
-            </p>
+
+            @if (! empty($summaryCards))
+                <div class="etd-kpi-grid mt-3 mb-1">
+                    @foreach ($summaryCards as $card)
+                        @include('ecom_tracker.partials.ga4-kpi-card', [
+                            'label' => $card['label'],
+                            'value' => $card['value'],
+                            'compact' => true,
+                        ])
+                    @endforeach
+                </div>
+            @endif
         @endif
     </header>
 

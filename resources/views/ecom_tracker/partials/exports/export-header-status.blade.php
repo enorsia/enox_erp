@@ -4,10 +4,14 @@
     $isLoading = $export && in_array($export->status, ['queued', 'processing'], true);
     $isReady = $export && $export->status === 'completed' && $export->isDownloadReady();
     $showStatus = $isLoading || $isReady;
-    $downloadLabel = $export?->downloadDisplayFilename() ?? 'Download';
+    $downloadFilename = $export?->downloadDisplayFilename() ?? 'Download';
+    $downloadCompletedAt = ($isReady && $export?->completed_at)
+        ? $export->completed_at->timezone(config('app.timezone'))->format('M d, Y h:i A')
+        : null;
 
-    if ($isReady && $export->completed_at) {
-        $downloadLabel .= ' · '.$export->completed_at->timezone(config('app.timezone'))->format('M d, Y h:i A');
+    $downloadLabel = $downloadFilename;
+    if ($downloadCompletedAt) {
+        $downloadLabel .= ' · '.$downloadCompletedAt;
     }
 
     $progressLabel = '';
@@ -50,19 +54,23 @@
         <a id="{{ $exportKey }}-export-download"
             href="{{ $isReady ? ($export->signedDownloadUrl() ?? '#') : '#' }}"
             @if($isReady) download="{{ $export->downloadDisplayFilename() }}" @endif
+            @if($isReady && filled($downloadLabel)) title="{{ $downloadLabel }}" @endif
             role="button"
-            class="inline-flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border-r border-slate-200 dark:border-slate-600 transition-colors max-w-[320px] rounded-l-[11px]">
+            class="export-download-btn inline-flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border-r border-slate-200 dark:border-slate-600 transition-colors min-w-0 rounded-l-[11px]">
             <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
-            <span id="{{ $exportKey }}-export-filename" class="text-[12px] font-semibold truncate">{{ $downloadLabel }}</span>
+            <span id="{{ $exportKey }}-export-filename" class="export-download-btn__label text-[12px] font-semibold truncate">{{ $downloadLabel }}</span>
+            @if ($isReady && filled($downloadLabel))
+                <span class="export-download-tooltip">{{ $downloadLabel }}</span>
+            @endif
         </a>
 
         <button type="button" id="{{ $exportKey }}-export-dismiss"
-            class="export-dismiss-btn inline-flex items-center justify-center px-2.5 py-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-200 transition-colors shrink-0 rounded-r-[11px]"
+            class="export-dismiss-btn"
             aria-label="Remove export"
             @if($export) data-export-id="{{ $export->id }}" @endif>
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <svg class="export-dismiss-btn__icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/>
             </svg>
             <span class="export-dismiss-tooltip">Remove this export and delete the file</span>

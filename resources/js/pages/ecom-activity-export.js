@@ -236,6 +236,29 @@
         return `${name} · ${stamp}`;
     }
 
+    function applyDownloadLabel(data) {
+        const download = els.download();
+        const filename = els.filename();
+        const label = formatDownloadLabel(data);
+
+        if (filename) {
+            filename.textContent = label;
+        }
+
+        if (download) {
+            download.setAttribute("title", label);
+
+            let tooltip = download.querySelector(".export-download-tooltip");
+            if (!tooltip) {
+                tooltip = document.createElement("span");
+                tooltip.className = "export-download-tooltip";
+                download.appendChild(tooltip);
+            }
+
+            tooltip.textContent = label;
+        }
+    }
+
     function isRowsComplete(data) {
         const processed = Number(data?.processed_rows) || 0;
         const total = Number(data?.total_rows) || 0;
@@ -411,7 +434,7 @@
             const url = data.download_url || "";
             download.href = url || "#";
             download.setAttribute("download", data.download_filename || "");
-            filename.textContent = formatDownloadLabel(data);
+            applyDownloadLabel(data);
             download.classList.add("inline-flex");
 
             if (!url) {
