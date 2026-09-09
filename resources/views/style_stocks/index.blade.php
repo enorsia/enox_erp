@@ -234,7 +234,9 @@
 
                                     @foreach ($category['products'] as $product)
                                         <tr class="ssr-row ssr-row--product product-row category-{{ $deptKey }}-{{ $catKey }} hidden"
-                                            data-has-discount="{{ $product['has_discount'] ? '1' : '0' }}">
+                                            data-has-discount="{{ $product['has_discount'] ? '1' : '0' }}"
+                                            data-stock="{{ $product['stock'] }}"
+                                            data-sold="{{ $product['sold'] }}">
                                             <td class="ssr-label-cell ssr-label-cell--product">
                                                 <div class="ssr-product-wrap">
                                                     @if (!empty($product['image_link']))
