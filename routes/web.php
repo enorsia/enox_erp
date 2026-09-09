@@ -20,6 +20,7 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\EcomActivityController;
 use App\Http\Controllers\EcomTrackerDashboardController;
 use App\Http\Controllers\EcomTrackerDashboardDetailController;
+use App\Http\Controllers\Exports\UserExportController;
 use App\Http\Controllers\SaleTrackingController;
 use App\Http\Controllers\StyleStockReportController;
 use Illuminate\Support\Facades\Auth;
@@ -44,6 +45,13 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('ecom-activity', EcomActivityController::class)->only(['index', 'show'])->parameters([
         'ecom-activity' => 'session',
     ]);
+    Route::prefix('exports')->name('exports.')->controller(UserExportController::class)->group(function () {
+        Route::post('ecom-activity/start', 'startEcomActivityReport')->name('ecom-activity.start');
+        Route::get('active', 'active')->name('active');
+        Route::get('{export}/status', 'status')->name('status');
+        Route::get('{export}/download', 'download')->name('download');
+        Route::post('{export}/dismiss', 'cancel')->name('dismiss');
+    });
     Route::get('ecom-tracker/dashboard', [EcomTrackerDashboardController::class, 'index'])->name('ecom-tracker.dashboard');
     Route::get('ecom-tracker/dashboard/export', [EcomTrackerDashboardController::class, 'export'])->name('ecom-tracker.dashboard.export');
     Route::get('ecom-tracker/dashboard/details/{section}', [EcomTrackerDashboardDetailController::class, 'show'])->name('ecom-tracker.dashboard.details');

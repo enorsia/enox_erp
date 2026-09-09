@@ -116,6 +116,16 @@
                             <span class="etd-header-btn-badge">{{ $sidebarFilterCount }}</span>
                         @endif
                     </button>
+                    @include('ecom_tracker.partials.exports.export-header-status', [
+                        'export_key' => 'activity',
+                        'export' => $activityExport ?? null,
+                    ])
+                    <button type="button" onclick="window.openActivityExportModal && window.openActivityExportModal()" class="etd-header-btn etd-header-btn--icon" aria-label="Export">
+                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V3m0 0L7.5 7.5M12 3l4.5 4.5M4.5 19.5h15"/>
+                        </svg>
+                        <span class="etd-header-btn-text">Export</span>
+                    </button>
                 </div>
             </div>
 
@@ -191,4 +201,18 @@
         </div>
     </div>
 </div>
+
+@include('ecom_tracker.partials.exports.export-modal', [
+    'export_modal_title' => 'Export User Activity',
+    'export_modal_id' => 'activity-export-modal',
+    'export_start_btn_id' => 'activity-export-start-btn',
+    'export_modal_date_range_id' => 'activity-export-modal-filter-summary',
+    'export_format_input_name' => 'activity_export_format',
+    'export_modal_open_fn' => 'openActivityExportModal',
+    'export_modal_close_fn' => 'closeActivityExportModal',
+    'export_modal_show_date_range' => false,
+    'export_modal_filter_label' => 'Current filters',
+    'export_modal_filter_default' => $rangeLabel ?? 'All sessions',
+    'export_modal_show_notify' => false,
+])
 @endsection

@@ -6,6 +6,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\ActivityEcomUserBotContext;
 use App\Models\TrackerUtmFilter;
+use App\Models\UserExport;
 use App\Services\EcomActivityFilterCounts;
 use App\Services\EcomActivityFunnelSessions;
 use App\Services\EcomActivityRowMetrics;
@@ -241,6 +242,9 @@ class EcomActivityController extends EcomTrackerAdminController
             'eventScenarioOptions' => $eventScenarioOptions,
             'productSortGroups' => $productSortGroups,
             'productActivityOptions' => $productActivityOptions,
+            'activityExport' => auth()->check()
+                ? UserExport::getActiveForUser(auth()->id(), UserExport::TYPE_ECOM_ACTIVITY_REPORT)
+                : null,
         ]);
     }
 

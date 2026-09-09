@@ -6455,3 +6455,71 @@ body.etd-print-measure #ecom-tracker-dashboard-content .etd-category-departments
         text-decoration: none !important;
     }
 }
+
+/* Async report export — header status + modal */
+[id$="-export-status"]:not(.is-export-active) {
+    display: none !important;
+}
+
+[id$="-export-status"].is-export-active {
+    display: flex;
+}
+
+[id$="-export-loading"]:not(.is-export-loading) {
+    display: none !important;
+}
+
+[id$="-export-loading"].is-export-loading {
+    display: inline-flex;
+}
+
+[id$="-export-ready-group"]:not(.is-export-ready) {
+    display: none !important;
+}
+
+[id$="-export-ready-group"].is-export-ready {
+    display: inline-flex;
+}
+
+.export-report-modal:not(.is-export-modal-open) {
+    display: none !important;
+}
+
+.export-report-modal.is-export-modal-open {
+    display: flex;
+}
+
+.export-dismiss-btn {
+    position: relative;
+}
+
+.export-dismiss-tooltip {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 99999;
+    display: block;
+    pointer-events: none;
+    width: max-content;
+    min-width: 0;
+    max-width: min(17.5rem, calc(100vw - 1rem));
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.5rem;
+    background: rgb(15 23 42);
+    color: #fff;
+    font-size: 11px;
+    line-height: 1.35;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease;
+}
+
+.export-dismiss-btn:hover .export-dismiss-tooltip,
+.export-dismiss-btn:focus-visible .export-dismiss-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+.etd-page-header-right .etd-header-actions {
+    align-items: center;
+}
