@@ -188,10 +188,19 @@ class StyleStockReportService
                     }
 
                     $code = $discount->platform->code;
-                    $platformRanges[$code][] = [
-                        'range' => $price->range,
-                        'price' => $discount->price,
-                    ];
+                    $priceValue = (float) $discount->price;
+
+                    if (! isset($platformRanges[$code])) {
+                        $platformRanges[$code] = [
+                            'min' => $priceValue,
+                            'max' => $priceValue,
+                        ];
+
+                        continue;
+                    }
+
+                    $platformRanges[$code]['min'] = min($platformRanges[$code]['min'], $priceValue);
+                    $platformRanges[$code]['max'] = max($platformRanges[$code]['max'], $priceValue);
                 }
             }
 
