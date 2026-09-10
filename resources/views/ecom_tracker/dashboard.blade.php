@@ -79,14 +79,15 @@
                     window.location.href = url.toString();
                 }
              }">
-            <div class="etd-page-header-left">
+            <div class="etd-page-header-left-stack">
                 <h1 class="etd-page-title">Store performance</h1>
-                <span class="etd-header-sep" aria-hidden="true">·</span>
-                <span class="etd-page-range">{{ $d['range']['label'] }}</span>
-                <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
-                <div class="etd-page-meta">
-                    @include('ecom_tracker.partials.timezone-notice')
-                    @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $d['analytics_cache'] ?? null])
+                <div class="etd-page-header-sub">
+                    <span class="etd-page-range">{{ $d['range']['label'] }}</span>
+                    <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
+                    <div class="etd-page-meta">
+                        @include('ecom_tracker.partials.timezone-notice')
+                        @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $d['analytics_cache'] ?? null])
+                    </div>
                 </div>
             </div>
 
@@ -95,6 +96,7 @@
                     'baseQuery' => $baseQuery,
                     'range' => $d['range'],
                     'period' => $period,
+                    'showComparisonLink' => true,
                     'showUserActivityLink' => true,
                 ])
 

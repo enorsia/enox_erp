@@ -42,6 +42,7 @@ if (has('#daily-returns-page-content'))       import('./pages/daily-returns');
 if (has('#monthly-budget-page-content'))      import('./pages/monthly-budgets');
 if (has('#analytics-dashboard-content'))      import('./pages/analytics-dashboard');
 if (has('#ecom-tracker-dashboard-content'))   import('./pages/ecom-tracker-dashboard');
+if (has('#ecom-tracker-compare-content'))     import('./pages/ecom-tracker-compare');
 if (has('#ecom-activity-page-content'))       import('./pages/ecom-activity-table');
 if (has('#ecom-activity-page-content'))       import('./pages/ecom-activity-export');
 if (has('.etd-filter-drawer') || has('.etd-flatpickr-date') || has('.etd-flatpickr-datetime')) {

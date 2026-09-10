@@ -1,7 +1,7 @@
 @php
     $departments = $departments ?? [];
     $showCurrency = $showCurrency ?? true;
-    $categoryActivityLink = $categoryActivityLink ?? null;
+    $categoryActivityLink = ($readOnly ?? false) ? null : ($categoryActivityLink ?? null);
     $maxSaleAmount = max(1, (float) collect($departments)->max('sale_amount'));
 @endphp
 

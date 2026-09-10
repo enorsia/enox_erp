@@ -3,13 +3,14 @@
     'emptyColspan' => 11,
     'emptyMessage' => 'No traffic source data in this period.',
     'activitySourceLink' => null,
+    'readOnly' => false,
 ])
 
 @php
     use App\Support\SessionTrafficAttribution;
 
-    $resolveSourceLink = function (array $row) use ($activitySourceLink) {
-        if (! is_callable($activitySourceLink) || ($row['source'] ?? '') === 'Other') {
+    $resolveSourceLink = function (array $row) use ($activitySourceLink, $readOnly) {
+        if (($readOnly ?? false) || ! is_callable($activitySourceLink) || ($row['source'] ?? '') === 'Other') {
             return null;
         }
 

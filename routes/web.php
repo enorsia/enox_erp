@@ -19,6 +19,7 @@ use App\Http\Controllers\SellingChartExpenseController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\EcomActivityController;
 use App\Http\Controllers\EcomTrackerDashboardController;
+use App\Http\Controllers\EcomTrackerDashboardCompareController;
 use App\Http\Controllers\EcomTrackerDashboardDetailController;
 use App\Http\Controllers\Exports\UserExportController;
 use App\Http\Controllers\SaleTrackingController;
@@ -53,6 +54,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
         Route::post('{export}/dismiss', 'cancel')->name('dismiss');
     });
     Route::get('ecom-tracker/dashboard', [EcomTrackerDashboardController::class, 'index'])->name('ecom-tracker.dashboard');
+    Route::get('ecom-tracker/dashboard/compare', [EcomTrackerDashboardCompareController::class, 'index'])->name('ecom-tracker.dashboard.compare');
     Route::get('ecom-tracker/dashboard/export', [EcomTrackerDashboardController::class, 'export'])->name('ecom-tracker.dashboard.export');
     Route::get('ecom-tracker/dashboard/details/{section}', [EcomTrackerDashboardDetailController::class, 'show'])->name('ecom-tracker.dashboard.details');
 

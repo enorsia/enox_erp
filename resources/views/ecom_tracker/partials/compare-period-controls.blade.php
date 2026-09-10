@@ -2,44 +2,58 @@
     use App\Support\EcomTrackerViewData;
     use App\Support\TrackerTime;
 
+    $side = $side ?? 'left';
+    $otherSide = $side === 'right' ? 'left' : 'right';
     $period = $period === '90d' ? '30d' : $period;
     $activePreset = match ($period) {
         'yesterday', '7d', '30d', 'custom' => $period,
         default => '24h',
     };
-    $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d'], true) ? $period : '24h';
-    $dayNav = EcomTrackerViewData::dashboardDayNavigation($baseQuery, $range, $routeName ?? 'admin.ecom-tracker.dashboard');
-    $presetUrl = fn (string $preset) => route($routeName ?? 'admin.ecom-tracker.dashboard', array_merge($baseQuery, ['period' => $preset]));
+
+    $otherFilters = $otherFilters ?? [];
+    $baseQuery = array_merge(
+        EcomTrackerViewData::compareSideQuery($otherSide, $otherFilters),
+        filled($backUrl ?? null) ? ['back' => $backUrl] : (request()->filled('back') ? ['back' => request('back')] : []),
+    );
+
+    $sideFilters = array_merge($filters ?? [], ['period' => $period, 'date_from' => $dateFrom ?? '', 'date_to' => $dateTo ?? '']);
+    $prefix = EcomTrackerViewData::compareSidePrefix($side);
+    $sideQueryForPreset = function (string $preset) use ($sideFilters, $side, $baseQuery) {
+        $next = collect($sideFilters)->except(['date_from', 'date_to'])->all();
+        $next['period'] = $preset;
+
+        if ($preset !== 'custom') {
+            unset($next['date_from'], $next['date_to']);
+        }
+
+        return array_merge(
+            $baseQuery,
+            EcomTrackerViewData::compareSideQuery($side, array_filter($next, fn ($value) => filled($value) || $value === '24h')),
+        );
+    };
+
+    $presetUrl = fn (string $preset) => route('admin.ecom-tracker.dashboard.compare', $sideQueryForPreset($preset));
+
+    $currentSideFilters = array_filter(
+        $sideFilters,
+        fn ($value, $key) => $key === 'period' || filled($value),
+        ARRAY_FILTER_USE_BOTH,
+    );
+
+    $dayNav = EcomTrackerViewData::dashboardDayNavigation(
+        array_merge(
+            $baseQuery,
+            EcomTrackerViewData::compareSideQuery($side, $currentSideFilters),
+        ),
+        $range,
+        'admin.ecom-tracker.dashboard.compare',
+        "{$prefix}period",
+        "{$prefix}date_from",
+        "{$prefix}date_to",
+    );
 @endphp
 
-<div class="etd-date-nav">
-    @can('ecom_tracker.dashboard.index')
-        @if ($showDashboardLink ?? false)
-            <div class="etd-segmented etd-segmented--compact etd-date-nav__shortcut">
-                <a href="{{ $dashboardUrl ?? EcomTrackerViewData::dashboardShortcutUrl(request()) }}"
-                   class="etd-segmented-btn no-underline">Tracking</a>
-            </div>
-        @endif
-    @endcan
-
-    @can('ecom_tracker.dashboard.index')
-        @if ($showComparisonLink ?? false)
-            <div class="etd-segmented etd-segmented--compact etd-date-nav__shortcut">
-                <a href="{{ EcomTrackerViewData::compareShortcutUrl(request()) }}"
-                   class="etd-segmented-btn no-underline">Comparison</a>
-            </div>
-        @endif
-    @endcan
-
-    @can('ecom_tracker.activity.index')
-        @if ($showUserActivityLink ?? false)
-            <div class="etd-segmented etd-segmented--compact etd-date-nav__shortcut">
-                <a href="{{ EcomTrackerViewData::activityShortcutUrl(request()) }}"
-                   class="etd-segmented-btn no-underline">User Activity</a>
-            </div>
-        @endif
-    @endcan
-
+<div class="etd-compare-period-nav">
     <a href="{{ $dayNav['previous_url'] }}"
        class="etd-segmented-btn etd-date-nav-btn no-underline"
        aria-label="Previous day"

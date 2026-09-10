@@ -251,14 +251,20 @@ final class EcomTrackerViewData
      * @param  array{from: \Carbon\Carbon, to: \Carbon\Carbon}  $range
      * @return array{previous_url: string, next_url: ?string, can_go_next: bool}
      */
-    public static function dashboardDayNavigation(array $baseQuery, array $range, string $routeName = 'admin.ecom-tracker.dashboard'): array
-    {
+    public static function dashboardDayNavigation(
+        array $baseQuery,
+        array $range,
+        string $routeName = 'admin.ecom-tracker.dashboard',
+        string $periodKey = 'period',
+        string $dateFromKey = 'date_from',
+        string $dateToKey = 'date_to',
+    ): array {
         $fromLocal = TrackerTime::toLocal($range['from']);
         $toLocal = TrackerTime::toLocal($range['to']);
 
         if ($fromLocal === null || $toLocal === null) {
             return [
-                'previous_url' => route($routeName, array_merge($baseQuery, ['period' => '24h'])),
+                'previous_url' => route($routeName, array_merge($baseQuery, [$periodKey => '24h'])),
                 'next_url' => null,
                 'can_go_next' => false,
             ];
@@ -273,6 +279,9 @@ final class EcomTrackerViewData
                 $fromLocal->copy()->subDay(),
                 $toLocal->copy()->subDay(),
                 $routeName,
+                $periodKey,
+                $dateFromKey,
+                $dateToKey,
             ),
             'next_url' => $canGoNext
                 ? self::dashboardPeriodUrl(
@@ -280,6 +289,9 @@ final class EcomTrackerViewData
                     $fromLocal->copy()->addDay(),
                     $toLocal->copy()->addDay(),
                     $routeName,
+                    $periodKey,
+                    $dateFromKey,
+                    $dateToKey,
                 )
                 : null,
             'can_go_next' => $canGoNext,
@@ -289,25 +301,34 @@ final class EcomTrackerViewData
     /**
      * @param  array<string, mixed>  $baseQuery
      */
-    private static function dashboardPeriodUrl(array $baseQuery, \Carbon\Carbon $fromLocal, \Carbon\Carbon $toLocal, string $routeName): string
-    {
+    private static function dashboardPeriodUrl(
+        array $baseQuery,
+        \Carbon\Carbon $fromLocal,
+        \Carbon\Carbon $toLocal,
+        string $routeName,
+        string $periodKey = 'period',
+        string $dateFromKey = 'date_from',
+        string $dateToKey = 'date_to',
+    ): string {
         $today = TrackerTime::localNow()->startOfDay();
         $yesterday = $today->copy()->subDay();
+        $query = $baseQuery;
+        unset($query[$dateFromKey], $query[$dateToKey]);
 
         if ($fromLocal->isSameDay($toLocal)) {
             if ($fromLocal->isSameDay($today)) {
-                return route($routeName, array_merge($baseQuery, ['period' => '24h']));
+                return route($routeName, array_merge($query, [$periodKey => '24h']));
             }
 
             if ($fromLocal->isSameDay($yesterday)) {
-                return route($routeName, array_merge($baseQuery, ['period' => 'yesterday']));
+                return route($routeName, array_merge($query, [$periodKey => 'yesterday']));
             }
         }
 
-        return route($routeName, array_merge($baseQuery, [
-            'period' => 'custom',
-            'date_from' => $fromLocal->toDateString(),
-            'date_to' => $toLocal->toDateString(),
+        return route($routeName, array_merge($query, [
+            $periodKey => 'custom',
+            $dateFromKey => $fromLocal->toDateString(),
+            $dateToKey => $toLocal->toDateString(),
         ]));
     }
 
@@ -415,5 +436,128 @@ final class EcomTrackerViewData
             [],
             $back,
         );
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function compareSideFilterKeys(): array
+    {
+        return array_merge(
+            ['period', 'date_from', 'date_to', 'sort_by'],
+            self::sharedNavigationQueryKeys(),
+        );
+    }
+
+    public static function compareSidePrefix(string $side): string
+    {
+        return $side === 'right' ? 'right_' : 'left_';
+    }
+
+    public static function compareShortcutUrl(Request $request): string
+    {
+        $leftFilters = array_merge(
+            ['period' => $request->input('period', '24h')],
+            $request->only(array_merge(
+                ['date_from', 'date_to'],
+                self::sharedNavigationQueryKeys(),
+            )),
+        );
+
+        $query = self::compareSideQuery('left', $leftFilters);
+        $query['back'] = $request->fullUrl();
+
+        return route('admin.ecom-tracker.dashboard.compare', $query);
+    }
+
+    public static function compareBackUrl(Request $request): string
+    {
+        $explicit = self::resolveBackUrl($request->input('back'));
+
+        return $explicit ?? route('admin.ecom-tracker.dashboard');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    public static function compareSideQuery(string $side, array $filters): array
+    {
+        $prefix = self::compareSidePrefix($side);
+        $query = [];
+
+        foreach (self::compareSideFilterKeys() as $key) {
+            $value = $filters[$key] ?? null;
+
+            if (filled($value)) {
+                $query["{$prefix}{$key}"] = $value;
+            }
+        }
+
+        if (($filters['period'] ?? '24h') === '24h' && $side === 'left' && ! array_key_exists("{$prefix}period", $query)) {
+            $query["{$prefix}period"] = '24h';
+        }
+
+        return $query;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function compareSideFiltersFromRequest(Request $request, string $side): array
+    {
+        $prefix = self::compareSidePrefix($side);
+        $period = $request->input("{$prefix}period");
+
+        $filters = [
+            'period' => filled($period) ? (string) $period : '24h',
+            'date_from' => $request->input("{$prefix}date_from"),
+            'date_to' => $request->input("{$prefix}date_to"),
+            'sort_by' => $request->input("{$prefix}sort_by"),
+        ];
+
+        foreach (self::sharedNavigationQueryKeys() as $key) {
+            if ($key === 'period' || $key === 'date_from' || $key === 'date_to') {
+                continue;
+            }
+
+            $filters[$key] = $request->input("{$prefix}{$key}");
+        }
+
+        return array_filter(
+            $filters,
+            fn ($value, string $key) => $key === 'period' || filled($value),
+            ARRAY_FILTER_USE_BOTH,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $leftFilters
+     * @param  array<string, mixed>  $rightFilters
+     * @return array<string, mixed>
+     */
+    public static function comparePageQuery(Request $request, array $leftFilters, array $rightFilters): array
+    {
+        $query = array_merge(
+            self::compareSideQuery('left', $leftFilters),
+            self::compareSideQuery('right', $rightFilters),
+        );
+
+        if ($request->filled('back')) {
+            $query['back'] = $request->input('back');
+        }
+
+        unset($query['period'], $query['date_from'], $query['date_to']);
+
+        return $query;
+    }
+
+    public static function hasCompareSideParams(Request $request, string $side): bool
+    {
+        $prefix = self::compareSidePrefix($side);
+
+        return $request->filled("{$prefix}period")
+            || $request->filled("{$prefix}date_from")
+            || $request->filled("{$prefix}date_to");
     }
 }

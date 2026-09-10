@@ -1,6 +1,8 @@
 <?php
 
 use App\Support\EcomTrackerViewData;
+use App\Support\TrackerTime;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 uses(Tests\TestCase::class);
@@ -114,4 +116,53 @@ test('activity back url keeps dashboard scroll hash', function () {
             'GET',
             ['focus' => 'duration', 'back' => $back],
         )))->toBe($back);
+});
+
+test('compare day navigation uses prefixed period query keys', function () {
+    Carbon::setTestNow(Carbon::parse('2026-09-10 12:00:00', TrackerTime::timezone()));
+
+    $range = TrackerTime::yesterdayRangeUtc();
+    $baseQuery = [
+        'left_period' => 'yesterday',
+        'right_period' => '24h',
+        'back' => 'http://127.0.0.1:8001/admin/ecom-tracker/dashboard?period=7d',
+    ];
+
+    $dayNav = EcomTrackerViewData::dashboardDayNavigation(
+        $baseQuery,
+        $range,
+        'admin.ecom-tracker.dashboard.compare',
+        'left_period',
+        'left_date_from',
+        'left_date_to',
+    );
+
+    parse_str((string) parse_url($dayNav['previous_url'], PHP_URL_QUERY), $query);
+
+    expect($query)->toHaveKey('left_period')
+        ->and($query)->not->toHaveKey('period')
+        ->and($query['left_period'])->toBe('custom')
+        ->and($query['left_date_from'])->toBe('2026-09-08')
+        ->and($query['left_date_to'])->toBe('2026-09-08')
+        ->and($query['right_period'])->toBe('24h');
+});
+
+test('compare page query strips unprefixed period keys', function () {
+    $request = Request::create('/admin/ecom-tracker/dashboard/compare', 'GET', [
+        'left_period' => 'yesterday',
+        'right_period' => '24h',
+        'period' => 'custom',
+        'date_from' => '2026-09-08',
+        'date_to' => '2026-09-08',
+        'back' => 'http://127.0.0.1:8001/admin/ecom-tracker/dashboard?period=7d',
+    ]);
+
+    $query = EcomTrackerViewData::comparePageQuery(
+        $request,
+        EcomTrackerViewData::compareSideFiltersFromRequest($request, 'left'),
+        EcomTrackerViewData::compareSideFiltersFromRequest($request, 'right'),
+    );
+
+    expect($query)->toHaveKeys(['left_period', 'right_period', 'back'])
+        ->and($query)->not->toHaveKeys(['period', 'date_from', 'date_to']);
 });

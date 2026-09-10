@@ -1,12 +1,14 @@
 @props([
     'devices' => ['by_device' => [], 'by_browser' => []],
     'deviceActivityLink' => null,
+    'readOnly' => false,
 ])
 
 @php
     $deviceRows = $devices['by_device'] ?? [];
     $browserRows = $devices['by_browser'] ?? [];
-    $devicesFocusLink = is_callable($deviceActivityLink) ? $deviceActivityLink('') : null;
+    $devicesFocusLink = (! ($readOnly ?? false) && is_callable($deviceActivityLink)) ? $deviceActivityLink('') : null;
+    $rowActivityLink = ($readOnly ?? false) ? null : $deviceActivityLink;
 @endphp
 
 <div class="etd-device-browser etd-device-browser-grid">
@@ -14,7 +16,7 @@
         'title' => 'Device',
         'rows' => $deviceRows,
         'emptyMessage' => 'No device data in this period.',
-        'rowActivityLink' => $deviceActivityLink,
+        'rowActivityLink' => $rowActivityLink,
     ])
 
     @include('ecom_tracker.partials.device-browser-table', [
