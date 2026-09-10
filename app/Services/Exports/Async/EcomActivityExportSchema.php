@@ -53,6 +53,7 @@ final class EcomActivityExportSchema
         ];
 
         $headings = array_merge($headings, [
+            'Product Code',
             'Product title',
             'Size',
             'Color',
@@ -127,6 +128,7 @@ final class EcomActivityExportSchema
             [
                 ...self::SESSION_MERGE_HEADINGS,
                 ...self::EVENT_MERGE_HEADINGS,
+                'Product Code',
                 'Product title',
                 'Size',
                 'Color',
@@ -339,9 +341,10 @@ final class EcomActivityExportSchema
             $productValues[1],
             $productValues[2],
             $productValues[3],
-            $eventSummaryValues[0],
             $productValues[4],
+            $eventSummaryValues[0],
             $productValues[5],
+            $productValues[6],
             $eventSummaryValues[1],
         ];
 
@@ -469,7 +472,7 @@ final class EcomActivityExportSchema
      */
     private static function emptyProductValues(): array
     {
-        return ['—', '—', '—', '—', '—', '—'];
+        return ['—', '—', '—', '—', '—', '—', '—'];
     }
 
     /**
@@ -485,15 +488,41 @@ final class EcomActivityExportSchema
             : null;
 
         $color = trim((string) ($product['color_po'] ?? $product['color_ecommerce'] ?? ''));
+        $productCode = trim((string) ($product['product_code'] ?? $product['code'] ?? ''));
 
         return [
-            filled($product['title'] ?? null) ? (string) $product['title'] : '—',
+            $productCode !== '' ? $productCode : '—',
+            self::exportProductTitle($product, $productCode),
             filled($product['size'] ?? null) ? (string) $product['size'] : '—',
             $color !== '' ? $color : '—',
             $qty ?? '—',
             $unitPrice ?? '—',
             $lineTotal ?? '—',
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $product
+     */
+    private static function exportProductTitle(array $product, string $productCode = ''): string
+    {
+        $title = filled($product['title'] ?? null) ? trim((string) $product['title']) : '';
+
+        if ($title === '') {
+            return '—';
+        }
+
+        if ($productCode !== '') {
+            $suffix = ' ('.$productCode.')';
+
+            if (str_ends_with($title, $suffix)) {
+                $title = rtrim(substr($title, 0, -strlen($suffix)));
+            }
+        }
+
+        $title = trim(preg_replace('/\s*\([^)]+\)\s*$/', '', $title) ?? $title);
+
+        return $title !== '' ? $title : '—';
     }
 
     /**

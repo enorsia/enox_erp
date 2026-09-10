@@ -282,6 +282,7 @@ final class CommerceReadSupport
             }
 
             return array_filter([
+                'product_code' => $code !== '' ? $code : null,
                 'title' => $title !== '' ? $title : 'Product',
                 'size' => trim((string) ($row->size_name ?? '')),
                 'color_po' => trim((string) ($row->color_name ?? '')),
@@ -433,6 +434,7 @@ final class CommerceReadSupport
                     : (is_numeric($row->line_total ?? null) ? round((float) $row->line_total, 2) : null);
 
                 return array_filter([
+                    'product_code' => null,
                     'title' => $title,
                     'size' => '—',
                     'color_po' => '—',
@@ -457,6 +459,7 @@ final class CommerceReadSupport
             }
 
             return array_filter([
+                'product_code' => $code !== '' ? $code : null,
                 'title' => $title !== '' ? $title : 'Product',
                 'size' => trim((string) ($row->size_name ?? '')),
                 'color_po' => trim((string) ($row->color_name ?? '')),

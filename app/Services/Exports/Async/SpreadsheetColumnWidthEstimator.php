@@ -213,6 +213,7 @@ final class SpreadsheetColumnWidthEstimator
             'Order ID' => 14.0,
             'Order total' => 14.0,
             'Commerce detail' => 18.0,
+            'Product Code' => 16.0,
             'Product title' => 38.0,
             'Size' => 10.0,
             'Color' => 14.0,

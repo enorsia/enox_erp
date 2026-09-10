@@ -18,6 +18,7 @@ test('export headings focus on management columns', function () {
             'Paid click ID',
             'Commerce stage',
             'Order ID',
+            'Product Code',
             'Product title',
             'Size',
             'Color',
@@ -174,6 +175,7 @@ test('payment event expands to one row per product line', function () {
                 ]],
                 'products' => [
                     [
+                        'product_code' => 'MS34129',
                         'title' => 'Silk Blouse (SKU1)',
                         'size' => 'M',
                         'color_po' => 'Red',
@@ -181,6 +183,7 @@ test('payment event expands to one row per product line', function () {
                         'price' => '£45.00',
                     ],
                     [
+                        'product_code' => 'SKU2',
                         'title' => 'Trousers (SKU2)',
                         'size' => '12',
                         'color_po' => 'Navy',
@@ -207,14 +210,15 @@ test('payment event expands to one row per product line', function () {
         ->and($rows[1][0])->toBe('')
         ->and($rows[0][7])->toBe('104521')
         ->and($rows[1][7])->toBe('')
-        ->and($rows[0][8])->toBe('Silk Blouse (SKU1)')
-        ->and($rows[0][12])->toBe(2)
-        ->and($rows[1][12])->toBe('')
-        ->and($rows[0][13])->toBe(45.0)
+        ->and($rows[0][8])->toBe('MS34129')
+        ->and($rows[0][9])->toBe('Silk Blouse')
+        ->and($rows[0][13])->toBe(2)
+        ->and($rows[1][13])->toBe('')
         ->and($rows[0][14])->toBe(45.0)
-        ->and($rows[0][15])->toBe(89.99)
-        ->and($rows[1][8])->toBe('Trousers (SKU2)')
-        ->and($rows[1][14])->toBe(44.99)
+        ->and($rows[0][15])->toBe(45.0)
+        ->and($rows[0][16])->toBe(89.99)
+        ->and($rows[1][9])->toBe('Trousers')
+        ->and($rows[1][15])->toBe(44.99)
         ->and($serial)->toBe(2);
 });
 
@@ -279,6 +283,7 @@ test('product view commerce event expands to export rows with product columns', 
             'stage_label' => 'View',
             'cart_total' => null,
             'products' => [[
+                'product_code' => 'MS34129',
                 'title' => 'Silk Blouse (SKU1)',
                 'size' => 'M',
                 'color_po' => 'Red',
@@ -298,11 +303,12 @@ test('product view commerce event expands to export rows with product columns', 
 
     expect($expanded['rows'])->toHaveCount(1)
         ->and($expanded['rows'][0][6])->toBe('View')
-        ->and($expanded['rows'][0][8])->toBe('Silk Blouse (SKU1)')
-        ->and($expanded['rows'][0][9])->toBe('M')
-        ->and($expanded['rows'][0][10])->toBe('Red')
-        ->and($expanded['rows'][0][13])->toBe(45.0)
-        ->and($expanded['rows'][0][14])->toBe(45.0);
+        ->and($expanded['rows'][0][8])->toBe('MS34129')
+        ->and($expanded['rows'][0][9])->toBe('Silk Blouse')
+        ->and($expanded['rows'][0][10])->toBe('M')
+        ->and($expanded['rows'][0][11])->toBe('Red')
+        ->and($expanded['rows'][0][14])->toBe(45.0)
+        ->and($expanded['rows'][0][15])->toBe(45.0);
 });
 
 test('category view commerce event expands with category title in product column', function () {
@@ -340,7 +346,8 @@ test('category view commerce event expands with category title in product column
 
     expect($expanded['rows'])->toHaveCount(1)
         ->and($expanded['rows'][0][6])->toBe('Category view')
-        ->and($expanded['rows'][0][8])->toBe('Women → Dresses');
+        ->and($expanded['rows'][0][8])->toBe('—')
+        ->and($expanded['rows'][0][9])->toBe('Women → Dresses');
 });
 
 test('merge ranges include event level columns for multi product orders', function () {
@@ -394,7 +401,7 @@ test('duplicate product titles in one order merge vertically in export', functio
     );
 
     expect($expanded['rows'])->toHaveCount(2)
-        ->and($expanded['rows'][0][$productTitleColumn])->toBe('Silk Blouse (SKU1)')
+        ->and($expanded['rows'][0][$productTitleColumn])->toBe('Silk Blouse')
         ->and($expanded['rows'][1][$productTitleColumn])->toBe('')
         ->and($expanded['product_title_merges'])->toMatchArray([[
             'column' => $productTitleColumn,
@@ -526,6 +533,9 @@ test('quantity columns are excluded from decimal formatting', function () {
 
 test('product columns are ordered qty sum price line total then order total', function () {
     $headings = EcomActivityExportSchema::headings(['period' => '7d']);
+
+    expect(array_search('Product Code', $headings, true))
+        ->toBeLessThan(array_search('Product title', $headings, true));
 
     $productQtyIndex = array_search('Product qty', $headings, true);
 
