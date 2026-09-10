@@ -213,6 +213,90 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
             return true;
         }
 
+        function parseNum(value) {
+            const num = parseFloat(value);
+            return Number.isFinite(num) ? num : 0;
+        }
+
+        function formatDisplayValue(type, value) {
+            if (type === "sold" && value === 0) {
+                return "0";
+            }
+
+            return value;
+        }
+
+        function calcPercent(part, total) {
+            return total > 0 ? Math.round((part / total) * 100) : 0;
+        }
+
+        function updateProgressCell($row, type, value, combinedTotal) {
+            const cellIndex = type === "stock" ? 1 : 2;
+            const $cell = $row.children("td").eq(cellIndex);
+            const percent = calcPercent(value, combinedTotal);
+            const $progress = $cell.find(".ssr-progress--" + type);
+            const $bar = $progress.find(".ssr-progress-bar");
+            const $label = $progress.find(".ssr-progress-label");
+
+            $bar.css("width", percent + "%").attr("aria-valuenow", percent);
+            $label.text(percent + "%");
+            $progress.toggleClass("ssr-progress--empty", percent <= 0);
+            $cell.find(".ssr-value").text(formatDisplayValue(type, value));
+        }
+
+        function updateRowTotals($row, stock, sold) {
+            const combined = stock + sold;
+            updateProgressCell($row, "stock", stock, combined);
+            updateProgressCell($row, "sold", sold, combined);
+        }
+
+        function recalculateTotals() {
+            let grandStock = 0;
+            let grandSold = 0;
+
+            $(".department-row").each(function () {
+                const $deptRow = $(this);
+                if ($deptRow.hasClass("ssr-filter-hidden")) {
+                    return;
+                }
+
+                const deptTarget = $deptRow.data("target");
+                let deptStock = 0;
+                let deptSold = 0;
+
+                $(".category-row." + deptTarget).each(function () {
+                    const $catRow = $(this);
+                    if ($catRow.hasClass("ssr-filter-hidden")) {
+                        return;
+                    }
+
+                    const catTarget = $catRow.data("target");
+                    let catStock = 0;
+                    let catSold = 0;
+
+                    $("tr.product-row." + catTarget).each(function () {
+                        const $product = $(this);
+                        if ($product.hasClass("ssr-filter-hidden")) {
+                            return;
+                        }
+
+                        catStock += parseNum($product.data("stock"));
+                        catSold += parseNum($product.data("sold"));
+                    });
+
+                    updateRowTotals($catRow, catStock, catSold);
+                    deptStock += catStock;
+                    deptSold += catSold;
+                });
+
+                updateRowTotals($deptRow, deptStock, deptSold);
+                grandStock += deptStock;
+                grandSold += deptSold;
+            });
+
+            updateRowTotals($(".ssr-row--total"), grandStock, grandSold);
+        }
+
         function applyFilters() {
             const discountMode = $("#discount_status").val() || "1";
             const deptKey = $("#search_department").val();
@@ -330,6 +414,8 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
                         .addClass("ssr-chevron--open");
                 }
             });
+
+            recalculateTotals();
 
             return firstMatch;
         }

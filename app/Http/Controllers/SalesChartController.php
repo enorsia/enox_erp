@@ -145,6 +145,59 @@ class SalesChartController extends Controller
         return view('selling_chart.discounts.index', $data);
     }
 
+    public function saveExistingDiscounts(Request $request)
+    {
+        $ecommerceProducts = $this->sellingChartApiService->getEcomProducts([
+            // 'designNos' => ['MS3482135'],
+            'is_discounted' => 1
+        ]);
+        $ecommerceMap = $ecommerceProducts->keyBy(fn($item) => $item['style']['name'] ?? null);
+        $styles = $ecommerceMap->keys()->toArray();
+        $slInfos = SellingChartBasicInfo::whereIn('design_no', $styles)->with(['sellingChartPrices'])->get();
+
+        $foundDesignNos = $slInfos->pluck('design_no')->toArray();
+        $missingStyles = array_diff($styles, $foundDesignNos);
+
+        foreach($slInfos as $slInfo) {
+            $ecomProduct = $ecommerceMap[$slInfo->design_no] ?? null;
+            foreach($slInfo->sellingChartPrices as $price) {
+                if($price->range_id){
+                    $sizeIds = collect($ecomProduct['size_ranges'])->where('size_range_id', $price->range_id)->pluck('size_id');
+                    $poH = collect($ecomProduct['po_histories'])->where('initial_repeat_id', 2007)->whereIn('product_size_id', $sizeIds)->first();
+                } else {
+                    $poH = collect($ecomProduct['po_histories'])->where('initial_repeat_id', 2007)->first();
+                }
+                $sl_price_id = $price->id;
+                $priceValue = $poH['ecom_discount_price'] ?? 0;
+                $shippingCost = 2.6;
+                $platformIds = [1, 2];
+
+                if($priceValue <= 0 || $priceValue == $poH['selling_price']) continue;
+
+                foreach($platformIds as $platformId) {
+                    if(SellingChartDiscount::where('selling_chart_price_id', $sl_price_id)->where('platform_id', $platformId)->exists()) {
+                        SellingChartDiscount::where('selling_chart_price_id', $sl_price_id)->where('platform_id', $platformId)->update([
+                            "price" => $priceValue,
+                            "shipping_cost" => $shippingCost,
+                        ]);
+                    } else {
+                        SellingChartDiscount::create([
+                            "selling_chart_price_id" => $sl_price_id,
+                            "platform_id" => $platformId,
+                            "price" => $priceValue,
+                            "shipping_cost" => $shippingCost,
+                            "cost_basis" => 'fob',
+                        ]);
+                    }
+                }
+
+            }
+        }
+
+
+        dd("Missing Styles: " . implode(', ', $missingStyles));
+    }
+
 
     public function getChartData($request)
     {
