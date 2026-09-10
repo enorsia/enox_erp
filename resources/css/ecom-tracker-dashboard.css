@@ -4108,6 +4108,309 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     color: #64748b;
 }
 
+.etd-trend-tooltip {
+    position: fixed;
+    z-index: 1200;
+    pointer-events: none;
+    opacity: 0;
+    width: max-content;
+    min-width: min(16rem, calc(100vw - 1rem));
+    max-width: min(22rem, calc(100vw - 1rem));
+    transform: translate(-50%, calc(-100% - 12px));
+    transition: opacity 0.16s ease;
+}
+
+.etd-trend-tooltip--positioning {
+    opacity: 0;
+    transition: none;
+}
+
+.etd-trend-tooltip--visible {
+    opacity: 1;
+}
+
+.etd-trend-tooltip__card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-height: min(70vh, calc(100dvh - 1.5rem));
+    padding: clamp(0.55rem, 1.6vw, 0.8rem) clamp(0.6rem, 1.8vw, 0.85rem) clamp(0.6rem, 1.6vw, 0.75rem);
+    border-radius: clamp(0.6rem, 1.4vw, 0.75rem);
+    border: 1px solid color-mix(in srgb, #cbd5e1 80%, transparent);
+    background: color-mix(in srgb, #ffffff 92%, transparent);
+    box-shadow:
+        0 18px 40px rgba(15, 23, 42, 0.14),
+        0 4px 12px rgba(15, 23, 42, 0.06);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    overflow: hidden;
+}
+
+.etd-trend-tooltip__card::after {
+    content: '';
+    position: absolute;
+    left: clamp(0.85rem, calc(50% + var(--etd-tooltip-arrow-offset, 0px)), calc(100% - 0.85rem));
+    bottom: -6px;
+    width: 12px;
+    height: 12px;
+    border-right: 1px solid color-mix(in srgb, #cbd5e1 80%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, #cbd5e1 80%, transparent);
+    background: color-mix(in srgb, #ffffff 92%, transparent);
+    transform: translateX(-50%) rotate(45deg);
+}
+
+.etd-trend-tooltip--below .etd-trend-tooltip__card::after {
+    top: -6px;
+    bottom: auto;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 1px solid color-mix(in srgb, #cbd5e1 80%, transparent);
+    border-top: 1px solid color-mix(in srgb, #cbd5e1 80%, transparent);
+}
+
+.etd-trend-tooltip--dark .etd-trend-tooltip__card {
+    border-color: color-mix(in srgb, #475569 85%, transparent);
+    background: color-mix(in srgb, #1e293b 94%, transparent);
+    box-shadow:
+        0 18px 40px rgba(0, 0, 0, 0.42),
+        0 4px 12px rgba(0, 0, 0, 0.24);
+}
+
+.etd-trend-tooltip--dark .etd-trend-tooltip__card::after {
+    border-color: color-mix(in srgb, #475569 85%, transparent);
+    background: color-mix(in srgb, #1e293b 94%, transparent);
+}
+
+.etd-trend-tooltip--dark.etd-trend-tooltip--below .etd-trend-tooltip__card::after {
+    border-color: color-mix(in srgb, #475569 85%, transparent);
+    background: color-mix(in srgb, #1e293b 94%, transparent);
+}
+
+.etd-trend-tooltip__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.55rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid color-mix(in srgb, #cbd5e1 55%, transparent);
+    flex-shrink: 0;
+}
+
+.etd-trend-tooltip--dark .etd-trend-tooltip__header {
+    border-bottom-color: color-mix(in srgb, #475569 70%, transparent);
+}
+
+.etd-trend-tooltip__date {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #0f172a;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.etd-trend-tooltip--dark .etd-trend-tooltip__date {
+    color: #f8fafc;
+}
+
+.etd-trend-tooltip__body {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 1.2vw, 0.55rem);
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+.etd-trend-tooltip__body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.etd-trend-tooltip__body::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+}
+
+.dark .etd-trend-tooltip__body {
+    scrollbar-color: #475569 transparent;
+}
+
+.dark .etd-trend-tooltip__body::-webkit-scrollbar-thumb {
+    background: #475569;
+}
+
+.etd-trend-tooltip__group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.28rem;
+}
+
+.etd-trend-tooltip__group-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    line-height: 1.2;
+}
+
+.etd-trend-tooltip--dark .etd-trend-tooltip__group-label {
+    color: #64748b;
+}
+
+.etd-trend-tooltip__row {
+    display: grid;
+    grid-template-columns: 0.5rem minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: 0.35rem clamp(0.35rem, 1.4vw, 0.55rem);
+    min-width: max-content;
+}
+
+.etd-trend-tooltip__swatch {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 999px;
+    background: var(--etd-trend-swatch, var(--etd-accent));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--etd-trend-swatch, var(--etd-accent)) 22%, transparent);
+}
+
+.etd-trend-tooltip__label {
+    font-size: 10px;
+    font-weight: 500;
+    color: #64748b;
+    line-height: 1.3;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etd-trend-tooltip--dark .etd-trend-tooltip__label {
+    color: #94a3b8;
+}
+
+.etd-trend-tooltip__value {
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #0f172a;
+    line-height: 1.3;
+    white-space: nowrap;
+    text-align: right;
+    justify-self: end;
+    flex-shrink: 0;
+}
+
+.etd-trend-tooltip--dark .etd-trend-tooltip__value {
+    color: #f1f5f9;
+}
+
+@media (max-width: 360px) {
+    .etd-trend-tooltip {
+        min-width: calc(100vw - 0.75rem);
+        max-width: calc(100vw - 0.75rem);
+    }
+
+    .etd-trend-tooltip__group-label {
+        font-size: 8px;
+    }
+
+    .etd-trend-tooltip__row {
+        grid-template-columns: 0.45rem minmax(0, 1fr) max-content;
+        gap: 0.3rem 0.4rem;
+    }
+
+    .etd-trend-tooltip__swatch {
+        width: 0.45rem;
+        height: 0.45rem;
+    }
+}
+
+@media (min-width: 1024px) {
+    .etd-trend-tooltip {
+        min-width: 18rem;
+        max-width: min(26rem, calc(100vw - 2rem));
+    }
+
+    .etd-trend-tooltip__card {
+        padding: 0.9rem 1rem 0.95rem;
+        border-radius: 0.85rem;
+    }
+
+    .etd-trend-tooltip__header {
+        margin-bottom: 0.65rem;
+        padding-bottom: 0.6rem;
+    }
+
+    .etd-trend-tooltip__date {
+        font-size: 14px;
+        line-height: 1.3;
+    }
+
+    .etd-trend-tooltip__body {
+        gap: 0.65rem;
+    }
+
+    .etd-trend-tooltip__group {
+        gap: 0.35rem;
+    }
+
+    .etd-trend-tooltip__group-label {
+        font-size: 10px;
+        letter-spacing: 0.07em;
+    }
+
+    .etd-trend-tooltip__row {
+        grid-template-columns: 0.65rem minmax(0, 1fr) max-content;
+        gap: 0.45rem 0.75rem;
+    }
+
+    .etd-trend-tooltip__swatch {
+        width: 0.65rem;
+        height: 0.65rem;
+    }
+
+    .etd-trend-tooltip__label,
+    .etd-trend-tooltip__value {
+        font-size: 13px;
+        line-height: 1.35;
+    }
+}
+
+@media (min-width: 1280px) {
+    .etd-trend-tooltip {
+        min-width: 19rem;
+        max-width: min(28rem, calc(100vw - 2.5rem));
+    }
+
+    .etd-trend-tooltip__card {
+        padding: 1rem 1.1rem 1.05rem;
+        border-radius: 0.9rem;
+    }
+
+    .etd-trend-tooltip__date {
+        font-size: 15px;
+    }
+
+    .etd-trend-tooltip__group-label {
+        font-size: 11px;
+    }
+
+    .etd-trend-tooltip__row {
+        gap: 0.5rem 0.85rem;
+    }
+
+    .etd-trend-tooltip__label,
+    .etd-trend-tooltip__value {
+        font-size: 14px;
+    }
+}
+
 .etd-link {
     color: var(--etd-accent);
     font-size: 11px;
