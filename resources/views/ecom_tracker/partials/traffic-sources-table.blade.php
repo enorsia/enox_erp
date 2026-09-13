@@ -4,6 +4,8 @@
     'emptyMessage' => 'No traffic source data in this period.',
     'activitySourceLink' => null,
     'readOnly' => false,
+    'showCompareDelta' => false,
+    'compareDeltas' => [],
 ])
 
 @php
@@ -99,12 +101,24 @@
                         'align' => 'right',
                     ])
                 </th>
+                @if ($showCompareDelta)
+                    <th class="etd-num etd-compare-table-delta-head">Δ vs B</th>
+                @endif
             </tr>
         </thead>
         <tbody>
             @forelse ($rows as $source)
-                @php($sourceUrl = $resolveSourceLink($source))
-                <tr>
+                @php
+                    $sourceUrl = $resolveSourceLink($source);
+                    $trafficKey = ($source['source'] ?? '').'|'.($source['medium'] ?? '');
+                    $trafficDelta = $compareDeltas[$trafficKey] ?? null;
+                    $trafficRowClass = match ($trafficDelta['highlight'] ?? null) {
+                        'up' => 'etd-compare-row--up',
+                        'down' => 'etd-compare-row--down',
+                        default => '',
+                    };
+                @endphp
+                <tr @class([$trafficRowClass])>
                     <td>
                         @if ($sourceUrl)
                             <a href="{{ $sourceUrl }}" class="etd-source-link">{{ SessionTrafficAttribution::displaySourceLabel($source['source']) ?? $source['source'] }}</a>
@@ -122,10 +136,13 @@
                     <td class="etd-num">{{ number_format($source['sold_qty']) }}</td>
                     <td class="etd-num">{{ $source['conversion_rate'] }}%</td>
                     <td class="etd-num">£{{ number_format($source['revenue'], 2) }}</td>
+                    @if ($showCompareDelta)
+                        @include('ecom_tracker.partials.compare-table-delta-cell', ['delta' => $trafficDelta])
+                    @endif
                 </tr>
             @empty
                 <tr>
-                    <td colspan="{{ $emptyColspan }}" class="text-slate-400">{{ $emptyMessage }}</td>
+                    <td colspan="{{ $showCompareDelta ? $emptyColspan + 1 : $emptyColspan }}" class="text-slate-400">{{ $emptyMessage }}</td>
                 </tr>
             @endforelse
         </tbody>

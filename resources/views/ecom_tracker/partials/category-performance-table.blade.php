@@ -2,6 +2,8 @@
     $departments = $departments ?? [];
     $showCurrency = $showCurrency ?? true;
     $categoryActivityLink = ($readOnly ?? false) ? null : ($categoryActivityLink ?? null);
+    $showCompareDelta = $showCompareDelta ?? false;
+    $compareDeltas = $compareDeltas ?? [];
     $maxSaleAmount = max(1, (float) collect($departments)->max('sale_amount'));
 @endphp
 
@@ -50,6 +52,9 @@
                         ])
                     </th>
                     <th class="etd-num etd-col-metric">Sale</th>
+                    @if ($showCompareDelta)
+                        <th class="etd-num etd-col-metric etd-compare-table-delta-head">Δ vs B</th>
+                    @endif
                 </tr>
             </thead>
             <tbody>
@@ -58,8 +63,15 @@
                         $departmentKey = $department['key'] ?? strtolower($department['name']);
                         $categoryCount = $department['category_count'] ?? count($department['categories'] ?? []);
                         $saleBarPercent = (int) round(((float) ($department['sale_amount'] ?? 0) / $maxSaleAmount) * 100);
+                        $deptDeltaKey = 'dept:'.($department['name'] ?? '');
+                        $deptDelta = $compareDeltas[$deptDeltaKey] ?? null;
+                        $deptRowClass = match ($deptDelta['highlight'] ?? null) {
+                            'up' => 'etd-compare-row--up',
+                            'down' => 'etd-compare-row--down',
+                            default => '',
+                        };
                     @endphp
-                    <tr class="etd-catalog-product-row etd-category-dept-row" :class="{ 'is-expanded': expanded === @js($departmentKey) }">
+                    <tr @class(['etd-catalog-product-row', 'etd-category-dept-row', $deptRowClass]) :class="{ 'is-expanded': expanded === @js($departmentKey) }">
                         <td class="etd-catalog-expand-col">
                             @if ($categoryCount > 0)
                                 <button type="button"
@@ -90,6 +102,9 @@
                             @endif
                             <div class="etd-mini-bar"><div style="width: {{ $saleBarPercent }}%"></div></div>
                         </td>
+                        @if ($showCompareDelta)
+                            @include('ecom_tracker.partials.compare-table-delta-cell', ['delta' => $deptDelta])
+                        @endif
                     </tr>
                     @foreach ($department['categories'] as $category)
                         @php
@@ -97,8 +112,15 @@
                             $categoryLink = is_callable($categoryActivityLink)
                                 ? $categoryActivityLink(array_merge($category, ['department_name' => $category['department_name'] ?? $department['name'] ?? '']))
                                 : null;
+                            $catDeltaKey = 'cat:'.($department['name'] ?? '').'/'.($category['category_name'] ?? '');
+                            $catDelta = $compareDeltas[$catDeltaKey] ?? null;
+                            $catRowClass = match ($catDelta['highlight'] ?? null) {
+                                'up' => 'etd-compare-row--up',
+                                'down' => 'etd-compare-row--down',
+                                default => '',
+                            };
                         @endphp
-                        <tr class="etd-category-child-row"
+                        <tr @class(['etd-category-child-row', $catRowClass])
                             x-show="expanded === @js($departmentKey)"
                             x-cloak>
                             <td class="etd-catalog-expand-col"></td>
@@ -129,6 +151,9 @@
                                 @endif
                                 <div class="etd-mini-bar"><div style="width: {{ $categorySaleBar }}%"></div></div>
                             </td>
+                            @if ($showCompareDelta)
+                                @include('ecom_tracker.partials.compare-table-delta-cell', ['delta' => $catDelta])
+                            @endif
                         </tr>
                     @endforeach
                 @endforeach

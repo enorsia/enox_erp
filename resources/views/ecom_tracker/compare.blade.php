@@ -2,6 +2,7 @@
 
 @section('title', 'Compare Store Performance')
 
+
 @section('content')
 <div id="ecom-tracker-compare-content" class="etd-page etd-compare-page">
     <header class="etd-page-header">
@@ -12,9 +13,15 @@
                     <span class="etd-compare-page-mode">Compare</span>
                     <span class="etd-header-sep" aria-hidden="true">·</span>
                     <p class="etd-compare-page-subtitle" title="{{ $left['range']['label'] ?? '' }} vs {{ $right['range']['label'] ?? '' }}">
-                        <span class="etd-compare-page-subtitle-range">{{ $left['range']['label'] ?? '' }}</span>
+                        @include('ecom_tracker.partials.range-display-label', [
+                            'range' => $left['range'] ?? [],
+                            'class' => 'etd-compare-page-subtitle-range',
+                        ])
                         <span class="etd-compare-page-subtitle-vs">vs</span>
-                        <span class="etd-compare-page-subtitle-range">{{ $right['range']['label'] ?? '' }}</span>
+                        @include('ecom_tracker.partials.range-display-label', [
+                            'range' => $right['range'] ?? [],
+                            'class' => 'etd-compare-page-subtitle-range',
+                        ])
                     </p>
                     <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
                     <div class="etd-page-meta">
@@ -24,7 +31,7 @@
             </div>
 
             <div class="etd-page-header-right">
-                <div class="etd-header-actions">
+                <div class="etd-header-actions etd-compare-header-actions">
                     @include('ecom_tracker.partials.header-back-button', [
                         'url' => $backUrl,
                         'label' => 'Back',
@@ -38,6 +45,12 @@
         </div>
     </header>
 
+    @include('ecom_tracker.partials.compare-executive-summary', [
+        'rows' => $executiveRows,
+        'leftRange' => $left['range'] ?? [],
+        'rightRange' => $right['range'] ?? [],
+    ])
+
     <div class="etd-compare-grid">
         @include('ecom_tracker.partials.compare-column', [
             'side' => 'left',
@@ -45,6 +58,7 @@
             'filters' => $leftFilters,
             'otherFilters' => $rightFilters,
             'backUrl' => $backUrl,
+            'tableCompareDeltas' => $tableCompareDeltas,
             'chartCanvasId' => 'etdTrendChartLeft',
             'chartScrollId' => 'etdTrendChartScrollLeft',
             'chartWrapId' => 'etdTrendChartWrapLeft',
@@ -58,6 +72,7 @@
             'filters' => $rightFilters,
             'otherFilters' => $leftFilters,
             'backUrl' => $backUrl,
+            'tableCompareDeltas' => [],
             'chartCanvasId' => 'etdTrendChartRight',
             'chartScrollId' => 'etdTrendChartScrollRight',
             'chartWrapId' => 'etdTrendChartWrapRight',

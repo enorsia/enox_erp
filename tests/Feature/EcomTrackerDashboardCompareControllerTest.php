@@ -4,6 +4,8 @@ use App\Models\User;
 use App\Services\EcomTrackerDashboardService;
 use App\Support\EcomTrackerCompareSupport;
 use App\Support\EcomTrackerViewData;
+use App\Support\TrackerTime;
+use Illuminate\Http\Request;
 use Spatie\Permission\Models\Permission;
 
 beforeEach(function () {
@@ -23,11 +25,14 @@ test('compare page renders period columns', function () {
     $user->givePermissionTo('ecom_tracker.dashboard.index');
 
     $this->actingAs($user)
-        ->get(route('admin.ecom-tracker.dashboard.compare', ['left_period' => '7d']))
+        ->get(route('admin.ecom-tracker.dashboard.compare', [
+            'left_period' => '7d',
+            'right_period' => '7d',
+        ]))
         ->assertOk()
         ->assertSee('Store performance')
         ->assertSee('Compare')
-        ->assertDontSee('Executive summary')
+        ->assertSee('Executive summary')
         ->assertSee('Period A')
         ->assertSee('Period B')
         ->assertSee('Merchandising')
@@ -82,11 +87,31 @@ test('compare defaults period b to previous range when right params are absent',
 
     $response = $this->actingAs($user)
         ->get(route('admin.ecom-tracker.dashboard.compare', ['left_period' => '7d']))
-        ->assertOk();
+        ->assertRedirect();
 
-    expect($response->getContent())
-        ->toContain(\App\Support\TrackerTime::toLocal($prevRange['from'])?->toDateString() ?? '')
-        ->toContain(\App\Support\TrackerTime::toLocal($prevRange['to'])?->toDateString() ?? '');
+    $redirectUrl = $response->headers->get('Location') ?? '';
+
+    expect($redirectUrl)
+        ->toContain('left_period=7d')
+        ->toContain('right_period=custom')
+        ->toContain('right_date_from='.(TrackerTime::toLocal($prevRange['from'])?->toDateString() ?? ''))
+        ->toContain('right_date_to='.(TrackerTime::toLocal($prevRange['to'])?->toDateString() ?? ''));
+});
+
+test('compare shortcut includes explicit right period params', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.dashboard.index');
+
+    $html = $this->actingAs($user)
+        ->get(route('admin.ecom-tracker.dashboard', ['period' => '24h']))
+        ->assertOk()
+        ->getContent();
+
+    expect($html)
+        ->toContain('left_period=24h')
+        ->and($html)->toContain('right_period=custom')
+        ->and($html)->toContain('right_date_from=')
+        ->and($html)->toContain('right_date_to=');
 });
 
 test('compare period arrows use side specific query keys', function () {
@@ -190,7 +215,7 @@ test('executive summary marks revenue increase as improved sentiment', function 
 test('compare back url helper returns dashboard when back param is set', function () {
     $dashboardUrl = route('admin.ecom-tracker.dashboard', ['period' => '7d']);
 
-    $request = \Illuminate\Http\Request::create('/admin/ecom-tracker/dashboard/compare', 'GET', [
+    $request = Request::create('/admin/ecom-tracker/dashboard/compare', 'GET', [
         'back' => $dashboardUrl,
     ]);
 

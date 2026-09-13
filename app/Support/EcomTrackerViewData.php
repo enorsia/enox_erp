@@ -2,7 +2,8 @@
 
 namespace App\Support;
 
-use App\Models\TrackerUtmFilter;
+use App\Services\EcomTrackerDashboardService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 final class EcomTrackerViewData
@@ -248,7 +249,7 @@ final class EcomTrackerViewData
 
     /**
      * @param  array<string, mixed>  $baseQuery
-     * @param  array{from: \Carbon\Carbon, to: \Carbon\Carbon}  $range
+     * @param  array{from: Carbon, to: Carbon}  $range
      * @return array{previous_url: string, next_url: ?string, can_go_next: bool}
      */
     public static function dashboardDayNavigation(
@@ -303,8 +304,8 @@ final class EcomTrackerViewData
      */
     private static function dashboardPeriodUrl(
         array $baseQuery,
-        \Carbon\Carbon $fromLocal,
-        \Carbon\Carbon $toLocal,
+        Carbon $fromLocal,
+        Carbon $toLocal,
         string $routeName,
         string $periodKey = 'period',
         string $dateFromKey = 'date_from',
@@ -464,7 +465,28 @@ final class EcomTrackerViewData
             )),
         );
 
-        $query = self::compareSideQuery('left', $leftFilters);
+        $service = app(EcomTrackerDashboardService::class);
+        $leftRange = $service->resolveDateRange($leftFilters);
+        $prevRange = $service->resolvePreviousPeriodRange($leftRange);
+        $fromLocal = TrackerTime::toLocal($prevRange['from']);
+        $toLocal = TrackerTime::toLocal($prevRange['to']);
+
+        $rightFilters = array_merge(
+            collect($leftFilters)
+                ->except(['period', 'date_from', 'date_to'])
+                ->filter(fn ($value) => filled($value))
+                ->all(),
+            [
+                'period' => 'custom',
+                'date_from' => $fromLocal?->toDateString(),
+                'date_to' => $toLocal?->toDateString(),
+            ],
+        );
+
+        $query = array_merge(
+            self::compareSideQuery('left', $leftFilters),
+            self::compareSideQuery('right', $rightFilters),
+        );
         $query['back'] = $request->fullUrl();
 
         return route('admin.ecom-tracker.dashboard.compare', $query);

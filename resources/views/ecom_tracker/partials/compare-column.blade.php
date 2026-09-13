@@ -4,6 +4,7 @@
     'filters' => [],
     'otherFilters' => [],
     'backUrl' => null,
+    'tableCompareDeltas' => [],
     'chartCanvasId' => 'etdTrendChartLeft',
     'chartScrollId' => 'etdTrendChartScrollLeft',
     'chartWrapId' => 'etdTrendChartWrapLeft',
@@ -12,6 +13,8 @@
 ])
 
 @php
+    use App\Support\TrackerTime;
+
     $periodLabel = $side === 'right' ? 'Period B' : 'Period A';
     $modifier = $side === 'right' ? 'etd-compare-column--b' : 'etd-compare-column--a';
     $period = $filters['period'] ?? '24h';
@@ -41,6 +44,12 @@
     $unique = (int) (($d['new_returning']['unique'] ?? $d['new_returning']['new'] ?? 0));
     $returning = (int) ($d['new_returning']['returning'] ?? 0);
     $medianDuration = $d['duration_distribution']['median_label'] ?? null;
+    $showTableDeltas = $side === 'left' && ! empty($tableCompareDeltas);
+    $deviceDeltas = $tableCompareDeltas['devices'] ?? [];
+    $browserDeltas = $tableCompareDeltas['browsers'] ?? [];
+    $trafficDeltas = $tableCompareDeltas['traffic'] ?? [];
+    $productDeltas = $tableCompareDeltas['products'] ?? [];
+    $categoryDeltas = $tableCompareDeltas['categories'] ?? [];
 @endphp
 
 <div class="etd-compare-column {{ $modifier }}"
@@ -96,7 +105,9 @@
             <div class="etd-compare-column__title-wrap">
                 <span class="etd-compare-column__badge">{{ $periodLabel }}</span>
                 <span class="etd-compare-column__range"
-                      title="{{ $d['range']['label'] ?? '' }}">{{ $d['range']['label'] ?? '' }}</span>
+                      title="{{ TrackerTime::rangeDisplayLabel($d['range'] ?? []) }}">
+                    @include('ecom_tracker.partials.range-display-label', ['range' => $d['range'] ?? []])
+                </span>
             </div>
 
             <div class="etd-compare-column__controls">
@@ -151,7 +162,11 @@
                                         'label' => $kpi['label'],
                                         'tip' => $kpi['tip'] ?? null,
                                     ])
-                                    <p class="etd-kpi-value {{ $kpi['value_class'] ?? '' }}">{{ $kpi['formatted'] }}</p>
+                                    @include('ecom_tracker.partials.kpi-value-with-comparison', [
+                                        'formatted' => $kpi['formatted'],
+                                        'comparison' => $kpi['comparison'] ?? null,
+                                        'valueClass' => $kpi['value_class'] ?? '',
+                                    ])
                                 </div>
                             @endif
                         @endforeach
@@ -186,7 +201,7 @@
             </div>
         </div>
 
-        <div class="etd-panel etd-compare-panel" data-compare-sync="trend">
+        <div class="etd-panel etd-compare-panel etd-compare-panel--trend" data-compare-sync="trend">
             <div class="etd-panel-head">
                 <h3 class="etd-panel-title">Shopper journey over time</h3>
             </div>
@@ -201,9 +216,9 @@
             </div>
         </div>
 
-        <p class="etd-compare-block-label" data-compare-sync="merch-label">Merchandising</p>
+        <p class="etd-compare-block-label etd-compare-detail-only" data-compare-sync="merch-label">Merchandising</p>
 
-        <div class="etd-panel etd-compare-panel" data-compare-sync="categories">
+        <div class="etd-panel etd-compare-panel etd-compare-detail-only" data-compare-sync="categories">
             <div class="etd-panel-head">
                 <div>
                     <h3 class="etd-panel-title">Category performance</h3>
@@ -220,11 +235,13 @@
                     'departments' => $d['category_departments'] ?? [],
                     'showCurrency' => true,
                     'readOnly' => true,
+                    'showCompareDelta' => $showTableDeltas,
+                    'compareDeltas' => $categoryDeltas,
                 ])
             </div>
         </div>
 
-        <div class="etd-panel etd-compare-panel" data-compare-sync="products">
+        <div class="etd-panel etd-compare-panel etd-compare-detail-only" data-compare-sync="products">
             <div class="etd-panel-head">
                 <div>
                     <h3 class="etd-panel-title">Product performance</h3>
@@ -267,11 +284,22 @@
                                 ])
                             </th>
                             <th class="etd-num etd-col-metric">Sale</th>
+                            @if ($showTableDeltas)
+                                <th class="etd-num etd-col-metric etd-compare-table-delta-head">Δ vs B</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($d['products'] ?? [] as $product)
-                            <tr>
+                            @php
+                                $productDelta = $productDeltas[$product['name'] ?? ''] ?? null;
+                                $productRowClass = match ($productDelta['highlight'] ?? null) {
+                                    'up' => 'etd-compare-row--up',
+                                    'down' => 'etd-compare-row--down',
+                                    default => '',
+                                };
+                            @endphp
+                            <tr @class([$productRowClass])>
                                 <td class="etd-col-product">{{ $product['name'] }}</td>
                                 <td class="etd-num etd-col-metric">{{ number_format($product['views']) }}</td>
                                 <td class="etd-num etd-col-metric">{{ number_format($product['adds']) }}</td>
@@ -281,42 +309,52 @@
                                     £{{ number_format($product['revenue'], 2) }}
                                     <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] }}%"></div></div>
                                 </td>
+                                @if ($showTableDeltas)
+                                    @include('ecom_tracker.partials.compare-table-delta-cell', ['delta' => $productDelta])
+                                @endif
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="text-slate-400">No product activity in this period.</td></tr>
+                            <tr><td colspan="{{ $showTableDeltas ? 7 : 6 }}" class="text-slate-400">No product activity in this period.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <p class="etd-compare-block-label" data-compare-sync="recover-label">Recoverable sale</p>
+        <p class="etd-compare-block-label etd-compare-detail-only" data-compare-sync="recover-label">Recoverable sale</p>
 
-        @include('ecom_tracker.partials.compare-recoverable-summary', ['panels' => $recoverablePanels])
+        <div class="etd-compare-detail-only">
+            @include('ecom_tracker.partials.compare-recoverable-summary', ['panels' => $recoverablePanels])
+        </div>
 
-        <p class="etd-compare-block-label" data-compare-sync="acq-label">Acquisition &amp; audience</p>
+        <p class="etd-compare-block-label etd-compare-detail-only" data-compare-sync="acq-label">Acquisition &amp; audience</p>
 
-        <div class="etd-panel etd-compare-panel" data-compare-sync="devices">
+        <div class="etd-panel etd-compare-panel etd-compare-detail-only" data-compare-sync="devices">
             <div class="etd-panel-head">
                 <h3 class="etd-panel-title">Device &amp; browser</h3>
             </div>
             @include('ecom_tracker.partials.device-browser-breakdown', [
                 'devices' => $d['devices'] ?? [],
                 'readOnly' => true,
+                'showCompareDelta' => $showTableDeltas,
+                'deviceDeltas' => $deviceDeltas,
+                'browserDeltas' => $browserDeltas,
             ])
         </div>
 
-        <div class="etd-panel etd-compare-panel" data-compare-sync="traffic">
+        <div class="etd-panel etd-compare-panel etd-compare-detail-only" data-compare-sync="traffic">
             <div class="etd-panel-head">
                 <h3 class="etd-panel-title">Traffic sources</h3>
             </div>
             @include('ecom_tracker.partials.traffic-sources-table', [
                 'rows' => $d['traffic_sources'] ?? [],
                 'readOnly' => true,
+                'showCompareDelta' => $showTableDeltas,
+                'compareDeltas' => $trafficDeltas,
             ])
         </div>
 
-        <div class="etd-compare-audience-note" data-compare-sync="audience">
+        <div class="etd-compare-audience-note etd-compare-detail-only" data-compare-sync="audience">
             @if ($medianDuration || ($unique + $returning) > 0)
                 @if ($medianDuration)
                     <span>Median session duration: <strong>{{ $medianDuration }}</strong></span>

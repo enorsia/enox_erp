@@ -3,6 +3,8 @@
     'rows' => [],
     'emptyMessage' => 'No data in this period.',
     'rowActivityLink' => null,
+    'showCompareDelta' => false,
+    'compareDeltas' => [],
 ])
 
 <div class="etd-device-browser-panel">
@@ -49,14 +51,23 @@
                         ])
                     </th>
                     <th class="etd-num">Conv.</th>
+                    @if ($showCompareDelta)
+                        <th class="etd-num etd-compare-table-delta-head">Δ vs B</th>
+                    @endif
                 </tr>
             </thead>
             <tbody>
                 @forelse ($rows as $row)
                     @php
                         $rowLink = is_callable($rowActivityLink) ? $rowActivityLink($row['label'] ?? '') : null;
+                        $rowDelta = $compareDeltas[$row['label'] ?? ''] ?? null;
+                        $rowClass = match ($rowDelta['highlight'] ?? null) {
+                            'up' => 'etd-compare-row--up',
+                            'down' => 'etd-compare-row--down',
+                            default => '',
+                        };
                     @endphp
-                    <tr>
+                    <tr @class([$rowClass])>
                         <td>
                             @if (filled($rowLink))
                                 <a href="{{ $rowLink }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">{{ $row['label'] }}</a>
@@ -71,10 +82,13 @@
                         <td class="etd-num">{{ number_format($row['proceed_checkout']) }}</td>
                         <td class="etd-num">{{ number_format($row['sold_qty']) }}</td>
                         <td class="etd-num">{{ $row['conversion_rate'] }}%</td>
+                        @if ($showCompareDelta)
+                            @include('ecom_tracker.partials.compare-table-delta-cell', ['delta' => $rowDelta])
+                        @endif
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="8" class="text-slate-400">{{ $emptyMessage }}</td>
+                        <td colspan="{{ $showCompareDelta ? 9 : 8 }}" class="text-slate-400">{{ $emptyMessage }}</td>
                     </tr>
                 @endforelse
             </tbody>

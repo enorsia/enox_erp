@@ -2,6 +2,9 @@
     'devices' => ['by_device' => [], 'by_browser' => []],
     'deviceActivityLink' => null,
     'readOnly' => false,
+    'showCompareDelta' => false,
+    'deviceDeltas' => [],
+    'browserDeltas' => [],
 ])
 
 @php
@@ -17,6 +20,8 @@
         'rows' => $deviceRows,
         'emptyMessage' => 'No device data in this period.',
         'rowActivityLink' => $rowActivityLink,
+        'showCompareDelta' => $showCompareDelta,
+        'compareDeltas' => $deviceDeltas,
     ])
 
     @include('ecom_tracker.partials.device-browser-table', [
@@ -24,5 +29,7 @@
         'rows' => $browserRows,
         'emptyMessage' => 'No browser data in this period.',
         'rowActivityLink' => fn (string $label) => $devicesFocusLink,
+        'showCompareDelta' => $showCompareDelta,
+        'compareDeltas' => $browserDeltas,
     ])
 </div>

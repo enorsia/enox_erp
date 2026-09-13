@@ -35,26 +35,96 @@ const compareData = window.ecomTrackerCompareData || {};
 const compareSyncQuery = window.matchMedia('(min-width: 1200px)');
 let comparePrintSyncPaused = false;
 
-function clearCompareSectionHeights() {
-    document.querySelectorAll('#ecom-tracker-compare-content [data-compare-sync]').forEach((element) => {
+function syncElementHeights(elements) {
+    if (!elements?.length) {
+        return;
+    }
+
+    elements.forEach((element) => {
         element.style.minHeight = '';
     });
+
+    if (elements.length < 2) {
+        return;
+    }
+
+    const maxHeight = Math.max(...elements.map((element) => element.getBoundingClientRect().height));
+
+    if (maxHeight <= 0) {
+        return;
+    }
+
+    const height = `${Math.ceil(maxHeight)}px`;
+
+    elements.forEach((element) => {
+        element.style.minHeight = height;
+    });
+}
+
+function groupElementsByText(root, selector, textSelector) {
+    const groups = new Map();
+
+    root.querySelectorAll(selector).forEach((element) => {
+        const label = element.querySelector(textSelector)?.textContent?.trim();
+
+        if (!label) {
+            return;
+        }
+
+        if (!groups.has(label)) {
+            groups.set(label, []);
+        }
+
+        groups.get(label).push(element);
+    });
+
+    return groups;
+}
+
+function clearCompareMatchedHeights() {
+    const root = document.getElementById('ecom-tracker-compare-content');
+
+    if (!root) {
+        return;
+    }
+
+    root.querySelectorAll('[data-compare-sync], [data-compare-sync] .etd-kpi--compact, [data-compare-sync] .etd-kpi-group, [data-compare-sync] .etd-compare-recoverable-card').forEach((element) => {
+        element.style.minHeight = '';
+    });
+}
+
+function syncCompareKpiHeights(root) {
+    groupElementsByText(root, '[data-compare-sync="kpis"] .etd-kpi--compact', '.etd-kpi-label-text')
+        .forEach((cards) => {
+            syncElementHeights(cards);
+        });
+}
+
+function syncCompareRecoverableHeights(root) {
+    groupElementsByText(root, '[data-compare-sync="recoverable"] .etd-compare-recoverable-card', '.etd-compare-recoverable-card__title')
+        .forEach((cards) => {
+            syncElementHeights(cards);
+        });
 }
 
 function syncCompareSectionHeights() {
     const root = document.getElementById('ecom-tracker-compare-content');
 
     if (comparePrintSyncPaused) {
-        clearCompareSectionHeights();
+        clearCompareMatchedHeights();
 
         return;
     }
 
     if (!root || !compareSyncQuery.matches) {
-        clearCompareSectionHeights();
+        clearCompareMatchedHeights();
 
         return;
     }
+
+    clearCompareMatchedHeights();
+    syncCompareKpiHeights(root);
+    syncCompareRecoverableHeights(root);
 
     const groups = new Map();
 
@@ -73,29 +143,17 @@ function syncCompareSectionHeights() {
     });
 
     groups.forEach((elements) => {
-        if (elements.length < 2) {
-            elements.forEach((element) => {
-                element.style.minHeight = '';
-            });
-
-            return;
-        }
-
-        elements.forEach((element) => {
-            element.style.minHeight = '';
-        });
-
-        const maxHeight = Math.max(...elements.map((element) => element.offsetHeight));
-
-        elements.forEach((element) => {
-            element.style.minHeight = `${maxHeight}px`;
-        });
+        syncElementHeights(elements);
     });
 }
 
 function scheduleCompareSectionSync() {
     window.requestAnimationFrame(() => {
         syncCompareSectionHeights();
+
+        window.requestAnimationFrame(() => {
+            syncCompareSectionHeights();
+        });
     });
 }
 
@@ -104,7 +162,7 @@ let compareSyncObserver;
 function pauseCompareSectionSyncForPrint() {
     comparePrintSyncPaused = true;
     compareSyncObserver?.disconnect();
-    clearCompareSectionHeights();
+    clearCompareMatchedHeights();
 }
 
 function resumeCompareSectionSyncAfterPrint() {
@@ -142,6 +200,13 @@ function initCompareSectionSync() {
         root.querySelectorAll('[data-compare-sync]').forEach((element) => {
             compareSyncObserver.observe(element);
         });
+        root.querySelectorAll('[data-compare-sync] .etd-kpi--compact, [data-compare-sync] .etd-kpi-group, [data-compare-sync] .etd-compare-recoverable-card').forEach((element) => {
+            compareSyncObserver.observe(element);
+        });
+    }
+
+    if (document.fonts?.ready) {
+        document.fonts.ready.then(scheduleCompareSectionSync).catch(() => {});
     }
 }
 
@@ -612,11 +677,13 @@ function printEcomTrackerCompare() {
     prepareCompareForPrint();
 
     requestAnimationFrame(() => {
-        resizeCompareTrendChartsForPrint();
-
         requestAnimationFrame(() => {
-            clearCompareSectionHeights();
-            window.print();
+            resizeCompareTrendChartsForPrint();
+
+            requestAnimationFrame(() => {
+                clearCompareMatchedHeights();
+                window.print();
+            });
         });
     });
 }

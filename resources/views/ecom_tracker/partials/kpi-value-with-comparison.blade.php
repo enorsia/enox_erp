@@ -4,6 +4,10 @@
     'valueClass' => '',
 ])
 
+@php
+    use App\Support\TrackerTime;
+@endphp
+
 <div class="etd-kpi-value-stack">
     <div class="etd-kpi-value {{ $valueClass }}">{{ $formatted }}</div>
 
@@ -53,7 +57,15 @@
             </div>
 
             @if ($hasBaseline)
-                <span class="etd-kpi-compare__period">{{ ucfirst($comparisonLabel) }}</span>
+                @php $periodParts = TrackerTime::comparisonLabelParts($comparisonLabel); @endphp
+                @if (($periodParts['type'] ?? '') === 'range')
+                    <span class="etd-kpi-compare__period etd-date-range">
+                        <span class="etd-date-range__from">{{ $periodParts['from'] }} –</span>
+                        <span class="etd-date-range__to">{{ $periodParts['to'] }}</span>
+                    </span>
+                @else
+                    <span class="etd-kpi-compare__period">{{ ucfirst($periodParts['label'] ?? $comparisonLabel) }}</span>
+                @endif
             @endif
         </div>
     @endif

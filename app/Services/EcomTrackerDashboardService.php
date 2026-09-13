@@ -346,7 +346,7 @@ class EcomTrackerDashboardService
             return [
                 'from' => $from,
                 'to' => $to,
-                'label' => $fromLocal?->format('d M Y').' – '.$toLocal?->format('d M Y'),
+                'label' => TrackerTime::formatLocalDateRangeLabel($fromLocal, $toLocal),
                 'days' => (int) ($fromLocal?->diffInDays($toLocal) ?? 0) + 1,
                 'period' => 'custom',
             ];
