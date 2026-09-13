@@ -2723,7 +2723,7 @@ body.etd-filter-panel-open {
 
 .etd-device-browser-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: clamp(0.75rem, 1.5vw, 1rem);
     align-items: start;
 }
@@ -3003,11 +3003,27 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     }
 }
 
-@media (max-width: 1023px) {
-    .etd-device-browser-grid {
-        grid-template-columns: minmax(0, 1fr);
+@media (min-width: 640px) {
+    .etd-device-browser-panel,
+    .etd-table-scroll--device-browser.etd-table-scroll--fixed {
+        width: 100%;
+        max-width: 100%;
     }
 
+    .etd-table--device-browser {
+        width: 100%;
+        min-width: 0;
+        table-layout: fixed;
+    }
+
+    .etd-table--device-browser th,
+    .etd-table--device-browser td {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+@media (max-width: 1023px) {
     .etd-panel--acquisition {
         min-height: 0;
     }
@@ -3019,7 +3035,14 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 
 @media (max-width: 639px) {
     .etd-table--device-browser {
+        width: max-content;
         min-width: 36rem;
+        table-layout: auto;
+    }
+
+    .etd-table--device-browser th,
+    .etd-table--device-browser td {
+        white-space: nowrap;
     }
 
     .etd-table--traffic {
@@ -8758,41 +8781,22 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-category-departments.e
 }
 
 .etd-compare-page .etd-table--device-browser {
-    width: max-content;
-    min-width: 36rem;
-    table-layout: auto;
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
     font-size: 12px;
 }
 
 .etd-compare-page .etd-table--device-browser th,
 .etd-compare-page .etd-table--device-browser td {
     padding: 0.4rem 0.5rem;
-    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .etd-compare-page .etd-table--device-browser th:first-child,
 .etd-compare-page .etd-table--device-browser td:first-child {
-    position: sticky;
-    left: 0;
-    z-index: 1;
     min-width: 5.5rem;
-    background: #fff;
-    box-shadow: 2px 0 4px -2px rgba(15, 23, 42, 0.08);
-}
-
-.dark .etd-compare-page .etd-table--device-browser th:first-child,
-.dark .etd-compare-page .etd-table--device-browser td:first-child {
-    background: #1e293b;
-    box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.25);
-}
-
-.etd-compare-page .etd-table-scroll--fixed .etd-table--device-browser thead th:first-child {
-    z-index: 3;
-    background: #f8fafc;
-}
-
-.dark .etd-compare-page .etd-table-scroll--fixed .etd-table--device-browser thead th:first-child {
-    background: #1e293b;
 }
 
 .etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments thead th {
@@ -8946,11 +8950,6 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-category-departments.e
         -webkit-overflow-scrolling: touch;
     }
 
-    #ecom-tracker-compare-content .etd-table--device-browser {
-        min-width: 34rem;
-        font-size: 11px;
-    }
-
     #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-category-departments .etd-table {
         min-width: 34rem;
         font-size: 11px;
@@ -8991,6 +8990,44 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-category-departments.e
     #ecom-tracker-compare-content .etd-kpi-group--4 .etd-kpi-group-grid,
     #ecom-tracker-compare-content .etd-kpi-group--2 .etd-kpi-group-grid {
         grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 639px) {
+    #ecom-tracker-compare-content .etd-table--device-browser {
+        width: max-content;
+        min-width: 34rem;
+        table-layout: auto;
+        font-size: 11px;
+    }
+
+    #ecom-tracker-compare-content .etd-table--device-browser th,
+    #ecom-tracker-compare-content .etd-table--device-browser td {
+        white-space: nowrap;
+    }
+
+    #ecom-tracker-compare-content .etd-table--device-browser th:first-child,
+    #ecom-tracker-compare-content .etd-table--device-browser td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background: #fff;
+        box-shadow: 2px 0 4px -2px rgba(15, 23, 42, 0.08);
+    }
+
+    .dark #ecom-tracker-compare-content .etd-table--device-browser th:first-child,
+    .dark #ecom-tracker-compare-content .etd-table--device-browser td:first-child {
+        background: #1e293b;
+        box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.25);
+    }
+
+    #ecom-tracker-compare-content .etd-table-scroll--fixed .etd-table--device-browser thead th:first-child {
+        z-index: 3;
+        background: #f8fafc;
+    }
+
+    .dark #ecom-tracker-compare-content .etd-table-scroll--fixed .etd-table--device-browser thead th:first-child {
+        background: #1e293b;
     }
 }
 
@@ -9568,6 +9605,30 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-category-departments.e
     #ecom-tracker-dashboard-content .etd-grid-4--recoverable > .etd-panel--recoverable {
         min-height: 0;
     }
+
+    #ecom-tracker-dashboard-content .etd-table--device-browser th:first-child,
+    #ecom-tracker-dashboard-content .etd-table--device-browser td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background: #fff;
+        box-shadow: 2px 0 4px -2px rgba(15, 23, 42, 0.08);
+    }
+
+    .dark #ecom-tracker-dashboard-content .etd-table--device-browser th:first-child,
+    .dark #ecom-tracker-dashboard-content .etd-table--device-browser td:first-child {
+        background: #1e293b;
+        box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.25);
+    }
+
+    #ecom-tracker-dashboard-content .etd-table-scroll--device-browser.etd-table-scroll--fixed .etd-table--device-browser thead th:first-child {
+        z-index: 3;
+        background: #f8fafc;
+    }
+
+    .dark #ecom-tracker-dashboard-content .etd-table-scroll--device-browser.etd-table-scroll--fixed .etd-table--device-browser thead th:first-child {
+        background: #1e293b;
+    }
 }
 
 @media (max-width: 1023px) {
@@ -9661,30 +9722,6 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-category-departments.e
 
     .dark #ecom-tracker-dashboard-content #products .etd-table-scroll--fixed .etd-product-catalog thead th.etd-catalog-expand-col,
     .dark #ecom-tracker-dashboard-content #products .etd-table-scroll--fixed .etd-product-catalog thead th.etd-col-product {
-        background: #1e293b;
-    }
-
-    #ecom-tracker-dashboard-content .etd-table--device-browser th:first-child,
-    #ecom-tracker-dashboard-content .etd-table--device-browser td:first-child {
-        position: sticky;
-        left: 0;
-        z-index: 1;
-        background: #fff;
-        box-shadow: 2px 0 4px -2px rgba(15, 23, 42, 0.08);
-    }
-
-    .dark #ecom-tracker-dashboard-content .etd-table--device-browser th:first-child,
-    .dark #ecom-tracker-dashboard-content .etd-table--device-browser td:first-child {
-        background: #1e293b;
-        box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.25);
-    }
-
-    #ecom-tracker-dashboard-content .etd-table-scroll--device-browser.etd-table-scroll--fixed .etd-table--device-browser thead th:first-child {
-        z-index: 3;
-        background: #f8fafc;
-    }
-
-    .dark #ecom-tracker-dashboard-content .etd-table-scroll--device-browser.etd-table-scroll--fixed .etd-table--device-browser thead th:first-child {
         background: #1e293b;
     }
 
