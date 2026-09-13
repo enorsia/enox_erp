@@ -959,7 +959,10 @@ final class EcomActivityFocus
      */
     public static function drawerPreserveQueryParams(Request $request): array
     {
-        $editableKeys = self::sidebarFilterQueryKeys($request);
+        $editableKeys = array_merge(
+            self::sidebarFilterQueryKeys($request),
+            ['period', 'date_from', 'date_to'],
+        );
 
         $preserveKeys = array_values(array_diff(
             EcomTrackerViewData::activityQueryKeys(),

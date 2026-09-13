@@ -70,7 +70,7 @@
                 class="etd-segmented-btn"
                 :class="{ 'active': presetKey === 'custom' }"
                 aria-label="Custom date range"
-                @click="toggleCustom()">Custom</button>
+                @click.stop="toggleCustom()">Custom</button>
     </div>
 
     @if ($dayNav['can_go_next'])

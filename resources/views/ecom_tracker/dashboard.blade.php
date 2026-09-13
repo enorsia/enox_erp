@@ -27,12 +27,6 @@
 
     $period = $period === '90d' ? '30d' : $period;
 
-    $activePreset = match ($period) {
-        'yesterday', '7d', '30d', 'custom' => $period,
-        default => '24h',
-    };
-
-    $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d'], true) ? $period : '24h';
     $baseQuery = request()->except([
         'date_from', 'date_to', 'period',
         'search', 'category', 'color', 'size', 'sort_by', 'activity',
@@ -44,110 +38,53 @@
     @include('ecom_tracker.partials.filter-drawer', [
         'action' => route('admin.ecom-tracker.dashboard'),
         'resetUrl' => route('admin.ecom-tracker.dashboard'),
-        'preservePeriodParams' => true,
+        'showPeriodFilters' => true,
         'showSessionFilters' => true,
         'sessionFiltersHeading' => 'Sessions & audience',
         'includeCountry' => false,
         'period' => $period,
         'dateFrom' => $dateFrom,
         'dateTo' => $dateTo,
+        'baseQuery' => $baseQuery,
+        'range' => $d['range'],
+        'routeName' => 'admin.ecom-tracker.dashboard',
     ])
 
     <header class="etd-page-header">
-        <div class="etd-page-header-bar"
-             x-data="{
-                presetKey: '{{ $activePreset }}',
-                basePreset: '{{ $basePreset }}',
-                dateFrom: '{{ $dateFrom }}',
-                dateTo: '{{ $dateTo }}',
-                toggleCustom() {
-                    this.presetKey = this.presetKey === 'custom' ? this.basePreset : 'custom';
-                },
-                applyCustom() {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('period', 'custom');
-                    if (this.dateFrom) {
-                        url.searchParams.set('date_from', this.dateFrom);
-                    } else {
-                        url.searchParams.delete('date_from');
-                    }
-                    if (this.dateTo) {
-                        url.searchParams.set('date_to', this.dateTo);
-                    } else {
-                        url.searchParams.delete('date_to');
-                    }
-                    window.location.href = url.toString();
-                }
-             }">
-            <div class="etd-page-header-left-stack">
-                <h1 class="etd-page-title">Store performance</h1>
-                <div class="etd-page-header-sub">
-                    <span class="etd-page-range">{{ $d['range']['label'] }}</span>
-                    <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
-                    <div class="etd-page-meta">
-                        @include('ecom_tracker.partials.timezone-notice')
-                        @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $d['analytics_cache'] ?? null])
+        <div class="etd-page-header-bar">
+            <div class="etd-page-header-main">
+                <div class="etd-page-header-left-stack">
+                    <h1 class="etd-page-title">Store performance</h1>
+                    <span class="etd-header-sep etd-header-sep--title" aria-hidden="true">·</span>
+                    <div class="etd-page-header-sub">
+                        <span class="etd-page-range">{{ $d['range']['label'] }}</span>
+                        <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
+                        <div class="etd-page-meta">
+                            @include('ecom_tracker.partials.timezone-notice')
+                            @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $d['analytics_cache'] ?? null])
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="etd-page-header-right">
-                @include('ecom_tracker.partials.dashboard-period-controls', [
-                    'baseQuery' => $baseQuery,
-                    'range' => $d['range'],
-                    'period' => $period,
-                    'showComparisonLink' => true,
-                    'showUserActivityLink' => true,
-                ])
-
-                <div class="etd-header-actions">
+            <div class="etd-page-header-toolbar">
+                <div class="etd-header-toolbar-row">
+                    @include('ecom_tracker.partials.dashboard-header-shortcuts', [
+                        'showComparisonLink' => true,
+                        'showUserActivityLink' => true,
+                    ])
                     @include('ecom_tracker.partials.header-reset-button', [
                         'url' => route('admin.ecom-tracker.dashboard'),
                         'active' => count(request()->query()) > 0,
                     ])
-                    <button type="button" @click="drawerOpen = true" class="etd-header-btn etd-header-btn--icon {{ $hasActiveFilters ? 'etd-header-btn--filtered' : '' }}" aria-label="Filters">
-                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
-                        <span class="etd-header-btn-text">Filters</span>
-                        @if ($hasActiveFilters)
-                            <span class="etd-header-btn-badge">{{ $activeFilterCount }}</span>
-                        @endif
-                    </button>
+                    @include('ecom_tracker.partials.header-filter-button', [
+                        'active' => $hasActiveFilters,
+                        'count' => $hasActiveFilters ? $activeFilterCount : 0,
+                    ])
                     @include('ecom_tracker.partials.header-print-button')
                 </div>
             </div>
-
-            <div x-show="presetKey === 'custom'"
-                 x-collapse
-                 x-effect="if (presetKey === 'custom') { $nextTick(() => window.refreshEtdFilterControls?.($el)) }"
-                 class="etd-custom-dates etd-custom-dates--inline etd-date-range"
-                 data-etd-date-range
-                 @if ($activePreset !== 'custom') style="display: none" @endif>
-                <input type="text"
-                       x-model="dateFrom"
-                       data-range="from"
-                       data-default="{{ $dateFrom }}"
-                       value="{{ $dateFrom }}"
-                       placeholder="From date"
-                       readonly
-                       class="etd-flatpickr-date f-input etd-date-input"
-                       aria-label="From date">
-                <span class="etd-custom-dates-sep">–</span>
-                <input type="text"
-                       x-model="dateTo"
-                       data-range="to"
-                       data-default="{{ $dateTo }}"
-                       value="{{ $dateTo }}"
-                       placeholder="To date"
-                       readonly
-                       class="etd-flatpickr-date f-input etd-date-input"
-                       aria-label="To date">
-                <button type="button" class="etd-header-btn etd-header-btn--primary etd-pill-apply" @click="applyCustom()">Apply</button>
-            </div>
         </div>
-
-        @if ($hasActiveFilters)
-            <p class="etd-filter-active-note etd-filter-active-note--compact">Filters applied — open Filters to change or reset.</p>
-        @endif
 
         @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
     </header>
@@ -432,7 +369,9 @@
     <div class="etd-panel etd-print-unit mb-3" id="traffic">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Traffic sources</h2>
-            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('traffic-sources')])
+            <div class="etd-panel-head-actions">
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink('traffic-sources')])
+            </div>
         </div>
         @include('ecom_tracker.partials.traffic-sources-table', [
             'rows' => $d['traffic_sources'],

@@ -1,6 +1,125 @@
 import flatpickr from 'flatpickr';
 import 'flatpickr/dist/flatpickr.min.css';
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function parseLocalDate(isoDate) {
+    const [year, month, day] = isoDate.split('-').map(Number);
+
+    return new Date(year, month - 1, day);
+}
+
+function formatLocalDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+}
+
+function addLocalDays(isoDate, deltaDays) {
+    const date = parseLocalDate(isoDate);
+    date.setDate(date.getDate() + deltaDays);
+
+    return formatLocalDate(date);
+}
+
+function formatDisplayDate(isoDate) {
+    const date = parseLocalDate(isoDate);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = MONTH_LABELS[date.getMonth()];
+
+    return `${day} ${month} ${date.getFullYear()}`;
+}
+
+function formatRangeLabel(from, to, config) {
+    if (from === to) {
+        if (from === config.today) {
+            return config.todayLabel;
+        }
+
+        if (from === config.yesterday) {
+            return config.yesterdayLabel;
+        }
+    }
+
+    return `${formatDisplayDate(from)} – ${formatDisplayDate(to)}`;
+}
+
+function resolvePeriodState(from, to, config) {
+    if (from === to) {
+        if (from === config.today) {
+            return { period: '24h', dateFrom: '', dateTo: '' };
+        }
+
+        if (from === config.yesterday) {
+            return { period: 'yesterday', dateFrom: '', dateTo: '' };
+        }
+    }
+
+    return { period: 'custom', dateFrom: from, dateTo: to };
+}
+
+function resolveRangeFromForm(root, config) {
+    const periodSelect = root.querySelector('[name="period"]');
+    const period = selectValue(periodSelect) || config.period || '24h';
+    const dateFrom = root.querySelector('[name="date_from"]')?.value || '';
+    const dateTo = root.querySelector('[name="date_to"]')?.value || '';
+
+    if (period === '24h') {
+        return { from: config.today, to: config.today };
+    }
+
+    if (period === 'yesterday') {
+        return { from: config.yesterday, to: config.yesterday };
+    }
+
+    if (period === '7d') {
+        return { from: addLocalDays(config.today, -6), to: config.today };
+    }
+
+    if (period === '30d') {
+        return { from: addLocalDays(config.today, -29), to: config.today };
+    }
+
+    if (period === 'custom' && dateFrom && dateTo) {
+        return { from: dateFrom, to: dateTo };
+    }
+
+    return { from: config.rangeFrom, to: config.rangeTo };
+}
+
+function setFlatpickrValue(input, value) {
+    if (!input) {
+        return;
+    }
+
+    const fp = input._etdFlatpickr;
+
+    if (fp) {
+        if (value) {
+            fp.setDate(value, true);
+        } else {
+            fp.clear();
+            notifyInputChange(input, '');
+        }
+
+        return;
+    }
+
+    notifyInputChange(input, value || '');
+}
+
+function applyPeriodStateToForm(root, state) {
+    const periodSelect = root.querySelector('[name="period"]');
+    const dateFromInput = root.querySelector('[name="date_from"]');
+    const dateToInput = root.querySelector('[name="date_to"]');
+
+    setSelectValue(periodSelect, state.period);
+    setFlatpickrValue(dateFromInput, state.dateFrom);
+    setFlatpickrValue(dateToInput, state.dateTo);
+}
+
 const accentColor = () => getComputedStyle(document.querySelector('.etd-page') || document.body)
     .getPropertyValue('--etd-accent')
     .trim() || '#1D9E75';
@@ -8,7 +127,12 @@ const accentColor = () => getComputedStyle(document.querySelector('.etd-page') |
 function inputClasses(element) {
     return element.dataset.fpInputClass
         || Array.from(element.classList)
-            .filter((className) => !['etd-flatpickr-date', 'etd-flatpickr-datetime', 'flatpickr-input'].includes(className))
+            .filter((className) => ![
+                'etd-flatpickr-date',
+                'etd-flatpickr-datetime',
+                'etd-flatpickr-date-range',
+                'flatpickr-input',
+            ].includes(className))
             .join(' ');
 }
 
@@ -100,6 +224,61 @@ function initRangeGroups(root) {
     });
 }
 
+function initSingleRangeGroups(root) {
+    const scope = root?.querySelectorAll ? root : document;
+
+    scope.querySelectorAll('[data-etd-date-range-single]').forEach((group) => {
+        const displayEl = group.querySelector('.etd-flatpickr-date-range');
+        const fromEl = group.querySelector('[data-range="from"]');
+        const toEl = group.querySelector('[data-range="to"]');
+
+        if (!displayEl) {
+            return;
+        }
+
+        if (displayEl._etdFlatpickr) {
+            displayEl._etdFlatpickr.destroy();
+            displayEl._etdFlatpickr = null;
+        }
+
+        const defaultFrom = displayEl.dataset.defaultFrom || fromEl?.value || '';
+        const defaultTo = displayEl.dataset.defaultTo || toEl?.value || '';
+        const defaultDate = defaultFrom && defaultTo ? [defaultFrom, defaultTo] : null;
+        const altInputClass = inputClasses(displayEl);
+
+        const fp = flatpickr(displayEl, {
+            mode: 'range',
+            allowInput: true,
+            disableMobile: true,
+            altInput: true,
+            altFormat: 'j M Y',
+            dateFormat: 'Y-m-d',
+            defaultDate,
+            altInputClass,
+            appendTo: document.body,
+            onChange(dates, _dateStr, instance) {
+                const from = dates[0] ? instance.formatDate(dates[0], 'Y-m-d') : '';
+                const to = dates[1] ? instance.formatDate(dates[1], 'Y-m-d') : '';
+
+                if (fromEl) {
+                    notifyInputChange(fromEl, from);
+                }
+
+                if (toEl) {
+                    notifyInputChange(toEl, to);
+                }
+            },
+            onReady(_selectedDates, _dateStr, instance) {
+                if (instance.altInput) {
+                    instance.altInput.placeholder = displayEl.dataset.placeholder || 'Select date range';
+                }
+            },
+        });
+
+        displayEl._etdFlatpickr = fp;
+    });
+}
+
 function initEtdFlatpickr(root = document) {
     const scope = root?.querySelectorAll ? root : document;
     const singles = root?.matches?.('.etd-flatpickr-date, .etd-flatpickr-datetime')
@@ -107,13 +286,14 @@ function initEtdFlatpickr(root = document) {
         : [];
 
     scope.querySelectorAll('.etd-flatpickr-date, .etd-flatpickr-datetime').forEach((element) => {
-        if (!element.closest('[data-etd-date-range]')) {
+        if (!element.closest('[data-etd-date-range]') && !element.closest('[data-etd-date-range-single]')) {
             singles.push(element);
         }
     });
 
     singles.forEach((element) => initFlatpickrElement(element));
     initRangeGroups(scope);
+    initSingleRangeGroups(scope);
 
     document.documentElement.style.setProperty('--etd-flatpickr-accent', accentColor());
 }
@@ -135,6 +315,48 @@ function selectValue(select) {
 
     return values[0] ?? '';
 }
+
+let etdFilterPeriodAlpineRegistered = false;
+
+function registerEtdFilterPeriodAlpine() {
+    if (etdFilterPeriodAlpineRegistered || !window.Alpine) {
+        return;
+    }
+
+    etdFilterPeriodAlpineRegistered = true;
+
+    window.Alpine.data('etdFilterPeriod', (config) => ({
+        drawerPeriod: config.period,
+        navLabel: config.initialLabel,
+        canGoNext: config.canGoNext,
+        rangeFrom: config.rangeFrom,
+        rangeTo: config.rangeTo,
+        today: config.today,
+        yesterday: config.yesterday,
+        todayLabel: config.todayLabel,
+        yesterdayLabel: config.yesterdayLabel,
+
+        shiftDay(delta) {
+            const current = resolveRangeFromForm(this.$root, config);
+            const newFrom = addLocalDays(current.from, delta);
+            const newTo = addLocalDays(current.to, delta);
+            const state = resolvePeriodState(newFrom, newTo, config);
+
+            this.rangeFrom = newFrom;
+            this.rangeTo = newTo;
+            this.drawerPeriod = state.period;
+            this.navLabel = formatRangeLabel(newFrom, newTo, config);
+            this.canGoNext = newTo < config.today;
+
+            this.$nextTick(() => {
+                applyPeriodStateToForm(this.$root, state);
+            });
+        },
+    }));
+}
+
+document.addEventListener('alpine:init', registerEtdFilterPeriodAlpine);
+registerEtdFilterPeriodAlpine();
 
 function setSelectValue(select, value) {
     if (select.tomselect) {
@@ -375,6 +597,10 @@ window.refreshEtdFilterControls = function (root) {
 
     initEtdFlatpickr(root);
     initDepartmentCategoryFilters(root);
+
+    if (typeof window.initEtdTipPositioning === 'function') {
+        window.initEtdTipPositioning(root);
+    }
 };
 
 window.syncEtdFlatpickrEnabled = function (container, enabled) {
@@ -382,7 +608,7 @@ window.syncEtdFlatpickrEnabled = function (container, enabled) {
         return;
     }
 
-    container.querySelectorAll('.etd-flatpickr-date, .etd-flatpickr-datetime').forEach((element) => {
+    container.querySelectorAll('.etd-flatpickr-date, .etd-flatpickr-datetime, .etd-flatpickr-date-range').forEach((element) => {
         const fp = element._etdFlatpickr;
 
         if (!fp) {

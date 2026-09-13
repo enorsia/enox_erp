@@ -8,6 +8,7 @@
 ])
 
 @php
+    use App\Support\EcomActivityCommerceEvents;
     use App\Support\TrackerTime;
     use App\Support\EcomTrackerViewData;
 
@@ -105,6 +106,7 @@
                 @php
                     $metrics = $rowMetrics[$session->session_id] ?? [];
                     $commerceEvents = $metrics['commerce_events'] ?? [];
+                    $expandableCommerceEvents = EcomActivityCommerceEvents::expandableEvents($commerceEvents);
                     $formatMetric = function (string $key, mixed $default = '—') use ($metrics) {
                         $value = $metrics[$key] ?? $default;
 
@@ -157,7 +159,7 @@
                         @endcan
                     </td>
                 </tr>
-                @foreach ($commerceEvents as $event)
+                @foreach ($expandableCommerceEvents as $event)
                     @php $eventKey = $session->session_id.':'.($event['id'] ?? $loop->index); @endphp
                     <tr
                         class="etd-commerce-event-row"

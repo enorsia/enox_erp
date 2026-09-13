@@ -73,18 +73,9 @@
                 </select>
             </form>
         @endif
-        <button type="button"
-                @click="drawerOpen = true"
-                @class([
-                    'etd-topbar-btn',
-                    'etd-topbar-btn--sm' => $compact,
-                    $activeFilterCount > 0 ? 'etd-topbar-btn--active' : 'etd-topbar-btn--ghost',
-                ])>
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M3 4h18M7 8h10M11 12h2"/></svg>
-            Filters
-            @if ($activeFilterCount > 0)
-                <span class="etd-topbar-btn__badge">{{ $activeFilterCount }}</span>
-            @endif
-        </button>
+        @include('ecom_tracker.partials.header-filter-button', [
+            'active' => $activeFilterCount > 0,
+            'count' => $activeFilterCount,
+        ])
     </div>
 </div>

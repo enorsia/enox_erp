@@ -276,9 +276,26 @@ final class EcomActivityCommerceEvents
         ];
     }
 
-    private static function isViewStage(string $stage): bool
+    public static function isViewStage(string $stage): bool
     {
         return array_key_exists($stage, self::VIEW_STAGE_LABELS);
+    }
+
+    public static function viewStageLabel(string $stage): string
+    {
+        return self::VIEW_STAGE_LABELS[$stage] ?? 'View';
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $events
+     * @return list<array<string, mixed>>
+     */
+    public static function expandableEvents(array $events): array
+    {
+        return array_values(array_filter(
+            $events,
+            fn (array $event) => ! self::isViewStage((string) ($event['stage'] ?? '')),
+        ));
     }
 
     /**

@@ -380,3 +380,25 @@ test('commerce events from popup and category view lines use distinct stage labe
         ->and(collect($events)->pluck('stage_label')->all())->toBe(['Category view', 'Popup view'])
         ->and(collect($events)->firstWhere('stage', 'category_view')['products'][0]['title'])->toBe('Women -> Dresses');
 });
+
+test('expandable events excludes view stages but keeps funnel and order events', function () {
+    $events = [
+        ['stage' => 'category_view', 'stage_label' => 'Category view'],
+        ['stage' => 'product_view', 'stage_label' => 'View'],
+        ['stage' => 'add_to_cart', 'stage_label' => 'Cart'],
+        ['stage' => 'payment_success', 'stage_label' => 'Order'],
+    ];
+
+    $expandable = EcomActivityCommerceEvents::expandableEvents($events);
+
+    expect($expandable)->toHaveCount(2)
+        ->and(collect($expandable)->pluck('stage')->all())->toBe(['add_to_cart', 'payment_success']);
+});
+
+test('view stage helpers identify labels for browsing stages', function () {
+    expect(EcomActivityCommerceEvents::isViewStage('category_view'))->toBeTrue()
+        ->and(EcomActivityCommerceEvents::isViewStage('product_view'))->toBeTrue()
+        ->and(EcomActivityCommerceEvents::isViewStage('add_to_cart'))->toBeFalse()
+        ->and(EcomActivityCommerceEvents::viewStageLabel('category_view'))->toBe('Category view')
+        ->and(EcomActivityCommerceEvents::viewStageLabel('product_view'))->toBe('View');
+});

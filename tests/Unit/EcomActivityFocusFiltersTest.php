@@ -473,7 +473,8 @@ test('drawer preserve params keep drill-down focus but expose visitor type in dr
 
     $preserved = EcomActivityFocus::drawerPreserveQueryParams($request);
 
-    expect($preserved)->toHaveKeys(['focus', 'period'])
+    expect($preserved)->toHaveKeys(['focus'])
+        ->and($preserved)->not->toHaveKey('period')
         ->and($preserved)->not->toHaveKey('visitor_type');
 });
 

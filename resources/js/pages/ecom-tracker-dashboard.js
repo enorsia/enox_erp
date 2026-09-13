@@ -13,6 +13,10 @@ import {
     LineController,
     DoughnutController,
 } from 'chart.js';
+import {
+    bindTrendTooltipDismiss,
+    createTrendTooltipHandler,
+} from '../lib/ecom-tracker-trend-tooltip';
 
 Chart.register(
     CategoryScale,
@@ -71,209 +75,6 @@ const tipStyle = () => ({
     padding: 10,
     cornerRadius: 8,
 });
-
-const TREND_TOOLTIP_GROUPS = [
-    { label: 'Reach', keys: ['unique_visitors', 'sessions'] },
-    { label: 'Discovery', keys: ['category_views', 'product_views'] },
-    { label: 'Checkout', keys: ['add_to_cart', 'begin_checkout', 'proceed_checkout'] },
-    { label: 'Sales', keys: ['purchases', 'items_sold_qty', 'conversion_rate'] },
-];
-
-let trendTooltipElement = null;
-
-function formatTrendTooltipValue(key, value) {
-    const numeric = Number(value) || 0;
-
-    if (key === 'conversion_rate') {
-        return `${numeric.toFixed(1)}%`;
-    }
-
-    return numeric.toLocaleString('en-GB');
-}
-
-function getOrCreateTrendTooltip() {
-    if (trendTooltipElement) {
-        return trendTooltipElement;
-    }
-
-    trendTooltipElement = document.createElement('div');
-    trendTooltipElement.className = 'etd-trend-tooltip';
-    trendTooltipElement.setAttribute('role', 'tooltip');
-    trendTooltipElement.innerHTML = '<div class="etd-trend-tooltip__card"></div>';
-    document.body.appendChild(trendTooltipElement);
-
-    return trendTooltipElement;
-}
-
-function hideTrendTooltip() {
-    if (!trendTooltipElement) {
-        return;
-    }
-
-    trendTooltipElement.classList.remove('etd-trend-tooltip--visible', 'etd-trend-tooltip--below');
-}
-
-function trendTooltipViewportPadding() {
-    const viewportWidth = window.innerWidth;
-
-    if (viewportWidth <= 360) {
-        return 8;
-    }
-
-    if (viewportWidth <= 640) {
-        return 10;
-    }
-
-    return 12;
-}
-
-function positionTrendTooltip(tooltipEl, chart, tooltip) {
-    const cardEl = tooltipEl.querySelector('.etd-trend-tooltip__card');
-    const viewportPadding = trendTooltipViewportPadding();
-    const gap = viewportPadding <= 8 ? 10 : 12;
-    const canvasRect = chart.canvas.getBoundingClientRect();
-    const anchorX = canvasRect.left + tooltip.caretX;
-    const anchorY = canvasRect.top + tooltip.caretY;
-
-    tooltipEl.classList.remove('etd-trend-tooltip--below', 'etd-trend-tooltip--visible');
-    tooltipEl.classList.add('etd-trend-tooltip--positioning');
-    tooltipEl.style.left = `${anchorX}px`;
-    tooltipEl.style.top = `${anchorY}px`;
-    tooltipEl.style.transform = 'translate(-50%, calc(-100% - 12px))';
-
-    const { width, height } = tooltipEl.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const minCenterX = viewportPadding + (width / 2);
-    const maxCenterX = viewportWidth - viewportPadding - (width / 2);
-    const centerX = Math.max(minCenterX, Math.min(maxCenterX, anchorX));
-    const arrowOffset = anchorX - centerX;
-    const spaceAbove = anchorY - viewportPadding;
-    const spaceBelow = viewportHeight - anchorY - viewportPadding;
-    const maxTooltipHeight = Math.max(
-        120,
-        viewportHeight - (viewportPadding * 2) - gap,
-    );
-
-    if (cardEl) {
-        cardEl.style.setProperty('--etd-tooltip-arrow-offset', `${arrowOffset}px`);
-        cardEl.style.maxHeight = `${maxTooltipHeight}px`;
-    }
-
-    let placement = 'above';
-
-    if (height + gap > spaceAbove && spaceBelow > spaceAbove) {
-        placement = 'below';
-    } else if (height + gap > spaceAbove && height + gap > spaceBelow) {
-        placement = spaceBelow >= spaceAbove ? 'below' : 'above';
-    }
-
-    tooltipEl.style.left = `${centerX}px`;
-    tooltipEl.style.top = `${anchorY}px`;
-    tooltipEl.style.transform = placement === 'below'
-        ? `translate(-50%, ${gap}px)`
-        : `translate(-50%, calc(-100% - ${gap}px))`;
-    tooltipEl.classList.toggle('etd-trend-tooltip--below', placement === 'below');
-    tooltipEl.classList.remove('etd-trend-tooltip--positioning');
-    tooltipEl.classList.add('etd-trend-tooltip--visible');
-}
-
-function buildTrendTooltipHtml(title, seriesByKey) {
-    const groups = TREND_TOOLTIP_GROUPS.map((group) => {
-        const rows = group.keys
-            .map((key) => seriesByKey[key])
-            .filter(Boolean);
-
-        if (!rows.length) {
-            return '';
-        }
-
-        const rowHtml = rows.map((entry) => `
-            <div class="etd-trend-tooltip__row">
-                <span class="etd-trend-tooltip__swatch" style="--etd-trend-swatch:${entry.color}"></span>
-                <span class="etd-trend-tooltip__label">${entry.label}</span>
-                <span class="etd-trend-tooltip__value">${entry.formatted}</span>
-            </div>
-        `).join('');
-
-        return `
-            <div class="etd-trend-tooltip__group">
-                <div class="etd-trend-tooltip__group-label">${group.label}</div>
-                ${rowHtml}
-            </div>
-        `;
-    }).filter(Boolean).join('');
-
-    return `
-        <div class="etd-trend-tooltip__header">
-            <span class="etd-trend-tooltip__date">${title}</span>
-        </div>
-        <div class="etd-trend-tooltip__body">
-            ${groups}
-        </div>
-    `;
-}
-
-function createTrendTooltipHandler(orderedSeries) {
-    const seriesByKey = Object.fromEntries(
-        orderedSeries.map((entry) => [entry.key, entry]),
-    );
-
-    return (context) => {
-        const { chart, tooltip } = context;
-        const tooltipEl = getOrCreateTrendTooltip();
-        const cardEl = tooltipEl.querySelector('.etd-trend-tooltip__card');
-
-        tooltipEl.classList.toggle('etd-trend-tooltip--dark', isDark());
-
-        if (tooltip.opacity === 0 || !tooltip.dataPoints?.length) {
-            tooltipEl.classList.remove('etd-trend-tooltip--visible');
-
-            return;
-        }
-
-        const dataIndex = tooltip.dataPoints[0].dataIndex;
-        const title = tooltip.title?.[0] || tooltip.dataPoints[0].label || '';
-        const valuesByKey = {};
-
-        tooltip.dataPoints.forEach((point) => {
-            const seriesEntry = orderedSeries[point.datasetIndex];
-
-            if (!seriesEntry) {
-                return;
-            }
-
-            const rawValue = point.parsed?.y ?? point.raw ?? 0;
-
-            valuesByKey[seriesEntry.key] = {
-                label: seriesEntry.label,
-                color: trendSeriesColor(seriesEntry.key),
-                formatted: formatTrendTooltipValue(seriesEntry.key, rawValue),
-            };
-        });
-
-        Object.entries(seriesByKey).forEach(([key, entry]) => {
-            if (valuesByKey[key]) {
-                return;
-            }
-
-            const rawValue = entry.data?.[dataIndex] ?? 0;
-
-            valuesByKey[key] = {
-                label: entry.label,
-                color: trendSeriesColor(key),
-                formatted: formatTrendTooltipValue(key, rawValue),
-            };
-        });
-
-        if (cardEl) {
-            cardEl.innerHTML = buildTrendTooltipHtml(title, valuesByKey);
-            cardEl.style.removeProperty('max-height');
-        }
-
-        positionTrendTooltip(tooltipEl, chart, tooltip);
-    };
-}
 
 function ctx(id) {
     const el = document.getElementById(id);
@@ -388,21 +189,10 @@ function sortTrendSeries(series) {
     });
 }
 
-const trendCtx = ctx('etdTrendChart');
-if (trendCtx && D.trend) {
-    const {
-        labels = [],
-        series = [],
-        use_log_scale: useLogScale = false,
-    } = D.trend;
-
-    const orderedSeries = sortTrendSeries(series);
+function buildTrendDatasets(orderedSeries, labels, useLogScale) {
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
 
-    applyTrendChartLayout(labels.length);
-    renderTrendLegend(orderedSeries);
-
-    const datasets = orderedSeries.map((entry, index) => {
+    return orderedSeries.map((entry, index) => {
         const color = trendSeriesColor(entry.key);
         const isConversion = entry.key === 'conversion_rate';
         const isBar = entry.chart_type === 'bar';
@@ -430,12 +220,47 @@ if (trendCtx && D.trend) {
             maxBarThickness: isBar ? 14 : undefined,
         };
     });
+}
+
+function applyTrendChartOptions(chart, labels) {
+    const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
+
+    chart.options.layout.padding.right = useHorizontalScroll ? 8 : 0;
+    chart.options.plugins.legend.display = !isCompactChart();
+    chart.options.scales.x.ticks.maxRotation = useHorizontalScroll || labels.length > 20 ? 45 : 0;
+    chart.options.scales.x.ticks.minRotation = useHorizontalScroll ? 35 : 0;
+    chart.options.scales.x.ticks.autoSkip = !useHorizontalScroll && labels.length > 24;
+    chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, useHorizontalScroll);
+    chart.options.scales.x.ticks.font.size = isNarrow() ? 9 : 11;
+    chart.options.scales.y.ticks.font.size = isNarrow() ? 9 : 11;
+    chart.options.scales.y1.ticks.font.size = isNarrow() ? 9 : 11;
+}
+
+function refreshTrendChart(chart, orderedSeries, labels, useLogScale) {
+    chart.data.datasets = buildTrendDatasets(orderedSeries, labels, useLogScale);
+    applyTrendChartOptions(chart, labels);
+    chart.update('none');
+    chart.resize();
+}
+
+const trendCtx = ctx('etdTrendChart');
+if (trendCtx && D.trend) {
+    const {
+        labels = [],
+        series = [],
+        use_log_scale: useLogScale = false,
+    } = D.trend;
+
+    const orderedSeries = sortTrendSeries(series);
+
+    applyTrendChartLayout(labels.length);
+    renderTrendLegend(orderedSeries);
 
     const trendChart = new Chart(trendCtx, {
         type: 'bar',
         data: {
             labels,
-            datasets,
+            datasets: buildTrendDatasets(orderedSeries, labels, useLogScale),
         },
         options: {
             responsive: true,
@@ -443,7 +268,7 @@ if (trendCtx && D.trend) {
             interaction: { mode: 'index', intersect: false },
             layout: {
                 padding: {
-                    right: useHorizontalScroll ? 8 : 0,
+                    right: trendUsesHorizontalScroll(labels.length) ? 8 : 0,
                 },
             },
             plugins: {
@@ -459,7 +284,7 @@ if (trendCtx && D.trend) {
                 },
                 tooltip: {
                     enabled: false,
-                    external: createTrendTooltipHandler(orderedSeries),
+                    external: createTrendTooltipHandler(orderedSeries, trendSeriesColor),
                     itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
                 },
             },
@@ -467,10 +292,10 @@ if (trendCtx && D.trend) {
                 x: {
                     grid: { display: false },
                     ticks: {
-                        maxRotation: useHorizontalScroll || labels.length > 20 ? 45 : 0,
-                        minRotation: useHorizontalScroll ? 35 : 0,
-                        autoSkip: !useHorizontalScroll && labels.length > 24,
-                        maxTicksLimit: trendTickLimit(labels.length, useHorizontalScroll),
+                        maxRotation: trendUsesHorizontalScroll(labels.length) || labels.length > 20 ? 45 : 0,
+                        minRotation: trendUsesHorizontalScroll(labels.length) ? 35 : 0,
+                        autoSkip: !trendUsesHorizontalScroll(labels.length) && labels.length > 24,
+                        maxTicksLimit: trendTickLimit(labels.length, trendUsesHorizontalScroll(labels.length)),
                         font: { size: isNarrow() ? 9 : 11 },
                     },
                 },
@@ -507,13 +332,7 @@ if (trendCtx && D.trend) {
     let resizeFrame = null;
     const trendChartScroll = document.getElementById('etdTrendChartScroll');
 
-    const handleTrendTooltipDismiss = () => {
-        hideTrendTooltip();
-    };
-
-    window.addEventListener('resize', handleTrendTooltipDismiss, { passive: true });
-    window.addEventListener('scroll', handleTrendTooltipDismiss, { passive: true, capture: true });
-    trendChartScroll?.addEventListener('scroll', handleTrendTooltipDismiss, { passive: true });
+    bindTrendTooltipDismiss(trendChartScroll);
 
     window.addEventListener('resize', () => {
         if (resizeFrame) {
@@ -523,13 +342,7 @@ if (trendCtx && D.trend) {
         resizeFrame = requestAnimationFrame(() => {
             applyTrendChartLayout(labels.length);
             renderTrendLegend(orderedSeries);
-            trendChart.options.plugins.legend.display = !isCompactChart();
-            trendChart.options.scales.x.ticks.autoSkip = !trendUsesHorizontalScroll(labels.length) && labels.length > 24;
-            trendChart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(
-                labels.length,
-                trendUsesHorizontalScroll(labels.length),
-            );
-            trendChart.resize();
+            refreshTrendChart(trendChart, orderedSeries, labels, useLogScale);
         });
     });
 }
@@ -696,6 +509,15 @@ function syncKpiPanelCardHeights() {
     const cards = panel.querySelectorAll('.etd-kpi--compact');
 
     if (!cards.length) {
+        return;
+    }
+
+    if (window.matchMedia('(max-width: 767px)').matches) {
+        panel.style.removeProperty('--etd-kpi-sync-height');
+        cards.forEach((card) => {
+            card.style.minHeight = '';
+        });
+
         return;
     }
 

@@ -50,27 +50,48 @@
         dateFrom: '{{ $dateFrom }}',
         dateTo: '{{ $dateTo }}',
         filtersOpen: false,
-        toggleCustom() {
-            this.presetKey = this.presetKey === 'custom' ? this.basePreset : 'custom';
+        closeFilters() {
+            this.filtersOpen = false;
         },
-        applyCustom() {
-            const url = new URL(window.location.href);
-            const prefix = '{{ $side === 'right' ? 'right_' : 'left_' }}';
-            url.searchParams.set(prefix + 'period', 'custom');
-            if (this.dateFrom) {
-                url.searchParams.set(prefix + 'date_from', this.dateFrom);
-            } else {
-                url.searchParams.delete(prefix + 'date_from');
+        openFilters() {
+            this.filtersOpen = true;
+            this.$nextTick(() => window.refreshEtdFilterControls?.(this.$refs.filterForm));
+        },
+        toggleFilters() {
+            if (this.filtersOpen) {
+                this.closeFilters();
+                return;
             }
-            if (this.dateTo) {
-                url.searchParams.set(prefix + 'date_to', this.dateTo);
-            } else {
-                url.searchParams.delete(prefix + 'date_to');
+
+            this.openFilters();
+        },
+        toggleCustom() {
+            if (this.presetKey === 'custom' && this.filtersOpen) {
+                this.presetKey = this.basePreset;
+                this.filtersOpen = false;
+                return;
             }
-            window.location.href = url.toString();
-        }
-     }">
-    <div class="etd-compare-column__header" data-compare-sync="header">
+
+            this.presetKey = 'custom';
+            this.$nextTick(() => this.openFilters());
+        },
+     }"
+     @keydown.escape.window="closeFilters()">
+    <div x-show="filtersOpen"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @click="closeFilters()"
+         class="etd-compare-filter-backdrop etd-print-hide"
+         aria-hidden="true"
+         style="display: none"></div>
+
+    <div class="etd-compare-column__header"
+         :class="{ 'etd-compare-column__header--filters-open': filtersOpen }"
+         data-compare-sync="header">
         <div class="etd-compare-column__header-row">
             <div class="etd-compare-column__title-wrap">
                 <span class="etd-compare-column__badge">{{ $periodLabel }}</span>
@@ -92,53 +113,27 @@
                     ])
                 </div>
 
-                <div class="etd-compare-column__filter-toggle etd-print-hide">
-                    <span class="etd-compare-column__filter-label">Filters</span>
-                    <button type="button"
-                            class="toggle-track"
-                            :class="{ 'on': filtersOpen }"
-                            @click="filtersOpen = !filtersOpen"
-                            aria-label="Toggle filters"
-                            :aria-expanded="filtersOpen.toString()">
-                        <span class="toggle-thumb"></span>
-                    </button>
+                <div class="etd-compare-column__filter-wrap etd-print-hide">
+                    <div class="etd-compare-column__filter-toggle">
+                        <span class="etd-compare-column__filter-label">Filters</span>
+                        <button type="button"
+                                class="toggle-track"
+                                :class="{ 'on': filtersOpen }"
+                                @click.stop="toggleFilters()"
+                                aria-label="Toggle filters"
+                                :aria-expanded="filtersOpen.toString()">
+                            <span class="toggle-thumb"></span>
+                        </button>
+                    </div>
+
+                    @include('ecom_tracker.partials.compare-column-filters', [
+                        'side' => $side,
+                        'filters' => $filters,
+                        'otherFilters' => $otherFilters,
+                        'backUrl' => $backUrl,
+                    ])
                 </div>
             </div>
-        </div>
-
-        @include('ecom_tracker.partials.compare-column-filters', [
-            'side' => $side,
-            'filters' => $filters,
-            'otherFilters' => $otherFilters,
-            'backUrl' => $backUrl,
-        ])
-
-        <div x-show="presetKey === 'custom'"
-             x-collapse
-             x-effect="if (presetKey === 'custom') { $nextTick(() => window.refreshEtdFilterControls?.($el)) }"
-             class="etd-custom-dates etd-custom-dates--inline etd-date-range etd-compare-custom-dates"
-             data-etd-date-range
-             @if ($activePreset !== 'custom') style="display: none" @endif>
-            <input type="text"
-                   x-model="dateFrom"
-                   data-range="from"
-                   data-default="{{ $dateFrom }}"
-                   value="{{ $dateFrom }}"
-                   placeholder="From date"
-                   readonly
-                   class="etd-flatpickr-date f-input etd-date-input"
-                   aria-label="From date">
-            <span class="etd-custom-dates-sep">–</span>
-            <input type="text"
-                   x-model="dateTo"
-                   data-range="to"
-                   data-default="{{ $dateTo }}"
-                   value="{{ $dateTo }}"
-                   placeholder="To date"
-                   readonly
-                   class="etd-flatpickr-date f-input etd-date-input"
-                   aria-label="To date">
-            <button type="button" class="etd-header-btn etd-header-btn--primary etd-pill-apply" @click="applyCustom()">Apply</button>
         </div>
     </div>
 
