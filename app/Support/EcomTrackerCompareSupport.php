@@ -484,6 +484,35 @@ final class EcomTrackerCompareSupport
     }
 
     /**
+     * @param  array<string, mixed>  $current
+     * @param  array<string, mixed>  $other
+     * @return array<string, array<string, array<string, mixed>>>
+     */
+    public static function buildCategoryMetricCompareDeltas(array $current, array $other): array
+    {
+        $metricKeys = [
+            'category_views',
+            'product_views',
+            'adds',
+            'proceed_checkouts',
+            'sale_items',
+            'sale_amount',
+        ];
+
+        $currentRows = self::flattenCategoryRows($current['category_departments'] ?? []);
+        $otherRows = self::flattenCategoryRows($other['category_departments'] ?? []);
+        $deltas = [];
+
+        foreach ($metricKeys as $metricKey) {
+            foreach (self::rowDeltaMap($currentRows, $otherRows, fn (array $row): string => (string) ($row['key'] ?? ''), $metricKey, true) as $rowKey => $delta) {
+                $deltas[$rowKey][$metricKey] = $delta;
+            }
+        }
+
+        return $deltas;
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $departments
      * @return list<array<string, mixed>>
      */
@@ -493,20 +522,36 @@ final class EcomTrackerCompareSupport
 
         foreach ($departments as $department) {
             $departmentName = (string) ($department['name'] ?? '');
-            $rows[] = [
-                'key' => 'dept:'.$departmentName,
-                'sale_amount' => (float) ($department['sale_amount'] ?? 0),
-            ];
+            $rows[] = array_merge(
+                ['key' => 'dept:'.$departmentName],
+                self::categoryMetricSnapshot($department),
+            );
 
             foreach ($department['categories'] ?? [] as $category) {
-                $rows[] = [
-                    'key' => 'cat:'.$departmentName.'/'.($category['category_name'] ?? $category['name'] ?? ''),
-                    'sale_amount' => (float) ($category['sale_amount'] ?? 0),
-                ];
+                $rows[] = array_merge(
+                    ['key' => 'cat:'.$departmentName.'/'.($category['category_name'] ?? $category['name'] ?? '')],
+                    self::categoryMetricSnapshot($category),
+                );
             }
         }
 
         return $rows;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, float>
+     */
+    private static function categoryMetricSnapshot(array $row): array
+    {
+        return [
+            'category_views' => (float) ($row['category_views'] ?? 0),
+            'product_views' => (float) ($row['product_views'] ?? 0),
+            'adds' => (float) ($row['adds'] ?? 0),
+            'proceed_checkouts' => (float) ($row['proceed_checkouts'] ?? 0),
+            'sale_items' => (float) ($row['sale_items'] ?? 0),
+            'sale_amount' => (float) ($row['sale_amount'] ?? 0),
+        ];
     }
 
     public static function executiveMetricActivityFocus(string $metricKey): ?string

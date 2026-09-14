@@ -9153,12 +9153,15 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 .etd-compare-page [data-compare-sync='categories'] .etd-category-departments th.etd-col-category,
 .etd-compare-page [data-compare-sync='categories'] .etd-category-departments td.etd-col-category {
     width: auto;
-    min-width: 8.5rem;
+    min-width: 0;
     max-width: none;
     white-space: normal;
+    overflow: visible;
+    overflow-wrap: break-word;
+    word-break: normal;
 }
 
-.etd-compare-page [data-compare-sync='categories'] .etd-category-departments th.etd-col-category {
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) th.etd-col-category {
     white-space: nowrap;
     letter-spacing: 0.02em;
 }
@@ -9169,11 +9172,112 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     text-overflow: clip;
 }
 
-.etd-compare-page [data-compare-sync='categories'] .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric,
-.etd-compare-page [data-compare-sync='categories'] .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric {
-    width: 4.5rem;
-    min-width: 3.75rem;
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric,
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric {
+    width: auto;
+    min-width: 3.5rem;
+    white-space: normal;
+    vertical-align: top;
+}
+
+.etd-category-metric-cell {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    gap: 0.12rem;
+    max-width: 100%;
+}
+
+.etd-category-metric-cell--stacked {
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 0.1rem;
+    line-height: 1.2;
+}
+
+.etd-category-metric-cell__value {
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25;
+}
+
+.etd-category-metric-cell__delta {
+    display: block;
+    line-height: 1.1;
+}
+
+.etd-category-metric-cell__pct {
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1.2;
     white-space: nowrap;
+    background: transparent;
+}
+
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments--compare-inline .etd-table {
+    table-layout: auto;
+}
+
+.etd-category-departments--compare-inline .etd-category-name-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+}
+
+.etd-category-departments--compare-inline .etd-category-name-cell .etd-catalog-expand-btn {
+    flex: 0 0 auto;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin: 0;
+}
+
+.etd-category-departments--compare-inline .etd-category-name-cell .etd-category-count-badge {
+    flex: 0 0 auto;
+    margin-left: 0.35rem;
+}
+
+.etd-category-departments--compare-inline .etd-col-category--with-expand {
+    padding-left: 0.35rem;
+    text-align: left;
+}
+
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments--compare-inline th.etd-col-category,
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments--compare-inline td.etd-col-category {
+    position: static;
+    left: auto;
+    box-shadow: none;
+    width: 1%;
+    min-width: 0;
+    max-width: none;
+    padding-left: 0.35rem;
+    padding-right: 0.5rem;
+    text-align: left;
+    white-space: nowrap;
+    overflow: visible;
+    vertical-align: middle;
+}
+
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments--compare-inline thead th.etd-col-category {
+    white-space: nowrap;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+}
+
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments--compare-inline .etd-category-child-row td.etd-col-category {
+    padding-left: 1.35rem;
+}
+
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments--compare-inline .etd-category-child-label {
+    white-space: nowrap;
+}
+
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments--compare-inline .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric,
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments--compare-inline .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric {
+    width: auto;
+    min-width: 2.75rem;
+    padding-inline: 0.3rem;
 }
 
 .etd-compare-page [data-compare-sync='categories'] .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric:last-of-type,
@@ -9370,41 +9474,71 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     min-width: 5.5rem;
 }
 
-.etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments thead th {
+.etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments:not(.etd-category-departments--compare-inline) thead th {
     white-space: nowrap;
 }
 
-.etd-compare-page [data-compare-sync='categories'] .etd-category-departments .etd-catalog-expand-col {
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) thead .etd-catalog-expand-col,
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) .etd-category-dept-row .etd-catalog-expand-col {
+    width: 1.75rem;
+    min-width: 1.75rem;
+    max-width: 1.75rem;
+    padding-left: 0.2rem;
+    padding-right: 0;
+}
+
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) .etd-catalog-expand-col {
     position: sticky;
     left: 0;
     z-index: 1;
     background: #fff;
 }
 
-.etd-compare-page [data-compare-sync='categories'] .etd-category-departments th.etd-col-category,
-.etd-compare-page [data-compare-sync='categories'] .etd-category-departments td.etd-col-category {
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) th.etd-col-category,
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) td.etd-col-category {
     position: sticky;
-    left: 2.25rem;
+    left: 0;
     z-index: 1;
     background: #fff;
     box-shadow: 2px 0 4px -2px rgba(15, 23, 42, 0.08);
+    padding-left: 0.35rem;
+    text-align: left;
 }
 
-.dark .etd-compare-page [data-compare-sync='categories'] .etd-category-departments .etd-catalog-expand-col,
-.dark .etd-compare-page [data-compare-sync='categories'] .etd-category-departments th.etd-col-category,
-.dark .etd-compare-page [data-compare-sync='categories'] .etd-category-departments td.etd-col-category {
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments--compare-inline th.etd-col-category,
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments--compare-inline td.etd-col-category {
+    position: static;
+    left: auto;
+    z-index: auto;
+    box-shadow: none;
+    background: transparent;
+}
+
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) th.etd-col-category,
+.etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) td.etd-col-category {
+    left: 1.75rem;
+}
+
+.dark .etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) .etd-catalog-expand-col,
+.dark .etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) th.etd-col-category,
+.dark .etd-compare-page [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) td.etd-col-category {
     background: #1e293b;
     box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.25);
 }
 
-.etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments thead th.etd-catalog-expand-col,
-.etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments thead th.etd-col-category {
+.etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments:not(.etd-category-departments--compare-inline) thead th.etd-catalog-expand-col,
+.etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments:not(.etd-category-departments--compare-inline) thead th.etd-col-category {
     z-index: 3;
     background: #f8fafc;
 }
 
-.dark .etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments thead th.etd-catalog-expand-col,
-.dark .etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments thead th.etd-col-category {
+.etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments--compare-inline thead th.etd-col-category {
+    z-index: auto;
+    background: transparent;
+}
+
+.dark .etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments:not(.etd-category-departments--compare-inline) thead th.etd-catalog-expand-col,
+.dark .etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed .etd-category-departments:not(.etd-category-departments--compare-inline) thead th.etd-col-category {
     background: #1e293b;
 }
 
@@ -9522,12 +9656,12 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     }
 
     #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-category-departments .etd-table {
-        min-width: 34rem;
+        min-width: 0;
         font-size: 11px;
     }
 
-    #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric,
-    #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric {
+    #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric,
+    #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-category-departments:not(.etd-category-departments--compare-inline) .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric {
         min-width: 3.35rem;
         padding-inline: 0.35rem;
     }

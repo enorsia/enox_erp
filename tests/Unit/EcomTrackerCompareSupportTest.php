@@ -220,6 +220,104 @@ test('row delta map highlights top movers', function () {
         ->and($map['Desktop']['delta_sentiment'] ?? null)->toBe('bad');
 });
 
+test('category metric compare deltas compare each side against the other side', function () {
+    $left = [
+        'category_departments' => [
+            [
+                'name' => 'Mens',
+                'category_views' => 15,
+                'product_views' => 0,
+                'adds' => 0,
+                'proceed_checkouts' => 0,
+                'sale_items' => 0,
+                'sale_amount' => 0,
+                'categories' => [],
+            ],
+        ],
+    ];
+
+    $right = [
+        'category_departments' => [
+            [
+                'name' => 'Mens',
+                'category_views' => 10,
+                'product_views' => 0,
+                'adds' => 0,
+                'proceed_checkouts' => 0,
+                'sale_items' => 0,
+                'sale_amount' => 0,
+                'categories' => [],
+            ],
+        ],
+    ];
+
+    $leftDeltas = EcomTrackerCompareSupport::buildCategoryMetricCompareDeltas($left, $right);
+    $rightDeltas = EcomTrackerCompareSupport::buildCategoryMetricCompareDeltas($right, $left);
+
+    expect($leftDeltas['dept:Mens']['category_views']['delta_pct'] ?? null)->toBe(50.0)
+        ->and($rightDeltas['dept:Mens']['category_views']['delta_pct'] ?? null)->toBe(-33.3);
+});
+
+test('build category metric compare deltas maps each metric for departments and categories', function () {
+    $left = [
+        'category_departments' => [
+            [
+                'name' => 'Mens',
+                'category_views' => 20,
+                'product_views' => 40,
+                'adds' => 4,
+                'proceed_checkouts' => 2,
+                'sale_items' => 1,
+                'sale_amount' => 100,
+                'categories' => [
+                    [
+                        'category_name' => 'Shirts',
+                        'category_views' => 10,
+                        'product_views' => 20,
+                        'adds' => 2,
+                        'proceed_checkouts' => 1,
+                        'sale_items' => 1,
+                        'sale_amount' => 60,
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    $right = [
+        'category_departments' => [
+            [
+                'name' => 'Mens',
+                'category_views' => 10,
+                'product_views' => 20,
+                'adds' => 2,
+                'proceed_checkouts' => 1,
+                'sale_items' => 0,
+                'sale_amount' => 50,
+                'categories' => [
+                    [
+                        'category_name' => 'Shirts',
+                        'category_views' => 5,
+                        'product_views' => 10,
+                        'adds' => 1,
+                        'proceed_checkouts' => 0,
+                        'sale_items' => 0,
+                        'sale_amount' => 30,
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    $deltas = EcomTrackerCompareSupport::buildCategoryMetricCompareDeltas($left, $right);
+
+    expect($deltas['dept:Mens']['category_views']['delta_pct'] ?? null)->toBe(100.0)
+        ->and($deltas['dept:Mens']['sale_amount']['delta_pct'] ?? null)->toBe(100.0)
+        ->and($deltas['cat:Mens/Shirts']['adds']['delta_pct'] ?? null)->toBe(100.0)
+        ->and($deltas['cat:Mens/Shirts']['sale_items']['delta_direction'] ?? null)->toBe('up')
+        ->and($deltas['cat:Mens/Shirts']['sale_items']['delta_pct'] ?? null)->toBeNull();
+});
+
 test('executive metric activity focus maps metrics to drill down focuses', function () {
     expect(EcomTrackerCompareSupport::executiveMetricActivityFocus('sale_amount'))->toBe('conversion')
         ->and(EcomTrackerCompareSupport::executiveMetricActivityFocus('sessions'))->toBe('audience')

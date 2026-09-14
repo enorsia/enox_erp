@@ -253,6 +253,8 @@
                 @include('ecom_tracker.partials.category-performance-table', [
                     'departments' => $d['category_departments'] ?? [],
                     'showCurrency' => true,
+                    'showInlineCompareDelta' => true,
+                    'compareMetricDeltas' => $categoryMetricDeltas ?? [],
                     'categoryActivityLink' => fn (array $category) => $activityFocusLink('categories', [
                         'category' => $category['category_name'] ?? '',
                         'department' => $category['department_name'] ?? '',

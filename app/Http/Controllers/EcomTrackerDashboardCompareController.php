@@ -74,6 +74,8 @@ class EcomTrackerDashboardCompareController extends EcomTrackerAdminController
             'compareBaseQuery' => $this->compareBaseQuery($request),
             'pageQuery' => EcomTrackerViewData::comparePageQuery($request, $leftFilters, $rightFilters),
             'executiveRows' => $executiveRows,
+            'leftCategoryMetricDeltas' => EcomTrackerCompareSupport::buildCategoryMetricCompareDeltas($leftRaw, $rightRaw),
+            'rightCategoryMetricDeltas' => EcomTrackerCompareSupport::buildCategoryMetricCompareDeltas($rightRaw, $leftRaw),
         ]);
     }
 

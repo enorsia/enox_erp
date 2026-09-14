@@ -4,17 +4,21 @@
     $categoryActivityLink = ($readOnly ?? false) ? null : ($categoryActivityLink ?? null);
     $showCompareDelta = $showCompareDelta ?? false;
     $compareDeltas = $compareDeltas ?? [];
+    $showInlineCompareDelta = $showInlineCompareDelta ?? false;
+    $compareMetricDeltas = $compareMetricDeltas ?? [];
     $maxSaleAmount = max(1, (float) collect($departments)->max('sale_amount'));
 @endphp
 
 @if ($departments === [])
     <p class="etd-empty-note">No category activity in this period.</p>
 @else
-    <div x-data="{ expanded: null }" class="etd-category-departments">
+    <div x-data="{ expanded: null }" @class(['etd-category-departments', 'etd-category-departments--compare-inline' => $showInlineCompareDelta])>
         <table class="etd-table etd-table--categories etd-table--catalog etd-table--performance-metrics w-full">
             <thead>
                 <tr>
-                    <th class="etd-catalog-expand-col"></th>
+                    @unless ($showInlineCompareDelta)
+                        <th class="etd-catalog-expand-col"></th>
+                    @endunless
                     <th class="etd-col-category">Department / Category</th>
                     <th class="etd-num etd-col-metric">
                         @include('ecom_tracker.partials.column-header-with-tip', [
@@ -72,34 +76,86 @@
                         };
                     @endphp
                     <tr @class(['etd-catalog-product-row', 'etd-category-dept-row', $deptRowClass]) :class="{ 'is-expanded': expanded === @js($departmentKey) }">
-                        <td class="etd-catalog-expand-col">
-                            @if ($categoryCount > 0)
-                                <button type="button"
-                                        class="etd-catalog-expand-btn"
-                                        @click="expanded = expanded === @js($departmentKey) ? null : @js($departmentKey)"
-                                        :aria-expanded="expanded === @js($departmentKey)"
-                                        aria-label="Show categories in {{ $department['name'] }}">
-                                    <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-90': expanded === @js($departmentKey) }" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg>
-                                </button>
-                            @endif
-                        </td>
-                        <td class="etd-col-category">
-                            <span class="font-medium text-slate-800 dark:text-slate-100">{{ $department['name'] }}</span>
-                            @if ($categoryCount > 0)
-                                <span class="etd-category-count-badge">{{ $categoryCount }}</span>
-                            @endif
-                        </td>
-                        <td class="etd-num etd-col-metric">{{ number_format($department['category_views'] ?? 0) }}</td>
-                        <td class="etd-num etd-col-metric">{{ number_format($department['product_views'] ?? 0) }}</td>
-                        <td class="etd-num etd-col-metric">{{ number_format($department['adds']) }}</td>
-                        <td class="etd-num etd-col-metric">{{ number_format($department['proceed_checkouts'] ?? 0) }}</td>
-                        <td class="etd-num etd-col-metric">{{ number_format($department['sale_items']) }}</td>
+                        @if ($showInlineCompareDelta)
+                            <td class="etd-col-category etd-col-category--with-expand">
+                                <div class="etd-category-name-cell">
+                                    @if ($categoryCount > 0)
+                                        <button type="button"
+                                                class="etd-catalog-expand-btn"
+                                                @click="expanded = expanded === @js($departmentKey) ? null : @js($departmentKey)"
+                                                :aria-expanded="expanded === @js($departmentKey)"
+                                                aria-label="Show categories in {{ $department['name'] }}">
+                                            <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-90': expanded === @js($departmentKey) }" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg>
+                                        </button>
+                                    @endif
+                                    <span class="font-medium text-slate-800 dark:text-slate-100">{{ $department['name'] }}</span>
+                                    @if ($categoryCount > 0)
+                                        <span class="etd-category-count-badge">{{ $categoryCount }}</span>
+                                    @endif
+                                </div>
+                            </td>
+                        @else
+                            <td class="etd-catalog-expand-col">
+                                @if ($categoryCount > 0)
+                                    <button type="button"
+                                            class="etd-catalog-expand-btn"
+                                            @click="expanded = expanded === @js($departmentKey) ? null : @js($departmentKey)"
+                                            :aria-expanded="expanded === @js($departmentKey)"
+                                            aria-label="Show categories in {{ $department['name'] }}">
+                                        <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-90': expanded === @js($departmentKey) }" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg>
+                                    </button>
+                                @endif
+                            </td>
+                            <td class="etd-col-category">
+                                <span class="font-medium text-slate-800 dark:text-slate-100">{{ $department['name'] }}</span>
+                                @if ($categoryCount > 0)
+                                    <span class="etd-category-count-badge">{{ $categoryCount }}</span>
+                                @endif
+                            </td>
+                        @endif
                         <td class="etd-num etd-col-metric">
-                            @if ($showCurrency)
-                                £{{ number_format($department['sale_amount'], 2) }}
-                            @else
-                                {{ number_format($department['sale_amount'], 2) }}
-                            @endif
+                            @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                'formatted' => number_format($department['category_views'] ?? 0),
+                                'showInlineCompareDelta' => $showInlineCompareDelta,
+                                'delta' => $compareMetricDeltas[$deptDeltaKey]['category_views'] ?? null,
+                            ])
+                        </td>
+                        <td class="etd-num etd-col-metric">
+                            @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                'formatted' => number_format($department['product_views'] ?? 0),
+                                'showInlineCompareDelta' => $showInlineCompareDelta,
+                                'delta' => $compareMetricDeltas[$deptDeltaKey]['product_views'] ?? null,
+                            ])
+                        </td>
+                        <td class="etd-num etd-col-metric">
+                            @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                'formatted' => number_format($department['adds']),
+                                'showInlineCompareDelta' => $showInlineCompareDelta,
+                                'delta' => $compareMetricDeltas[$deptDeltaKey]['adds'] ?? null,
+                            ])
+                        </td>
+                        <td class="etd-num etd-col-metric">
+                            @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                'formatted' => number_format($department['proceed_checkouts'] ?? 0),
+                                'showInlineCompareDelta' => $showInlineCompareDelta,
+                                'delta' => $compareMetricDeltas[$deptDeltaKey]['proceed_checkouts'] ?? null,
+                            ])
+                        </td>
+                        <td class="etd-num etd-col-metric">
+                            @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                'formatted' => number_format($department['sale_items']),
+                                'showInlineCompareDelta' => $showInlineCompareDelta,
+                                'delta' => $compareMetricDeltas[$deptDeltaKey]['sale_items'] ?? null,
+                            ])
+                        </td>
+                        <td class="etd-num etd-col-metric">
+                            @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                'formatted' => $showCurrency
+                                    ? '£'.number_format($department['sale_amount'], 2)
+                                    : number_format($department['sale_amount'], 2),
+                                'showInlineCompareDelta' => $showInlineCompareDelta,
+                                'delta' => $compareMetricDeltas[$deptDeltaKey]['sale_amount'] ?? null,
+                            ])
                             <div class="etd-mini-bar"><div style="width: {{ $saleBarPercent }}%"></div></div>
                         </td>
                         @if ($showCompareDelta)
@@ -123,7 +179,9 @@
                         <tr @class(['etd-category-child-row', $catRowClass])
                             x-show="expanded === @js($departmentKey)"
                             x-cloak>
-                            <td class="etd-catalog-expand-col"></td>
+                            @unless ($showInlineCompareDelta)
+                                <td class="etd-catalog-expand-col"></td>
+                            @endunless
                             <td class="etd-col-category etd-category-child-name">
                                 <div class="etd-category-child-line">
                                     <svg class="etd-category-child-branch" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -138,17 +196,49 @@
                                     @endif
                                 </div>
                             </td>
-                            <td class="etd-num etd-col-metric">{{ number_format($category['category_views'] ?? 0) }}</td>
-                            <td class="etd-num etd-col-metric">{{ number_format($category['product_views'] ?? 0) }}</td>
-                            <td class="etd-num etd-col-metric">{{ number_format($category['adds']) }}</td>
-                            <td class="etd-num etd-col-metric">{{ number_format($category['proceed_checkouts'] ?? 0) }}</td>
-                            <td class="etd-num etd-col-metric">{{ number_format($category['sale_items']) }}</td>
                             <td class="etd-num etd-col-metric">
-                                @if ($showCurrency)
-                                    £{{ number_format($category['sale_amount'], 2) }}
-                                @else
-                                    {{ number_format($category['sale_amount'], 2) }}
-                                @endif
+                                @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                    'formatted' => number_format($category['category_views'] ?? 0),
+                                    'showInlineCompareDelta' => $showInlineCompareDelta,
+                                    'delta' => $compareMetricDeltas[$catDeltaKey]['category_views'] ?? null,
+                                ])
+                            </td>
+                            <td class="etd-num etd-col-metric">
+                                @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                    'formatted' => number_format($category['product_views'] ?? 0),
+                                    'showInlineCompareDelta' => $showInlineCompareDelta,
+                                    'delta' => $compareMetricDeltas[$catDeltaKey]['product_views'] ?? null,
+                                ])
+                            </td>
+                            <td class="etd-num etd-col-metric">
+                                @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                    'formatted' => number_format($category['adds']),
+                                    'showInlineCompareDelta' => $showInlineCompareDelta,
+                                    'delta' => $compareMetricDeltas[$catDeltaKey]['adds'] ?? null,
+                                ])
+                            </td>
+                            <td class="etd-num etd-col-metric">
+                                @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                    'formatted' => number_format($category['proceed_checkouts'] ?? 0),
+                                    'showInlineCompareDelta' => $showInlineCompareDelta,
+                                    'delta' => $compareMetricDeltas[$catDeltaKey]['proceed_checkouts'] ?? null,
+                                ])
+                            </td>
+                            <td class="etd-num etd-col-metric">
+                                @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                    'formatted' => number_format($category['sale_items']),
+                                    'showInlineCompareDelta' => $showInlineCompareDelta,
+                                    'delta' => $compareMetricDeltas[$catDeltaKey]['sale_items'] ?? null,
+                                ])
+                            </td>
+                            <td class="etd-num etd-col-metric">
+                                @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                    'formatted' => $showCurrency
+                                        ? '£'.number_format($category['sale_amount'], 2)
+                                        : number_format($category['sale_amount'], 2),
+                                    'showInlineCompareDelta' => $showInlineCompareDelta,
+                                    'delta' => $compareMetricDeltas[$catDeltaKey]['sale_amount'] ?? null,
+                                ])
                                 <div class="etd-mini-bar"><div style="width: {{ $categorySaleBar }}%"></div></div>
                             </td>
                             @if ($showCompareDelta)
