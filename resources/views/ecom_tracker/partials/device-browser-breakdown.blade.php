@@ -5,6 +5,9 @@
     'showCompareDelta' => false,
     'deviceDeltas' => [],
     'browserDeltas' => [],
+    'showInlineCompareDelta' => false,
+    'deviceMetricDeltas' => [],
+    'browserMetricDeltas' => [],
 ])
 
 @php
@@ -14,7 +17,7 @@
     $rowActivityLink = ($readOnly ?? false) ? null : $deviceActivityLink;
 @endphp
 
-<div class="etd-device-browser etd-device-browser-grid">
+<div @class(['etd-device-browser', 'etd-device-browser-grid', 'etd-device-browser--compare-inline' => $showInlineCompareDelta])>
     @include('ecom_tracker.partials.device-browser-table', [
         'title' => 'Device',
         'rows' => $deviceRows,
@@ -22,6 +25,8 @@
         'rowActivityLink' => $rowActivityLink,
         'showCompareDelta' => $showCompareDelta,
         'compareDeltas' => $deviceDeltas,
+        'showInlineCompareDelta' => $showInlineCompareDelta,
+        'compareMetricDeltas' => $deviceMetricDeltas,
     ])
 
     @include('ecom_tracker.partials.device-browser-table', [
@@ -31,5 +36,7 @@
         'rowActivityLink' => fn (string $label) => $devicesFocusLink,
         'showCompareDelta' => $showCompareDelta,
         'compareDeltas' => $browserDeltas,
+        'showInlineCompareDelta' => $showInlineCompareDelta,
+        'compareMetricDeltas' => $browserMetricDeltas,
     ])
 </div>

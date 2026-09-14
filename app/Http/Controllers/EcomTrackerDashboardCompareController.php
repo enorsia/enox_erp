@@ -76,6 +76,18 @@ class EcomTrackerDashboardCompareController extends EcomTrackerAdminController
             'executiveRows' => $executiveRows,
             'leftCategoryMetricDeltas' => EcomTrackerCompareSupport::buildCategoryMetricCompareDeltas($leftRaw, $rightRaw),
             'rightCategoryMetricDeltas' => EcomTrackerCompareSupport::buildCategoryMetricCompareDeltas($rightRaw, $leftRaw),
+            'leftProductMetricDeltas' => EcomTrackerCompareSupport::buildProductMetricCompareDeltas($leftRaw, $rightRaw),
+            'rightProductMetricDeltas' => EcomTrackerCompareSupport::buildProductMetricCompareDeltas($rightRaw, $leftRaw),
+            'leftDeviceMetricDeltas' => EcomTrackerCompareSupport::buildDeviceMetricCompareDeltas($leftRaw, $rightRaw),
+            'rightDeviceMetricDeltas' => EcomTrackerCompareSupport::buildDeviceMetricCompareDeltas($rightRaw, $leftRaw),
+            'leftBrowserMetricDeltas' => EcomTrackerCompareSupport::buildBrowserMetricCompareDeltas($leftRaw, $rightRaw),
+            'rightBrowserMetricDeltas' => EcomTrackerCompareSupport::buildBrowserMetricCompareDeltas($rightRaw, $leftRaw),
+            'leftTrafficMetricDeltas' => EcomTrackerCompareSupport::buildTrafficMetricCompareDeltas($leftRaw, $rightRaw),
+            'rightTrafficMetricDeltas' => EcomTrackerCompareSupport::buildTrafficMetricCompareDeltas($rightRaw, $leftRaw),
+            'leftRecoverableMetricDeltas' => EcomTrackerCompareSupport::buildRecoverableMetricCompareDeltas($leftRaw, $rightRaw),
+            'rightRecoverableMetricDeltas' => EcomTrackerCompareSupport::buildRecoverableMetricCompareDeltas($rightRaw, $leftRaw),
+            'leftAudienceMetricDeltas' => EcomTrackerCompareSupport::buildAudienceMetricCompareDeltas($leftRaw, $rightRaw),
+            'rightAudienceMetricDeltas' => EcomTrackerCompareSupport::buildAudienceMetricCompareDeltas($rightRaw, $leftRaw),
         ]);
     }
 

@@ -258,6 +258,43 @@ test('category metric compare deltas compare each side against the other side', 
         ->and($rightDeltas['dept:Mens']['category_views']['delta_pct'] ?? null)->toBe(-33.3);
 });
 
+test('product metric compare deltas compare each side against the other side', function () {
+    $left = [
+        'products' => [
+            [
+                'code' => 'SKU-1',
+                'name' => 'Blue Shirt',
+                'views' => 30,
+                'adds' => 6,
+                'proceed_checkouts' => 3,
+                'qty' => 2,
+                'revenue' => 120,
+            ],
+        ],
+    ];
+
+    $right = [
+        'products' => [
+            [
+                'code' => 'SKU-1',
+                'name' => 'Blue Shirt',
+                'views' => 20,
+                'adds' => 4,
+                'proceed_checkouts' => 2,
+                'qty' => 1,
+                'revenue' => 60,
+            ],
+        ],
+    ];
+
+    $leftDeltas = EcomTrackerCompareSupport::buildProductMetricCompareDeltas($left, $right);
+    $rightDeltas = EcomTrackerCompareSupport::buildProductMetricCompareDeltas($right, $left);
+
+    expect($leftDeltas['product:SKU-1']['views']['delta_pct'] ?? null)->toBe(50.0)
+        ->and($rightDeltas['product:SKU-1']['views']['delta_pct'] ?? null)->toBe(-33.3)
+        ->and($leftDeltas['product:SKU-1']['revenue']['delta_pct'] ?? null)->toBe(100.0);
+});
+
 test('build category metric compare deltas maps each metric for departments and categories', function () {
     $left = [
         'category_departments' => [
@@ -324,4 +361,110 @@ test('executive metric activity focus maps metrics to drill down focuses', funct
         ->and(EcomTrackerCompareSupport::executiveMetricActivityFocus('cart_drop'))->toBe('cart_abandonment')
         ->and(EcomTrackerCompareSupport::executiveMetricActivityFocus('payments'))->toBe('payment_success')
         ->and(EcomTrackerCompareSupport::executiveMetricActivityFocus('unknown'))->toBeNull();
+});
+
+test('device metric compare deltas compare each side against the other side', function () {
+    $left = [
+        'devices' => [
+            'by_device' => [
+                ['label' => 'Mobile', 'sessions' => 150],
+            ],
+        ],
+    ];
+
+    $right = [
+        'devices' => [
+            'by_device' => [
+                ['label' => 'Mobile', 'sessions' => 100],
+            ],
+        ],
+    ];
+
+    $leftDeltas = EcomTrackerCompareSupport::buildDeviceMetricCompareDeltas($left, $right);
+    $rightDeltas = EcomTrackerCompareSupport::buildDeviceMetricCompareDeltas($right, $left);
+
+    expect($leftDeltas['Mobile']['sessions']['delta_pct'] ?? null)->toBe(50.0)
+        ->and($rightDeltas['Mobile']['sessions']['delta_pct'] ?? null)->toBe(-33.3);
+});
+
+test('browser metric compare deltas compare each side against the other side', function () {
+    $left = [
+        'devices' => [
+            'by_browser' => [
+                ['label' => 'Chrome', 'sessions' => 150],
+            ],
+        ],
+    ];
+
+    $right = [
+        'devices' => [
+            'by_browser' => [
+                ['label' => 'Chrome', 'sessions' => 100],
+            ],
+        ],
+    ];
+
+    $leftDeltas = EcomTrackerCompareSupport::buildBrowserMetricCompareDeltas($left, $right);
+    $rightDeltas = EcomTrackerCompareSupport::buildBrowserMetricCompareDeltas($right, $left);
+
+    expect($leftDeltas['Chrome']['sessions']['delta_pct'] ?? null)->toBe(50.0)
+        ->and($rightDeltas['Chrome']['sessions']['delta_pct'] ?? null)->toBe(-33.3);
+});
+
+test('traffic metric compare deltas compare revenue per source and medium key', function () {
+    $left = [
+        'traffic_sources' => [
+            ['source' => 'google', 'medium' => 'cpc', 'revenue' => 200],
+        ],
+    ];
+
+    $right = [
+        'traffic_sources' => [
+            ['source' => 'google', 'medium' => 'cpc', 'revenue' => 100],
+        ],
+    ];
+
+    $leftDeltas = EcomTrackerCompareSupport::buildTrafficMetricCompareDeltas($left, $right);
+    $rightDeltas = EcomTrackerCompareSupport::buildTrafficMetricCompareDeltas($right, $left);
+
+    expect($leftDeltas['google|cpc']['revenue']['delta_pct'] ?? null)->toBe(100.0)
+        ->and($rightDeltas['google|cpc']['revenue']['delta_pct'] ?? null)->toBe(-50.0);
+});
+
+test('recoverable metric compare deltas invert abandonment sentiment and keep payment success higher is better', function () {
+    $left = [
+        'cart_abandonment' => ['session_count' => 40, 'at_stake' => 400],
+        'payment_success_events' => ['session_count' => 120, 'at_stake' => 0],
+    ];
+
+    $right = [
+        'cart_abandonment' => ['session_count' => 80, 'at_stake' => 800],
+        'payment_success_events' => ['session_count' => 60, 'at_stake' => 0],
+    ];
+
+    $leftDeltas = EcomTrackerCompareSupport::buildRecoverableMetricCompareDeltas($left, $right);
+
+    expect($leftDeltas['cart_abandonment']['session_count']['delta_pct'] ?? null)->toBe(50.0)
+        ->and($leftDeltas['cart_abandonment']['session_count']['delta_sentiment'] ?? null)->toBe('good')
+        ->and($leftDeltas['payment_success_events']['session_count']['delta_pct'] ?? null)->toBe(100.0)
+        ->and($leftDeltas['payment_success_events']['session_count']['delta_sentiment'] ?? null)->toBe('good');
+});
+
+test('audience metric compare deltas compare unique visitors', function () {
+    $left = [
+        'new_returning' => ['unique' => 300, 'returning' => 90],
+        'duration_distribution' => ['median_seconds' => 180],
+    ];
+
+    $right = [
+        'new_returning' => ['unique' => 200, 'returning' => 60],
+        'duration_distribution' => ['median_seconds' => 120],
+    ];
+
+    $leftDeltas = EcomTrackerCompareSupport::buildAudienceMetricCompareDeltas($left, $right);
+    $rightDeltas = EcomTrackerCompareSupport::buildAudienceMetricCompareDeltas($right, $left);
+
+    expect($leftDeltas['unique']['delta_pct'] ?? null)->toBe(50.0)
+        ->and($rightDeltas['unique']['delta_pct'] ?? null)->toBe(-33.3)
+        ->and($leftDeltas['median_seconds']['delta_pct'] ?? null)->toBe(50.0);
 });

@@ -9285,6 +9285,139 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     width: auto;
 }
 
+.etd-compare-page [data-compare-sync='products'] .etd-product-catalog .etd-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+}
+
+.etd-compare-page [data-compare-sync='products'] .etd-product-catalog--compare-inline .etd-table {
+    table-layout: auto;
+}
+
+.etd-compare-page [data-compare-sync='products'] .etd-product-catalog--compare-inline th.etd-col-product,
+.etd-compare-page [data-compare-sync='products'] .etd-product-catalog--compare-inline td.etd-col-product {
+    width: 1%;
+    min-width: 0;
+    max-width: none;
+    padding-left: 0.35rem;
+    padding-right: 0.5rem;
+    white-space: nowrap;
+    overflow: visible;
+    vertical-align: middle;
+}
+
+.etd-compare-page [data-compare-sync='products'] .etd-product-catalog--compare-inline thead th.etd-col-product {
+    white-space: nowrap;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+}
+
+.etd-compare-page [data-compare-sync='products'] .etd-product-catalog--compare-inline .etd-table--product-catalog.etd-table--performance-metrics th.etd-col-metric,
+.etd-compare-page [data-compare-sync='products'] .etd-product-catalog--compare-inline .etd-table--product-catalog.etd-table--performance-metrics td.etd-col-metric {
+    width: auto;
+    min-width: 2.75rem;
+    padding-inline: 0.3rem;
+    white-space: normal;
+    vertical-align: top;
+}
+
+.etd-compare-page [data-compare-sync='products'] .etd-product-catalog--compare-inline .etd-table--product-catalog.etd-table--performance-metrics th.etd-col-metric:last-of-type,
+.etd-compare-page [data-compare-sync='products'] .etd-product-catalog--compare-inline .etd-table--product-catalog.etd-table--performance-metrics td.etd-col-metric:last-of-type {
+    width: auto;
+}
+
+.etd-compare-page [data-compare-sync='devices'] .etd-device-browser-panel--compare-inline .etd-table--device-browser {
+    table-layout: auto;
+}
+
+.etd-compare-page [data-compare-sync='devices'] .etd-device-browser-panel--compare-inline .etd-table--device-browser th:first-child,
+.etd-compare-page [data-compare-sync='devices'] .etd-device-browser-panel--compare-inline .etd-table--device-browser td:first-child {
+    width: 1%;
+    min-width: 0;
+    max-width: none;
+    padding-left: 0.35rem;
+    padding-right: 0.5rem;
+    white-space: nowrap;
+    overflow: visible;
+    vertical-align: middle;
+}
+
+.etd-compare-page [data-compare-sync='devices'] .etd-device-browser-panel--compare-inline .etd-table--device-browser th.etd-num,
+.etd-compare-page [data-compare-sync='devices'] .etd-device-browser-panel--compare-inline .etd-table--device-browser td.etd-num {
+    width: auto;
+    min-width: 2.75rem;
+    padding-inline: 0.3rem;
+    white-space: normal;
+    vertical-align: top;
+}
+
+.etd-compare-page [data-compare-sync='traffic'] .etd-traffic-sources--compare-inline .etd-table--traffic {
+    table-layout: auto;
+    min-width: 0;
+    width: 100%;
+}
+
+.etd-compare-page [data-compare-sync='traffic'] .etd-traffic-sources--compare-inline .etd-table--traffic th:first-child,
+.etd-compare-page [data-compare-sync='traffic'] .etd-traffic-sources--compare-inline .etd-table--traffic td:first-child,
+.etd-compare-page [data-compare-sync='traffic'] .etd-traffic-sources--compare-inline .etd-table--traffic th:nth-child(2),
+.etd-compare-page [data-compare-sync='traffic'] .etd-traffic-sources--compare-inline .etd-table--traffic td:nth-child(2) {
+    width: 1%;
+    min-width: 0;
+    max-width: none;
+    padding-left: 0.35rem;
+    padding-right: 0.5rem;
+    white-space: nowrap;
+    overflow: visible;
+    vertical-align: middle;
+}
+
+.etd-compare-page [data-compare-sync='traffic'] .etd-traffic-sources--compare-inline .etd-table--traffic th.etd-num,
+.etd-compare-page [data-compare-sync='traffic'] .etd-traffic-sources--compare-inline .etd-table--traffic td.etd-num,
+.etd-compare-page [data-compare-sync='traffic'] .etd-traffic-sources--compare-inline .etd-table--traffic th.etd-col-metric,
+.etd-compare-page [data-compare-sync='traffic'] .etd-traffic-sources--compare-inline .etd-table--traffic td.etd-col-metric {
+    width: auto;
+    min-width: 2.75rem;
+    padding-inline: 0.3rem;
+    white-space: normal;
+    vertical-align: top;
+}
+
+.etd-compare-recoverable-grid--compare-inline .etd-compare-recoverable-card__value .etd-category-metric-cell,
+.etd-compare-recoverable-grid--compare-inline .etd-compare-recoverable-card__stake .etd-category-metric-cell {
+    align-items: flex-start;
+}
+
+.etd-compare-recoverable-grid--compare-inline .etd-compare-recoverable-card__value,
+.etd-compare-recoverable-grid--compare-inline .etd-compare-recoverable-card__stake {
+    min-width: 0;
+}
+
+.etd-compare-audience-note--compare-inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 0.35rem;
+}
+
+.etd-compare-audience-note--compare-inline .etd-compare-audience-note__item {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.etd-compare-audience-note--compare-inline .etd-category-metric-cell--stacked {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.2rem;
+}
+
+.etd-compare-audience-note--compare-inline .etd-category-metric-cell__delta {
+    display: inline;
+}
+
 .etd-compare-page [data-compare-sync='traffic'] .etd-table-scroll--traffic.etd-table-scroll--fixed {
     width: 100%;
     max-width: 100%;

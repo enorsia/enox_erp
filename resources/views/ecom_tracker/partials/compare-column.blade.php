@@ -279,69 +279,23 @@
                 </div>
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
-                <table class="etd-table etd-table--product-catalog etd-table--performance-metrics">
-                    <thead>
-                        <tr>
-                            <th class="etd-col-product">Product</th>
-                            <th class="etd-num etd-col-metric">Views</th>
-                            <th class="etd-num etd-col-metric">
-                                @include('ecom_tracker.partials.column-header-with-tip', [
-                                    'label' => 'Adds',
-                                    'tip' => 'Add to cart',
-                                    'align' => 'center',
-                                ])
-                            </th>
-                            <th class="etd-num etd-col-metric">
-                                @include('ecom_tracker.partials.column-header-with-tip', [
-                                    'label' => 'Proceed',
-                                    'tip' => 'Proceed to checkout',
-                                    'align' => 'center',
-                                ])
-                            </th>
-                            <th class="etd-num etd-col-metric">
-                                @include('ecom_tracker.partials.column-header-with-tip', [
-                                    'label' => 'Sold',
-                                    'tip' => 'Sale item',
-                                    'align' => 'center',
-                                ])
-                            </th>
-                            <th class="etd-num etd-col-metric">Sale</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($d['products'] ?? [] as $product)
-                            <tr>
-                                <td class="etd-col-product">
-                                    @php
-                                        $productDrillQuery = array_filter([
-                                            'product_code' => $product['code'] ?? ($product['product_code'] ?? null),
-                                        ]);
-                                    @endphp
-                                    <a href="{{ $activityFocusLink('products', $productDrillQuery) }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
-                                        {{ $product['name'] }}
-                                    </a>
-                                </td>
-                                <td class="etd-num etd-col-metric">{{ number_format($product['views']) }}</td>
-                                <td class="etd-num etd-col-metric">{{ number_format($product['adds']) }}</td>
-                                <td class="etd-num etd-col-metric">{{ number_format($product['proceed_checkouts'] ?? 0) }}</td>
-                                <td class="etd-num etd-col-metric">{{ number_format($product['qty'] ?? 0) }}</td>
-                                <td class="etd-num etd-col-metric">
-                                    £{{ number_format($product['revenue'], 2) }}
-                                    <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] }}%"></div></div>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="6" class="text-slate-400">No product activity in this period.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
+                @include('ecom_tracker.partials.product-performance-table', [
+                    'products' => $d['products'] ?? [],
+                    'showInlineCompareDelta' => true,
+                    'compareMetricDeltas' => $productMetricDeltas ?? [],
+                    'productActivityLink' => fn (array $query) => $activityFocusLink('products', $query),
+                ])
             </div>
         </div>
 
         <p class="etd-compare-block-label etd-compare-detail-only" data-compare-sync="recover-label">Recoverable sale</p>
 
         <div class="etd-compare-detail-only">
-            @include('ecom_tracker.partials.compare-recoverable-summary', ['panels' => $recoverablePanels])
+            @include('ecom_tracker.partials.compare-recoverable-summary', [
+                'panels' => $recoverablePanels,
+                'showInlineCompareDelta' => true,
+                'compareMetricDeltas' => $recoverableMetricDeltas ?? [],
+            ])
         </div>
 
         <p class="etd-compare-block-label etd-compare-detail-only" data-compare-sync="acq-label">Acquisition &amp; audience</p>
@@ -355,6 +309,9 @@
                 'deviceActivityLink' => fn (string $label) => $activityFocusLink('devices', array_filter([
                     'device_type' => in_array(strtolower($label), ['mobile', 'desktop', 'tablet'], true) ? strtolower($label) : null,
                 ])),
+                'showInlineCompareDelta' => true,
+                'deviceMetricDeltas' => $deviceMetricDeltas ?? [],
+                'browserMetricDeltas' => $browserMetricDeltas ?? [],
             ])
         </div>
 
@@ -365,23 +322,44 @@
             @include('ecom_tracker.partials.traffic-sources-table', [
                 'rows' => $d['traffic_sources'] ?? [],
                 'activitySourceLink' => $activitySourceLink,
+                'showInlineCompareDelta' => true,
+                'compareMetricDeltas' => $trafficMetricDeltas ?? [],
             ])
         </div>
 
-        <div class="etd-compare-audience-note etd-compare-detail-only" data-compare-sync="audience">
+        <div class="etd-compare-audience-note etd-compare-audience-note--compare-inline etd-compare-detail-only" data-compare-sync="audience">
+            @php $audienceDeltas = $audienceMetricDeltas ?? []; @endphp
             @if ($medianDuration || ($unique + $returning) > 0)
                 @if ($medianDuration)
-                    <span>Median session duration: <strong>{{ $medianDuration }}</strong></span>
+                    <span class="etd-compare-audience-note__item">
+                        Median session duration:
+                        @include('ecom_tracker.partials.category-performance-metric-cell', [
+                            'formatted' => $medianDuration,
+                            'showInlineCompareDelta' => true,
+                            'delta' => $audienceDeltas['median_seconds'] ?? null,
+                        ])
+                    </span>
                 @endif
                 @if (($unique + $returning) > 0)
                     @if ($medianDuration)
                         <span class="etd-header-sep" aria-hidden="true">·</span>
                     @endif
-                    <span>
+                    <span class="etd-compare-audience-note__item">
                         <a href="{{ $activityFocusLink('audience') }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
-                            <strong>{{ number_format($unique) }}</strong> unique
+                            @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                'formatted' => number_format($unique).' unique',
+                                'showInlineCompareDelta' => true,
+                                'delta' => $audienceDeltas['unique'] ?? null,
+                            ])
                         </a>
-                        · <strong>{{ number_format($returning) }}</strong> returning
+                    </span>
+                    <span class="etd-header-sep" aria-hidden="true">·</span>
+                    <span class="etd-compare-audience-note__item">
+                        @include('ecom_tracker.partials.category-performance-metric-cell', [
+                            'formatted' => number_format($returning).' returning',
+                            'showInlineCompareDelta' => true,
+                            'delta' => $audienceDeltas['returning'] ?? null,
+                        ])
                     </span>
                 @endif
             @endif
