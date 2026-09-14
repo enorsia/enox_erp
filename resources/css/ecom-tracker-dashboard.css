@@ -9071,7 +9071,6 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 @media (min-width: 1200px) {
     .etd-compare-page [data-compare-sync='kpis'],
     .etd-compare-page [data-compare-sync='trend'],
-    .etd-compare-page [data-compare-sync='recoverable'],
     .etd-compare-page [data-compare-sync='categories'],
     .etd-compare-page [data-compare-sync='products'],
     .etd-compare-page [data-compare-sync='devices'],
@@ -9101,10 +9100,6 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     .etd-compare-page [data-compare-sync='trend'] .etd-chart-wrap--trend {
         flex: 1 1 auto;
         min-height: clamp(220px, 28vh, 280px);
-    }
-
-    .etd-compare-page [data-compare-sync='recoverable'] {
-        align-items: stretch;
     }
 
     .etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed,
@@ -9691,30 +9686,30 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     text-overflow: clip;
 }
 
-.etd-compare-recoverable-grid {
+.etd-compare-page .etd-compare-recoverable-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
+    width: 100%;
 }
 
-@media (max-width: 767px) {
-    .etd-compare-recoverable-grid {
+@media (max-width: 639px) {
+    .etd-compare-page .etd-compare-recoverable-grid {
         grid-template-columns: minmax(0, 1fr);
-    }
-
-    .etd-compare-recoverable-card,
-    .etd-compare-recoverable-card__title,
-    .etd-compare-recoverable-card__value,
-    .etd-compare-recoverable-card__stake {
-        min-width: 0;
     }
 }
 
 .etd-compare-recoverable-card {
+    min-width: 0;
     padding: 0.65rem 0.75rem;
     border-radius: 0.65rem;
     border: 1px solid #e2e8f0;
     background: #fff;
+}
+
+.etd-compare-recoverable-card__link {
+    display: block;
+    min-width: 0;
 }
 
 .dark .etd-compare-recoverable-card {
@@ -9723,12 +9718,37 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 }
 
 .etd-compare-recoverable-card__title {
+    display: flex;
+    align-items: center;
     margin: 0 0 0.35rem;
+    min-width: 0;
+}
+
+.etd-compare-recoverable-card__title .etd-th-with-tip {
+    min-width: 0;
+    max-width: 100%;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     font-size: 11px;
     font-weight: 600;
     color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+}
+
+.dark .etd-compare-recoverable-card__title .etd-th-with-tip {
+    color: #94a3b8;
+}
+
+.etd-compare-recoverable-card__title .etd-tip-trigger {
+    flex-shrink: 0;
+}
+
+@media (max-width: 639px) {
+    .etd-compare-recoverable-card,
+    .etd-compare-recoverable-card__title,
+    .etd-compare-recoverable-card__value,
+    .etd-compare-recoverable-card__stake {
+        min-width: 0;
+    }
 }
 
 .etd-compare-recoverable-card__value {

@@ -36,10 +36,34 @@
     $funnelDropoff = $d['funnel_dropoff'] ?? [];
 
     $recoverablePanels = [
-        ['title' => 'Cart abandoned', 'dataKey' => 'cart_abandonment', 'tone' => 'cart'],
-        ['title' => 'Begin checkout abandoned', 'dataKey' => 'begin_checkout_abandonment', 'tone' => 'begin'],
-        ['title' => 'Proceed checkout abandoned', 'dataKey' => 'proceed_checkout_abandonment', 'tone' => 'proceed'],
-        ['title' => 'Payment success', 'dataKey' => 'payment_success_events', 'tone' => 'success'],
+        [
+            'title' => 'Cart abandoned',
+            'shortTitle' => 'Cart',
+            'tip' => 'Sessions that added to cart but did not begin checkout.',
+            'dataKey' => 'cart_abandonment',
+            'tone' => 'cart',
+        ],
+        [
+            'title' => 'Begin checkout abandoned',
+            'shortTitle' => 'Begin',
+            'tip' => 'Sessions that began checkout but did not proceed.',
+            'dataKey' => 'begin_checkout_abandonment',
+            'tone' => 'begin',
+        ],
+        [
+            'title' => 'Proceed checkout abandoned',
+            'shortTitle' => 'Proceed',
+            'tip' => 'Sessions that proceeded to checkout but did not complete payment.',
+            'dataKey' => 'proceed_checkout_abandonment',
+            'tone' => 'proceed',
+        ],
+        [
+            'title' => 'Payment success',
+            'shortTitle' => 'Paid',
+            'tip' => 'Sessions with a successful payment.',
+            'dataKey' => 'payment_success_events',
+            'tone' => 'success',
+        ],
     ];
     $recoverableFocusByDataKey = [
         'cart_abandonment' => 'cart_abandonment',

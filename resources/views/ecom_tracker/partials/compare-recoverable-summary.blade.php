@@ -13,10 +13,9 @@
             $atStake = (float) ($data['at_stake'] ?? 0);
             $panelHref = $panel['href'] ?? null;
             $panelDeltas = $compareMetricDeltas[$dataKey] ?? [];
+            $cardTitle = $panel['shortTitle'] ?? $panel['title'] ?? '';
+            $cardTip = $panel['tip'] ?? $panel['title'] ?? '';
         @endphp
-        @if (filled($panelHref))
-            <a href="{{ $panelHref }}" class="etd-kpi-drilldown-link no-underline text-inherit">
-        @endif
         <div @class([
             'etd-compare-recoverable-card',
             'etd-compare-recoverable-card--cart' => ($panel['tone'] ?? '') === 'cart',
@@ -24,7 +23,15 @@
             'etd-compare-recoverable-card--proceed' => ($panel['tone'] ?? '') === 'proceed',
             'etd-compare-recoverable-card--success' => ($panel['tone'] ?? '') === 'success',
         ])>
-            <p class="etd-compare-recoverable-card__title">{{ $panel['title'] ?? '' }}</p>
+            <p class="etd-compare-recoverable-card__title">
+                @include('ecom_tracker.partials.column-header-with-tip', [
+                    'label' => $cardTitle,
+                    'tip' => $cardTip,
+                ])
+            </p>
+            @if (filled($panelHref))
+                <a href="{{ $panelHref }}" class="etd-kpi-drilldown-link etd-compare-recoverable-card__link no-underline text-inherit">
+            @endif
             <p class="etd-compare-recoverable-card__value">
                 @include('ecom_tracker.partials.category-performance-metric-cell', [
                     'formatted' => number_format($sessionCount).' '.Str::plural('session', $sessionCount),
@@ -39,9 +46,9 @@
                     'delta' => $panelDeltas['at_stake'] ?? null,
                 ])
             </p>
+            @if (filled($panelHref))
+                </a>
+            @endif
         </div>
-        @if (filled($panelHref))
-            </a>
-        @endif
     @endforeach
 </div>
