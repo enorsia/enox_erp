@@ -904,29 +904,19 @@ body.etd-filter-panel-open {
     }
 
     #ecom-tracker-dashboard-content .etd-page-header-left-stack {
-        flex-direction: row;
-        flex-wrap: nowrap;
-        align-items: center;
-        gap: 0.35rem 0.5rem;
-    }
-
-    .etd-header-sep--title {
-        display: inline;
-        flex-shrink: 0;
-    }
-
-    #ecom-tracker-dashboard-content .etd-page-header-sub {
-        display: inline-flex;
-        flex-wrap: nowrap;
-        align-items: center;
-        gap: 0.35rem 0.45rem;
-        min-width: 0;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.2rem;
     }
 
     #ecom-tracker-dashboard-content .etd-page-range,
     #ecom-tracker-dashboard-content .etd-page-meta,
     #ecom-tracker-dashboard-content .etd-meta-item {
         white-space: nowrap;
+    }
+
+    #ecom-tracker-dashboard-content .etd-page-range {
+        margin: 0;
     }
 
     #ecom-tracker-dashboard-content .etd-page-meta {
@@ -1208,6 +1198,86 @@ body.etd-filter-panel-open {
 .etd-date-nav-icon {
     width: 0.95rem;
     height: 0.95rem;
+}
+
+#ecom-tracker-dashboard-content .etd-header-period-nav {
+    display: none;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: max-content;
+    flex-shrink: 0;
+}
+
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-segmented {
+    flex-wrap: nowrap;
+}
+
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-segmented--compact .etd-segmented-btn {
+    padding: 0.35rem 0.5rem;
+    min-width: 2.1rem;
+}
+
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-date-nav-btn {
+    flex-shrink: 0;
+}
+
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header {
+    display: inline-flex;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    gap: 0.35rem;
+    align-items: center;
+    white-space: nowrap;
+}
+
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-wrapper {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-date-input--range,
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-input,
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header input.form-control.input {
+    flex: 0 1 auto;
+    width: 10.5rem;
+    min-width: 8.5rem;
+    max-width: 11rem;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    font-size: 0.75rem;
+}
+
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-pill-apply {
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    min-height: 2rem;
+    padding-inline: 0.65rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+    #ecom-tracker-dashboard-content .etd-header-period-nav {
+        display: flex;
+    }
+
+    #ecom-tracker-dashboard-content .etd-filter-period--drawer-mobile {
+        display: none;
+    }
+}
+
+@media (max-width: 767px) {
+    #ecom-tracker-dashboard-content .etd-header-toolbar-row .etd-segmented {
+        display: inline-flex;
+        width: auto;
+        grid-template-columns: none;
+    }
 }
 
 .etd-header-shortcuts {
@@ -5294,10 +5364,6 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 }
 
 @media (max-width: 1023px) {
-    #ecom-tracker-dashboard-content .etd-page-header-sub {
-        align-items: flex-start;
-    }
-
     #ecom-tracker-dashboard-content .etd-page-meta {
         flex-wrap: wrap;
     }
@@ -5333,7 +5399,7 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
         display: none;
     }
 
-    .etd-page-range {
+    #ecom-tracker-dashboard-content .etd-page-range {
         flex: 1 1 100%;
     }
 

@@ -26,6 +26,11 @@
     $funnelDropoff = $d['funnel_dropoff'] ?? [];
 
     $period = $period === '90d' ? '30d' : $period;
+    $activePreset = match ($period) {
+        'yesterday', '7d', '30d', 'custom' => $period,
+        default => '24h',
+    };
+    $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d'], true) ? $period : '24h';
 
     $baseQuery = request()->except([
         'date_from', 'date_to', 'period',
@@ -48,22 +53,43 @@
         'baseQuery' => $baseQuery,
         'range' => $d['range'],
         'routeName' => 'admin.ecom-tracker.dashboard',
+        'periodFiltersMobileOnly' => true,
     ])
 
     <header class="etd-page-header">
-        <div class="etd-page-header-bar">
+        <div class="etd-page-header-bar"
+             x-data="{
+                presetKey: '{{ $activePreset }}',
+                basePreset: '{{ $basePreset }}',
+                dateFrom: '{{ $dateFrom }}',
+                dateTo: '{{ $dateTo }}',
+                toggleCustom() {
+                    this.presetKey = this.presetKey === 'custom' ? this.basePreset : 'custom';
+                },
+                applyCustom() {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('period', 'custom');
+                    if (this.dateFrom) {
+                        url.searchParams.set('date_from', this.dateFrom);
+                    } else {
+                        url.searchParams.delete('date_from');
+                    }
+                    if (this.dateTo) {
+                        url.searchParams.set('date_to', this.dateTo);
+                    } else {
+                        url.searchParams.delete('date_to');
+                    }
+                    window.location.href = url.toString();
+                }
+             }">
             <div class="etd-page-header-main">
                 <div class="etd-page-header-left-stack">
                     <h1 class="etd-page-title">Store performance</h1>
-                    <span class="etd-header-sep etd-header-sep--title" aria-hidden="true">·</span>
-                    <div class="etd-page-header-sub">
-                        <span class="etd-page-range">{{ $d['range']['label'] }}</span>
-                        <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
-                        <div class="etd-page-meta">
-                            @include('ecom_tracker.partials.timezone-notice')
-                            @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $d['analytics_cache'] ?? null])
-                        </div>
+                    <div class="etd-page-meta">
+                        @include('ecom_tracker.partials.timezone-notice')
+                        @include('ecom_tracker.partials.analytics-cache-notice', ['analytics_cache' => $d['analytics_cache'] ?? null])
                     </div>
+                    <p class="etd-page-range">{{ $d['range']['label'] }}</p>
                 </div>
             </div>
 
@@ -72,6 +98,14 @@
                     @include('ecom_tracker.partials.dashboard-header-shortcuts', [
                         'showComparisonLink' => true,
                         'showUserActivityLink' => true,
+                    ])
+                    @include('ecom_tracker.partials.dashboard-header-period-controls', [
+                        'baseQuery' => $baseQuery,
+                        'range' => $d['range'],
+                        'period' => $period,
+                        'dateFrom' => $dateFrom,
+                        'dateTo' => $dateTo,
+                        'routeName' => 'admin.ecom-tracker.dashboard',
                     ])
                     @include('ecom_tracker.partials.header-reset-button', [
                         'url' => route('admin.ecom-tracker.dashboard'),

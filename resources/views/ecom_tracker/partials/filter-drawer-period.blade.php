@@ -38,6 +38,7 @@
 
 <section @class([
     'etd-filter-period',
+    'etd-filter-period--drawer-mobile' => $mobileOnly ?? false,
     'etd-activity-filter-section etd-activity-filter-section--full' => $useActivitySection,
 ])
          @if ($periodNavConfig)

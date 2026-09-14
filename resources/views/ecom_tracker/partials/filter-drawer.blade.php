@@ -29,6 +29,7 @@
     'sessionFiltersHeading' => null,
     'productFiltersHeading' => null,
     'drawerWide' => false,
+    'periodFiltersMobileOnly' => false,
 ])
 
 <div x-show="drawerOpen"
@@ -111,6 +112,7 @@
                     'range' => $range,
                     'routeName' => $routeName,
                     'sectionStyle' => ($showActivityFilters && ($drawerWide ?? false)) ? 'activity' : 'default',
+                    'mobileOnly' => $periodFiltersMobileOnly ?? false,
                 ])
                 @if ($showActivityFilters || $showSessionFilters || $showProductFilters)
                     <hr class="etd-filter-divider"/>
