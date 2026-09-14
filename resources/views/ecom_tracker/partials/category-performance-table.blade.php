@@ -50,7 +50,7 @@
                     </th>
                     <th class="etd-num etd-col-metric">
                         @include('ecom_tracker.partials.column-header-with-tip', [
-                            'label' => 'Sold',
+                            'label' => 'Qty',
                             'tip' => 'Sale item',
                             'align' => 'center',
                         ])
