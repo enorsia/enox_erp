@@ -70,6 +70,7 @@ class EcomTrackerDashboardCompareController extends EcomTrackerAdminController
             'leftFilters' => $leftFilters,
             'rightFilters' => $rightFilters,
             'backUrl' => EcomTrackerViewData::compareBackUrl($request),
+            'compareSelfUrl' => $request->fullUrl(),
             'compareBaseQuery' => $this->compareBaseQuery($request),
             'pageQuery' => EcomTrackerViewData::comparePageQuery($request, $leftFilters, $rightFilters),
             'executiveRows' => $executiveRows,

@@ -45,10 +45,17 @@
         </div>
     </header>
 
+    @php
+        $leftColumnPage = \App\Support\EcomTrackerViewData::forCompareColumn($leftFilters, $compareSelfUrl);
+        $rightColumnPage = \App\Support\EcomTrackerViewData::forCompareColumn($rightFilters, $compareSelfUrl);
+    @endphp
+
     @include('ecom_tracker.partials.compare-executive-summary', [
         'rows' => $executiveRows,
         'leftRange' => $left['range'] ?? [],
         'rightRange' => $right['range'] ?? [],
+        'leftActivityFocusLink' => $leftColumnPage['activityFocusLink'],
+        'rightActivityFocusLink' => $rightColumnPage['activityFocusLink'],
     ])
 
     <div class="etd-compare-grid">
@@ -58,6 +65,7 @@
             'filters' => $leftFilters,
             'otherFilters' => $rightFilters,
             'backUrl' => $backUrl,
+            'compareSelfUrl' => $compareSelfUrl,
             'chartCanvasId' => 'etdTrendChartLeft',
             'chartScrollId' => 'etdTrendChartScrollLeft',
             'chartWrapId' => 'etdTrendChartWrapLeft',
@@ -71,6 +79,7 @@
             'filters' => $rightFilters,
             'otherFilters' => $leftFilters,
             'backUrl' => $backUrl,
+            'compareSelfUrl' => $compareSelfUrl,
             'chartCanvasId' => 'etdTrendChartRight',
             'chartScrollId' => 'etdTrendChartScrollRight',
             'chartWrapId' => 'etdTrendChartWrapRight',

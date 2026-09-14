@@ -508,4 +508,17 @@ final class EcomTrackerCompareSupport
 
         return $rows;
     }
+
+    public static function executiveMetricActivityFocus(string $metricKey): ?string
+    {
+        return match ($metricKey) {
+            'sale_amount', 'items_sold' => 'conversion',
+            'sessions', 'unique_visitors' => 'audience',
+            'payments' => 'payment_success',
+            'cart_drop' => 'cart_abandonment',
+            'checkout_drop' => 'begin_checkout_abandonment',
+            'proceed_drop' => 'proceed_checkout_abandonment',
+            default => null,
+        };
+    }
 }

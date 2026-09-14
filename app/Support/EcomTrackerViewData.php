@@ -64,6 +64,33 @@ final class EcomTrackerViewData
     }
 
     /**
+     * @param  array<string, mixed>  $sideFilters
+     * @return array{activityFocusLink: callable, activitySourceLink: callable, detailLink: callable}
+     */
+    public static function forCompareColumn(array $sideFilters, string $compareSelfUrl): array
+    {
+        return [
+            'detailLink' => fn (string $section) => self::activityDrillDownLink(
+                EcomActivityFocus::fromSection($section) ?? 'audience',
+                $sideFilters,
+                self::dashboardSectionDrillExtras($section),
+                $compareSelfUrl,
+            ),
+            'activityFocusLink' => fn (string $focus, array $extra = []) => self::activityDrillDownLink(
+                $focus,
+                $sideFilters,
+                $extra,
+                $compareSelfUrl,
+            ),
+            'activitySourceLink' => fn (string $source) => self::activitySourceLink(
+                $sideFilters,
+                $source,
+                $compareSelfUrl,
+            ),
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function activityShowParams(string $sessionId, ?string $back = null): array

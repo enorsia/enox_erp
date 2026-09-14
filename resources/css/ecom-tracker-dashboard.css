@@ -1200,7 +1200,8 @@ body.etd-filter-panel-open {
     height: 0.95rem;
 }
 
-#ecom-tracker-dashboard-content .etd-header-period-nav {
+#ecom-tracker-dashboard-content .etd-header-period-nav,
+#ecom-activity-page-content .etd-header-period-nav {
     display: none;
     flex-wrap: nowrap;
     align-items: center;
@@ -1209,20 +1210,24 @@ body.etd-filter-panel-open {
     flex-shrink: 0;
 }
 
-#ecom-tracker-dashboard-content .etd-header-period-nav .etd-segmented {
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-segmented,
+#ecom-activity-page-content .etd-header-period-nav .etd-segmented {
     flex-wrap: nowrap;
 }
 
-#ecom-tracker-dashboard-content .etd-header-period-nav .etd-segmented--compact .etd-segmented-btn {
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-segmented--compact .etd-segmented-btn,
+#ecom-activity-page-content .etd-header-period-nav .etd-segmented--compact .etd-segmented-btn {
     padding: 0.35rem 0.5rem;
     min-width: 2.1rem;
 }
 
-#ecom-tracker-dashboard-content .etd-header-period-nav .etd-date-nav-btn {
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-date-nav-btn,
+#ecom-activity-page-content .etd-header-period-nav .etd-date-nav-btn {
     flex-shrink: 0;
 }
 
-#ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header {
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header,
+#ecom-activity-page-content .etd-header-period-nav .etd-custom-dates--header {
     display: inline-flex;
     flex: 0 0 auto;
     flex-wrap: nowrap;
@@ -1236,14 +1241,18 @@ body.etd-filter-panel-open {
     white-space: nowrap;
 }
 
-#ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-wrapper {
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-wrapper,
+#ecom-activity-page-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-wrapper {
     flex: 0 1 auto;
     min-width: 0;
 }
 
 #ecom-tracker-dashboard-content .etd-header-period-nav .etd-date-input--range,
 #ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-input,
-#ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header input.form-control.input {
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header input.form-control.input,
+#ecom-activity-page-content .etd-header-period-nav .etd-date-input--range,
+#ecom-activity-page-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-input,
+#ecom-activity-page-content .etd-header-period-nav .etd-custom-dates--header input.form-control.input {
     flex: 0 1 auto;
     width: 10.5rem;
     min-width: 8.5rem;
@@ -1253,7 +1262,8 @@ body.etd-filter-panel-open {
     font-size: 0.75rem;
 }
 
-#ecom-tracker-dashboard-content .etd-header-period-nav .etd-pill-apply {
+#ecom-tracker-dashboard-content .etd-header-period-nav .etd-pill-apply,
+#ecom-activity-page-content .etd-header-period-nav .etd-pill-apply {
     flex: 0 0 auto;
     flex-shrink: 0;
     min-height: 2rem;
@@ -1263,11 +1273,13 @@ body.etd-filter-panel-open {
 }
 
 @media (min-width: 768px) {
-    #ecom-tracker-dashboard-content .etd-header-period-nav {
+    #ecom-tracker-dashboard-content .etd-header-period-nav,
+    #ecom-activity-page-content .etd-header-period-nav {
         display: flex;
     }
 
-    #ecom-tracker-dashboard-content .etd-filter-period--drawer-mobile {
+    #ecom-tracker-dashboard-content .etd-filter-period--drawer-mobile,
+    #ecom-activity-page-content .etd-filter-period--drawer-mobile {
         display: none;
     }
 }
@@ -3524,31 +3536,29 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     table-layout: auto;
 }
 
-@media (min-width: 1200px) {
-    .etd-table--activity {
-        table-layout: fixed;
-    }
+.etd-table-scroll--activity .etd-table--activity {
+    width: 100%;
+    min-width: 100%;
+    table-layout: auto;
 }
 
-@media (min-width: 1200px) {
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-user > div,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-user .etd-subtle {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
+.etd-table-scroll--activity .etd-table--activity td.etd-col-user > div,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-user .etd-subtle {
+    overflow: visible;
+    text-overflow: unset;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
 
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-session,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-session {
-        overflow: visible;
-        vertical-align: top;
-    }
+.etd-table-scroll--activity .etd-table--activity th.etd-col-session,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-session {
+    overflow: visible;
+    vertical-align: top;
+}
 
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-trust,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-trust {
-        white-space: normal;
-        vertical-align: top;
-    }
+.etd-table-scroll--activity .etd-table--activity th.etd-col-trust,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-trust {
+    vertical-align: top;
 }
 
 .etd-table--activity td.etd-col-user > div,
@@ -4113,10 +4123,11 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 
 .etd-commerce-event-detail__product-table {
     width: 100%;
-    min-width: 0;
+    min-width: 32rem;
     border-collapse: collapse;
     font-size: 0.6875rem;
     line-height: 1.25;
+    table-layout: auto;
 }
 
 .etd-commerce-event-detail__product-table th {
@@ -4138,118 +4149,41 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 }
 
 .etd-commerce-event-detail__product-col-title {
+    min-width: 9rem;
     overflow-wrap: anywhere;
     word-break: break-word;
 }
 
-.dark .etd-commerce-event-detail__product-table td {
-    color: #e2e8f0;
+.etd-commerce-event-detail__product-col-size {
+    min-width: 2.75rem;
+    white-space: nowrap;
 }
 
-@media (max-width: 1023px) {
-    .etd-commerce-event-detail--compact .etd-commerce-event-detail__product-table-wrap,
-    .etd-commerce-event-detail__product-table-wrap {
-        overflow: visible;
-    }
+.etd-commerce-event-detail__product-col-color {
+    min-width: 3.5rem;
+    white-space: nowrap;
+}
 
-    .etd-commerce-event-detail--compact .etd-commerce-event-detail__product-table,
-    .etd-commerce-event-detail__product-table,
-    .etd-commerce-event-detail__product-table thead,
-    .etd-commerce-event-detail__product-table tbody,
-    .etd-commerce-event-detail__product-table tfoot {
-        display: block;
-        width: 100%;
-        min-width: 0;
-    }
+.etd-commerce-event-detail__product-col-qty {
+    min-width: 2.25rem;
+    white-space: nowrap;
+}
 
-    .etd-commerce-event-detail__product-table thead {
-        display: none;
-    }
+.etd-commerce-event-detail__product-col-price {
+    min-width: 3.5rem;
+    white-space: nowrap;
+}
 
-    .etd-commerce-event-detail__product-table tbody tr {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        row-gap: 0.12rem;
-        align-items: start;
-        padding: 0.5rem 0;
-        border-bottom: 1px solid color-mix(in srgb, var(--etd-accent, #1d9e75) 18%, #e2e8f0);
-    }
+.etd-commerce-event-detail__product-table tbody tr {
+    white-space: nowrap;
+}
 
-    .etd-commerce-event-detail__product-table tbody tr:last-child {
-        border-bottom: 0;
-        padding-bottom: 0.15rem;
-    }
+.etd-commerce-event-detail__product-table tbody tr .etd-commerce-event-detail__product-col-title {
+    white-space: normal;
+}
 
-    .etd-commerce-event-detail__product-table td {
-        padding: 0;
-        width: auto;
-        max-width: none;
-        text-align: left;
-        min-width: 0;
-    }
-
-    .etd-commerce-event-detail__product-col-title {
-        font-weight: 600;
-        line-height: 1.3;
-    }
-
-    .etd-commerce-event-detail__product-table td[data-label]:not([data-label=""])::before {
-        content: attr(data-label) " ";
-        font-size: 0.5625rem;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-        color: #94a3b8;
-    }
-
-    .etd-commerce-event-detail__product-col-title::before {
-        content: none;
-    }
-
-    .etd-commerce-event-detail__product-col-qty,
-    .etd-commerce-event-detail__product-col-price {
-        text-align: left !important;
-    }
-
-    .etd-commerce-event-detail__product-total-row {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 0.75rem;
-        padding-top: 0.45rem;
-        margin-top: 0.15rem;
-        border-top: 1px solid color-mix(in srgb, var(--etd-accent, #1d9e75) 30%, #94a3b8);
-    }
-
-    .etd-commerce-event-detail__product-total-spacer {
-        display: none;
-    }
-
-    .etd-commerce-event-detail__product-total-qty,
-    .etd-commerce-event-detail__product-total-price {
-        padding: 0;
-        width: auto;
-    }
-
-    .etd-commerce-event-detail__product-total-qty::before,
-    .etd-commerce-event-detail__product-total-price::before {
-        content: attr(data-label) " ";
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.02em;
-        color: #94a3b8;
-        font-size: 0.5625rem;
-    }
-
-    .dark .etd-commerce-event-detail__product-table tbody tr {
-        border-bottom-color: color-mix(in srgb, var(--etd-accent, #1d9e75) 22%, #334155);
-    }
-
-    .dark .etd-commerce-event-detail__product-table td[data-label]:not([data-label=""])::before,
-    .dark .etd-commerce-event-detail__product-total-qty::before,
-    .dark .etd-commerce-event-detail__product-total-price::before {
-        color: #94a3b8;
-    }
+.dark .etd-commerce-event-detail__product-table td {
+    color: #e2e8f0;
 }
 
 .etd-country-tag {
@@ -6261,14 +6195,14 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     }
 
     .etd-activity-context__summary {
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         gap: 0.5rem;
     }
 
     .etd-activity-context__metrics {
-        flex-wrap: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        flex-wrap: wrap;
+        overflow: visible;
+        text-overflow: unset;
     }
 
     .etd-activity-context__export {
@@ -6276,7 +6210,7 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     }
 }
 
-/* ── User activity page: 320px → 1800px ── */
+/* ── User activity page: 320px → 2000px ── */
 main:has(> .etd-page--activity) {
     display: flex;
     flex-direction: column;
@@ -6292,12 +6226,107 @@ main:has(> .etd-page--activity) {
     height: 100%;
     max-height: 100%;
     overflow: hidden;
+    overflow-x: clip;
     padding-bottom: 0.75rem;
 }
 
 .etd-page--activity .etd-page-header {
     flex: 0 0 auto;
     min-width: 0;
+    max-width: 100%;
+}
+
+.etd-page--activity .etd-page-header-toolbar {
+    position: relative;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.etd-page--activity .etd-header-toolbar-row {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+.etd-page--activity .etd-page-header-toolbar::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 1.25rem;
+    background: linear-gradient(to right, transparent, #fff);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.dark .etd-page--activity .etd-page-header-toolbar::after {
+    background: linear-gradient(to right, transparent, #1e293b);
+}
+
+@media (min-width: 1024px) {
+    .etd-page--activity .etd-header-toolbar-row {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+    .etd-page--activity .etd-page-header-bar {
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: wrap;
+    }
+
+    .etd-page--activity .etd-page-header-main,
+    .etd-page--activity .etd-page-header-toolbar {
+        width: 100%;
+    }
+
+    .etd-page--activity .etd-page-header-left {
+        flex-direction: column;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .etd-page--activity .etd-page-header-left > .flex {
+        flex-wrap: wrap !important;
+        align-items: flex-start;
+    }
+
+    .etd-page--activity .etd-page-title,
+    .etd-page--activity .etd-page-range,
+    .etd-page--activity .etd-page-meta,
+    .etd-page--activity .etd-meta-item {
+        white-space: normal;
+    }
+
+    #ecom-activity-page-content .etd-header-period-nav .etd-segmented--compact .etd-segmented-btn {
+        padding: 0.3rem 0.4rem;
+        min-width: 1.9rem;
+        font-size: 0.6875rem;
+    }
+
+    #ecom-activity-page-content .etd-header-period-nav .etd-date-nav-btn {
+        display: none;
+    }
+}
+
+@media (min-width: 1200px) and (max-width: 1399px) {
+    .etd-page--activity .etd-page-header-left > .flex {
+        flex-wrap: wrap !important;
+    }
+
+    .etd-page--activity .etd-page-range {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        min-width: 0;
+    }
 }
 
 .etd-page--activity .etd-panel {
@@ -6321,10 +6350,22 @@ main:has(> .etd-page--activity) {
 .etd-activity-pagination {
     flex: 0 0 auto;
     margin-top: 0.75rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .etd-activity-pagination > div {
     margin-top: 0;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.etd-activity-pagination nav {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
 }
 
 .etd-table-scroll--activity,
@@ -6342,121 +6383,134 @@ main:has(> .etd-page--activity) {
 
 .etd-commerce-event-trigger {
     max-width: 100%;
-    white-space: normal;
 }
 
-.etd-commerce-event-trigger__label {
+/* Activity table — full width, content wraps; x-scroll only when focus cols need it */
+.etd-table-scroll--activity .etd-table--activity th.etd-col-session,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-session {
+    min-width: 6.5rem;
+    overflow: visible;
+    vertical-align: top;
+}
+
+.etd-table-scroll--activity .etd-table--activity th.etd-col-user,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-user {
+    min-width: 7rem;
+    overflow: visible;
+    vertical-align: top;
+}
+
+.etd-table-scroll--activity .etd-chip--session,
+.etd-table-scroll--activity .etd-chip--session__text {
+    display: block;
+    max-width: 100%;
+    overflow: visible;
+    text-overflow: unset;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+}
+
+.etd-table-scroll--activity .etd-table--activity th.etd-col-trust,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-trust {
+    min-width: 6.75rem;
+    overflow: visible;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.etd-table-scroll--activity .etd-table--activity td.etd-col-trust .visitor-classification-badge {
     min-width: 0;
+    max-width: 100%;
+}
+
+.etd-table-scroll--activity .etd-table--activity td.etd-col-trust .visitor-classification-badge > div {
+    flex-wrap: nowrap;
+}
+
+.etd-table-scroll--activity .etd-table--activity td.etd-col-trust .visitor-classification-badge span.inline-flex {
+    white-space: nowrap;
+}
+
+.etd-table-scroll--activity .etd-table--activity td.etd-col-trust .etd-visitor-ip {
+    display: block;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+}
+
+.etd-table-scroll--activity .etd-table--activity th.etd-col-trust {
+    white-space: nowrap;
+}
+
+.etd-table-scroll--activity .etd-table--activity th.etd-col-commerce,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-commerce {
+    min-width: 5.5rem;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.etd-table-scroll--activity .etd-table--activity td.etd-col-commerce .etd-commerce-cell,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-commerce .etd-commerce-cell__line,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-commerce .etd-commerce-cell__meta,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-commerce .etd-commerce-events,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-commerce .etd-commerce-event-trigger,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-commerce .etd-commerce-event-trigger__label {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.etd-table-scroll--activity .etd-table--activity th.etd-col-actions,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-actions {
+    min-width: 3rem;
+}
+
+.etd-table-scroll--activity .etd-table--activity th.etd-col-duration,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-duration {
+    min-width: 4rem;
+}
+
+.etd-table-scroll--activity .etd-table--activity th.etd-col-last-active,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-last-active {
+    min-width: 4.5rem;
+}
+
+.etd-table-scroll--activity .etd-table--activity th.etd-col-action,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-action {
+    min-width: 5rem;
+}
+
+.etd-table-scroll--activity .etd-table--activity th,
+.etd-table-scroll--activity .etd-table--activity td {
+    white-space: normal;
     overflow-wrap: anywhere;
 }
 
-/* Desktop table column sizing — 1200px+ (sidebar leaves too little room below this, e.g. 1047px) */
-@media (min-width: 1200px) {
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-session,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-session {
-        width: 12%;
-        min-width: 7.25rem;
-        max-width: 10.5rem;
-        overflow: visible;
-        vertical-align: top;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-user,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-user {
-        width: 15%;
-        min-width: 8.5rem;
-        max-width: 13rem;
-        overflow: hidden;
-        vertical-align: top;
-    }
-
-    .etd-table-scroll--activity .etd-chip--session,
-    .etd-table-scroll--activity .etd-chip--session__text {
-        display: block;
-        max-width: 100%;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-trust,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-trust {
-        width: 9%;
-        min-width: 5.5rem;
-        max-width: 7.5rem;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-commerce,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-commerce {
-        width: 12%;
-        min-width: 6rem;
-        max-width: 10rem;
-        white-space: normal;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-actions,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-actions {
-        width: 5%;
-        min-width: 3.25rem;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-duration,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-duration {
-        width: 7%;
-        min-width: 4.5rem;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-last-active,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-last-active {
-        width: 10%;
-        min-width: 5.5rem;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-action,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-action {
-        width: 6.5rem;
-        min-width: 5.5rem;
-    }
-
-    .etd-table-scroll--activity-wide {
-        overflow: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .etd-table-scroll--activity-wide .etd-table--activity {
-        min-width: max(100%, calc(52rem + (var(--etd-activity-focus-cols, 0) * 4.25rem)));
-    }
-
-    .etd-table-scroll--activity-wide .etd-table--activity th.etd-col-session,
-    .etd-table-scroll--activity-wide .etd-table--activity td.etd-col-session {
-        position: sticky;
-        left: 0;
-        z-index: 3;
-        background: #fff;
-        box-shadow: 1px 0 0 #cbd5e1;
-        border-right: 1px solid #e2e8f0;
-    }
-
-    .dark .etd-table-scroll--activity-wide .etd-table--activity th.etd-col-session,
-    .dark .etd-table-scroll--activity-wide .etd-table--activity td.etd-col-session {
-        background: #1e293b;
-        box-shadow: 1px 0 0 #475569;
-        border-right-color: #334155;
-    }
-
-    .etd-table-scroll--activity-wide.etd-table-scroll--fixed .etd-table thead th.etd-col-session {
-        z-index: 4;
-    }
+.etd-table-scroll--activity .etd-table--activity th.etd-col-commerce,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-commerce,
+.etd-table-scroll--activity .etd-table--activity th.etd-col-duration,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-duration,
+.etd-table-scroll--activity .etd-table--activity th.etd-col-last-active,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-last-active,
+.etd-table-scroll--activity .etd-table--activity th.etd-col-actions,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-actions,
+.etd-table-scroll--activity .etd-table--activity th.etd-col-action,
+.etd-table-scroll--activity .etd-table--activity td.etd-col-action {
+    white-space: nowrap;
+    overflow-wrap: normal;
 }
 
-/* Small laptop: drop lower-priority columns in table mode */
-@media (min-width: 1200px) and (max-width: 1279px) {
-    .etd-table-scroll--activity .etd-activity-col--optional {
-        display: none;
-    }
+.etd-table-scroll--activity-wide {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
-@media (min-width: 1280px) and (max-width: 1599px) {
-    .etd-table-scroll--activity .etd-col-last-active.etd-activity-col--optional {
-        display: none;
-    }
+.etd-table-scroll--activity-wide .etd-table--activity {
+    width: 100%;
+    min-width: max(100%, calc(100% + (var(--etd-activity-focus-cols, 0) * 5rem)));
 }
 
 /* Large desktop */
@@ -6469,14 +6523,22 @@ main:has(> .etd-page--activity) {
     .etd-page--activity .etd-panel {
         padding: clamp(0.75rem, 1vw, 1.1rem);
     }
+}
 
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-user,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-user {
-        max-width: 14rem;
+@media (min-width: 1800px) {
+    .etd-page--activity {
+        padding-left: clamp(1rem, 1.4vw, 1.5rem);
+        padding-right: clamp(1rem, 1.4vw, 1.5rem);
     }
 }
 
-/* Tablet + small laptop: card layout (avoids table squeeze with sidebar, e.g. 1047px) */
+@media (min-width: 2000px) {
+    .etd-page--activity .etd-panel {
+        padding: clamp(0.85rem, 0.9vw, 1.25rem);
+    }
+}
+
+/* Tablet + small screens: keep table layout, full width */
 @media (max-width: 1199px) {
     .etd-page--activity .etd-page-header-bar {
         align-items: stretch;
@@ -6486,168 +6548,8 @@ main:has(> .etd-page--activity) {
         grid-template-columns: repeat(auto-fit, minmax(5.75rem, 1fr));
     }
 
-    main:has(> .etd-page--activity) {
-        overflow: auto;
-    }
-
-    .etd-page--activity {
-        height: auto;
-        max-height: none;
-        overflow: visible;
-    }
-
-    .etd-page--activity .etd-panel {
-        flex: 0 1 auto;
-        overflow: visible;
-    }
-
-    .etd-table-scroll--activity {
-        overflow: auto;
-    }
-
     .etd-table-scroll--activity.etd-table-scroll--fixed {
-        flex: none;
-        max-height: min(70dvh, 40rem);
-        min-height: 12rem;
-        overflow: auto;
-        border: 0;
-        background: transparent;
-        scrollbar-gutter: auto;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity {
-        min-width: 0;
-        table-layout: auto;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity thead {
-        display: none;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody {
-        display: block;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row {
-        display: block;
-        margin-bottom: 0.625rem;
-        padding: 0.5rem 0.625rem;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.625rem;
-        background: #fff;
-    }
-
-    .dark .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row {
-        border-color: #334155;
-        background: #1e293b;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td {
-        display: grid;
-        grid-template-columns: minmax(5rem, 32%) minmax(0, 1fr);
-        gap: 0.2rem 0.5rem;
-        align-items: start;
-        width: 100%;
-        min-width: 0;
-        max-width: none;
-        padding: 0.3rem 0;
-        border: 0;
-        white-space: normal;
-        text-align: left;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td::before {
-        content: attr(data-label);
-        font-size: 0.5625rem;
-        font-weight: 700;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-        color: #94a3b8;
-        line-height: 1.35;
-        padding-top: 0.1rem;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td.etd-num {
-        text-align: left;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td.etd-col-session,
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td.etd-col-user,
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td.etd-col-commerce {
-        overflow: visible;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td.etd-col-user > div,
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td.etd-col-user .etd-subtle {
-        white-space: normal;
-        overflow: visible;
-        text-overflow: unset;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td.etd-col-action {
-        padding-top: 0.45rem;
-        border-top: 1px dashed #e2e8f0;
-        margin-top: 0.15rem;
-    }
-
-    .dark .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td.etd-col-action {
-        border-top-color: #334155;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-commerce-event-row {
-        display: none;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-commerce-event-row.is-open {
-        display: block;
-        margin: -0.35rem 0 0.625rem;
-        border: 1px solid color-mix(in srgb, var(--etd-accent, #1d9e75) 48%, #64748b);
-        border-top: 0;
-        border-radius: 0 0 0.625rem 0.625rem;
-        background: linear-gradient(
-            180deg,
-            color-mix(in srgb, var(--etd-accent, #1d9e75) 8%, #f8fafc) 0%,
-            #f1f5f9 100%
-        );
-        box-shadow: inset 4px 0 0 #0f766e;
-    }
-
-    .dark .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-commerce-event-row.is-open {
-        border-color: color-mix(in srgb, var(--etd-accent, #1d9e75) 44%, #475569);
-        background: linear-gradient(
-            180deg,
-            color-mix(in srgb, var(--etd-accent, #1d9e75) 12%, #0f172a) 0%,
-            #111827 100%
-        );
-        box-shadow: inset 4px 0 0 #14b8a6;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-commerce-event-row > td {
-        display: block;
-        width: 100%;
-        max-width: 100%;
-        padding: 0;
-        min-width: 0;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-empty-row {
-        display: block;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-empty-row > td {
-        display: block;
-        width: 100%;
-    }
-
-    .etd-table-scroll--activity .etd-chip--session,
-    .etd-table-scroll--activity .etd-chip--session__text {
-        max-width: 100%;
-    }
-}
-
-@media (min-width: 768px) and (max-width: 1199px) {
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td {
-        grid-template-columns: minmax(6rem, 28%) minmax(0, 1fr);
+        --etd-table-scroll-height: clamp(16rem, calc(100dvh - 18rem), 40rem);
     }
 }
 
@@ -6708,6 +6610,15 @@ main:has(> .etd-page--activity) {
         padding: 0.5rem 0.6rem;
     }
 
+    .etd-page--activity .etd-page-header-meta-row {
+        flex-wrap: wrap;
+    }
+
+    .etd-page--activity .etd-activity-context__chip-label {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
     .etd-page--activity .etd-kpi-grid {
         grid-template-columns: 1fr;
     }
@@ -6721,27 +6632,19 @@ main:has(> .etd-page--activity) {
         font-size: 0.6875rem;
     }
 
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row {
-        padding: 0.45rem 0.5rem;
+    .etd-activity-table-toolbar {
+        justify-content: stretch;
     }
 
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td {
-        grid-template-columns: 1fr;
-        gap: 0.1rem;
+    .etd-activity-sort-field {
+        width: 100%;
     }
 
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td::before {
-        padding-top: 0;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td + td {
-        margin-top: 0.2rem;
-        padding-top: 0.35rem;
-        border-top: 1px solid #f1f5f9;
-    }
-
-    .dark .etd-table-scroll--activity .etd-table--activity tbody > tr.etd-activity-session-row > td + td {
-        border-top-color: #334155;
+    .etd-activity-sort-select {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: none;
+        width: 100%;
     }
 
     .etd-commerce-event-detail {
@@ -7105,21 +7008,66 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-category-departments.e
     display: none !important;
 }
 
+body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec,
+body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec.etd-print-exec-expanded {
+    overflow: visible !important;
+}
+
 body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__toggle {
     display: none !important;
 }
 
-body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__body {
+body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__body,
+body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec.etd-print-exec-expanded .etd-compare-exec__body {
     display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
     padding: 0 0 0.35rem !important;
+}
+
+body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__print-heading {
+    display: block !important;
+}
+
+body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__header-group {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+}
+
+body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__periods-banner {
+    margin: 0.15rem 0 0 !important;
+    font-size: 6.5pt !important;
 }
 
 body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__table-wrap {
     overflow: visible !important;
+    break-before: avoid !important;
+    page-break-before: avoid !important;
+}
+
+body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__table thead {
+    display: table-header-group !important;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+}
+
+body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__table tbody tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
 }
 
 body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__table {
+    width: 100% !important;
     min-width: 0 !important;
+    table-layout: fixed !important;
+}
+
+body.etd-print-measure #ecom-tracker-compare-content .etd-compare-exec__col-range {
+    max-width: none !important;
+    white-space: normal !important;
 }
 
 body.etd-print-measure #ecom-tracker-compare-content .etd-kpi-compare__period {
@@ -8041,6 +7989,11 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
         gap: 0.5rem;
     }
 
+    .etd-page--activity .etd-page-header-meta-row {
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
     .etd-page-header-meta-row__left {
         flex: 1 1 auto;
         min-width: 0;
@@ -8052,10 +8005,21 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
         white-space: nowrap;
     }
 
+    .etd-page--activity .etd-visitor-quality-summary {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+    }
+
     .etd-page-header-meta-row__right {
         flex: 0 0 auto;
         width: auto;
         justify-content: flex-end;
+    }
+
+    .etd-page--activity .etd-page-header-meta-row__right {
+        width: 100%;
+        justify-content: flex-start;
     }
 
     [id$="-export-ready-group"].is-export-ready,
@@ -8190,6 +8154,32 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 
 .etd-compare-exec__body {
     padding: 0 1.1rem 1rem;
+}
+
+.etd-compare-exec__content {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+}
+
+.etd-compare-exec__header-group {
+    margin-bottom: 0.65rem;
+}
+
+.etd-compare-exec__periods-banner {
+    margin: 0.35rem 0 0;
+    font-size: 0.8125rem;
+    color: #64748b;
+    line-height: 1.35;
+}
+
+.dark .etd-compare-exec__periods-banner {
+    color: #94a3b8;
+}
+
+.etd-compare-exec__body .etd-compare-exec__col-range {
+    display: none;
 }
 
 .etd-compare-exec__print-heading {
@@ -9710,58 +9700,103 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
         page-break-inside: avoid !important;
     }
 
-    #ecom-tracker-compare-content .etd-compare-exec {
-        break-inside: avoid !important;
-        page-break-inside: avoid !important;
-        break-after: avoid-page !important;
-        page-break-after: avoid !important;
+    #ecom-tracker-compare-content .etd-compare-exec,
+    #ecom-tracker-compare-content .etd-compare-exec.etd-print-exec-expanded {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+        break-after: auto !important;
+        page-break-after: auto !important;
         margin-bottom: 0.5rem !important;
         padding: 0 !important;
         border: none !important;
         box-shadow: none !important;
+        overflow: visible !important;
     }
 
     #ecom-tracker-compare-content .etd-compare-exec__toggle {
         display: none !important;
     }
 
-    #ecom-tracker-compare-content .etd-compare-exec__body {
+    #ecom-tracker-compare-content .etd-compare-exec__body,
+    #ecom-tracker-compare-content .etd-compare-exec.etd-print-exec-expanded .etd-compare-exec__body {
         display: block !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
         padding: 0 0 0.35rem !important;
     }
 
     #ecom-tracker-compare-content .etd-compare-exec__print-heading {
         display: block !important;
         font-size: 9pt !important;
-        margin-bottom: 0.25rem !important;
+        margin-bottom: 0 !important;
     }
 
-    #ecom-tracker-compare-content .etd-compare-exec__chevron {
+    #ecom-tracker-compare-content .etd-compare-exec__chevron,
+    #ecom-tracker-compare-content .etd-compare-exec__subtitle {
         display: none !important;
     }
 
-    #ecom-tracker-compare-content .etd-compare-exec__subtitle {
-        font-size: 6.5pt !important;
-        margin-top: 0.1rem !important;
-        gap: 0.2rem 0.35rem !important;
+    #ecom-tracker-compare-content .etd-compare-exec__header-group {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+        margin-bottom: 0.25rem !important;
     }
 
-    #ecom-tracker-compare-content .etd-compare-exec__periods {
+    #ecom-tracker-compare-content .etd-compare-exec__periods-banner {
+        margin: 0.12rem 0 0 !important;
+        font-size: 6.5pt !important;
+        line-height: 1.25 !important;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__periods-banner .etd-compare-exec__periods {
         gap: 0.15rem 0.25rem !important;
     }
 
-    #ecom-tracker-compare-content .etd-compare-exec__col-range {
-        font-size: 5.5pt !important;
-        max-width: none !important;
+    #ecom-tracker-compare-content .etd-compare-exec__body .etd-compare-exec__col-range {
+        display: none !important;
     }
 
     #ecom-tracker-compare-content .etd-compare-exec__table-wrap {
         overflow: visible !important;
+        break-before: avoid !important;
+        page-break-before: avoid !important;
     }
 
     #ecom-tracker-compare-content .etd-compare-exec__table {
+        width: 100% !important;
         min-width: 0 !important;
+        table-layout: fixed !important;
         font-size: 7pt !important;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table thead {
+        display: table-header-group !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table tbody tr {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-exec__col-metric {
+        width: 36% !important;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-exec__col-period {
+        width: 22% !important;
+        min-width: 0 !important;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-exec__col-change {
+        width: 20% !important;
+        min-width: 0 !important;
     }
 
     #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-delta-badge {

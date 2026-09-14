@@ -553,6 +553,53 @@ function restoreCompareCategoryDepartmentsAfterPrint() {
     });
 }
 
+function prepareCompareExecutiveSummaryForPrint() {
+    const root = document.getElementById('ecom-tracker-compare-content');
+
+    if (!root) {
+        return;
+    }
+
+    root.querySelectorAll('.etd-compare-exec').forEach((section) => {
+        section.classList.add('etd-print-exec-expanded');
+
+        const body = section.querySelector('.etd-compare-exec__body');
+
+        if (!body) {
+            return;
+        }
+
+        body.dataset.printRestoreStyle = body.getAttribute('style') || '';
+        body.style.setProperty('display', 'block', 'important');
+        body.style.setProperty('height', 'auto', 'important');
+        body.style.setProperty('max-height', 'none', 'important');
+        body.style.setProperty('overflow', 'visible', 'important');
+    });
+}
+
+function restoreCompareExecutiveSummaryAfterPrint() {
+    const root = document.getElementById('ecom-tracker-compare-content');
+
+    if (!root) {
+        return;
+    }
+
+    root.querySelectorAll('.etd-compare-exec').forEach((section) => {
+        section.classList.remove('etd-print-exec-expanded');
+
+        const body = section.querySelector('.etd-compare-exec__body');
+
+        if (!body) {
+            return;
+        }
+
+        if (body.dataset.printRestoreStyle !== undefined) {
+            body.setAttribute('style', body.dataset.printRestoreStyle);
+            delete body.dataset.printRestoreStyle;
+        }
+    });
+}
+
 function resetCompareTrendChartForPrint({ canvasId, wrapId, legendId, hintId, trend }) {
     const wrap = document.getElementById(wrapId);
     const hint = document.getElementById(hintId);
@@ -650,6 +697,7 @@ function prepareCompareForPrint() {
     }
 
     expandCompareCategoryDepartmentsForPrint();
+    prepareCompareExecutiveSummaryForPrint();
     compareTrendChartConfigs.forEach(resetCompareTrendChartForPrint);
 }
 
@@ -658,6 +706,7 @@ function restoreCompareAfterPrint() {
 
     document.body.classList.remove('etd-print-measure');
     restoreCompareCategoryDepartmentsAfterPrint();
+    restoreCompareExecutiveSummaryAfterPrint();
     compareTrendChartConfigs.forEach(restoreCompareTrendChartAfterPrint);
     resumeCompareSectionSyncAfterPrint();
     scheduleCompareSectionSync();

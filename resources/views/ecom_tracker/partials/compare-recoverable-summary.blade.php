@@ -9,6 +9,10 @@
             $sessionCount = (int) ($data['session_count'] ?? 0);
             $atStake = (float) ($data['at_stake'] ?? 0);
         @endphp
+        @php $panelHref = $panel['href'] ?? null; @endphp
+        @if (filled($panelHref))
+            <a href="{{ $panelHref }}" class="etd-kpi-drilldown-link no-underline text-inherit">
+        @endif
         <div @class([
             'etd-compare-recoverable-card',
             'etd-compare-recoverable-card--cart' => ($panel['tone'] ?? '') === 'cart',
@@ -22,5 +26,8 @@
             </p>
             <p class="etd-compare-recoverable-card__stake">£{{ number_format($atStake, 2) }} at stake</p>
         </div>
+        @if (filled($panelHref))
+            </a>
+        @endif
     @endforeach
 </div>

@@ -4,6 +4,7 @@
     'filters' => [],
     'otherFilters' => [],
     'backUrl' => null,
+    'compareSelfUrl' => '',
     'chartCanvasId' => 'etdTrendChartLeft',
     'chartScrollId' => 'etdTrendChartScrollLeft',
     'chartWrapId' => 'etdTrendChartWrapLeft',
@@ -12,7 +13,12 @@
 ])
 
 @php
+    use App\Support\EcomTrackerViewData;
     use App\Support\TrackerTime;
+
+    $columnPage = EcomTrackerViewData::forCompareColumn($filters, $compareSelfUrl);
+    $activityFocusLink = $columnPage['activityFocusLink'];
+    $activitySourceLink = $columnPage['activitySourceLink'];
 
     $periodLabel = $side === 'right' ? 'Period B' : 'Period A';
     $modifier = $side === 'right' ? 'etd-compare-column--b' : 'etd-compare-column--a';
@@ -35,9 +41,17 @@
         ['title' => 'Proceed checkout abandoned', 'dataKey' => 'proceed_checkout_abandonment', 'tone' => 'proceed'],
         ['title' => 'Payment success', 'dataKey' => 'payment_success_events', 'tone' => 'success'],
     ];
+    $recoverableFocusByDataKey = [
+        'cart_abandonment' => 'cart_abandonment',
+        'begin_checkout_abandonment' => 'begin_checkout_abandonment',
+        'proceed_checkout_abandonment' => 'proceed_checkout_abandonment',
+        'payment_success_events' => 'payment_success',
+    ];
+
     $recoverablePanels = collect($recoverablePanels)->map(fn (array $panel) => [
         ...$panel,
         'data' => $d[$panel['dataKey']] ?? [],
+        'href' => $activityFocusLink($recoverableFocusByDataKey[$panel['dataKey']] ?? 'audience'),
     ])->all();
 
     $unique = (int) (($d['new_returning']['unique'] ?? $d['new_returning']['new'] ?? 0));
@@ -150,17 +164,19 @@
                         @foreach (['Unique visitors', 'Sessions', 'Total stay time', 'Avg stay time'] as $label)
                             @if ($kpiByLabel->has($label))
                                 @php $kpi = $kpiByLabel->get($label); @endphp
-                                <div class="etd-kpi etd-kpi--compact">
-                                    @include('ecom_tracker.partials.kpi-label-with-tip', [
-                                        'label' => $kpi['label'],
-                                        'tip' => $kpi['tip'] ?? null,
-                                    ])
-                                    @include('ecom_tracker.partials.kpi-value-with-comparison', [
-                                        'formatted' => $kpi['formatted'],
-                                        'comparison' => $kpi['comparison'] ?? null,
-                                        'valueClass' => $kpi['value_class'] ?? '',
-                                    ])
-                                </div>
+                                <a href="{{ $activityFocusLink('audience') }}" class="etd-kpi-drilldown-link no-underline text-inherit">
+                                    <div class="etd-kpi etd-kpi--compact">
+                                        @include('ecom_tracker.partials.kpi-label-with-tip', [
+                                            'label' => $kpi['label'],
+                                            'tip' => $kpi['tip'] ?? null,
+                                        ])
+                                        @include('ecom_tracker.partials.kpi-value-with-comparison', [
+                                            'formatted' => $kpi['formatted'],
+                                            'comparison' => $kpi['comparison'] ?? null,
+                                            'valueClass' => $kpi['value_class'] ?? '',
+                                        ])
+                                    </div>
+                                </a>
                             @endif
                         @endforeach
                     </div>
@@ -171,6 +187,10 @@
                         'title' => 'Sale & conversion',
                         'modifier' => 'etd-kpi-group--sale',
                         'cols' => 2,
+                        'metricHrefs' => [
+                            $activityFocusLink('conversion'),
+                            $activityFocusLink('conversion'),
+                        ],
                         'metrics' => [
                             $saleConversion['item_qty'] ?? null,
                             $saleConversion['revenue'] ?? null,
@@ -183,6 +203,12 @@
                         'title' => 'Funnel drop-off',
                         'modifier' => 'etd-kpi-group--funnel',
                         'cols' => 4,
+                        'metricHrefs' => [
+                            $activityFocusLink('cart_abandonment'),
+                            $activityFocusLink('begin_checkout_abandonment'),
+                            $activityFocusLink('proceed_checkout_abandonment'),
+                            $activityFocusLink('payment_success'),
+                        ],
                         'metrics' => [
                             $funnelDropoff['cart_drop'] ?? null,
                             $funnelDropoff['checkout_drop'] ?? null,
@@ -227,7 +253,10 @@
                 @include('ecom_tracker.partials.category-performance-table', [
                     'departments' => $d['category_departments'] ?? [],
                     'showCurrency' => true,
-                    'readOnly' => true,
+                    'categoryActivityLink' => fn (array $category) => $activityFocusLink('categories', [
+                        'category' => $category['category_name'] ?? '',
+                        'department' => $category['department_name'] ?? '',
+                    ]),
                 ])
             </div>
         </div>
@@ -280,7 +309,16 @@
                     <tbody>
                         @forelse ($d['products'] ?? [] as $product)
                             <tr>
-                                <td class="etd-col-product">{{ $product['name'] }}</td>
+                                <td class="etd-col-product">
+                                    @php
+                                        $productDrillQuery = array_filter([
+                                            'product_code' => $product['code'] ?? ($product['product_code'] ?? null),
+                                        ]);
+                                    @endphp
+                                    <a href="{{ $activityFocusLink('products', $productDrillQuery) }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
+                                        {{ $product['name'] }}
+                                    </a>
+                                </td>
                                 <td class="etd-num etd-col-metric">{{ number_format($product['views']) }}</td>
                                 <td class="etd-num etd-col-metric">{{ number_format($product['adds']) }}</td>
                                 <td class="etd-num etd-col-metric">{{ number_format($product['proceed_checkouts'] ?? 0) }}</td>
@@ -312,7 +350,9 @@
             </div>
             @include('ecom_tracker.partials.device-browser-breakdown', [
                 'devices' => $d['devices'] ?? [],
-                'readOnly' => true,
+                'deviceActivityLink' => fn (string $label) => $activityFocusLink('devices', array_filter([
+                    'device_type' => in_array(strtolower($label), ['mobile', 'desktop', 'tablet'], true) ? strtolower($label) : null,
+                ])),
             ])
         </div>
 
@@ -322,7 +362,7 @@
             </div>
             @include('ecom_tracker.partials.traffic-sources-table', [
                 'rows' => $d['traffic_sources'] ?? [],
-                'readOnly' => true,
+                'activitySourceLink' => $activitySourceLink,
             ])
         </div>
 
@@ -335,7 +375,12 @@
                     @if ($medianDuration)
                         <span class="etd-header-sep" aria-hidden="true">·</span>
                     @endif
-                    <span><strong>{{ number_format($unique) }}</strong> unique · <strong>{{ number_format($returning) }}</strong> returning</span>
+                    <span>
+                        <a href="{{ $activityFocusLink('audience') }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
+                            <strong>{{ number_format($unique) }}</strong> unique
+                        </a>
+                        · <strong>{{ number_format($returning) }}</strong> returning
+                    </span>
                 @endif
             @endif
         </div>

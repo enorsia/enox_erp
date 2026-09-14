@@ -3,6 +3,8 @@
     $deltaPct = $row['delta_pct'] ?? null;
     $deltaDirection = $row['delta_direction'] ?? null;
     $sentiment = $row['delta_sentiment'] ?? 'neutral';
+    $periodAHref = $period_a_href ?? null;
+    $periodBHref = $period_b_href ?? null;
 @endphp
 
 <tr class="etd-compare-metric-row">
@@ -19,8 +21,20 @@
             </button>
         @endif
     </td>
-    <td class="etd-num etd-compare-metric-row__value">{{ $row['period_a_formatted'] ?? '0' }}</td>
-    <td class="etd-num etd-compare-metric-row__value">{{ $row['period_b_formatted'] ?? '0' }}</td>
+    <td class="etd-num etd-compare-metric-row__value">
+        @if (filled($periodAHref))
+            <a href="{{ $periodAHref }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">{{ $row['period_a_formatted'] ?? '0' }}</a>
+        @else
+            {{ $row['period_a_formatted'] ?? '0' }}
+        @endif
+    </td>
+    <td class="etd-num etd-compare-metric-row__value">
+        @if (filled($periodBHref))
+            <a href="{{ $periodBHref }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">{{ $row['period_b_formatted'] ?? '0' }}</a>
+        @else
+            {{ $row['period_b_formatted'] ?? '0' }}
+        @endif
+    </td>
     <td class="etd-num etd-compare-metric-row__delta">
         @if ($deltaPct !== null)
             <span @class([

@@ -214,6 +214,45 @@ test('executive summary marks revenue increase as improved sentiment', function 
         ->and($cartDrop['delta_sentiment'] ?? null)->toBe('good');
 });
 
+test('compare page links to user activity drill downs with side specific filters', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.dashboard.index');
+
+    $compareUrl = route('admin.ecom-tracker.dashboard.compare', [
+        'left_period' => '7d',
+        'left_device_type' => 'mobile',
+        'right_period' => 'custom',
+        'right_date_from' => '2026-09-01',
+        'right_date_to' => '2026-09-07',
+        'right_device_type' => 'desktop',
+    ]);
+
+    $html = $this->actingAs($user)
+        ->get($compareUrl)
+        ->assertOk()
+        ->getContent();
+
+    expect($html)
+        ->toContain('etd-kpi-drilldown-link')
+        ->toContain('focus=audience')
+        ->toContain('focus=conversion')
+        ->toContain('focus=cart_abandonment')
+        ->toContain('focus=begin_checkout_abandonment')
+        ->toContain('focus=proceed_checkout_abandonment')
+        ->toContain('focus=payment_success')
+        ->toContain('focus=categories')
+        ->toContain('focus=products')
+        ->toContain('focus=devices')
+        ->toContain('focus=traffic')
+        ->toContain('etd-row-drilldown-link')
+        ->toContain('period=7d')
+        ->toContain('device_type=mobile')
+        ->toContain('date_from=2026-09-01')
+        ->toContain('date_to=2026-09-07')
+        ->toContain('device_type=desktop')
+        ->toContain('back=');
+});
+
 test('compare back url helper returns dashboard when back param is set', function () {
     $dashboardUrl = route('admin.ecom-tracker.dashboard', ['period' => '7d']);
 

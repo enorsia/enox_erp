@@ -13,6 +13,13 @@
     $sidebarFilterCount = $sidebarFilterCount ?? \App\Support\EcomActivityFocus::activeFilterCount(request());
     $showCatalogFilters = $showCatalogFilters ?? in_array(request('focus'), ['products', 'categories'], true);
     $showProductCatalogExtras = \App\Support\EcomActivityFocus::showProductCatalogExtrasInDrawer(request());
+
+    $period = $period === '90d' ? '30d' : $period;
+    $activePreset = match ($period) {
+        'yesterday', '7d', '30d', 'custom' => $period,
+        default => '24h',
+    };
+    $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d'], true) ? $period : '24h';
 @endphp
 
 <div class="etd-page etd-page--activity" id="ecom-activity-page-content" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
@@ -28,6 +35,7 @@
         'baseQuery' => $baseQuery,
         'range' => $range,
         'routeName' => 'admin.ecom-activity.index',
+        'periodFiltersMobileOnly' => true,
         'drawerWide' => true,
         'includeVisitorTrust' => false,
         'includeSessionSearch' => \App\Support\EcomActivityFocus::showActivitySearchInDrawer(request()),
@@ -45,7 +53,31 @@
     ])
 
     <header class="etd-page-header">
-        <div class="etd-page-header-bar">
+        <div class="etd-page-header-bar"
+             x-data="{
+                presetKey: '{{ $activePreset }}',
+                basePreset: '{{ $basePreset }}',
+                dateFrom: '{{ $dateFrom }}',
+                dateTo: '{{ $dateTo }}',
+                toggleCustom() {
+                    this.presetKey = this.presetKey === 'custom' ? this.basePreset : 'custom';
+                },
+                applyCustom() {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('period', 'custom');
+                    if (this.dateFrom) {
+                        url.searchParams.set('date_from', this.dateFrom);
+                    } else {
+                        url.searchParams.delete('date_from');
+                    }
+                    if (this.dateTo) {
+                        url.searchParams.set('date_to', this.dateTo);
+                    } else {
+                        url.searchParams.delete('date_to');
+                    }
+                    window.location.href = url.toString();
+                }
+             }">
             <div class="etd-page-header-main">
                 <div class="etd-page-header-left">
                     @if (! empty($breadcrumbs))
@@ -74,6 +106,14 @@
                     @include('ecom_tracker.partials.dashboard-header-shortcuts', [
                         'showDashboardLink' => true,
                         'dashboardUrl' => $backUrl ?? null,
+                    ])
+                    @include('ecom_tracker.partials.dashboard-header-period-controls', [
+                        'baseQuery' => $baseQuery,
+                        'range' => $range,
+                        'period' => $period,
+                        'dateFrom' => $dateFrom,
+                        'dateTo' => $dateTo,
+                        'routeName' => 'admin.ecom-activity.index',
                     ])
                     @include('ecom_tracker.partials.header-reset-button', [
                         'url' => route('admin.ecom-activity.index'),

@@ -219,3 +219,11 @@ test('row delta map highlights top movers', function () {
         ->and($map['Mobile']['highlight'] ?? null)->toBe('up')
         ->and($map['Desktop']['delta_sentiment'] ?? null)->toBe('bad');
 });
+
+test('executive metric activity focus maps metrics to drill down focuses', function () {
+    expect(EcomTrackerCompareSupport::executiveMetricActivityFocus('sale_amount'))->toBe('conversion')
+        ->and(EcomTrackerCompareSupport::executiveMetricActivityFocus('sessions'))->toBe('audience')
+        ->and(EcomTrackerCompareSupport::executiveMetricActivityFocus('cart_drop'))->toBe('cart_abandonment')
+        ->and(EcomTrackerCompareSupport::executiveMetricActivityFocus('payments'))->toBe('payment_success')
+        ->and(EcomTrackerCompareSupport::executiveMetricActivityFocus('unknown'))->toBeNull();
+});

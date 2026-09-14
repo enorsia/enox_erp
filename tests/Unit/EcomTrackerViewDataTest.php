@@ -147,6 +147,40 @@ test('compare day navigation uses prefixed period query keys', function () {
         ->and($query['right_period'])->toBe('24h');
 });
 
+test('compare column drill down links include side filters and compare back url', function () {
+    $compareUrl = 'https://example.test/admin/ecom-tracker/dashboard/compare?left_period=7d&right_period=custom&right_date_from=2026-09-01&right_date_to=2026-09-07';
+
+    $leftPage = EcomTrackerViewData::forCompareColumn([
+        'period' => '7d',
+        'device_type' => 'mobile',
+    ], $compareUrl);
+
+    $rightPage = EcomTrackerViewData::forCompareColumn([
+        'period' => 'custom',
+        'date_from' => '2026-09-01',
+        'date_to' => '2026-09-07',
+        'device_type' => 'desktop',
+    ], $compareUrl);
+
+    $leftUrl = ($leftPage['activityFocusLink'])('audience');
+    $rightUrl = ($rightPage['activityFocusLink'])('conversion');
+
+    expect($leftUrl)->toContain('focus=audience')
+        ->and($leftUrl)->toContain('period=7d')
+        ->and($leftUrl)->toContain('device_type=mobile')
+        ->and($leftUrl)->toContain('back=');
+
+    parse_str((string) parse_url($leftUrl, PHP_URL_QUERY), $leftQuery);
+
+    expect(EcomTrackerViewData::resolveBackUrl($leftQuery['back'] ?? null))->toBe($compareUrl);
+
+    expect($rightUrl)->toContain('focus=conversion')
+        ->and($rightUrl)->toContain('period=custom')
+        ->and($rightUrl)->toContain('date_from=2026-09-01')
+        ->and($rightUrl)->toContain('date_to=2026-09-07')
+        ->and($rightUrl)->toContain('device_type=desktop');
+});
+
 test('compare page query strips unprefixed period keys', function () {
     $request = Request::create('/admin/ecom-tracker/dashboard/compare', 'GET', [
         'left_period' => 'yesterday',
