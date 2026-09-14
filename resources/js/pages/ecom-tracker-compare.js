@@ -15,6 +15,7 @@ import {
     bindTrendTooltipDismiss,
     createTrendTooltipHandler,
 } from '../lib/ecom-tracker-trend-tooltip';
+import { bindActivityScrollRestore } from '../lib/ecom-tracker-scroll-restore';
 import './ecom-tracker-filters';
 import '../lib/etd-tip-position';
 
@@ -743,3 +744,9 @@ window.addEventListener('beforeprint', prepareCompareForPrint);
 window.addEventListener('afterprint', restoreCompareAfterPrint);
 
 document.getElementById('etdComparePrintBtn')?.addEventListener('click', printEcomTrackerCompare);
+
+const compareRoot = document.getElementById('ecom-tracker-compare-content');
+
+if (compareRoot) {
+    bindActivityScrollRestore(compareRoot, { stabilizeRestore: true });
+}
