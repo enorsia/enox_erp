@@ -49,7 +49,6 @@ class EcomTrackerDashboardCompareController extends EcomTrackerAdminController
         $right['chart_payload'] = $this->service->chartPayload($right);
 
         $executiveRows = EcomTrackerCompareSupport::buildExecutiveSummary($left, $right);
-        $tableCompareDeltas = EcomTrackerCompareSupport::buildTableCompareDeltas($left, $right);
 
         $leftRaw = $left;
         $rightRaw = $right;
@@ -74,7 +73,6 @@ class EcomTrackerDashboardCompareController extends EcomTrackerAdminController
             'compareBaseQuery' => $this->compareBaseQuery($request),
             'pageQuery' => EcomTrackerViewData::comparePageQuery($request, $leftFilters, $rightFilters),
             'executiveRows' => $executiveRows,
-            'tableCompareDeltas' => $tableCompareDeltas,
         ]);
     }
 

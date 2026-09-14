@@ -15,11 +15,8 @@ final class EcomTrackerCompareSupport
         foreach ($metrics as $definition) {
             $valueA = self::resolveMetricValue($periodA, $definition);
             $valueB = self::resolveMetricValue($periodB, $definition);
-            $delta = self::computeDelta((float) $valueA, (float) $valueB);
-            $sentiment = self::deltaSentiment(
-                $delta['delta_direction'],
-                $definition['higher_is_good'],
-            );
+            $delta = self::computeDelta((float) $valueA, (float) $valueB, $definition['higher_is_good']);
+            $sentiment = self::deltaSentiment($delta['delta_direction'], true);
 
             $rows[] = array_merge($definition, [
                 'period_a_formatted' => self::formatMetricValue($valueA, $definition['format'], $periodA, $definition),
@@ -115,7 +112,7 @@ final class EcomTrackerCompareSupport
             ],
             [
                 'key' => 'payments',
-                'label' => 'Payments',
+                'label' => 'Payments Confirm',
                 'tip' => 'Share of all sessions that completed a payment.',
                 'format' => 'funnel_rate',
                 'higher_is_good' => true,
@@ -128,6 +125,7 @@ final class EcomTrackerCompareSupport
                 'tip' => 'Sessions that added to cart but did not begin checkout.',
                 'format' => 'funnel_rate',
                 'higher_is_good' => false,
+                'compare_value_key' => 'count',
                 'source' => 'funnel_dropoff',
                 'source_key' => 'cart_drop',
             ],
@@ -137,6 +135,7 @@ final class EcomTrackerCompareSupport
                 'tip' => 'Sessions that began checkout but did not proceed.',
                 'format' => 'funnel_rate',
                 'higher_is_good' => false,
+                'compare_value_key' => 'count',
                 'source' => 'funnel_dropoff',
                 'source_key' => 'checkout_drop',
             ],
@@ -146,6 +145,7 @@ final class EcomTrackerCompareSupport
                 'tip' => 'Sessions that proceeded to checkout but did not pay.',
                 'format' => 'funnel_rate',
                 'higher_is_good' => false,
+                'compare_value_key' => 'count',
                 'source' => 'funnel_dropoff',
                 'source_key' => 'proceed_drop',
             ],
@@ -171,8 +171,8 @@ final class EcomTrackerCompareSupport
             return 0.0;
         }
 
-        if (($definition['format'] ?? '') === 'funnel_rate') {
-            return (float) ($metric['value'] ?? 0);
+        if (($definition['compare_value_key'] ?? null) === 'count') {
+            return (float) ($metric['count'] ?? 0);
         }
 
         return (float) ($metric['value'] ?? 0);
@@ -205,7 +205,21 @@ final class EcomTrackerCompareSupport
     /**
      * @return array{delta_pct: ?float, delta_direction: ?string}
      */
-    private static function computeDelta(float $current, float $compare): array
+    public static function computeDelta(float $current, float $compare, bool $higherIsGood = true): array
+    {
+        $delta = self::computeRawDelta($current, $compare);
+
+        if (! $higherIsGood) {
+            return self::invertDeltaForDisplay($delta);
+        }
+
+        return $delta;
+    }
+
+    /**
+     * @return array{delta_pct: ?float, delta_direction: ?string}
+     */
+    private static function computeRawDelta(float $current, float $compare): array
     {
         if ($compare == 0.0) {
             if ($current > 0) {
@@ -225,6 +239,30 @@ final class EcomTrackerCompareSupport
             'delta_pct' => round($deltaPct, 1),
             'delta_direction' => $deltaPct > 0 ? 'up' : ($deltaPct < 0 ? 'down' : 'flat'),
         ];
+    }
+
+    /**
+     * @param  array{delta_pct: ?float, delta_direction: ?string}  $delta
+     * @return array{delta_pct: ?float, delta_direction: ?string}
+     */
+    private static function invertDeltaForDisplay(array $delta): array
+    {
+        if ($delta['delta_pct'] !== null) {
+            $delta['delta_pct'] = -$delta['delta_pct'];
+            $delta['delta_direction'] = $delta['delta_pct'] > 0
+                ? 'up'
+                : ($delta['delta_pct'] < 0 ? 'down' : 'flat');
+
+            return $delta;
+        }
+
+        $delta['delta_direction'] = match ($delta['delta_direction']) {
+            'up' => 'down',
+            'down' => 'up',
+            default => $delta['delta_direction'],
+        };
+
+        return $delta;
     }
 
     private static function deltaSentiment(?string $direction, bool $higherIsGood): string
@@ -293,8 +331,9 @@ final class EcomTrackerCompareSupport
             }
 
             $other = $otherGroup[$key] ?? [];
-            $current = (float) ($metric['value'] ?? 0);
-            $previous = (float) ($other['value'] ?? 0);
+            $lowerIsBetter = in_array($key, ['cart_drop', 'checkout_drop', 'proceed_drop'], true);
+            $current = (float) ($lowerIsBetter ? ($metric['count'] ?? 0) : ($metric['value'] ?? 0));
+            $previous = (float) ($lowerIsBetter ? ($other['count'] ?? 0) : ($other['value'] ?? 0));
 
             $group[$key] = array_merge($metric, [
                 'comparison' => self::buildMetricComparison(
@@ -302,6 +341,7 @@ final class EcomTrackerCompareSupport
                     $previous,
                     (string) ($other['formatted'] ?? number_format($previous)),
                     $otherPeriodLabel,
+                    ! $lowerIsBetter,
                 ),
             ]);
         }
@@ -317,14 +357,17 @@ final class EcomTrackerCompareSupport
         float $previous,
         string $previousFormatted,
         string $comparisonLabel,
+        bool $higherIsGood = true,
     ): array {
-        $delta = self::computeDelta($current, $previous);
+        $rawDelta = self::computeRawDelta($current, $previous);
+        $delta = $higherIsGood ? $rawDelta : self::invertDeltaForDisplay($rawDelta);
 
         return array_merge($delta, [
             'previous' => $previous,
             'previous_formatted' => $previousFormatted,
             'comparison_label' => $comparisonLabel,
-            'delta_label' => $delta['delta_pct'] === null && $delta['delta_direction'] === 'up' ? 'new' : null,
+            'delta_label' => $rawDelta['delta_pct'] === null && $rawDelta['delta_direction'] === 'up' ? 'new' : null,
+            'delta_sentiment' => self::deltaSentiment($delta['delta_direction'], true),
         ]);
     }
 
@@ -412,12 +455,12 @@ final class EcomTrackerCompareSupport
             $key = $keyFn($row);
             $leftValue = (float) ($row[$metricKey] ?? 0);
             $rightValue = (float) ($rightByKey[$key][$metricKey] ?? 0);
-            $delta = self::computeDelta($leftValue, $rightValue);
+            $delta = self::computeDelta($leftValue, $rightValue, $higherIsGood);
 
             $map[$key] = [
                 'delta_pct' => $delta['delta_pct'],
                 'delta_direction' => $delta['delta_direction'],
-                'delta_sentiment' => self::deltaSentiment($delta['delta_direction'], $higherIsGood),
+                'delta_sentiment' => self::deltaSentiment($delta['delta_direction'], true),
             ];
 
             if ($delta['delta_pct'] !== null) {

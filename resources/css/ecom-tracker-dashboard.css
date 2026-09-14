@@ -2092,15 +2092,18 @@ body.etd-filter-panel-open {
     opacity: 0.9;
 }
 
-.etd-kpi-compare__change--up {
+.etd-kpi-compare__change--up,
+.etd-kpi-compare__change--good {
     color: #059669;
 }
 
-.etd-kpi-compare__change--down {
+.etd-kpi-compare__change--down,
+.etd-kpi-compare__change--bad {
     color: #e11d48;
 }
 
-.etd-kpi-compare__change--flat {
+.etd-kpi-compare__change--flat,
+.etd-kpi-compare__change--neutral {
     color: #64748b;
 }
 
@@ -2113,15 +2116,18 @@ body.etd-filter-panel-open {
     font-weight: 500;
 }
 
-.dark .etd-kpi-compare__change--up {
+.dark .etd-kpi-compare__change--up,
+.dark .etd-kpi-compare__change--good {
     color: #34d399;
 }
 
-.dark .etd-kpi-compare__change--down {
+.dark .etd-kpi-compare__change--down,
+.dark .etd-kpi-compare__change--bad {
     color: #fb7185;
 }
 
-.dark .etd-kpi-compare__change--flat {
+.dark .etd-kpi-compare__change--flat,
+.dark .etd-kpi-compare__change--neutral {
     color: #94a3b8;
 }
 
@@ -3421,9 +3427,8 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 
 .etd-table--categories th.etd-col-category,
 .etd-table--categories td.etd-col-category {
-    width: 24%;
+    width: 28%;
     min-width: 7.5rem;
-    max-width: 10.5rem;
     white-space: normal;
     word-break: normal;
     overflow-wrap: break-word;
@@ -3432,6 +3437,10 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 }
 
 /* Category performance — Department / Category column (Merchandising section) */
+.etd-category-departments {
+    width: 100%;
+}
+
 .etd-category-departments .etd-table {
     table-layout: fixed;
     min-width: 30rem;
@@ -3439,9 +3448,8 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 
 .etd-category-departments th.etd-col-category,
 .etd-category-departments td.etd-col-category {
-    width: 24%;
+    width: 28%;
     min-width: 7.5rem;
-    max-width: 10.5rem;
     word-break: normal;
     overflow-wrap: break-word;
 }
@@ -4641,6 +4649,11 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric {
     width: 5rem;
     min-width: 4.75rem;
+}
+
+.etd-category-departments .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric:last-of-type,
+.etd-category-departments .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric:last-of-type {
+    width: auto;
 }
 
 .etd-catalog-variant-row td {
@@ -9142,9 +9155,9 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 }
 
 .etd-compare-page [data-compare-sync='categories'] .etd-category-departments .etd-table {
-    width: max-content;
-    min-width: 36rem;
-    table-layout: auto;
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
 }
 
 .etd-compare-page [data-compare-sync='categories'] .etd-category-departments th.etd-col-category,
@@ -9168,9 +9181,14 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 
 .etd-compare-page [data-compare-sync='categories'] .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric,
 .etd-compare-page [data-compare-sync='categories'] .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric {
-    width: auto;
+    width: 4.5rem;
     min-width: 3.75rem;
     white-space: nowrap;
+}
+
+.etd-compare-page [data-compare-sync='categories'] .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric:last-of-type,
+.etd-compare-page [data-compare-sync='categories'] .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric:last-of-type {
+    width: auto;
 }
 
 .etd-compare-page [data-compare-sync='traffic'] .etd-table-scroll--traffic.etd-table-scroll--fixed {

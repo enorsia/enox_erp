@@ -16,6 +16,7 @@
             $deltaPct = $comparison['delta_pct'] ?? null;
             $deltaDirection = $comparison['delta_direction'] ?? null;
             $deltaLabel = $comparison['delta_label'] ?? null;
+            $deltaSentiment = $comparison['delta_sentiment'] ?? null;
             $comparisonLabel = $comparison['comparison_label'] ?? 'previous period';
             $previousFormatted = $comparison['previous_formatted'] ?? '0';
             $hasDelta = $deltaPct !== null && is_numeric($deltaPct);
@@ -28,9 +29,12 @@
                 @if ($hasDelta)
                     <span @class([
                         'etd-kpi-compare__change',
-                        'etd-kpi-compare__change--up' => $deltaDirection === 'up',
-                        'etd-kpi-compare__change--down' => $deltaDirection === 'down',
-                        'etd-kpi-compare__change--flat' => $deltaDirection !== 'up' && $deltaDirection !== 'down',
+                        'etd-kpi-compare__change--good' => $deltaSentiment === 'good',
+                        'etd-kpi-compare__change--bad' => $deltaSentiment === 'bad',
+                        'etd-kpi-compare__change--neutral' => $deltaSentiment === 'neutral',
+                        'etd-kpi-compare__change--up' => $deltaSentiment === null && $deltaDirection === 'up',
+                        'etd-kpi-compare__change--down' => $deltaSentiment === null && $deltaDirection === 'down',
+                        'etd-kpi-compare__change--flat' => $deltaSentiment === null && $deltaDirection !== 'up' && $deltaDirection !== 'down',
                     ])>
                         <span class="etd-kpi-compare__arrow" aria-hidden="true">
                             @if ($deltaDirection === 'up') ↑ @elseif ($deltaDirection === 'down') ↓ @else → @endif
@@ -38,7 +42,13 @@
                         <span class="etd-kpi-compare__pct">{{ ($deltaPct > 0 ? '+' : '') . number_format($deltaPct, 1) }}%</span>
                     </span>
                 @elseif ($deltaLabel === 'new')
-                    <span class="etd-kpi-compare__change etd-kpi-compare__change--new">New</span>
+                    <span @class([
+                        'etd-kpi-compare__change',
+                        'etd-kpi-compare__change--new' => $deltaSentiment === null,
+                        'etd-kpi-compare__change--good' => $deltaSentiment === 'good',
+                        'etd-kpi-compare__change--bad' => $deltaSentiment === 'bad',
+                        'etd-kpi-compare__change--neutral' => $deltaSentiment === 'neutral',
+                    ])>New</span>
                 @elseif ($deltaDirection === 'up' && $deltaPct === null && $hasBaseline)
                     <span class="etd-kpi-compare__change etd-kpi-compare__change--up" aria-label="Up from zero in previous period">
                         <span class="etd-kpi-compare__arrow" aria-hidden="true">↑</span>

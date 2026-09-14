@@ -182,9 +182,9 @@ test('executive summary marks revenue increase as improved sentiment', function 
         ],
         'funnel_dropoff' => [
             'payments' => ['label' => 'Payments', 'value' => 5, 'formatted' => '5.0% / 5'],
-            'cart_drop' => ['label' => 'Cart drop', 'value' => 10, 'formatted' => '10.0% / 10'],
-            'checkout_drop' => ['label' => 'Checkout drop', 'value' => 8, 'formatted' => '8.0% / 8'],
-            'proceed_drop' => ['label' => 'Proceed drop', 'value' => 6, 'formatted' => '6.0% / 6'],
+            'cart_drop' => ['label' => 'Cart drop', 'value' => 10, 'count' => 10, 'formatted' => '10.0% / 10'],
+            'checkout_drop' => ['label' => 'Checkout drop', 'value' => 8, 'count' => 8, 'formatted' => '8.0% / 8'],
+            'proceed_drop' => ['label' => 'Proceed drop', 'value' => 6, 'count' => 6, 'formatted' => '6.0% / 6'],
         ],
     ];
 
@@ -198,9 +198,9 @@ test('executive summary marks revenue increase as improved sentiment', function 
         ],
         'funnel_dropoff' => [
             'payments' => ['label' => 'Payments', 'value' => 3, 'formatted' => '3.0% / 3'],
-            'cart_drop' => ['label' => 'Cart drop', 'value' => 15, 'formatted' => '15.0% / 15'],
-            'checkout_drop' => ['label' => 'Checkout drop', 'value' => 12, 'formatted' => '12.0% / 12'],
-            'proceed_drop' => ['label' => 'Proceed drop', 'value' => 9, 'formatted' => '9.0% / 9'],
+            'cart_drop' => ['label' => 'Cart drop', 'value' => 15, 'count' => 15, 'formatted' => '15.0% / 15'],
+            'checkout_drop' => ['label' => 'Checkout drop', 'value' => 12, 'count' => 12, 'formatted' => '12.0% / 12'],
+            'proceed_drop' => ['label' => 'Proceed drop', 'value' => 9, 'count' => 9, 'formatted' => '9.0% / 9'],
         ],
     ];
 
@@ -209,7 +209,9 @@ test('executive summary marks revenue increase as improved sentiment', function 
     $cartDrop = collect($rows)->firstWhere('key', 'cart_drop');
 
     expect($revenue['delta_sentiment'] ?? null)->toBe('good');
-    expect($cartDrop['delta_sentiment'] ?? null)->toBe('good');
+    expect($cartDrop['delta_pct'] ?? null)->toBe(33.3)
+        ->and($cartDrop['delta_direction'] ?? null)->toBe('up')
+        ->and($cartDrop['delta_sentiment'] ?? null)->toBe('good');
 });
 
 test('compare back url helper returns dashboard when back param is set', function () {

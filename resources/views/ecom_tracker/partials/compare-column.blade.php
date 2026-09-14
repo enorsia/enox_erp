@@ -4,7 +4,6 @@
     'filters' => [],
     'otherFilters' => [],
     'backUrl' => null,
-    'tableCompareDeltas' => [],
     'chartCanvasId' => 'etdTrendChartLeft',
     'chartScrollId' => 'etdTrendChartScrollLeft',
     'chartWrapId' => 'etdTrendChartWrapLeft',
@@ -44,12 +43,6 @@
     $unique = (int) (($d['new_returning']['unique'] ?? $d['new_returning']['new'] ?? 0));
     $returning = (int) ($d['new_returning']['returning'] ?? 0);
     $medianDuration = $d['duration_distribution']['median_label'] ?? null;
-    $showTableDeltas = $side === 'left' && ! empty($tableCompareDeltas);
-    $deviceDeltas = $tableCompareDeltas['devices'] ?? [];
-    $browserDeltas = $tableCompareDeltas['browsers'] ?? [];
-    $trafficDeltas = $tableCompareDeltas['traffic'] ?? [];
-    $productDeltas = $tableCompareDeltas['products'] ?? [];
-    $categoryDeltas = $tableCompareDeltas['categories'] ?? [];
 @endphp
 
 <div class="etd-compare-column {{ $modifier }}"
@@ -235,8 +228,6 @@
                     'departments' => $d['category_departments'] ?? [],
                     'showCurrency' => true,
                     'readOnly' => true,
-                    'showCompareDelta' => $showTableDeltas,
-                    'compareDeltas' => $categoryDeltas,
                 ])
             </div>
         </div>
@@ -284,22 +275,11 @@
                                 ])
                             </th>
                             <th class="etd-num etd-col-metric">Sale</th>
-                            @if ($showTableDeltas)
-                                <th class="etd-num etd-col-metric etd-compare-table-delta-head">Δ vs B</th>
-                            @endif
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($d['products'] ?? [] as $product)
-                            @php
-                                $productDelta = $productDeltas[$product['name'] ?? ''] ?? null;
-                                $productRowClass = match ($productDelta['highlight'] ?? null) {
-                                    'up' => 'etd-compare-row--up',
-                                    'down' => 'etd-compare-row--down',
-                                    default => '',
-                                };
-                            @endphp
-                            <tr @class([$productRowClass])>
+                            <tr>
                                 <td class="etd-col-product">{{ $product['name'] }}</td>
                                 <td class="etd-num etd-col-metric">{{ number_format($product['views']) }}</td>
                                 <td class="etd-num etd-col-metric">{{ number_format($product['adds']) }}</td>
@@ -309,12 +289,9 @@
                                     £{{ number_format($product['revenue'], 2) }}
                                     <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] }}%"></div></div>
                                 </td>
-                                @if ($showTableDeltas)
-                                    @include('ecom_tracker.partials.compare-table-delta-cell', ['delta' => $productDelta])
-                                @endif
                             </tr>
                         @empty
-                            <tr><td colspan="{{ $showTableDeltas ? 7 : 6 }}" class="text-slate-400">No product activity in this period.</td></tr>
+                            <tr><td colspan="6" class="text-slate-400">No product activity in this period.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -336,9 +313,6 @@
             @include('ecom_tracker.partials.device-browser-breakdown', [
                 'devices' => $d['devices'] ?? [],
                 'readOnly' => true,
-                'showCompareDelta' => $showTableDeltas,
-                'deviceDeltas' => $deviceDeltas,
-                'browserDeltas' => $browserDeltas,
             ])
         </div>
 
@@ -349,8 +323,6 @@
             @include('ecom_tracker.partials.traffic-sources-table', [
                 'rows' => $d['traffic_sources'] ?? [],
                 'readOnly' => true,
-                'showCompareDelta' => $showTableDeltas,
-                'compareDeltas' => $trafficDeltas,
             ])
         </div>
 

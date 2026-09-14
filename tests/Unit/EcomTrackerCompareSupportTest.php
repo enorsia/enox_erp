@@ -95,6 +95,113 @@ test('enrich dashboard with cross comparison adds kpi deltas', function () {
         ->and($sessions['comparison']['comparison_label'] ?? null)->toBe('Yesterday');
 });
 
+test('drop metric delta uses session count and inverts improvement to positive change', function () {
+    $left = [
+        'kpis' => [],
+        'sale_conversion' => [],
+        'funnel_dropoff' => [
+            'cart_drop' => [
+                'label' => 'Cart drop',
+                'value' => 0.0,
+                'count' => 0,
+                'formatted' => '0.0% / 0',
+            ],
+        ],
+    ];
+
+    $right = [
+        'kpis' => [],
+        'sale_conversion' => [],
+        'funnel_dropoff' => [
+            'cart_drop' => [
+                'label' => 'Cart drop',
+                'value' => 40.0,
+                'count' => 2,
+                'formatted' => '40.0% / 2',
+            ],
+        ],
+    ];
+
+    $rows = EcomTrackerCompareSupport::buildExecutiveSummary($left, $right);
+    $cartDrop = collect($rows)->firstWhere('key', 'cart_drop');
+
+    expect($cartDrop['delta_pct'] ?? null)->toBe(100.0)
+        ->and($cartDrop['delta_direction'] ?? null)->toBe('up')
+        ->and($cartDrop['delta_sentiment'] ?? null)->toBe('good');
+});
+
+test('drop metric delta marks higher counts as negative change', function () {
+    $left = [
+        'kpis' => [],
+        'sale_conversion' => [],
+        'funnel_dropoff' => [
+            'checkout_drop' => [
+                'label' => 'Checkout drop',
+                'value' => 40.0,
+                'count' => 4,
+                'formatted' => '40.0% / 4',
+            ],
+        ],
+    ];
+
+    $right = [
+        'kpis' => [],
+        'sale_conversion' => [],
+        'funnel_dropoff' => [
+            'checkout_drop' => [
+                'label' => 'Checkout drop',
+                'value' => 20.0,
+                'count' => 2,
+                'formatted' => '20.0% / 2',
+            ],
+        ],
+    ];
+
+    $rows = EcomTrackerCompareSupport::buildExecutiveSummary($left, $right);
+    $checkoutDrop = collect($rows)->firstWhere('key', 'checkout_drop');
+
+    expect($checkoutDrop['delta_pct'] ?? null)->toBe(-100.0)
+        ->and($checkoutDrop['delta_direction'] ?? null)->toBe('down')
+        ->and($checkoutDrop['delta_sentiment'] ?? null)->toBe('bad');
+});
+
+test('enrich dashboard applies inverted drop count comparison to funnel cards', function () {
+    $left = [
+        'range' => ['label' => 'Today'],
+        'kpis' => [],
+        'sale_conversion' => [],
+        'funnel_dropoff' => [
+            'proceed_drop' => [
+                'label' => 'Proceed drop',
+                'value' => 0.0,
+                'count' => 0,
+                'formatted' => '0.0% / 0',
+            ],
+        ],
+    ];
+
+    $right = [
+        'range' => ['label' => 'Yesterday'],
+        'kpis' => [],
+        'sale_conversion' => [],
+        'funnel_dropoff' => [
+            'proceed_drop' => [
+                'label' => 'Proceed drop',
+                'value' => 25.0,
+                'count' => 1,
+                'formatted' => '25.0% / 1',
+            ],
+        ],
+    ];
+
+    $enriched = EcomTrackerCompareSupport::enrichDashboardWithCrossComparison($left, $right, 'Yesterday');
+    $comparison = $enriched['funnel_dropoff']['proceed_drop']['comparison'] ?? [];
+
+    expect($comparison['delta_pct'] ?? null)->toBe(100.0)
+        ->and($comparison['delta_direction'] ?? null)->toBe('up')
+        ->and($comparison['delta_sentiment'] ?? null)->toBe('good');
+});
+
 test('row delta map highlights top movers', function () {
     $left = [
         ['label' => 'Mobile', 'sessions' => 300],

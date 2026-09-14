@@ -11,6 +11,7 @@ use App\Support\CommerceLineItemQuery;
 use App\Support\CommerceReadSupport;
 use App\Support\EcomActivityFocus;
 use App\Support\EcomActivityKeywordSearch;
+use App\Support\EcomTrackerCompareSupport;
 use App\Support\EcomTrackerViewData;
 use App\Support\SessionDurationBuckets;
 use App\Support\SessionTrafficAttribution;
@@ -2671,9 +2672,16 @@ class EcomTrackerDashboardService
         string $tip,
         string $comparisonLabel,
     ): array {
-        $card = $this->kpiCardWithComparison($label, $currentRate, $previousRate, 'percent', $tip, $comparisonLabel);
+        $card = $this->kpiCard($label, $currentRate, 'percent', $tip);
+        $card['count'] = $currentCount;
         $card['formatted'] = $this->formatFunnelDropValue($currentRate, $currentCount);
-        $card['comparison']['previous_formatted'] = $this->formatFunnelDropValue($previousRate, $previousCount);
+        $card['comparison'] = EcomTrackerCompareSupport::buildMetricComparison(
+            (float) $currentCount,
+            (float) $previousCount,
+            $this->formatFunnelDropValue($previousRate, $previousCount),
+            $comparisonLabel,
+            false,
+        );
 
         return $card;
     }
@@ -2697,6 +2705,7 @@ class EcomTrackerDashboardService
             $comparisonLabel,
         );
         $card['formatted'] = $this->formatFunnelDropValue($currentRate, $currentCount);
+        $card['count'] = $currentCount;
         $card['comparison']['previous_formatted'] = $this->formatFunnelDropValue($previousRate, $previousCount);
         $card['value_class'] = 'etd-kpi-value--success';
 
@@ -2753,14 +2762,14 @@ class EcomTrackerDashboardService
         float|int $previous,
         string $format,
         string $comparisonLabel,
+        bool $higherIsGood = true,
     ): array {
-        return array_merge(
-            $this->computePeriodDelta((float) $current, (float) $previous),
-            [
-                'previous' => $previous,
-                'previous_formatted' => $this->formatKpiValue($previous, $format),
-                'comparison_label' => $comparisonLabel,
-            ],
+        return EcomTrackerCompareSupport::buildMetricComparison(
+            (float) $current,
+            (float) $previous,
+            $this->formatKpiValue($previous, $format),
+            $comparisonLabel,
+            $higherIsGood,
         );
     }
 
