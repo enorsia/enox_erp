@@ -1,5 +1,6 @@
 @php
     use App\Support\EcomActivityFocus;
+    use App\Support\TrackerMultiSelectFilter;
 
     $includeDateRange = $includeDateRange ?? true;
     $filterOptionCounts = $filterOptionCounts ?? [];
@@ -7,11 +8,16 @@
     $includeSessionSearch = $includeSessionSearch ?? true;
     $categoryFilterOptions = $categoryFilterOptions ?? ['departments' => [], 'categories_by_department' => []];
     $funnelOptions = EcomActivityFocus::sidebarFunnelFilterOptions();
-    $selectedFunnel = EcomActivityFocus::drawerFunnelSelectedValue(request());
+    $selectedFunnels = EcomActivityFocus::drawerFunnelSelectedValues(request());
+    $selectedDevices = TrackerMultiSelectFilter::allowedValues(request('device_type'), ['desktop', 'mobile', 'tablet']);
+    $selectedDurations = TrackerMultiSelectFilter::requestValues(request(), 'duration_bucket');
+    $selectedSources = $utmFilterState['selected_sources'] ?? TrackerMultiSelectFilter::requestValues(request(), 'utm_source');
+    $selectedMediums = $utmFilterState['selected_mediums'] ?? TrackerMultiSelectFilter::requestValues(request(), 'utm_medium');
     $countLabel = static function (string $value, string $label, array $counts): string {
         return isset($counts[$value]) ? "{$label} ({$counts[$value]})" : $label;
     };
     $tomSelectClass = 'tom-select etd-tom-select w-full';
+    $isSelected = static fn (array $selected, string $value): bool => in_array($value, $selected, true);
 @endphp
 
 <div class="etd-activity-filter-sections">
@@ -66,9 +72,10 @@
         <div class="etd-activity-filter-grid">
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">Funnel stage</span>
-                <select name="funnel" class="{{ $tomSelectClass }}" data-placeholder="All">
+                <select name="funnel[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
                     @foreach ($funnelOptions as $value => $label)
-                        <option value="{{ $value }}" @selected($selectedFunnel === $value)>{{ $label }}</option>
+                        @continue($value === '')
+                        <option value="{{ $value }}" @selected($isSelected($selectedFunnels, $value))>{{ $label }}</option>
                     @endforeach
                 </select>
             </label>
@@ -88,10 +95,9 @@
         <div class="etd-activity-filter-grid">
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">Device</span>
-                <select name="device_type" class="{{ $tomSelectClass }}" data-placeholder="All">
-                    <option value="" @selected(request('device_type', '') === '')>All</option>
+                <select name="device_type[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
                     @foreach (['desktop', 'mobile', 'tablet'] as $device)
-                        <option value="{{ $device }}" @selected(request('device_type') === $device)>{{ $countLabel($device, ucfirst($device), $filterOptionCounts['device_type'] ?? []) }}</option>
+                        <option value="{{ $device }}" @selected($isSelected($selectedDevices, $device))>{{ $countLabel($device, ucfirst($device), $filterOptionCounts['device_type'] ?? []) }}</option>
                     @endforeach
                 </select>
             </label>
@@ -105,9 +111,10 @@
             </label>
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">Duration</span>
-                <select name="duration_bucket" class="{{ $tomSelectClass }}" data-placeholder="All">
+                <select name="duration_bucket[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
                     @foreach (\App\Support\SessionDurationBuckets::optionLabels() as $value => $label)
-                        <option value="{{ $value }}" @selected((string) request('duration_bucket', '') === (string) $value)>{{ $label }}</option>
+                        @continue($value === '')
+                        <option value="{{ $value }}" @selected($isSelected($selectedDurations, (string) $value))>{{ $label }}</option>
                     @endforeach
                 </select>
             </label>
@@ -119,25 +126,21 @@
         @php
             $sources = $utmFilterState['sources'] ?? [];
             $mediums = $utmFilterState['mediums'] ?? [];
-            $selectedSource = $utmFilterState['selected_source'] ?? '';
-            $selectedMedium = $utmFilterState['selected_medium'] ?? '';
         @endphp
         <div class="etd-activity-filter-grid">
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">UTM source</span>
-                <select name="utm_source" class="{{ $tomSelectClass }}" data-placeholder="All">
-                    <option value="" @selected($selectedSource === '')>All</option>
+                <select name="utm_source[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
                     @foreach ($sources as $value => $label)
-                        <option value="{{ $value }}" @selected($selectedSource === $value)>{{ $label }}</option>
+                        <option value="{{ $value }}" @selected($isSelected($selectedSources, $value))>{{ $label }}</option>
                     @endforeach
                 </select>
             </label>
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">UTM medium</span>
-                <select name="utm_medium" class="{{ $tomSelectClass }}" data-placeholder="All">
-                    <option value="" @selected($selectedMedium === '')>All</option>
+                <select name="utm_medium[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
                     @foreach ($mediums as $value => $label)
-                        <option value="{{ $value }}" @selected($selectedMedium === $value)>{{ $label }}</option>
+                        <option value="{{ $value }}" @selected($isSelected($selectedMediums, $value))>{{ $label }}</option>
                     @endforeach
                 </select>
             </label>

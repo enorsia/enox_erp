@@ -137,6 +137,12 @@ window.initTomSelectElements = function (root) {
             maxOptions: element.dataset.maxOptions ? Number(element.dataset.maxOptions) : 50,
         };
 
+        if (element.multiple) {
+            options.plugins = ['remove_button'];
+            options.persist = false;
+            options.hidePlaceholder = true;
+        }
+
         if (element.dataset.dropdownParent === 'body') {
             options.dropdownParent = 'body';
         }
@@ -155,6 +161,11 @@ window.refreshTomSelectIn = function (root) {
     const scope = root && root.querySelectorAll ? root : document;
     scope.querySelectorAll('.tom-select').forEach((element) => {
         if (element.tomselect) {
+            if (element.multiple) {
+                element.tomselect.settings.hidePlaceholder = true;
+                element.tomselect.inputState();
+            }
+
             element.tomselect.sync();
         }
     });

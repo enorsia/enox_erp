@@ -8,13 +8,13 @@
 ])
 
 @php
+    use App\Support\EcomActivityCommerceEvents;
     use App\Support\TrackerTime;
     use App\Support\EcomTrackerViewData;
 
     $focusColspan = count($focusColumns);
     $showCatalogFilterColumn = request()->filled('department') || request()->filled('category');
     $totalCols = 8 + $focusColspan + ($showCatalogFilterColumn ? 1 : 0);
-    $isWideTable = $focusColspan > 0 || $showCatalogFilterColumn;
 @endphp
 
 <div class="etd-activity-table-shell" data-etd-activity-table-shell>
@@ -27,10 +27,12 @@
     </div>
 
     <div
-        class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity{{ $isWideTable ? ' etd-table-scroll--activity-wide' : '' }}"
+        class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity etd-table-scroll--activity-wide"
         style="--etd-activity-focus-cols: {{ $focusColspan }}"
         data-etd-activity-table-viewport
         x-data="{ openEvent: null }"
+        @keydown.escape.window="openEvent = null"
+        @click.window="if (openEvent && ! $event.target.closest('.etd-commerce-event-detail') && ! $event.target.closest('.etd-commerce-event-trigger')) openEvent = null"
     >
         <table class="etd-table etd-table--activity w-full">
         <thead>
@@ -105,6 +107,7 @@
                 @php
                     $metrics = $rowMetrics[$session->session_id] ?? [];
                     $commerceEvents = $metrics['commerce_events'] ?? [];
+                    $expandableCommerceEvents = EcomActivityCommerceEvents::expandableEvents($commerceEvents);
                     $formatMetric = function (string $key, mixed $default = '—') use ($metrics) {
                         $value = $metrics[$key] ?? $default;
 
@@ -157,7 +160,7 @@
                         @endcan
                     </td>
                 </tr>
-                @foreach ($commerceEvents as $event)
+                @foreach ($expandableCommerceEvents as $event)
                     @php $eventKey = $session->session_id.':'.($event['id'] ?? $loop->index); @endphp
                     <tr
                         class="etd-commerce-event-row"

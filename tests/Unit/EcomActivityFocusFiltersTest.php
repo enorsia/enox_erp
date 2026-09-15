@@ -163,6 +163,9 @@ test('category performance summary metrics use shared funnel formatter', functio
     $dashboard = Mockery::mock(EcomTrackerDashboardService::class);
     $dashboard->shouldReceive('categoryPerformanceForName')
         ->once()
+        ->withArgs(function ($from, $to, string $categoryName) {
+            return $categoryName === 'Tops and T-Shirts';
+        })
         ->andReturn([
             'views' => 5,
             'adds' => 2,
@@ -200,6 +203,100 @@ test('category performance summary metrics use shared funnel formatter', functio
     expect($values)->not->toHaveKey('Views')
         ->and($values['Cart abandoned'])->toBe('1')
         ->and($values['Sale'])->toBe('£45.00');
+});
+
+test('category performance summary metrics aggregate multiple selected categories', function () {
+    $request = Request::create('/', 'GET', [
+        'category' => ['Chinos', 'Co-ords'],
+        'department' => 'Men',
+    ]);
+
+    $dashboard = Mockery::mock(EcomTrackerDashboardService::class);
+    $dashboard->shouldReceive('categoryPerformanceForName')
+        ->twice()
+        ->andReturnUsing(function ($from, $to, string $categoryName) {
+            return match ($categoryName) {
+                'Chinos' => ['views' => 4, 'adds' => 2, 'proceed_checkouts' => 1],
+                'Co-ords' => ['views' => 3, 'adds' => 1, 'proceed_checkouts' => 0],
+                default => null,
+            };
+        });
+    $dashboard->shouldReceive('productCatalogSessionIds')
+        ->once()
+        ->andReturn(collect(['session-a', 'session-b']));
+    $dashboard->shouldReceive('categoryCatalogCommerceTotalsForSessions')
+        ->once()
+        ->andReturn([
+            'revenue' => 20.0,
+            'qty' => 2,
+            'purchases' => 1,
+        ]);
+
+    app()->instance(EcomTrackerDashboardService::class, $dashboard);
+
+    $method = new ReflectionMethod(EcomActivityFocus::class, 'categoryPerformanceSummaryMetrics');
+    $method->setAccessible(true);
+
+    $metrics = $method->invoke(
+        null,
+        $request,
+        Carbon::parse('2026-01-01'),
+        Carbon::parse('2026-01-31'),
+        'all',
+    );
+
+    $values = collect($metrics)->pluck('value', 'label')->all();
+
+    expect($values['Adds'])->toBe('3')
+        ->and($values['Proceed'])->toBe('1')
+        ->and($values['Cart abandoned'])->toBe('2')
+        ->and($values['Sale'])->toBe('£20.00');
+});
+
+test('activity list context keeps separate full category drill-down labels', function () {
+    $request = Request::create('/', 'GET', [
+        'category' => ['Chinos', 'Co-ords'],
+        'department' => 'Men',
+        'device_type' => 'mobile',
+    ]);
+
+    $dashboard = Mockery::mock(EcomTrackerDashboardService::class);
+    $dashboard->shouldReceive('productCatalogEventScenarioOptions')->andReturn([]);
+    $dashboard->shouldReceive('productCatalogActivityFilterOptions')->andReturn([]);
+    $dashboard->shouldReceive('categoryPerformanceForName')->andReturn([
+        'views' => 1,
+        'adds' => 0,
+        'proceed_checkouts' => 0,
+    ]);
+    $dashboard->shouldReceive('productCatalogSessionIds')->andReturn(collect([]));
+    $dashboard->shouldReceive('categoryCatalogCommerceTotalsForSessions')->andReturn([
+        'revenue' => 0.0,
+        'qty' => 0,
+        'purchases' => 0,
+    ]);
+
+    app()->instance(EcomTrackerDashboardService::class, $dashboard);
+
+    $context = EcomActivityFocus::activityListContext(
+        $request,
+        'All time',
+        6,
+        [],
+        Carbon::parse('2026-01-01'),
+        Carbon::parse('2026-01-31'),
+        'all',
+    );
+
+    $categoryCriteria = collect($context['criteria'] ?? [])
+        ->filter(fn (array $criterion) => ($criterion['label'] ?? '') === 'Category')
+        ->pluck('value')
+        ->all();
+
+    $chipLabels = collect($context['filter_chips'] ?? [])->pluck('label')->all();
+
+    expect($categoryCriteria)->toBe(['Men -> Chinos', 'Men -> Co-ords'])
+        ->and($chipLabels)->toContain('Category: Men -> Chinos', 'Category: Men -> Co-ords', 'Device: Mobile')
+        ->and(collect($context['filter_chips'] ?? [])->every(fn (array $chip) => filled($chip['remove_url'] ?? null)))->toBeTrue();
 });
 
 test('resolve filter summary focus infers devices and traffic from sidebar filters', function () {
@@ -376,7 +473,8 @@ test('drawer preserve params keep drill-down focus but expose visitor type in dr
 
     $preserved = EcomActivityFocus::drawerPreserveQueryParams($request);
 
-    expect($preserved)->toHaveKeys(['focus', 'period'])
+    expect($preserved)->toHaveKeys(['focus'])
+        ->and($preserved)->not->toHaveKey('period')
         ->and($preserved)->not->toHaveKey('visitor_type');
 });
 
@@ -510,6 +608,30 @@ test('abandonment summary items in cart use matched funnel metrics', function ()
         ->and($values['Items in cart'])->toBe('7');
 });
 
+test('drawer funnel filter values support multiple selections and skip duplicate focus', function () {
+    $request = Request::create('/', 'GET', [
+        'focus' => 'cart_abandonment',
+        'funnel' => ['cart_abandonment', 'payment_success'],
+    ]);
+
+    expect(EcomActivityFocus::drawerFunnelSelectedValues($request))
+        ->toBe(['cart_abandonment', 'payment_success'])
+        ->and(EcomActivityFocus::drawerFunnelFilterValues($request))
+        ->toBe(['payment_success'])
+        ->and(EcomActivityFocus::shouldApplyDrawerFunnelFilter($request))->toBeTrue()
+        ->and(EcomActivityFocus::activeFilterCount($request))->toBe(2);
+});
+
+test('active filter count sums multiple sidebar values', function () {
+    $request = Request::create('/', 'GET', [
+        'device_type' => ['mobile', 'desktop'],
+        'duration_bucket' => ['0-1', '1-3'],
+        'utm_source' => ['google', 'facebook'],
+    ]);
+
+    expect(EcomActivityFocus::activeFilterCount($request))->toBe(6);
+});
+
 test('catalog filters reconcile mismatched department and category combinations', function () {
     $request = Request::create('/', 'GET', [
         'department' => 'Women',
@@ -556,4 +678,35 @@ test('categories focus keeps top category column when only department filter is 
     $columns = EcomActivityFocus::tableColumns('categories', $request);
 
     expect(collect($columns)->pluck('key')->all())->toBe(['top_category', 'purchases']);
+});
+
+test('export context columns add payment totals when drawer funnel is payment success', function () {
+    $request = Request::create('/', 'GET', [
+        'period' => '30d',
+        'funnel' => ['payment_success'],
+    ]);
+
+    expect(EcomActivityFocus::resolveFunnelMetricsFocus($request))->toBe('payment_success')
+        ->and(EcomActivityFocus::shouldAttachPaymentMetrics(null, $request))->toBeTrue()
+        ->and(collect(EcomActivityFocus::exportContextColumns(null, $request))->pluck('key')->all())
+        ->toBe(['order_value'])
+        ->and(EcomActivityFocus::exportFilterSummary($request))
+        ->toContain('Funnel: Payment success');
+});
+
+test('export context columns add abandonment metrics for cart abandonment filter', function () {
+    $request = Request::create('/', 'GET', [
+        'funnel' => ['cart_abandonment'],
+    ]);
+
+    expect(collect(EcomActivityFocus::exportContextColumns(null, $request))->pluck('key')->all())
+        ->toBe(['cart_qty', 'cart_value', 'abandoned_at']);
+});
+
+test('resolve filter summary focus uses single drawer funnel key', function () {
+    $request = Request::create('/', 'GET', [
+        'funnel' => ['payment_success'],
+    ]);
+
+    expect(EcomActivityFocus::resolveFilterSummaryFocus($request))->toBe('payment_success');
 });

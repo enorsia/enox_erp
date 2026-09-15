@@ -296,6 +296,54 @@ final class CommerceFunnelQuery
         Carbon $from,
         Carbon $to,
     ): void {
+        self::applySidebarFunnelKeys($query, [$funnelKey], $from, $to);
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     * @param  list<string>  $funnelKeys
+     */
+    public static function applySidebarFunnelKeys(
+        Builder $query,
+        array $funnelKeys,
+        Carbon $from,
+        Carbon $to,
+    ): void {
+        $keys = array_values(array_filter(
+            TrackerMultiSelectFilter::values($funnelKeys),
+            static fn (string $key) => in_array($key, EcomActivityFocus::SIDEBAR_FUNNEL_FILTER_KEYS, true),
+        ));
+
+        if ($keys === []) {
+            return;
+        }
+
+        if (count($keys) === 1) {
+            self::applySingleSidebarFunnelKey($query, $keys[0], $from, $to);
+
+            return;
+        }
+
+        $query->where(function (Builder $inner) use ($keys, $from, $to) {
+            foreach ($keys as $index => $funnelKey) {
+                $method = $index === 0 ? 'where' : 'orWhere';
+
+                $inner->{$method}(function (Builder $branch) use ($funnelKey, $from, $to) {
+                    self::applySingleSidebarFunnelKey($branch, $funnelKey, $from, $to);
+                });
+            }
+        });
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function applySingleSidebarFunnelKey(
+        Builder $query,
+        string $funnelKey,
+        Carbon $from,
+        Carbon $to,
+    ): void {
         match ($funnelKey) {
             'cart_abandonment' => self::applyAbandonedSessionFilter($query, 'add_to_cart', 'begin_checkout', $from, $to),
             'begin_checkout_abandonment' => self::applyAbandonedSessionFilter($query, 'begin_checkout', 'proceed_checkout', $from, $to),

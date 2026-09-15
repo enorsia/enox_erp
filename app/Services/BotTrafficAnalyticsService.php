@@ -6,6 +6,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\TrackerUtmFilter;
 use App\Support\CommerceHasOrderFilter;
 use App\Support\EcomTrackerLogger;
+use App\Support\TrackerMultiSelectFilter;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -261,7 +262,14 @@ class BotTrafficAnalyticsService
         }
 
         if (! empty($filters['device_type'])) {
-            $query->where('device_type', $filters['device_type']);
+            $devices = TrackerMultiSelectFilter::allowedValues(
+                $filters['device_type'],
+                ['desktop', 'mobile', 'tablet'],
+            );
+
+            if ($devices !== []) {
+                $query->whereIn('device_type', $devices);
+            }
         }
 
         if (array_key_exists('logged_in', $filters) && $filters['logged_in'] !== '' && $filters['logged_in'] !== null) {

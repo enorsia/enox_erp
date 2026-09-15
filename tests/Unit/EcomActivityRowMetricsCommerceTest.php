@@ -100,5 +100,8 @@ test('activity commerce summary shows view when only product views exist in the 
 
     expect($metrics[$sessionId]['commerce_label'])->toBe('View')
         ->and($metrics[$sessionId]['commerce_display'])->toBe('View')
-        ->and($metrics[$sessionId]['commerce_events'])->toBe([]);
+        ->and($metrics[$sessionId]['commerce_events'])->toHaveCount(1)
+        ->and($metrics[$sessionId]['commerce_events'][0]['stage'])->toBe('product_view')
+        ->and($metrics[$sessionId]['commerce_events'][0]['stage_label'])->toBe('View')
+        ->and($metrics[$sessionId]['commerce_events'][0]['products'][0]['title'])->toContain('Mens Classic Front Seam Jersey Trouser');
 });
