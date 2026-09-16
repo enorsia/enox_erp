@@ -6440,6 +6440,21 @@ main:has(> .etd-page--activity) {
     word-break: break-all;
 }
 
+/* Tablet / laptop / desktop: cap trust column so long IPv6 wraps instead of stretching the table */
+@media (min-width: 768px) {
+    .etd-table-scroll--activity .etd-table--activity th.etd-col-trust,
+    .etd-table-scroll--activity .etd-table--activity td.etd-col-trust {
+        width: 1%;
+        max-width: 7rem;
+        overflow-wrap: anywhere;
+        word-break: break-all;
+    }
+
+    .etd-table-scroll--activity .etd-table--activity td.etd-col-trust .etd-visitor-ip {
+        max-width: 7rem;
+    }
+}
+
 .etd-table-scroll--activity .etd-table--activity th.etd-col-trust {
     white-space: nowrap;
 }
