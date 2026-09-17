@@ -27,7 +27,10 @@
     </div>
 
     <div
-        class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity etd-table-scroll--activity-wide"
+        @class([
+            'etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity',
+            'etd-table-scroll--activity-wide' => $focusColspan > 0,
+        ])
         style="--etd-activity-focus-cols: {{ $focusColspan }}"
         data-etd-activity-table-viewport
         x-data="{ openEvent: null }"
