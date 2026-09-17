@@ -6388,7 +6388,7 @@ main:has(> .etd-page--activity) {
 /* Activity table — full width, content wraps; x-scroll only when focus cols need it */
 .etd-table-scroll--activity .etd-table--activity th.etd-col-session,
 .etd-table-scroll--activity .etd-table--activity td.etd-col-session {
-    min-width: 6.5rem;
+    min-width: 10rem;
     overflow: visible;
     vertical-align: top;
 }
@@ -6400,7 +6400,14 @@ main:has(> .etd-page--activity) {
     vertical-align: top;
 }
 
-.etd-table-scroll--activity .etd-chip--session,
+.etd-table-scroll--activity .etd-chip--session {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    vertical-align: top;
+}
+
 .etd-table-scroll--activity .etd-chip--session__text {
     display: block;
     max-width: 100%;
@@ -6442,6 +6449,13 @@ main:has(> .etd-page--activity) {
 
 /* Tablet / laptop / desktop: cap trust column so long IPv6 wraps instead of stretching the table */
 @media (min-width: 768px) {
+    .etd-table-scroll--activity .etd-table--activity th.etd-col-session,
+    .etd-table-scroll--activity .etd-table--activity td.etd-col-session {
+        width: calc(19ch + 1.75rem);
+        min-width: calc(19ch + 1.75rem);
+        max-width: calc(19ch + 1.75rem);
+    }
+
     .etd-table-scroll--activity .etd-table--activity th.etd-col-trust,
     .etd-table-scroll--activity .etd-table--activity td.etd-col-trust {
         width: 1%;
