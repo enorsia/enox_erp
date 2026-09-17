@@ -13,6 +13,11 @@ import {
     LineController,
     DoughnutController,
 } from 'chart.js';
+import {
+    bindTrendTooltipDismiss,
+    createTrendTooltipHandler,
+} from '../lib/ecom-tracker-trend-tooltip';
+import { bindActivityScrollRestore } from '../lib/ecom-tracker-scroll-restore';
 
 Chart.register(
     CategoryScale,
@@ -185,21 +190,10 @@ function sortTrendSeries(series) {
     });
 }
 
-const trendCtx = ctx('etdTrendChart');
-if (trendCtx && D.trend) {
-    const {
-        labels = [],
-        series = [],
-        use_log_scale: useLogScale = false,
-    } = D.trend;
-
-    const orderedSeries = sortTrendSeries(series);
+function buildTrendDatasets(orderedSeries, labels, useLogScale) {
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
 
-    applyTrendChartLayout(labels.length);
-    renderTrendLegend(orderedSeries);
-
-    const datasets = orderedSeries.map((entry, index) => {
+    return orderedSeries.map((entry, index) => {
         const color = trendSeriesColor(entry.key);
         const isConversion = entry.key === 'conversion_rate';
         const isBar = entry.chart_type === 'bar';
@@ -227,12 +221,47 @@ if (trendCtx && D.trend) {
             maxBarThickness: isBar ? 14 : undefined,
         };
     });
+}
+
+function applyTrendChartOptions(chart, labels) {
+    const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
+
+    chart.options.layout.padding.right = useHorizontalScroll ? 8 : 0;
+    chart.options.plugins.legend.display = !isCompactChart();
+    chart.options.scales.x.ticks.maxRotation = useHorizontalScroll || labels.length > 20 ? 45 : 0;
+    chart.options.scales.x.ticks.minRotation = useHorizontalScroll ? 35 : 0;
+    chart.options.scales.x.ticks.autoSkip = !useHorizontalScroll && labels.length > 24;
+    chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, useHorizontalScroll);
+    chart.options.scales.x.ticks.font.size = isNarrow() ? 9 : 11;
+    chart.options.scales.y.ticks.font.size = isNarrow() ? 9 : 11;
+    chart.options.scales.y1.ticks.font.size = isNarrow() ? 9 : 11;
+}
+
+function refreshTrendChart(chart, orderedSeries, labels, useLogScale) {
+    chart.data.datasets = buildTrendDatasets(orderedSeries, labels, useLogScale);
+    applyTrendChartOptions(chart, labels);
+    chart.update('none');
+    chart.resize();
+}
+
+const trendCtx = ctx('etdTrendChart');
+if (trendCtx && D.trend) {
+    const {
+        labels = [],
+        series = [],
+        use_log_scale: useLogScale = false,
+    } = D.trend;
+
+    const orderedSeries = sortTrendSeries(series);
+
+    applyTrendChartLayout(labels.length);
+    renderTrendLegend(orderedSeries);
 
     const trendChart = new Chart(trendCtx, {
         type: 'bar',
         data: {
             labels,
-            datasets,
+            datasets: buildTrendDatasets(orderedSeries, labels, useLogScale),
         },
         options: {
             responsive: true,
@@ -240,7 +269,7 @@ if (trendCtx && D.trend) {
             interaction: { mode: 'index', intersect: false },
             layout: {
                 padding: {
-                    right: useHorizontalScroll ? 8 : 0,
+                    right: trendUsesHorizontalScroll(labels.length) ? 8 : 0,
                 },
             },
             plugins: {
@@ -255,32 +284,19 @@ if (trendCtx && D.trend) {
                     },
                 },
                 tooltip: {
-                    ...tipStyle(),
-                    titleFont: { size: isNarrow() ? 13 : 14, weight: '600' },
-                    bodyFont: { size: isNarrow() ? 12 : 13 },
-                    padding: isNarrow() ? 10 : 12,
+                    enabled: false,
+                    external: createTrendTooltipHandler(orderedSeries, trendSeriesColor),
                     itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
-                    callbacks: {
-                        label(context) {
-                            const value = context.parsed.y ?? 0;
-
-                            if (context.dataset.yAxisID === 'y1') {
-                                return `${context.dataset.label}: ${value}%`;
-                            }
-
-                            return `${context.dataset.label}: ${value}`;
-                        },
-                    },
                 },
             },
             scales: {
                 x: {
                     grid: { display: false },
                     ticks: {
-                        maxRotation: useHorizontalScroll || labels.length > 20 ? 45 : 0,
-                        minRotation: useHorizontalScroll ? 35 : 0,
-                        autoSkip: !useHorizontalScroll && labels.length > 24,
-                        maxTicksLimit: trendTickLimit(labels.length, useHorizontalScroll),
+                        maxRotation: trendUsesHorizontalScroll(labels.length) || labels.length > 20 ? 45 : 0,
+                        minRotation: trendUsesHorizontalScroll(labels.length) ? 35 : 0,
+                        autoSkip: !trendUsesHorizontalScroll(labels.length) && labels.length > 24,
+                        maxTicksLimit: trendTickLimit(labels.length, trendUsesHorizontalScroll(labels.length)),
                         font: { size: isNarrow() ? 9 : 11 },
                     },
                 },
@@ -315,6 +331,9 @@ if (trendCtx && D.trend) {
     });
 
     let resizeFrame = null;
+    const trendChartScroll = document.getElementById('etdTrendChartScroll');
+
+    bindTrendTooltipDismiss(trendChartScroll);
 
     window.addEventListener('resize', () => {
         if (resizeFrame) {
@@ -324,13 +343,7 @@ if (trendCtx && D.trend) {
         resizeFrame = requestAnimationFrame(() => {
             applyTrendChartLayout(labels.length);
             renderTrendLegend(orderedSeries);
-            trendChart.options.plugins.legend.display = !isCompactChart();
-            trendChart.options.scales.x.ticks.autoSkip = !trendUsesHorizontalScroll(labels.length) && labels.length > 24;
-            trendChart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(
-                labels.length,
-                trendUsesHorizontalScroll(labels.length),
-            );
-            trendChart.resize();
+            refreshTrendChart(trendChart, orderedSeries, labels, useLogScale);
         });
     });
 }
@@ -500,6 +513,15 @@ function syncKpiPanelCardHeights() {
         return;
     }
 
+    if (window.matchMedia('(max-width: 767px)').matches) {
+        panel.style.removeProperty('--etd-kpi-sync-height');
+        cards.forEach((card) => {
+            card.style.minHeight = '';
+        });
+
+        return;
+    }
+
     panel.style.removeProperty('--etd-kpi-sync-height');
 
     let maxHeight = 0;
@@ -547,107 +569,215 @@ if (kpiPanel) {
     }
 }
 
-const DASHBOARD_SCROLL_HASH = /^etd-y=(\d+)$/;
-
-function dashboardScrollY() {
-    const main = document.querySelector('main');
-
-    return Math.max(0, Math.round(main ? main.scrollTop : window.scrollY));
-}
-
-function applyDashboardScrollY(y) {
-    const main = document.querySelector('main');
-
-    if (main) {
-        main.scrollTop = y;
-        return;
-    }
-
-    window.scrollTo(0, y);
-}
-
-function stampActivityBackScroll(anchor) {
-    const href = anchor.getAttribute('href');
-
-    if (!href) {
-        return;
-    }
-
-    let url;
-
-    try {
-        url = new URL(href, window.location.origin);
-    } catch {
-        return;
-    }
-
-    if (!url.pathname.includes('/admin/ecom-activity')) {
-        return;
-    }
-
-    const back = url.searchParams.get('back');
-
-    if (!back) {
-        return;
-    }
-
-    let backUrl;
-
-    try {
-        backUrl = new URL(back, window.location.origin);
-    } catch {
-        return;
-    }
-
-    backUrl.hash = `etd-y=${dashboardScrollY()}`;
-    url.searchParams.set('back', backUrl.toString());
-    anchor.setAttribute('href', url.toString());
-}
-
-function restoreDashboardScroll() {
-    const hash = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
-    const hashMatch = hash.match(DASHBOARD_SCROLL_HASH);
-    const storageKey = `admin_scroll_${window.location.pathname}`;
-    let y = hashMatch ? parseInt(hashMatch[1], 10) : Number.NaN;
-
-    if (Number.isNaN(y)) {
-        const saved = sessionStorage.getItem(storageKey);
-        y = saved !== null && saved !== '' ? parseInt(saved, 10) : Number.NaN;
-    }
-
-    sessionStorage.removeItem(storageKey);
-
-    if (hashMatch) {
-        history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
-    }
-
-    if (Number.isNaN(y) || y < 1) {
-        return;
-    }
-
-    applyDashboardScrollY(y);
-}
-
 const dashboardRoot = document.getElementById('ecom-tracker-dashboard-content');
 
-if (dashboardRoot) {
-    const rememberDashboardScrollForLink = (event) => {
-        const link = event.target.closest('a[href]');
+const DASHBOARD_CHART_IDS = ['etdTrendChart', 'etdNewReturningChart', 'etdDwellChart'];
 
-        if (!link || !dashboardRoot.contains(link)) {
-            return;
+let dashboardPrintSession = null;
+
+function resizeDashboardChartsForPrint() {
+    DASHBOARD_CHART_IDS.forEach((id) => {
+        const chart = Chart.getChart(id);
+
+        if (chart) {
+            chart.resize();
         }
+    });
+}
 
-        stampActivityBackScroll(link);
+function resetNewReturningChartForPrint() {
+    const chart = Chart.getChart('etdNewReturningChart');
 
-        if (typeof window.saveScrollPosition === 'function') {
-            window.saveScrollPosition();
-        }
+    if (!chart) {
+        return;
+    }
+
+    chart.options.maintainAspectRatio = true;
+    chart.options.aspectRatio = 1;
+    chart.options.plugins.legend.display = false;
+    chart.options.layout = { padding: 4 };
+    chart.update('none');
+}
+
+function restoreNewReturningChartAfterPrint() {
+    const chart = Chart.getChart('etdNewReturningChart');
+
+    if (!chart) {
+        return;
+    }
+
+    chart.options.maintainAspectRatio = false;
+    chart.options.aspectRatio = undefined;
+    chart.options.plugins.legend.display = true;
+    chart.options.layout = { padding: 0 };
+    chart.update('none');
+}
+
+function expandCategoryDepartmentsForPrint() {
+    const root = document.getElementById('ecom-tracker-dashboard-content');
+
+    if (!root) {
+        return;
+    }
+
+    root.querySelectorAll('.etd-category-departments').forEach((wrap) => {
+        wrap.classList.add('etd-print-categories-expanded');
+    });
+
+    root.querySelectorAll('.etd-category-child-row').forEach((row) => {
+        row.dataset.printRestoreDisplay = row.style.display;
+        row.style.setProperty('display', 'table-row', 'important');
+    });
+}
+
+function restoreCategoryDepartmentsAfterPrint() {
+    const root = document.getElementById('ecom-tracker-dashboard-content');
+
+    if (!root) {
+        return;
+    }
+
+    root.querySelectorAll('.etd-category-departments').forEach((wrap) => {
+        wrap.classList.remove('etd-print-categories-expanded');
+    });
+
+    root.querySelectorAll('.etd-category-child-row').forEach((row) => {
+        row.style.display = row.dataset.printRestoreDisplay || '';
+        delete row.dataset.printRestoreDisplay;
+    });
+}
+
+function resetTrendChartForPrint() {
+    const wrap = document.getElementById('etdTrendChartWrap');
+    const hint = document.getElementById('etdTrendChartScrollHint');
+    const labels = D.trend?.labels || [];
+    const chart = Chart.getChart('etdTrendChart');
+
+    if (wrap) {
+        wrap.dataset.printRestoreMinWidth = wrap.style.minWidth;
+        wrap.style.minWidth = '';
+    }
+
+    if (hint) {
+        hint.hidden = true;
+    }
+
+    if (!chart || labels.length === 0) {
+        return;
+    }
+
+    chart.options.scales.x.ticks.autoSkip = labels.length > 12;
+    chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, false);
+    chart.options.scales.x.ticks.maxRotation = labels.length > 10 ? 45 : 0;
+    chart.options.scales.x.ticks.minRotation = labels.length > 10 ? 35 : 0;
+    chart.options.layout.padding.right = 0;
+    chart.options.plugins.legend.display = true;
+    chart.update('none');
+}
+
+function restoreTrendChartAfterPrint() {
+    const wrap = document.getElementById('etdTrendChartWrap');
+    const labels = D.trend?.labels || [];
+    const chart = Chart.getChart('etdTrendChart');
+
+    if (wrap) {
+        wrap.style.minWidth = wrap.dataset.printRestoreMinWidth || '';
+        delete wrap.dataset.printRestoreMinWidth;
+    }
+
+    if (labels.length === 0) {
+        return;
+    }
+
+    applyTrendChartLayout(labels.length);
+
+    if (!chart) {
+        return;
+    }
+
+    const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
+
+    chart.options.scales.x.ticks.autoSkip = !useHorizontalScroll && labels.length > 24;
+    chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, useHorizontalScroll);
+    chart.options.scales.x.ticks.maxRotation = useHorizontalScroll || labels.length > 20 ? 45 : 0;
+    chart.options.scales.x.ticks.minRotation = useHorizontalScroll ? 35 : 0;
+    chart.options.layout.padding.right = useHorizontalScroll ? 8 : 0;
+    chart.options.plugins.legend.display = !isCompactChart();
+    chart.update('none');
+}
+
+function beginDashboardPrintSession() {
+    const main = document.querySelector('main');
+
+    if (!main || dashboardPrintSession) {
+        return dashboardPrintSession;
+    }
+
+    dashboardPrintSession = {
+        scrollTop: main.scrollTop,
+        scrollLeft: main.scrollLeft,
     };
 
-    dashboardRoot.addEventListener('pointerdown', rememberDashboardScrollForLink);
-    dashboardRoot.addEventListener('click', rememberDashboardScrollForLink);
+    return dashboardPrintSession;
+}
 
-    restoreDashboardScroll();
+function prepareDashboardForPrint() {
+    const main = document.querySelector('main');
+
+    beginDashboardPrintSession();
+    document.body.classList.add('etd-print-measure');
+
+    if (main) {
+        main.scrollTop = 0;
+        main.scrollLeft = 0;
+    }
+
+    resetTrendChartForPrint();
+    resetNewReturningChartForPrint();
+    expandCategoryDepartmentsForPrint();
+    resizeDashboardChartsForPrint();
+}
+
+function restoreDashboardAfterPrint() {
+    const main = document.querySelector('main');
+
+    document.body.classList.remove('etd-print-measure');
+    restoreCategoryDepartmentsAfterPrint();
+    restoreTrendChartAfterPrint();
+    restoreNewReturningChartAfterPrint();
+    resizeDashboardChartsForPrint();
+
+    if (main && dashboardPrintSession) {
+        main.scrollTop = dashboardPrintSession.scrollTop;
+        main.scrollLeft = dashboardPrintSession.scrollLeft;
+    } else if (main) {
+        main.scrollLeft = 0;
+    }
+
+    dashboardPrintSession = null;
+}
+
+function printEcomTrackerDashboard() {
+    beginDashboardPrintSession();
+    prepareDashboardForPrint();
+
+    requestAnimationFrame(() => {
+        resizeDashboardChartsForPrint();
+
+        requestAnimationFrame(() => {
+            window.print();
+        });
+    });
+}
+
+window.printEcomTrackerDashboard = printEcomTrackerDashboard;
+
+if (dashboardRoot) {
+    window.addEventListener('beforeprint', prepareDashboardForPrint);
+    window.addEventListener('afterprint', restoreDashboardAfterPrint);
+
+    document.getElementById('etdDashboardPrintBtn')?.addEventListener('click', printEcomTrackerDashboard);
+
+    bindActivityScrollRestore(dashboardRoot);
 }
 

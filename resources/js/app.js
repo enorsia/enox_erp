@@ -3,6 +3,7 @@ import Alpine from 'alpinejs';
 import collapse from '@alpinejs/collapse';
 import './pages/sales-analytics-report';
 import './pages/ads-performance-report-export';
+import './pages/ecom-tracker-filters';
 
 Alpine.plugin(collapse);
 window.Alpine = Alpine;
@@ -42,10 +43,12 @@ if (has('#daily-returns-page-content'))       import('./pages/daily-returns');
 if (has('#monthly-budget-page-content'))      import('./pages/monthly-budgets');
 if (has('#analytics-dashboard-content'))      import('./pages/analytics-dashboard');
 if (has('#ecom-tracker-dashboard-content'))   import('./pages/ecom-tracker-dashboard');
-if (has('#ecom-activity-page-content'))       import('./pages/ecom-activity-table');
-if (has('.etd-filter-drawer') || has('.etd-flatpickr-date') || has('.etd-flatpickr-datetime')) {
-    import('./pages/ecom-tracker-filters');
+if (has('#ecom-tracker-compare-content'))     import('./pages/ecom-tracker-compare');
+if (has('#ecom-tracker-dashboard-content') || has('#ecom-tracker-compare-content') || has('.etd-tip-trigger')) {
+    import('./lib/etd-tip-position');
 }
+if (has('#ecom-activity-page-content'))       import('./pages/ecom-activity-table');
+if (has('#ecom-activity-page-content'))       import('./pages/ecom-activity-export');
 if (has('#sale-tracking-page'))               import('./pages/sale-tracking');
 if (has('#ads-performance-report-content'))  import('./pages/ads-performance-report');
 

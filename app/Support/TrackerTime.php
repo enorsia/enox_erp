@@ -97,7 +97,7 @@ class TrackerTime
 
     public static function todayPresetLabel(): string
     {
-        return 'Today (00:00:01 to 23:59:59)';
+        return self::todayPresetButtonLabel();
     }
 
     public static function todayPresetButtonLabel(): string
@@ -107,12 +107,140 @@ class TrackerTime
 
     public static function yesterdayPresetLabel(): string
     {
-        return 'Yesterday (00:00:01 to 23:59:59)';
+        return self::yesterdayPresetButtonLabel();
     }
 
     public static function yesterdayPresetButtonLabel(): string
     {
         return 'Yesterday';
+    }
+
+    public static function formatLocalDateLabel(Carbon $date): string
+    {
+        return $date->format('j M Y');
+    }
+
+    public static function formatLocalDateRangeLabel(Carbon $from, Carbon $to): string
+    {
+        $fromLocal = self::toLocal($from) ?? $from;
+        $toLocal = self::toLocal($to) ?? $to;
+
+        if ($fromLocal->toDateString() === $toLocal->toDateString()) {
+            return self::formatLocalDateLabel($fromLocal);
+        }
+
+        return self::formatLocalDateLabel($fromLocal).' – '.self::formatLocalDateLabel($toLocal);
+    }
+
+    /**
+     * @param  array{from?: Carbon|null, to?: Carbon|null, label?: string, period?: string}  $range
+     * @return array{type: 'single', label: string}|array{type: 'range', from: string, to: string}
+     */
+    public static function rangeDisplayParts(array $range): array
+    {
+        $label = trim((string) ($range['label'] ?? ''));
+        $period = (string) ($range['period'] ?? '');
+        $from = $range['from'] ?? null;
+        $to = $range['to'] ?? null;
+
+        if ($period === '24h') {
+            return ['type' => 'single', 'label' => self::todayPresetLabel()];
+        }
+
+        if ($period === 'yesterday') {
+            return ['type' => 'single', 'label' => self::yesterdayPresetLabel()];
+        }
+
+        if ($from instanceof Carbon && $to instanceof Carbon) {
+            $fromLocal = self::toLocal($from);
+            $toLocal = self::toLocal($to);
+
+            if ($fromLocal && $toLocal) {
+                $today = self::localNow()->toDateString();
+                $yesterday = self::localNow()->copy()->subDay()->toDateString();
+                $fromDate = $fromLocal->toDateString();
+                $toDate = $toLocal->toDateString();
+
+                if ($fromDate === $today && $toDate === $today) {
+                    return ['type' => 'single', 'label' => self::todayPresetLabel()];
+                }
+
+                if ($fromDate === $yesterday && $toDate === $yesterday) {
+                    return ['type' => 'single', 'label' => self::yesterdayPresetLabel()];
+                }
+
+                if ($fromDate === $toDate) {
+                    return ['type' => 'single', 'label' => self::formatLocalDateLabel($fromLocal)];
+                }
+
+                return [
+                    'type' => 'range',
+                    'from' => self::formatLocalDateLabel($fromLocal),
+                    'to' => self::formatLocalDateLabel($toLocal),
+                ];
+            }
+        }
+
+        return ['type' => 'single', 'label' => self::shortRangeDisplayLabel($label)];
+    }
+
+    /**
+     * @param  array{from?: Carbon|null, to?: Carbon|null, label?: string, period?: string}  $range
+     */
+    public static function rangeDisplayLabel(array $range): string
+    {
+        $parts = self::rangeDisplayParts($range);
+
+        if (($parts['type'] ?? '') === 'range') {
+            return $parts['from'].' – '.$parts['to'];
+        }
+
+        return $parts['label'] ?? '';
+    }
+
+    /**
+     * @return array{type: 'single', label: string}|array{type: 'range', from: string, to: string}
+     */
+    public static function comparisonLabelParts(?string $label): array
+    {
+        $label = self::shortRangeDisplayLabel($label);
+
+        if ($label === '') {
+            return ['type' => 'single', 'label' => ''];
+        }
+
+        if (preg_match('/^(.+?)\s+–\s+(.+)$/', $label, $matches)) {
+            $from = trim($matches[1]);
+            $to = trim($matches[2]);
+
+            if (preg_match('/^\d{1,2} \w{3} \d{4}$/', $from) && preg_match('/^\d{1,2} \w{3} \d{4}$/', $to)) {
+                if ($from === $to) {
+                    return ['type' => 'single', 'label' => $from];
+                }
+
+                return ['type' => 'range', 'from' => $from, 'to' => $to];
+            }
+        }
+
+        return ['type' => 'single', 'label' => $label];
+    }
+
+    /**
+     * Compact UI label without trailing time-window parentheticals.
+     */
+    public static function shortRangeDisplayLabel(?string $label): string
+    {
+        if ($label === null || $label === '') {
+            return '';
+        }
+
+        $label = trim($label);
+
+        if (preg_match('/^(.+?)\s*\([^)]*\)\s*$/', $label, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return $label;
     }
 
     /**

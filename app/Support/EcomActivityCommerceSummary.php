@@ -252,11 +252,21 @@ final class EcomActivityCommerceSummary
             return null;
         }
 
+        $latest = $viewLines
+            ->sortByDesc(fn (object $line) => [
+                strtotime((string) ($line->staged_at ?? '')) ?: 0,
+                (int) ($line->id ?? 0),
+            ])
+            ->first();
+
+        $stage = (string) ($latest->funnel_stage ?? '');
+        $label = EcomActivityCommerceEvents::viewStageLabel($stage);
+
         return [
-            'commerce_label' => 'View',
+            'commerce_label' => $label,
             'commerce_value' => null,
             'commerce_has_order' => false,
-            'commerce_display' => 'View',
+            'commerce_display' => $label,
             'commerce_tip' => null,
         ];
     }

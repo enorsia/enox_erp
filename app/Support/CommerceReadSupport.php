@@ -282,6 +282,7 @@ final class CommerceReadSupport
             }
 
             return array_filter([
+                'product_code' => $code !== '' ? $code : null,
                 'title' => $title !== '' ? $title : 'Product',
                 'size' => trim((string) ($row->size_name ?? '')),
                 'color_po' => trim((string) ($row->color_name ?? '')),
@@ -417,6 +418,33 @@ final class CommerceReadSupport
         }
 
         return array_values(array_map(function ($row) {
+            $stage = (string) ($row->funnel_stage ?? '');
+
+            if ($stage === 'category_view') {
+                $department = trim((string) ($row->department_name ?? ''));
+                $category = trim((string) ($row->category_name ?? ''));
+                $title = TrackerCategoryIdentity::label($department, $category);
+
+                if ($title === '' || $title === '—') {
+                    $title = $category !== '' ? $category : ($department !== '' ? $department : 'Category');
+                }
+
+                $price = is_numeric($row->unit_price ?? null)
+                    ? round((float) $row->unit_price, 2)
+                    : (is_numeric($row->line_total ?? null) ? round((float) $row->line_total, 2) : null);
+
+                return array_filter([
+                    'product_code' => null,
+                    'title' => $title,
+                    'size' => '—',
+                    'color_po' => '—',
+                    'color_ecommerce' => '—',
+                    'qty' => '1',
+                    'price' => $price !== null ? '£'.number_format($price, 2) : '—',
+                    'image_url' => '',
+                ], fn ($value) => $value !== '' && $value !== null);
+            }
+
             $qty = (int) max(1, (float) ($row->qty ?? 1));
             $price = is_numeric($row->unit_price ?? null)
                 ? round((float) $row->unit_price, 2)
@@ -431,6 +459,7 @@ final class CommerceReadSupport
             }
 
             return array_filter([
+                'product_code' => $code !== '' ? $code : null,
                 'title' => $title !== '' ? $title : 'Product',
                 'size' => trim((string) ($row->size_name ?? '')),
                 'color_po' => trim((string) ($row->color_name ?? '')),

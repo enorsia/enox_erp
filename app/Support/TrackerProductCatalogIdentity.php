@@ -28,9 +28,9 @@ final class TrackerProductCatalogIdentity
     public static function filterLinesMatchingCatalogOptions(Collection $lines, array $catalogOptions): Collection
     {
         $department = trim((string) ($catalogOptions['department'] ?? ''));
-        $category = trim((string) ($catalogOptions['category'] ?? ''));
+        $categoryFilters = TrackerMultiSelectFilter::values($catalogOptions['category'] ?? null);
 
-        if ($department === '' && $category === '') {
+        if ($department === '' && $categoryFilters === []) {
             return $lines;
         }
 
@@ -58,9 +58,9 @@ final class TrackerProductCatalogIdentity
         array $canonicalByCode = [],
     ): bool {
         $departmentFilter = trim((string) ($catalogOptions['department'] ?? ''));
-        $categoryFilter = trim((string) ($catalogOptions['category'] ?? ''));
+        $categoryFilters = TrackerMultiSelectFilter::values($catalogOptions['category'] ?? null);
 
-        if ($departmentFilter === '' && $categoryFilter === '') {
+        if ($departmentFilter === '' && $categoryFilters === []) {
             return true;
         }
 
@@ -78,8 +78,10 @@ final class TrackerProductCatalogIdentity
             }
         }
 
-        if ($categoryFilter !== ''
-            && ! TrackerCategoryIdentity::categoryMatchesFilter($categoryName, $categoryFilter)) {
+        if ($categoryFilters !== []
+            && ! collect($categoryFilters)->contains(
+                fn (string $categoryFilter) => TrackerCategoryIdentity::categoryMatchesFilter($categoryName, $categoryFilter),
+            )) {
             return false;
         }
 

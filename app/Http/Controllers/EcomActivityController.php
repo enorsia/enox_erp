@@ -6,6 +6,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\ActivityEcomUserBotContext;
 use App\Models\TrackerUtmFilter;
+use App\Models\UserExport;
 use App\Services\EcomActivityFilterCounts;
 use App\Services\EcomActivityFunnelSessions;
 use App\Services\EcomActivityRowMetrics;
@@ -20,6 +21,7 @@ use App\Support\EcomTrackerLogger;
 use App\Support\EcomTrackerViewData;
 use App\Support\SessionDurationBuckets;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerMultiSelectFilter;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -93,10 +95,11 @@ class EcomActivityController extends EcomTrackerAdminController
         $sessions = $this->paginateSessions($query, $request, $focus, $range);
 
         $funnelMetrics = [];
+        $metricsFocus = EcomActivityFocus::resolveFunnelMetricsFocus($request);
 
-        if (EcomActivityFocus::isValid($focus) && ! $isTableFragment) {
+        if ($metricsFocus !== null && ! $isTableFragment) {
             $funnelContext = EcomActivityFocus::resolveFunnelContext(
-                $focus,
+                $metricsFocus,
                 $range['from'],
                 $range['to'],
                 EcomActivityFocus::sessionFiltersFromRequest($request),
@@ -115,6 +118,7 @@ class EcomActivityController extends EcomTrackerAdminController
             in_array($focus, ['products', 'categories'], true)
                 ? EcomActivityFocus::productCatalogFiltersFromRequest($request)
                 : EcomActivityFocus::indexCatalogFiltersFromRequest($request),
+            $request,
         );
 
         $tableViewData = [
@@ -240,6 +244,9 @@ class EcomActivityController extends EcomTrackerAdminController
             'eventScenarioOptions' => $eventScenarioOptions,
             'productSortGroups' => $productSortGroups,
             'productActivityOptions' => $productActivityOptions,
+            'activityExport' => auth()->check()
+                ? UserExport::getActiveForUser(auth()->id(), UserExport::TYPE_ECOM_ACTIVITY_REPORT)
+                : null,
         ]);
     }
 
@@ -445,12 +452,19 @@ class EcomActivityController extends EcomTrackerAdminController
             }
         }
 
-        if (! in_array('device_type', $except, true) && $request->filled('device_type')) {
-            $query->where('device_type', $request->device_type);
+        if (! in_array('device_type', $except, true) && TrackerMultiSelectFilter::requestFilled($request, 'device_type')) {
+            $devices = TrackerMultiSelectFilter::allowedValues(
+                $request->input('device_type'),
+                ['desktop', 'mobile', 'tablet'],
+            );
+
+            if ($devices !== []) {
+                $query->whereIn('device_type', $devices);
+            }
         }
 
-        if (! in_array('duration_bucket', $except, true) && $request->filled('duration_bucket')) {
-            SessionDurationBuckets::applyToQuery($query, (string) $request->input('duration_bucket'));
+        if (! in_array('duration_bucket', $except, true) && TrackerMultiSelectFilter::requestFilled($request, 'duration_bucket')) {
+            SessionDurationBuckets::applyManyToQuery($query, TrackerMultiSelectFilter::requestValues($request, 'duration_bucket'));
         }
 
         if (! in_array('logged_in', $except, true) && $request->filled('logged_in')) {
@@ -631,7 +645,7 @@ class EcomActivityController extends EcomTrackerAdminController
 
             $value = $filters[$key];
 
-            if ($value === null || $value === '') {
+            if ($value === null || $value === '' || (is_array($value) && $value === [])) {
                 unset($query[$key]);
             } else {
                 $query[$key] = $value;
@@ -655,7 +669,7 @@ class EcomActivityController extends EcomTrackerAdminController
 
             $value = $filters[$key];
 
-            if ($value === null || $value === '') {
+            if ($value === null || $value === '' || (is_array($value) && $value === [])) {
                 $request->query->remove($key);
                 $request->request->remove($key);
 

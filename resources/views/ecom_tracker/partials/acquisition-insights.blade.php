@@ -17,7 +17,7 @@
         'activityDurationLink' => $activityDurationLink,
     ])
 
-    <div class="etd-panel etd-panel--new-returning">
+    <div class="etd-panel etd-panel--new-returning etd-print-unit">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Unique vs returning</h2>
         </div>
