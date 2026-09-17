@@ -3455,12 +3455,13 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 
 .etd-category-departments .etd-table {
     table-layout: fixed;
-    min-width: 30rem;
+    width: 100%;
+    min-width: 100%;
 }
 
 .etd-category-departments th.etd-col-category,
 .etd-category-departments td.etd-col-category {
-    width: 28%;
+    width: auto;
     min-width: 7.5rem;
     word-break: normal;
     overflow-wrap: break-word;
@@ -4565,6 +4566,12 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     text-align: center;
     vertical-align: middle;
     border-left: 1px solid #e2e8f0;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
+.etd-table--performance-metrics tbody td.etd-col-metric {
+    word-break: normal;
 }
 
 .etd-table--performance-metrics thead th.etd-col-metric {
@@ -4585,9 +4592,28 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     min-width: 4.75rem;
 }
 
+.etd-category-departments .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric:not(:last-of-type),
+.etd-category-departments .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric:not(:last-of-type) {
+    width: 4.5rem;
+    min-width: 4.5rem;
+}
+
 .etd-category-departments .etd-table--catalog.etd-table--performance-metrics th.etd-col-metric:last-of-type,
 .etd-category-departments .etd-table--catalog.etd-table--performance-metrics td.etd-col-metric:last-of-type {
-    width: auto;
+    width: 7.5rem;
+    min-width: 7.5rem;
+}
+
+.etd-product-catalog .etd-table--product-catalog.etd-table--performance-metrics th.etd-col-metric:not(:last-of-type),
+.etd-product-catalog .etd-table--product-catalog.etd-table--performance-metrics td.etd-col-metric:not(:last-of-type) {
+    width: 4.5rem;
+    min-width: 4.5rem;
+}
+
+.etd-product-catalog .etd-table--product-catalog.etd-table--performance-metrics th.etd-col-metric:last-of-type,
+.etd-product-catalog .etd-table--product-catalog.etd-table--performance-metrics td.etd-col-metric:last-of-type {
+    width: 7.5rem;
+    min-width: 7.5rem;
 }
 
 .etd-catalog-variant-row td {
@@ -4631,6 +4657,10 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 .etd-table--performance-metrics td.etd-col-metric .etd-mini-bar {
     margin-left: auto;
     margin-right: auto;
+}
+
+.etd-table--performance-metrics td.etd-col-metric:last-of-type .etd-mini-bar {
+    max-width: 6.5rem;
 }
 
 .dark .etd-table--performance-metrics thead th.etd-col-metric,
@@ -6386,8 +6416,8 @@ main:has(> .etd-page--activity) {
 }
 
 /* Activity table — full width, content wraps; x-scroll only when focus cols need it */
-.etd-table-scroll--activity .etd-table--activity th.etd-col-session,
-.etd-table-scroll--activity .etd-table--activity td.etd-col-session {
+#ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity th.etd-col-session,
+#ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td.etd-col-session {
     min-width: 10rem;
     overflow: visible;
     vertical-align: top;
@@ -6400,7 +6430,7 @@ main:has(> .etd-page--activity) {
     vertical-align: top;
 }
 
-.etd-table-scroll--activity .etd-chip--session {
+#ecom-activity-page-content .etd-table-scroll--activity .etd-chip--session {
     display: block;
     width: 100%;
     max-width: 100%;
@@ -6408,7 +6438,7 @@ main:has(> .etd-page--activity) {
     vertical-align: top;
 }
 
-.etd-table-scroll--activity .etd-chip--session__text {
+#ecom-activity-page-content .etd-table-scroll--activity .etd-chip--session__text {
     display: block;
     max-width: 100%;
     overflow: visible;
@@ -6449,8 +6479,8 @@ main:has(> .etd-page--activity) {
 
 /* Tablet / laptop / desktop: cap trust column so long IPv6 wraps instead of stretching the table */
 @media (min-width: 768px) {
-    .etd-table-scroll--activity .etd-table--activity th.etd-col-session,
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-session {
+    #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity th.etd-col-session,
+    #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td.etd-col-session {
         width: calc(19ch + 1.75rem);
         min-width: calc(19ch + 1.75rem);
         max-width: calc(19ch + 1.75rem);
@@ -6512,8 +6542,8 @@ main:has(> .etd-page--activity) {
     min-width: 5rem;
 }
 
-.etd-table-scroll--activity .etd-table--activity th,
-.etd-table-scroll--activity .etd-table--activity td {
+#ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity th,
+#ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td {
     white-space: normal;
     overflow-wrap: anywhere;
 }
