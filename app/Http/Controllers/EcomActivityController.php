@@ -311,6 +311,7 @@ class EcomActivityController extends EcomTrackerAdminController
         ]);
 
         $trafficAttribution = SessionTrafficAttribution::displayFields($activityUser, $actions);
+        $conversionAttribution = SessionTrafficAttribution::conversionDisplayFields($activityUser);
         $landingPage = filled($activityUser->landing_page)
             ? $activityUser->landing_page
             : $actions
@@ -329,6 +330,7 @@ class EcomActivityController extends EcomTrackerAdminController
             'reachedSteps' => $reachedSteps,
             'backUrl' => $backUrl,
             'trafficAttribution' => $trafficAttribution,
+            'conversionAttribution' => $conversionAttribution,
             'landingPage' => $landingPage,
             'latestActionAt' => $latestActionAt,
         ]);
@@ -481,7 +483,11 @@ class EcomActivityController extends EcomTrackerAdminController
         }
 
         if (! in_array('utm_source', $except, true)) {
-            TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
+            if (EcomActivityFocus::usesConversionSourceFilter($request)) {
+                TrackerUtmFilter::applyConversionSourceFilter($query, $request->input('utm_source'));
+            } else {
+                TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
+            }
         }
 
         if (! in_array('utm_medium', $except, true)) {

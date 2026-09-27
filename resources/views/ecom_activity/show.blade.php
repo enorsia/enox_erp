@@ -225,7 +225,7 @@
                 </div>
 
                 <div class="section-card">
-                    <div class="section-title">Traffic Attribution</div>
+                    <div class="section-title">Session traffic</div>
                     <div class="divide-y divide-slate-100 dark:divide-slate-700/60 text-[13px]">
                         @forelse ($trafficAttribution ?? [] as $label => $value)
                             <div class="py-2.5 first:pt-0 last:pb-0 min-w-0">
@@ -234,6 +234,20 @@
                             </div>
                         @empty
                             <p class="text-sm text-slate-400 dark:text-slate-500 py-1">No UTM or click tracking data for this session.</p>
+                        @endforelse
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <div class="section-title">Conversion attribution (last touch, 7d)</div>
+                    <div class="divide-y divide-slate-100 dark:divide-slate-700/60 text-[13px]">
+                        @forelse ($conversionAttribution ?? [] as $label => $value)
+                            <div class="py-2.5 first:pt-0 last:pb-0 min-w-0">
+                                <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
+                                <div class="text-slate-700 dark:text-slate-200 break-all text-[13px]">{{ $value }}</div>
+                            </div>
+                        @empty
+                            <p class="text-sm text-slate-400 dark:text-slate-500 py-1">No paid conversion touch recorded for this purchase session.</p>
                         @endforelse
                     </div>
                 </div>

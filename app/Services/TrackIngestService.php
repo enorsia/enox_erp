@@ -27,6 +27,8 @@ class TrackIngestService
         private BotContextPersister $botContextPersister,
         private TrackerPaymentCheckoutEnricher $paymentCheckoutEnricher,
         private CommerceIngestWriter $commerceIngestWriter,
+        private VisitorPaidTouchService $visitorPaidTouchService,
+        private ConversionAttributionService $conversionAttributionService,
     ) {}
 
     /**
@@ -87,6 +89,13 @@ class TrackIngestService
         $liveSessionLatestClock = null;
         $now = TrackerTime::nowUtc();
         $ensuredSessions = [];
+
+        if (! empty($visitorId)) {
+            $this->visitorPaidTouchService->mergeClientSnapshot(
+                $visitorId,
+                is_array($sessionData['last_paid_touch'] ?? null) ? $sessionData['last_paid_touch'] : null,
+            );
+        }
 
         foreach ($events as $event) {
             $eventId = $event['id'] ?? null;
@@ -207,12 +216,34 @@ class TrackIngestService
                 $event['referer'] ?? null,
             );
 
+            if (! empty($visitorId)) {
+                $this->visitorPaidTouchService->recordFromIngestEvent(
+                    $visitorId,
+                    $eventSessionId,
+                    $event['page_url'] ?? null,
+                    $event['referer'] ?? null,
+                    $eventAt,
+                    $eventId,
+                    $sessionData,
+                );
+            }
+
             if (($event['action_type'] ?? '') === 'proceed_checkout') {
                 $this->syncSessionUserFromProceedCheckout($eventSessionId, $event);
             }
 
             if (($event['action_type'] ?? '') === 'payment_success') {
                 $this->syncSessionUserFromPaymentSuccess($eventSessionId, $event);
+
+                $paymentAction = ActivityEcomUserAction::query()->where('event_id', $eventId)->first();
+
+                if ($paymentAction !== null) {
+                    $this->conversionAttributionService->applyForPaymentSuccess(
+                        $paymentAction,
+                        $sessionData,
+                        $eventAt,
+                    );
+                }
             }
 
             $acceptedIds[] = $eventId;

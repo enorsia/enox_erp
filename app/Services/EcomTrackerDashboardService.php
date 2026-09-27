@@ -2178,6 +2178,8 @@ class EcomTrackerDashboardService
                         'amount_paid',
                         'item_qty',
                         'ordered_at',
+                        'conversion_utm_source',
+                        'conversion_utm_medium',
                         DB::raw("'payment_success' as action_type"),
                     )
                     ->whereBetween('ordered_at', TrackerTime::storageRange($from, $to))
@@ -6159,10 +6161,16 @@ class EcomTrackerDashboardService
         $paymentSuccessSeen = [];
 
         foreach ($this->periodOrders($from, $to, $sessionIds, $period) as $order) {
-            $bucketKey = $sessionBucketMap[$order->session_id] ?? null;
+            $conversionSource = filled($order->conversion_utm_source ?? null)
+                ? (SessionTrafficAttribution::normalizeSource((string) $order->conversion_utm_source) ?? (string) $order->conversion_utm_source)
+                : '(direct)';
+            $conversionMedium = filled($order->conversion_utm_medium ?? null)
+                ? trim((string) $order->conversion_utm_medium)
+                : 'none';
+            $bucketKey = $conversionSource."\0".$conversionMedium;
 
-            if ($bucketKey === null) {
-                continue;
+            if (! isset($buckets[$bucketKey])) {
+                $this->incrementTrafficSourceBucket($buckets, $bucketKey, $conversionSource, $conversionMedium, 'sessions', 0);
             }
 
             if (! isset($paymentSuccessSeen[$order->session_id])) {

@@ -32,6 +32,11 @@ class ActivityEcomUser extends Model
         'utm_medium',
         'utm_campaign',
         'landing_page',
+        'conversion_utm_source',
+        'conversion_utm_medium',
+        'conversion_utm_campaign',
+        'conversion_landing_page',
+        'conversion_touch_captured_at',
         'is_logged_in',
         'has_add_to_cart',
         'has_begin_checkout',
@@ -62,6 +67,7 @@ class ActivityEcomUser extends Model
             'last_active_at' => 'datetime',
             'session_duration_seconds' => 'integer',
             'actions_count' => 'integer',
+            'conversion_touch_captured_at' => 'datetime',
         ];
     }
 

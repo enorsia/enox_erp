@@ -277,7 +277,11 @@ class EcomActivityExportQuery
             );
         }
 
-        TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
+        if (EcomActivityFocus::usesConversionSourceFilter($request)) {
+            TrackerUtmFilter::applyConversionSourceFilter($query, $request->input('utm_source'));
+        } else {
+            TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
+        }
         TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
 
         if (EcomActivityFocus::shouldApplyCatalogConstraintsInIndexQuery($focus, $request)) {

@@ -358,6 +358,13 @@ class CommerceIngestWriter
             'customer_email' => trim((string) ($customer['email'] ?? '')) ?: null,
             'customer_phone' => trim((string) ($customer['phone'] ?? $customer['mobile'] ?? '')) ?: null,
             'ordered_at' => $orderedAt,
+            'conversion_utm_source' => $session?->conversion_utm_source,
+            'conversion_utm_medium' => $session?->conversion_utm_medium,
+            'conversion_utm_campaign' => $session?->conversion_utm_campaign,
+            'conversion_landing_page' => $session?->conversion_landing_page,
+            'conversion_touch_captured_at' => $session?->conversion_touch_captured_at !== null
+                ? TrackerTime::formatUtc($session->conversion_touch_captured_at)
+                : null,
             'updated_at' => TrackerTime::formatUtc(TrackerTime::nowUtc()),
         ];
 

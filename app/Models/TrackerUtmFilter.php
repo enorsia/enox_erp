@@ -254,6 +254,63 @@ final class TrackerUtmFilter
 
     /**
      * @param  Builder<ActivityEcomUser>  $query
+     */
+    public static function applyConversionSourceFilter(Builder $query, mixed $source): void
+    {
+        self::applyConversionSourceFilters($query, TrackerMultiSelectFilter::values($source));
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     * @param  list<string>  $sources
+     */
+    public static function applyConversionSourceFilters(Builder $query, array $sources): void
+    {
+        $sources = array_values(array_filter(array_map(
+            static fn (string $value) => self::resolveSource($value),
+            TrackerMultiSelectFilter::values($sources),
+        )));
+
+        if ($sources === []) {
+            return;
+        }
+
+        if (count($sources) === 1) {
+            self::applyResolvedConversionSourceFilter($query, $sources[0]);
+
+            return;
+        }
+
+        $query->where(function (Builder $inner) use ($sources) {
+            foreach ($sources as $index => $source) {
+                $method = $index === 0 ? 'where' : 'orWhere';
+
+                $inner->{$method}(function (Builder $branch) use ($source) {
+                    self::applyResolvedConversionSourceFilter($branch, $source);
+                });
+            }
+        });
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    private static function applyResolvedConversionSourceFilter(Builder $query, string $source): void
+    {
+        if ($source === '(direct)') {
+            $query->where(function (Builder $inner) {
+                $inner->whereNull('conversion_utm_source')->orWhere('conversion_utm_source', '');
+            });
+
+            return;
+        }
+
+        $values = self::sourceColumnValues($source);
+        $query->whereIn('conversion_utm_source', $values);
+    }
+
+    /**
+     * @param  Builder<ActivityEcomUser>  $query
      * @param  list<string>  $sources
      */
     public static function applySourceFilters(Builder $query, array $sources): void

@@ -11,29 +11,29 @@ use Illuminate\Support\Collection;
  */
 final class SessionTrafficAttribution
 {
-    /** @var list<string> */
-    public const URL_PARAMS = [
-        'utm_source',
-        'utm_medium',
-        'utm_campaign',
-        'utm_id',
-        'utm_content',
-        'utm_term',
-        'media_type',
-        'fbclid',
-        'gclid',
-        'gbraid',
-        'wbraid',
-        'gad_source',
-        'gad_campaignid',
-        'msclkid',
-        'awc',
-        'ttclid',
-        'twclid',
-        'li_fat_id',
-        'epik',
-        'sc_cid',
-    ];
+    /**
+     * @return list<string>
+     */
+    public static function urlParamKeys(): array
+    {
+        static $keys = null;
+
+        if ($keys !== null) {
+            return $keys;
+        }
+
+        $keys = array_values(array_unique(array_merge([
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+            'utm_id',
+            'utm_content',
+            'utm_term',
+            'media_type',
+        ], AttributionRules::trackedPlatformQueryParamNames())));
+
+        return $keys;
+    }
 
     /** @var list<string> */
     private const SESSION_COLUMNS = [
@@ -66,7 +66,7 @@ final class SessionTrafficAttribution
 
         $parsed = [];
 
-        foreach (self::URL_PARAMS as $key) {
+        foreach (self::urlParamKeys() as $key) {
             $value = $params[$key] ?? null;
 
             if (! is_scalar($value) || $value === '') {
@@ -78,7 +78,10 @@ final class SessionTrafficAttribution
 
         return self::finalizeParsedAttribution(
             $params,
-            self::applyGoogleTrafficAliases($params, self::applyClickIdAliases($params, self::applyTrafficAliases($params, $parsed))),
+            self::applyGoogleTrafficAliases(
+                $params,
+                self::applyPlatformQueryAliases($params, self::applyTrafficAliases($params, $parsed)),
+            ),
         );
     }
 
@@ -121,29 +124,19 @@ final class SessionTrafficAttribution
      * @param  array<string, string>  $parsed
      * @return array<string, string>
      */
-    private static function applyClickIdAliases(array $params, array $parsed): array
+    private static function applyPlatformQueryAliases(array $params, array $parsed): array
     {
-        $clickIds = [
-            'fbclid' => ['utm_source' => 'facebook', 'utm_medium' => 'paid'],
-            'msclkid' => ['utm_source' => 'bing', 'utm_medium' => 'cpc'],
-            'ttclid' => ['utm_source' => 'tiktok', 'utm_medium' => 'paid'],
-            'twclid' => ['utm_source' => 'twitter', 'utm_medium' => 'paid'],
-            'li_fat_id' => ['utm_source' => 'linkedin', 'utm_medium' => 'paid'],
-            'epik' => ['utm_source' => 'pinterest', 'utm_medium' => 'paid'],
-            'sc_cid' => ['utm_source' => 'snapchat', 'utm_medium' => 'paid'],
-        ];
-
-        foreach ($clickIds as $param => $attribution) {
-            $hasClickId = isset($parsed[$param])
+        foreach (AttributionRules::PLATFORM_QUERY_PARAMS as $param => $definition) {
+            $hasParam = isset($parsed[$param])
                 || (is_scalar($params[$param] ?? null) && $params[$param] !== '');
 
-            if (! $hasClickId) {
+            if (! $hasParam) {
                 continue;
             }
 
-            foreach ($attribution as $field => $value) {
+            foreach (['utm_source', 'utm_medium'] as $field) {
                 if (! isset($parsed[$field])) {
-                    $parsed[$field] = $value;
+                    $parsed[$field] = $definition[$field];
                 }
             }
         }
@@ -227,7 +220,7 @@ final class SessionTrafficAttribution
      */
     private static function refererHostAttribution(): array
     {
-        return [
+        return array_merge([
             'google.' => [
                 'utm_source' => 'google',
                 'utm_medium' => 'organic',
@@ -284,7 +277,7 @@ final class SessionTrafficAttribution
                 'utm_source' => 'snapchat',
                 'utm_medium' => 'social',
             ],
-        ];
+        ], AttributionRules::refererHostAttributionMap());
     }
 
     /**
@@ -493,7 +486,7 @@ final class SessionTrafficAttribution
     {
         $merged = [];
 
-        foreach (self::URL_PARAMS as $key) {
+        foreach (self::urlParamKeys() as $key) {
             if ($key === 'utm_source' || $key === 'utm_medium' || $key === 'utm_campaign') {
                 $columnValue = $session->{$key} ?? null;
 
@@ -519,12 +512,43 @@ final class SessionTrafficAttribution
     /**
      * @return array<string, string>
      */
+    /**
+     * @return array<string, string>
+     */
+    public static function conversionDisplayFields(ActivityEcomUser $session): array
+    {
+        $fields = [];
+
+        if (filled($session->conversion_utm_source)) {
+            $fields['Conversion source'] = self::displaySourceLabel($session->conversion_utm_source)
+                ?? (string) $session->conversion_utm_source;
+        }
+
+        if (filled($session->conversion_utm_medium)) {
+            $fields['Conversion medium'] = (string) $session->conversion_utm_medium;
+        }
+
+        if (filled($session->conversion_utm_campaign)) {
+            $fields['Conversion campaign'] = (string) $session->conversion_utm_campaign;
+        }
+
+        if (filled($session->conversion_landing_page)) {
+            $fields['Conversion landing page'] = (string) $session->conversion_landing_page;
+        }
+
+        if ($session->conversion_touch_captured_at !== null) {
+            $fields['Conversion touch at'] = (string) $session->conversion_touch_captured_at;
+        }
+
+        return $fields;
+    }
+
     public static function displayFields(ActivityEcomUser $session, ?Collection $actions = null): array
     {
         $attribution = self::forSession($session, $actions);
         $fields = [];
 
-        foreach (self::URL_PARAMS as $key) {
+        foreach (self::urlParamKeys() as $key) {
             if (! isset($attribution[$key])) {
                 continue;
             }

@@ -1204,6 +1204,19 @@ final class EcomActivityFocus
         });
     }
 
+    public static function usesConversionSourceFilter(Request $request): bool
+    {
+        $focus = self::resolveFilterSummaryFocus($request);
+
+        if (in_array($focus, ['payment_success', 'conversion', 'purchases'], true)) {
+            return true;
+        }
+
+        $funnel = self::drawerFunnelFilterValues($request);
+
+        return $funnel === ['payment_success'];
+    }
+
     public static function resolveFilterSummaryFocus(Request $request): ?string
     {
         $focus = $request->input('focus');
