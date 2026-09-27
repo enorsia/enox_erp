@@ -6,6 +6,7 @@ use App\Jobs\RecordVisitorActivityJob;
 use App\Models\ActivityEcomUser;
 use App\Support\EcomTrackerLogger;
 use App\Support\TrackerRedisSupport;
+use App\Support\TrackerSessionClock;
 use App\Support\TrackerTime;
 use App\Support\VisitorSessionRedis;
 use Carbon\Carbon;
@@ -35,14 +36,13 @@ class VisitorSessionResolver
         $now = $this->redis->now();
         $today = $this->redis->todayString($now);
         $record = $this->redis->get($visitorId);
-        $gapMinutes = (int) config('tracker.session_gap_minutes', 30);
         $hasVisitedBefore = $this->hasVisitedBefore($visitorId);
 
         EcomTrackerLogger::frontend()->info('session.resolve.start', 'Finding visitor session', [
             'visitor_id' => $visitorId,
             'has_redis_record' => $record !== null,
             'has_visited_before' => $hasVisitedBefore,
-            'gap_minutes' => $gapMinutes,
+            'gap_seconds' => TrackerSessionClock::gapSeconds(),
         ]);
 
         $isNewUniqueVisitor = ! $hasVisitedBefore;
@@ -53,7 +53,7 @@ class VisitorSessionResolver
         if ($record === null) {
             $latestSession = $hasVisitedBefore ? $this->latestSession($visitorId) : null;
 
-            if ($latestSession !== null && $this->minutesSince((string) $latestSession->getRawOriginal('last_active_at'), $now) <= $gapMinutes) {
+            if ($latestSession !== null && ! TrackerSessionClock::gapExpired((string) $latestSession->getRawOriginal('last_active_at'), $now)) {
                 $isNewSession = false;
                 $sessionId = $latestSession->session_id;
                 $resolveReason = 'resume_from_db';
@@ -66,7 +66,7 @@ class VisitorSessionResolver
             $isNewSession = true;
             $sessionId = (string) Str::uuid();
             $resolveReason = 'new_day';
-        } elseif ($this->minutesSince($record['last_active_at'], $now) > $gapMinutes) {
+        } elseif (TrackerSessionClock::gapExpired($record['last_active_at'], $now)) {
             $isNewSession = true;
             $sessionId = (string) Str::uuid();
             $resolveReason = 'gap_expired';
@@ -129,11 +129,9 @@ class VisitorSessionResolver
         $now = $this->redis->now();
         $today = $this->redis->todayString($now);
         $record = $this->redis->get($visitorId);
-        $gapMinutes = (int) config('tracker.session_gap_minutes', 30);
-
         $needsFullResolve = $record === null
             || $record['last_date'] !== $today
-            || $this->minutesSince($record['last_active_at'], $now) > $gapMinutes;
+            || TrackerSessionClock::gapExpired($record['last_active_at'], $now);
 
         if ($needsFullResolve) {
             EcomTrackerLogger::frontend()->debug('session.resolve.ingest', 'Need new session for this visitor', [
@@ -183,6 +181,35 @@ class VisitorSessionResolver
             ->where('visitor_id', $visitorId)
             ->orderByDesc('last_active_at')
             ->first();
+    }
+
+    /**
+     * Pick the session that owns this event's wall-clock time (for delayed queue replay).
+     *
+     * @param  array<string, mixed>  $context
+     */
+    public function sessionIdForEventClock(string $visitorId, Carbon $eventAt, array $context = []): string
+    {
+        $sessions = ActivityEcomUser::query()
+            ->where('visitor_id', $visitorId)
+            ->orderByDesc('last_active_at')
+            ->get();
+
+        foreach ($sessions as $session) {
+            if (TrackerSessionClock::eventFallsInSessionWindow($eventAt, $session)) {
+                return $session->session_id;
+            }
+        }
+
+        $sessionId = (string) Str::uuid();
+
+        EcomTrackerLogger::frontend()->info('session.backfill.plan', 'Will backfill session for delayed event clock', [
+            'visitor_id' => $visitorId,
+            'session_id' => $sessionId,
+            'event_clock' => TrackerTime::formatUtc($eventAt),
+        ]);
+
+        return $sessionId;
     }
 
     /**
@@ -245,12 +272,24 @@ class VisitorSessionResolver
         ];
     }
 
-    private function minutesSince(string $lastActiveAt, Carbon $now): int
+    public function recordActivityClock(string $visitorId, string $sessionId, Carbon $activityAt): void
     {
-        if ($lastActiveAt === '') {
-            return PHP_INT_MAX;
+        $now = $this->redis->now();
+        $record = $this->redis->get($visitorId);
+        $activityIso = TrackerTime::formatUtc($activityAt) ?? $activityAt->toIso8601String();
+
+        if ($record !== null && $record['session_id'] === $sessionId) {
+            $existing = TrackerTime::toUtc($record['last_active_at']);
+
+            if ($existing !== null && $existing->greaterThan($activityAt)) {
+                $activityIso = TrackerTime::formatUtc($existing) ?? $record['last_active_at'];
+            }
         }
 
-        return (int) TrackerTime::toUtc($lastActiveAt)?->diffInMinutes($now) ?? PHP_INT_MAX;
+        $this->redis->put($visitorId, [
+            'last_active_at' => $activityIso,
+            'last_date' => $this->redis->todayString($now),
+            'session_id' => $sessionId,
+        ]);
     }
 }
