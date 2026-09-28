@@ -32,30 +32,10 @@
     };
     $basePreset = in_array($period, ['24h', 'yesterday', '7d', '30d'], true) ? $period : '24h';
 
-    $baseQuery = request()->except([
-        'date_from', 'date_to', 'period',
-        'search', 'category', 'color', 'size', 'sort_by', 'activity',
-        'has_purchases', 'has_views', 'has_adds', 'event_scenario',
-    ]);
+    $baseQuery = [];
 @endphp
 
-<div id="ecom-tracker-dashboard-content" class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
-    @include('ecom_tracker.partials.filter-drawer', [
-        'action' => route('admin.ecom-tracker.dashboard'),
-        'resetUrl' => route('admin.ecom-tracker.dashboard'),
-        'showPeriodFilters' => true,
-        'showSessionFilters' => true,
-        'sessionFiltersHeading' => 'Sessions & audience',
-        'includeCountry' => false,
-        'period' => $period,
-        'dateFrom' => $dateFrom,
-        'dateTo' => $dateTo,
-        'baseQuery' => $baseQuery,
-        'range' => $d['range'],
-        'routeName' => 'admin.ecom-tracker.dashboard',
-        'periodFiltersMobileOnly' => true,
-    ])
-
+<div id="ecom-tracker-dashboard-content" class="etd-page">
     <header class="etd-page-header">
         <div class="etd-page-header-bar"
              x-data="{
@@ -109,18 +89,12 @@
                     ])
                     @include('ecom_tracker.partials.header-reset-button', [
                         'url' => route('admin.ecom-tracker.dashboard'),
-                        'active' => count(request()->query()) > 0,
-                    ])
-                    @include('ecom_tracker.partials.header-filter-button', [
                         'active' => $hasActiveFilters,
-                        'count' => $hasActiveFilters ? $activeFilterCount : 0,
                     ])
                     @include('ecom_tracker.partials.header-print-button')
                 </div>
             </div>
         </div>
-
-        @include('ecom_tracker.partials.active-filter-chips', ['chips' => $filterChips ?? []])
     </header>
 
     <div class="etd-kpi-panel mb-5">
@@ -303,7 +277,7 @@
                             <td class="etd-num etd-col-metric">{{ number_format($product['qty'] ?? 0) }}</td>
                             <td class="etd-num etd-col-metric">
                                 £{{ number_format($product['revenue'], 2) }}
-                                <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] }}%"></div></div>
+                                <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] ?? 0 }}%"></div></div>
                             </td>
                         </tr>
                     @empty
@@ -423,6 +397,7 @@
             </div>
         </div>
     </section>
+
 </div>
 
 <script>

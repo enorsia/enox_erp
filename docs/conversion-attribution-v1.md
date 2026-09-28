@@ -18,7 +18,7 @@ Production `landing_page` samples use **`_kx`** (281 sessions); `kxcid` not obse
 6. `payment_success`: `ConversionAttributionService`
 7. Client: `enox_last_paid_touch` (not cleared on new session)
 8. Dashboard: revenue/purchases on `conversion_utm_source`; dual columns in admin
-9. Backfills: **7a → 7b** (7c optional)
+9. Backfill: `php artisan tracker:backfill-attribution` (all steps)
 
 ## Acceptance criteria
 
@@ -41,17 +41,18 @@ Always run **7a (session UTMs) before 7b (conversion)**. Conversion reads `visit
 
 ### 7a overwrite rule
 
-Update `utm_source` / `utm_medium` / `utm_campaign` only when current `utm_source` is null or empty (treat `(direct)` as empty). Examples: empty → `klaviyo`, empty → `google`+`organic`, empty → `mailchimp`. **Do not** overwrite an existing paid-qualifying session source.
+`tracker:backfill-attribution` (session step) scans **landing_page** plus **every action `page_url` and `referer`** (same-site referers with `awc`, `_kx`, etc. included). Fills empty `utm_*` only; treats `(direct)` as empty for `utm_source`. **Does not** overwrite an existing non-empty marketing `utm_source`.
 
 ### Stakeholder note (pre-ship orders)
 
-Without optional **7c** (rebuild `visitor_last_paid_touch` from historical `page_url`), old orders may have blank `conversion_*` even if the visitor clicked a paid ad before launch. Session labels are fixed by 7a; conversion on legacy orders needs 7c or purchases after go-live.
+At payment, conversion resolves **last marketing touch within 7 days** for the same `visitor_id` from `visitor_last_paid_touch`, the client snapshot, and **historical action `page_url` / `referer` rows** (so an earlier Google session can credit a later direct checkout). Run `tracker:backfill-attribution` after deploy to fill historical rows safely (see deploy section below).
 
 ## Test matrix
 
 | Case | Expected |
 |------|----------|
 | URL with `gclid` only | Session google/paid; paid touch recorded |
+| URL with `srsltid` only (Google Shopping / Search listings) | Session google/organic; marketing touch (not paid) |
 | URL with `awc` | Session awin/affiliate; paid touch |
 | Klaviyo param (`_kx` / verified) | Session klaviyo/email; marketing touch recorded |
 | `utm_source=klaviyo` | Session klaviyo; marketing touch |
@@ -62,6 +63,33 @@ Without optional **7c** (rebuild `visitor_last_paid_touch` from historical `page
 ## Internal note
 
 7-day conversion window is for internal analytics (config: `TRACKER_CONVERSION_WINDOW_DAYS`); it does not match Awin/Google billing windows.
+
+## `list_traffic_utm_*` columns (7-day visitor attribution)
+
+Activity **UTM source / medium** filters, facet counts, and the list **Source** column use **attributed** traffic per session:
+
+1. Paid order → `conversion_utm_*`
+2. Else last **marketing** touch for the same `visitor_id` within 7 days (including an earlier paid/Google session 30+ minutes ago)
+3. Else this session’s UTM / landing page
+
+**Session detail** “Session traffic” stays this visit only; the Conversion card can still show 7-day marketing when there is no purchase credit.
+
+After deploy or rule changes (on the server):
+
+```bash
+php artisan tracker:backfill-attribution
+```
+
+Runs four **conservative** steps in order (does not rewrite healthy sessions or existing conversion credit):
+
+1. Split only sessions whose **own** actions span more than 30 minutes  
+2. Fill **empty** session `utm_*` / landing (never overwrites a set marketing source)  
+3. Refresh `list_traffic_*` only when missing or still `(direct)`  
+4. Set `conversion_*` only when not already set  
+
+Can take a while on large databases.
+
+New ingests refresh `list_traffic_utm_*` automatically.
 
 ## MySQL integration tests (no rollback)
 

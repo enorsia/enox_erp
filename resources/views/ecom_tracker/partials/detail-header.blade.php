@@ -9,6 +9,7 @@
     'currentSort' => null,
     'sortAction' => null,
     'compact' => false,
+    'showFilterButton' => true,
 ])
 
 <div @class(['etd-topbar', 'etd-topbar--compact' => $compact])>
@@ -73,9 +74,11 @@
                 </select>
             </form>
         @endif
-        @include('ecom_tracker.partials.header-filter-button', [
-            'active' => $activeFilterCount > 0,
-            'count' => $activeFilterCount,
-        ])
+        @if ($showFilterButton)
+            @include('ecom_tracker.partials.header-filter-button', [
+                'active' => $activeFilterCount > 0,
+                'count' => $activeFilterCount,
+            ])
+        @endif
     </div>
 </div>

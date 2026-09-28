@@ -279,10 +279,11 @@ class EcomActivityExportQuery
 
         if (EcomActivityFocus::usesConversionSourceFilter($request)) {
             TrackerUtmFilter::applyConversionSourceFilter($query, $request->input('utm_source'));
+            TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
         } else {
-            TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
+            TrackerUtmFilter::applyListTrafficSourceFilter($query, $request->input('utm_source'));
+            TrackerUtmFilter::applyListTrafficMediumFilter($query, $request->input('utm_medium'));
         }
-        TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
 
         if (EcomActivityFocus::shouldApplyCatalogConstraintsInIndexQuery($focus, $request)) {
             EcomActivityFocus::applyProductCatalogConstraints(

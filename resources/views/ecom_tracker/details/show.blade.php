@@ -7,8 +7,7 @@
     $range = $detail['range'];
     $data = $detail['data'];
     $period = $filters['period'] ?? '24h';
-    $resetQuery = array_filter(['back' => request('back')]);
-    $queryParams = request()->only(['period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'sort_by', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario']);
+    $queryParams = request()->only(['period', 'date_from', 'date_to']);
     $chartPayload = match ($section) {
         'devices' => ['devices' => $data],
         'engagement' => ['engagement' => $data],
@@ -24,24 +23,7 @@
     ];
 @endphp
 
-<div class="etd-page" x-data="{ drawerOpen: false }" @keydown.escape.window="drawerOpen = false">
-    @include('ecom_tracker.partials.filter-drawer', [
-        'action' => route('admin.ecom-tracker.dashboard.details', $section),
-        'resetUrl' => route('admin.ecom-tracker.dashboard.details', array_merge(['section' => $section], $resetQuery)),
-        'showDashboardFilters' => true,
-        'showSessionFilters' => true,
-        'showProductFilters' => $section === 'products',
-        'productFiltersHeading' => $section === 'products' ? 'Product catalog' : null,
-        'productFilterOptions' => $section === 'products' ? ($data['filter_options'] ?? []) : [],
-        'eventScenarioOptions' => $eventScenarioOptions ?? [],
-        'productSortGroups' => $productSortGroups ?? [],
-        'productActivityOptions' => $productActivityOptions ?? [],
-        'currentProductSort' => $currentProductSort ?? 'top_revenue',
-        'period' => $period,
-        'dateFrom' => $filters['date_from'] ?? '',
-        'dateTo' => $filters['date_to'] ?? '',
-    ])
-
+<div class="etd-page">
     @include('ecom_tracker.partials.detail-header', [
         'title' => $title,
         'subtitle' => $range['label'] ?? null,
@@ -49,6 +31,7 @@
         'activeFilterCount' => $activeFilterCount,
         'breadcrumbs' => $breadcrumbs,
         'compact' => true,
+        'showFilterButton' => false,
     ])
 
     <div @class(['etd-panel', 'etd-panel--compact' => $section === 'products'])>

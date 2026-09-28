@@ -13,6 +13,49 @@ return [
     */
     'enabled' => (bool) env('ECOM_TRACKER_ENABLED', false),
 
+    /**
+     * When true, dashboard reads closed calendar days from activity_ecom_daily_* rollups
+     * and only scans raw tables for today (store timezone). Rollups never replace ingest.
+     */
+    'use_daily_rollups' => (bool) env('TRACKER_USE_DAILY_ROLLUPS', true),
+
+    /**
+     * Store dashboard: closed days come only from activity_ecom_daily_* rollups.
+     * Today stays live on raw tables. If any closed day in the range lacks a site rollup row, the dashboard shows no metrics (no slow raw fallback).
+     */
+    'dashboard_rollups_only' => (bool) env('TRACKER_DASHBOARD_ROLLUPS_ONLY', true),
+
+    /**
+     * When true, hybrid dashboard catalog reads product/category daily rollups (migration 2026_09_28_000007).
+     * Set false only before that migration runs; avoids information_schema probes per request.
+     */
+    'daily_rollups_commerce_view_columns' => filter_var(
+        env('TRACKER_DAILY_ROLLUPS_COMMERCE_VIEW_COLUMNS', true),
+        FILTER_VALIDATE_BOOL,
+    ),
+
+    /**
+     * When true and batch snapshot is unavailable, recoverable-sale panels show counts only (no session table).
+     * With batch read enabled, rows are hydrated from the snapshot without extra queries.
+     */
+    'dashboard_fast_recovery_rows' => (bool) env('TRACKER_DASHBOARD_FAST_RECOVERY_ROWS', false),
+
+    /** One batched DB read for the unfiltered store dashboard (date range only). */
+    'dashboard_batch_read' => (bool) env('TRACKER_DASHBOARD_BATCH_READ', true),
+
+    /**
+     * For long rollup-backed ranges (7d/30d), skip loading every session/line item into memory.
+     * Recoverable panels use SQL; counts and rollups stay the same.
+     */
+    /** Use slim rollup batch when closed days >= this (7d preset = 6 closed + today). */
+    'dashboard_slim_batch_min_closed_days' => (int) env('TRACKER_DASHBOARD_SLIM_BATCH_MIN_CLOSED_DAYS', 6),
+
+    /**
+     * Visitor quality (bot) strip on store dashboard — one extra SQL scan when true.
+     * Activity list / visitor analytics are unchanged.
+     */
+    'dashboard_visitor_quality' => filter_var(env('TRACKER_DASHBOARD_VISITOR_QUALITY', false), FILTER_VALIDATE_BOOL),
+
     'api_key_hash' => env('TRACKER_API_KEY_HASH'),
 
     /*
@@ -91,7 +134,7 @@ return [
 
     'queue_async' => (bool) env('TRACKER_QUEUE_ASYNC', true),
 
-    'analytics_cache_enabled' => (bool) env('TRACKER_ANALYTICS_CACHE_ENABLED', true),
+    'analytics_cache_enabled' => (bool) env('TRACKER_ANALYTICS_CACHE_ENABLED', false),
 
     'analytics_cache_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_SECONDS', 300),
 

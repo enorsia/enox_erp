@@ -147,6 +147,64 @@ final class SessionDurationBuckets
      *     median_seconds: int
      * }
      */
+    /**
+     * @param  array<string, int>  $countsByKey  bucket key => session count
+     * @return array{buckets: array<int, array<string, mixed>>, total_sessions: int, median_seconds: int}
+     */
+    public static function fromBucketCounts(array $countsByKey): array
+    {
+        $buckets = array_map(
+            fn (array $bucket) => array_merge($bucket, [
+                'count' => (int) ($countsByKey[$bucket['key']] ?? 0),
+            ]),
+            self::definitions(),
+        );
+
+        $total = (int) array_sum($countsByKey);
+        $median = self::medianSecondsFromHistogram($buckets, $total);
+
+        $bucketsWithPct = array_map(function (array $bucket) use ($total) {
+            return [
+                'key' => $bucket['key'],
+                'label' => $bucket['label'],
+                'min' => $bucket['min'],
+                'max' => $bucket['max'],
+                'count' => $bucket['count'],
+                'pct' => $total > 0 ? round(($bucket['count'] / $total) * 100, 1) : 0.0,
+            ];
+        }, $buckets);
+
+        return [
+            'buckets' => $bucketsWithPct,
+            'total_sessions' => $total,
+            'median_seconds' => $median,
+        ];
+    }
+
+    /**
+     * @param  array<int, array{key: string, label: string, min: int, max: int, count: int}>  $buckets
+     */
+    private static function medianSecondsFromHistogram(array $buckets, int $total): int
+    {
+        if ($total <= 0) {
+            return 0;
+        }
+
+        $target = intdiv($total, 2) + ($total % 2);
+        $seen = 0;
+
+        foreach ($buckets as $bucket) {
+            $seen += (int) $bucket['count'];
+            if ($seen >= $target) {
+                $mid = (int) round(($bucket['min'] + min($bucket['max'], 1800)) / 2);
+
+                return max(0, $mid);
+            }
+        }
+
+        return 0;
+    }
+
     public static function withCounts(iterable $durations): array
     {
         $buckets = array_map(

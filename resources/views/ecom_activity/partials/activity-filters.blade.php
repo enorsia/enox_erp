@@ -123,6 +123,7 @@
 
     <section class="etd-activity-filter-section">
         <p class="etd-activity-filter-section-title">Traffic source</p>
+        <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Counts sessions by last marketing touch within 7 days for the same visitor, then this visit.</p>
         @php
             $sources = $utmFilterState['sources'] ?? [];
             $mediums = $utmFilterState['mediums'] ?? [];

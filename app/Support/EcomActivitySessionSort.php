@@ -202,30 +202,29 @@ final class EcomActivitySessionSort
         $catalogOptions = is_array($scope['catalog_options'] ?? null) ? $scope['catalog_options'] : [];
         $useCatalogScope = self::usesCatalogActionScope($catalogOptions);
 
-        $lineSub = self::funnelLineTimesSubquery($scope, $useCatalogScope ? $catalogOptions : []);
+        if (! $useCatalogScope) {
+            return self::orderByFunnelStageFromSessionColumns($query, $dir);
+        }
 
-        $query = $query
+        $lineSub = self::funnelLineTimesSubquery($scope, $catalogOptions);
+
+        return $query
             ->leftJoinSub($lineSub, 'funnel_line_times', 'funnel_line_times.line_session_id', '=', "{$table}.session_id")
-            ->select("{$table}.*");
+            ->select("{$table}.*")
+            ->orderByRaw('COALESCE(funnel_line_times.stage_rank, 0) '.$dir)
+            ->orderByRaw(self::catalogStageTimeSql($table).' '.$dir)
+            ->orderByDesc("{$table}.id");
+    }
 
-        if ($useCatalogScope) {
-            return $query
-                ->orderByRaw('COALESCE(funnel_line_times.stage_rank, 0) '.$dir)
-                ->orderByRaw(self::catalogStageTimeSql($table).' '.$dir)
-                ->orderByDesc("{$table}.id");
-        }
-
-        $orderSub = DB::table('activity_ecom_orders')
-            ->selectRaw('session_id as order_session_id, MAX(ordered_at) as latest_ordered_at')
-            ->groupBy('session_id');
-
-        $from = $scope['from'] ?? null;
-        $to = $scope['to'] ?? null;
-
-        if ($from instanceof Carbon && $to instanceof Carbon) {
-            [$start, $end] = TrackerTime::storageRange($from, $to);
-            $orderSub->whereBetween('ordered_at', [$start, $end]);
-        }
+    /**
+     * Default activity list sort: session funnel flags only (no line-item / order subqueries).
+     *
+     * @param  Builder<ActivityEcomUser>  $query
+     * @return Builder<ActivityEcomUser>
+     */
+    private static function orderByFunnelStageFromSessionColumns(Builder $query, string $dir): Builder
+    {
+        $table = $query->getModel()->getTable();
 
         $rankSql = <<<SQL
 CASE
@@ -239,16 +238,15 @@ SQL;
 
         $stageTimeSql = <<<SQL
 CASE
-    WHEN {$table}.has_payment_success = 1 THEN COALESCE(funnel_order_times.latest_ordered_at, funnel_line_times.latest_payment_staged, {$table}.first_payment_at, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
-    WHEN {$table}.has_proceed_checkout = 1 THEN COALESCE(funnel_line_times.latest_proceed, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
-    WHEN {$table}.has_begin_checkout = 1 THEN COALESCE(funnel_line_times.latest_begin, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
-    WHEN {$table}.has_add_to_cart = 1 THEN COALESCE(funnel_line_times.latest_cart, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN {$table}.has_payment_success = 1 THEN COALESCE({$table}.first_payment_at, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN {$table}.has_proceed_checkout = 1 THEN COALESCE({$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN {$table}.has_begin_checkout = 1 THEN COALESCE({$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN {$table}.has_add_to_cart = 1 THEN COALESCE({$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
     ELSE COALESCE({$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
 END
 SQL;
 
         return $query
-            ->leftJoinSub($orderSub, 'funnel_order_times', 'funnel_order_times.order_session_id', '=', "{$table}.session_id")
             ->orderByRaw($rankSql.' '.$dir)
             ->orderByRaw($stageTimeSql.' '.$dir)
             ->orderByDesc("{$table}.id");

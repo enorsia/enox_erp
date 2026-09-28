@@ -37,6 +37,8 @@ class ActivityEcomUser extends Model
         'conversion_utm_campaign',
         'conversion_landing_page',
         'conversion_touch_captured_at',
+        'list_traffic_utm_source',
+        'list_traffic_utm_medium',
         'is_logged_in',
         'has_add_to_cart',
         'has_begin_checkout',

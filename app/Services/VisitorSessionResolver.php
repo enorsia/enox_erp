@@ -192,13 +192,21 @@ class VisitorSessionResolver
     {
         $sessions = ActivityEcomUser::query()
             ->where('visitor_id', $visitorId)
-            ->orderByDesc('last_active_at')
+            ->orderBy('created_at')
             ->get();
 
-        foreach ($sessions as $session) {
-            if (TrackerSessionClock::eventFallsInSessionWindow($eventAt, $session)) {
-                return $session->session_id;
-            }
+        $matches = $sessions->filter(
+            fn (ActivityEcomUser $session) => TrackerSessionClock::eventFallsInSessionWindow($eventAt, $session)
+        );
+
+        if ($matches->isNotEmpty()) {
+            return $this->pickBestSessionForEvent($eventAt, $matches, $context)->session_id;
+        }
+
+        $sessionId = $this->matchIngestBackfillPlan($eventAt, $context);
+
+        if ($sessionId !== null) {
+            return $sessionId;
         }
 
         $sessionId = (string) Str::uuid();
@@ -210,6 +218,81 @@ class VisitorSessionResolver
         ]);
 
         return $sessionId;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, ActivityEcomUser>  $matches
+     * @param  array<string, mixed>  $context
+     */
+    private function pickBestSessionForEvent(Carbon $eventAt, $matches, array $context): ActivityEcomUser
+    {
+        $liveSessionId = isset($context['live_session_id']) ? (string) $context['live_session_id'] : '';
+        $reference = TrackerTime::nowUtc();
+
+        $ranked = $matches->values()->all();
+
+        usort($ranked, function (ActivityEcomUser $left, ActivityEcomUser $right) use ($eventAt, $liveSessionId, $reference): int {
+            return $this->sessionEventRank($left, $eventAt, $liveSessionId, $reference)
+                <=> $this->sessionEventRank($right, $eventAt, $liveSessionId, $reference);
+        });
+
+        return $ranked[0];
+    }
+
+    private function sessionEventRank(
+        ActivityEcomUser $session,
+        Carbon $eventAt,
+        string $liveSessionId,
+        Carbon $reference,
+    ): string {
+        $created = TrackerTime::toUtc($session->created_at ?? $session->getRawOriginal('created_at'));
+        $lastActive = TrackerTime::toUtc($session->last_active_at ?? $session->getRawOriginal('last_active_at')) ?? $created;
+
+        $inCore = $created !== null
+            && $lastActive !== null
+            && $eventAt->greaterThanOrEqualTo($created)
+            && $eventAt->lessThanOrEqualTo($lastActive);
+
+        $isLiveSession = $liveSessionId !== '' && $session->session_id === $liveSessionId;
+        $staleForLive = $isLiveSession && ! TrackerSessionClock::isLiveActivity($eventAt, $reference);
+
+        return sprintf(
+            '%d-%d-%010d',
+            $inCore ? 0 : 1,
+            $staleForLive ? 1 : 0,
+            $created?->getTimestamp() ?? PHP_INT_MAX,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function matchIngestBackfillPlan(Carbon $eventAt, array $context): ?string
+    {
+        $plan = $context['backfill_plan'] ?? null;
+
+        if (! is_array($plan) || $plan === []) {
+            return null;
+        }
+
+        foreach ($plan as $sessionId => $bounds) {
+            if (! is_string($sessionId) || ! is_array($bounds)) {
+                continue;
+            }
+
+            $created = TrackerTime::toUtc($bounds['first_at'] ?? null);
+            $lastActive = TrackerTime::toUtc($bounds['last_at'] ?? null);
+
+            if ($created === null || $lastActive === null) {
+                continue;
+            }
+
+            if (TrackerSessionClock::eventFallsInActivitySpan($eventAt, $created, $lastActive)) {
+                return $sessionId;
+            }
+        }
+
+        return null;
     }
 
     /**

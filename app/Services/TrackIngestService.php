@@ -72,7 +72,6 @@ class TrackIngestService
             $liveSessionId = $resolved['session_id'];
             $sessionData['visitor_id'] = $visitorId;
             $sessionData['session_id'] = $liveSessionId;
-            $this->upsertSession($request, $liveSessionId, $sessionData, $clientContext);
         } else {
             $this->upsertSession($request, $sessionId, $sessionData, $clientContext);
         }
@@ -89,6 +88,8 @@ class TrackIngestService
         $liveSessionLatestClock = null;
         $now = TrackerTime::nowUtc();
         $ensuredSessions = [];
+        $backfillPlan = [];
+        $listTrafficSyncSessionIds = [];
 
         if (! empty($visitorId)) {
             $this->visitorPaidTouchService->mergeClientSnapshot(
@@ -106,8 +107,13 @@ class TrackIngestService
                 $eventSessionId = $this->visitorSessionResolver->sessionIdForEventClock(
                     $visitorId,
                     $eventAt,
-                    $sessionContext,
+                    array_merge($sessionContext, [
+                        'live_session_id' => $liveSessionId,
+                        'backfill_plan' => $backfillPlan,
+                    ]),
                 );
+
+                $this->rememberBackfillPlanBounds($backfillPlan, $eventSessionId, $eventAt);
             }
 
             if (! isset($ensuredSessions[$eventSessionId])) {
@@ -247,6 +253,7 @@ class TrackIngestService
             }
 
             $acceptedIds[] = $eventId;
+            $listTrafficSyncSessionIds[$eventSessionId] = true;
 
             $this->syncSessionLastActiveFromEvents($eventSessionId, [$event]);
 
@@ -269,6 +276,14 @@ class TrackIngestService
         if (! empty($visitorId)) {
             $redisClock = $liveSessionLatestClock ?? $now;
             $this->visitorSessionResolver->recordActivityClock($visitorId, $liveSessionId, $redisClock);
+        }
+
+        foreach (array_keys($listTrafficSyncSessionIds) as $syncSessionId) {
+            $session = ActivityEcomUser::query()->where('session_id', $syncSessionId)->first();
+
+            if ($session !== null) {
+                SessionTrafficAttribution::syncListTrafficAttributionColumns($session);
+            }
         }
 
         $this->logInfo('ingest.complete', 'All actions saved', [
@@ -821,6 +836,29 @@ class TrackIngestService
         }
 
         return max(0, (int) $from->diffInSeconds($to, absolute: true));
+    }
+
+    /**
+     * @param  array<string, array{first_at: Carbon, last_at: Carbon}>  $backfillPlan
+     */
+    private function rememberBackfillPlanBounds(array &$backfillPlan, string $sessionId, Carbon $eventAt): void
+    {
+        if (! isset($backfillPlan[$sessionId])) {
+            $backfillPlan[$sessionId] = [
+                'first_at' => $eventAt->copy(),
+                'last_at' => $eventAt->copy(),
+            ];
+
+            return;
+        }
+
+        if ($eventAt->lessThan($backfillPlan[$sessionId]['first_at'])) {
+            $backfillPlan[$sessionId]['first_at'] = $eventAt->copy();
+        }
+
+        if ($eventAt->greaterThan($backfillPlan[$sessionId]['last_at'])) {
+            $backfillPlan[$sessionId]['last_at'] = $eventAt->copy();
+        }
     }
 
     /**

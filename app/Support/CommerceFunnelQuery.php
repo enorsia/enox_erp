@@ -184,6 +184,75 @@ final class CommerceFunnelQuery
 
     /**
      * @param  Collection<int, string>|null  $allowedSessionIds
+     * @return array{revenue: float, item_qty: int, purchases: int}
+     */
+    public static function paymentMetricTotals(
+        Carbon $from,
+        Carbon $to,
+        ?Collection $allowedSessionIds,
+        ?string $period = null,
+    ): array {
+        return self::paymentMetricTotalsFromPaymentRows(
+            self::paymentRows($from, $to, $allowedSessionIds, $period),
+        );
+    }
+
+    /**
+     * @param  list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>  $rows
+     * @return array{revenue: float, item_qty: int, purchases: int}
+     */
+    public static function paymentMetricTotalsFromPaymentRows(array $rows): array
+    {
+        $collection = collect($rows);
+
+        return [
+            'revenue' => round((float) $collection->sum('value'), 2),
+            'item_qty' => (int) $collection->sum('qty'),
+            'purchases' => $collection->count(),
+        ];
+    }
+
+    /**
+     * @param  list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>  $rows
+     * @return array<string, int> local Y-m-d => units sold
+     */
+    public static function paymentItemQtyByLocalDate(array $rows): array
+    {
+        $byDate = [];
+
+        foreach ($rows as $row) {
+            $local = TrackerTime::toLocal(TrackerTime::fromStorage($row['occurred_at'] ?? null));
+            if ($local === null) {
+                continue;
+            }
+
+            $key = $local->toDateString();
+            $byDate[$key] = ($byDate[$key] ?? 0) + max(0, (int) ($row['qty'] ?? 0));
+        }
+
+        return $byDate;
+    }
+
+    /**
+     * Align daily site-metric rows used by the trend chart with payment-row totals (orders + action fallback).
+     *
+     * @param  array<string, array<string, int>>  $siteMetricsByDate
+     * @param  list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>  $paymentRows
+     * @return array<string, array<string, int>>
+     */
+    public static function overlayDailySiteMetricsWithPaymentRows(array $siteMetricsByDate, array $paymentRows): array
+    {
+        $qtyByDate = self::paymentItemQtyByLocalDate($paymentRows);
+
+        foreach ($siteMetricsByDate as $date => $metrics) {
+            $siteMetricsByDate[$date]['items_sold_qty'] = (int) ($qtyByDate[$date] ?? 0);
+        }
+
+        return $siteMetricsByDate;
+    }
+
+    /**
+     * @param  Collection<int, string>|null  $allowedSessionIds
      * @return list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>
      */
     public static function paymentRows(
@@ -196,6 +265,51 @@ final class CommerceFunnelQuery
             return [];
         }
 
+        ['rows' => $rows, 'seen' => $seen] = self::paymentRowsFromOrdersTable($from, $to, $allowedSessionIds, $period);
+        $sessionsWithOrdersInPeriod = array_fill_keys(array_column($rows, 'session_id'), true);
+
+        foreach (self::paymentRowsFromPaymentSuccessActions($from, $to, $allowedSessionIds, $period) as $actionRow) {
+            $dedupeKey = $actionRow['_dedupe_key'] ?? '';
+            $eventId = $actionRow['_event_id'] ?? '';
+            $sessionId = (string) ($actionRow['session_id'] ?? '');
+            unset($actionRow['_dedupe_key'], $actionRow['_event_id']);
+
+            if ($sessionId !== '' && isset($sessionsWithOrdersInPeriod[$sessionId])) {
+                continue;
+            }
+
+            if ($dedupeKey !== '' && isset($seen[$dedupeKey])) {
+                continue;
+            }
+
+            if ($eventId !== '' && isset($seen['event:'.$eventId])) {
+                continue;
+            }
+
+            if ($dedupeKey !== '') {
+                $seen[$dedupeKey] = true;
+            }
+
+            if ($eventId !== '') {
+                $seen['event:'.$eventId] = true;
+            }
+
+            $rows[] = $actionRow;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  Collection<int, string>|null  $allowedSessionIds
+     * @return array{rows: list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>, seen: array<string, true>}
+     */
+    private static function paymentRowsFromOrdersTable(
+        Carbon $from,
+        Carbon $to,
+        ?Collection $allowedSessionIds,
+        ?string $period,
+    ): array {
         $range = TrackerTime::storageRange($from, $to);
         $query = DB::table('activity_ecom_orders')
             ->select('session_id', 'ordered_at', 'amount_paid', 'item_qty', 'order_id', 'event_id')
@@ -209,7 +323,8 @@ final class CommerceFunnelQuery
 
         foreach ($query->get() as $order) {
             $orderId = trim((string) ($order->order_id ?? ''));
-            $dedupeKey = $orderId !== '' ? $orderId : (string) ($order->event_id ?? '');
+            $eventId = (string) ($order->event_id ?? '');
+            $dedupeKey = $orderId !== '' ? $orderId : $eventId;
 
             if ($dedupeKey !== '' && isset($seen[$dedupeKey])) {
                 continue;
@@ -219,11 +334,87 @@ final class CommerceFunnelQuery
                 $seen[$dedupeKey] = true;
             }
 
+            if ($eventId !== '') {
+                $seen['event:'.$eventId] = true;
+            }
+
             $rows[] = [
                 'session_id' => (string) $order->session_id,
                 'qty' => max(1, (int) ($order->item_qty ?? 0)),
                 'value' => round((float) ($order->amount_paid ?? 0), 2),
                 'occurred_at' => $order->ordered_at,
+            ];
+        }
+
+        return ['rows' => $rows, 'seen' => $seen];
+    }
+
+    /**
+     * payment_success actions in the period for sessions in the activity window (when orders are missing or ordered_at is outside the window).
+     *
+     * @param  Collection<int, string>|null  $allowedSessionIds
+     * @return list<array{session_id: string, qty: int, value: float, occurred_at: mixed, _dedupe_key: string}>
+     */
+    private static function paymentRowsFromPaymentSuccessActions(
+        Carbon $from,
+        Carbon $to,
+        ?Collection $allowedSessionIds,
+        ?string $period,
+    ): array {
+        $range = TrackerTime::storageRange($from, $to);
+        $query = DB::table('activity_ecom_user_actions as a')
+            ->select(
+                'a.session_id',
+                'a.event_id',
+                'a.order_id',
+                'a.amount_paid',
+                'a.commerce_total',
+                'a.item_qty',
+                'a.created_at',
+                'a.action_type',
+            )
+            ->where('a.action_type', 'payment_success')
+            ->whereBetween('a.created_at', $range)
+            ->orderByDesc('a.created_at');
+
+        if ($allowedSessionIds !== null) {
+            self::constrainToSessionIds($query, $allowedSessionIds, 'a.session_id');
+        } else {
+            $query->whereIn('a.session_id', function ($sub) use ($from, $to, $period) {
+                $sub->from('activity_ecom_user')->select('session_id');
+                TrackerTime::applyEcomActivitySessionScope($sub, $from, $to, $period);
+            });
+        }
+
+        $rows = [];
+        $seen = [];
+
+        foreach ($query->get() as $action) {
+            $orderId = CommerceReadSupport::orderIdForAction($action);
+            $eventId = (string) ($action->event_id ?? '');
+            $dedupeKey = $orderId !== '' ? $orderId : $eventId;
+
+            if ($dedupeKey !== '' && isset($seen[$dedupeKey])) {
+                continue;
+            }
+
+            if ($dedupeKey !== '') {
+                $seen[$dedupeKey] = true;
+            }
+
+            $amount = CommerceReadSupport::amountForAction($action);
+
+            if ($amount === null || $amount <= 0) {
+                continue;
+            }
+
+            $rows[] = [
+                'session_id' => (string) $action->session_id,
+                'qty' => max(1, CommerceReadSupport::itemQtyForAction($action)),
+                'value' => $amount,
+                'occurred_at' => $action->created_at,
+                '_dedupe_key' => $dedupeKey,
+                '_event_id' => $eventId,
             ];
         }
 
@@ -749,6 +940,12 @@ final class CommerceFunnelQuery
         if ($sessionIds !== null) {
             self::constrainToSessionIds($query, $sessionIds, $column);
 
+            return;
+        }
+
+        // Today only: tie orders to sessions that started or were active in the window.
+        // Calendar presets (custom, yesterday, 7d, …): count by ordered_at in range only.
+        if ($period !== '24h') {
             return;
         }
 

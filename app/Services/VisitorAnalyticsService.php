@@ -392,7 +392,7 @@ class VisitorAnalyticsService
     private function analyticsCacheMeta(TrackerRedisCache $cache, array $cached, int $ttl): array
     {
         return [
-            'enabled' => (bool) config('tracker.analytics_cache_enabled', true),
+            'enabled' => (bool) config('tracker.analytics_cache_enabled', false),
             'cached_at' => $cache->cachedAt($cached),
             'ttl_seconds' => $ttl,
         ];

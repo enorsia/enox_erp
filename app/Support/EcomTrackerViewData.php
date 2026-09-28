@@ -13,8 +13,16 @@ final class EcomTrackerViewData
      */
     public static function dashboardQueryKeys(): array
     {
+        return ['period', 'date_from', 'date_to'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function dashboardLegacyFilterQueryKeys(): array
+    {
         return [
-            'period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
+            'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
             'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'sort_by', 'activity',
             'has_purchases', 'has_views', 'has_adds', 'event_scenario',
         ];
@@ -98,11 +106,9 @@ final class EcomTrackerViewData
         $params = ['session' => $sessionId];
 
         if (filled($back)) {
-            $params['back'] = $back;
-        } elseif (request()->filled('back')) {
-            $params['back'] = request()->input('back');
-        } else {
-            $params['back'] = request()->fullUrl();
+            $params['back'] = self::encodeNavigationUrl($back);
+        } elseif (request()->routeIs('admin.ecom-activity.index') || request()->routeIs('admin.ecom-activity.show')) {
+            $params['back'] = self::requestNavigationUrl(request());
         }
 
         return $params;
@@ -118,7 +124,7 @@ final class EcomTrackerViewData
             'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
             'utm_source', 'utm_medium', 'duration_bucket', 'search', 'category', 'department', 'color', 'size',
             'product_code', 'product_name', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
-            'sort_by', 'sort_dir',
+            'sort_by', 'sort_dir', 'page',
         ];
     }
 
@@ -184,11 +190,131 @@ final class EcomTrackerViewData
     }
 
     /**
-     * Build show URL preserving current list filters for back navigation.
+     * Open a session from the current page; the current URL becomes the show page `back` target.
      */
     public static function activityShowUrlFromRequest(Request $request, string $sessionId): string
     {
-        return self::activityShowUrl($sessionId, $request->fullUrl());
+        if ($request->routeIs('admin.ecom-activity.show') || $request->routeIs('admin.ecom-activity.index')) {
+            return self::activityShowUrl($sessionId, self::requestNavigationUrl($request));
+        }
+
+        $back = self::resolveBackUrl($request->input('back'));
+
+        return self::activityShowUrl(
+            $sessionId,
+            $back ?? route('admin.ecom-activity.index', self::activityIndexQueryFromRequest($request)),
+        );
+    }
+
+    /**
+     * ← Back on session detail: previous page (list, dashboard, or another session).
+     */
+    public static function activityListBackUrlForShow(Request $request): string
+    {
+        $fromParam = self::resolveBackUrl($request->input('back'));
+
+        if ($fromParam !== null) {
+            return self::encodeNavigationUrl($fromParam);
+        }
+
+        return route('admin.ecom-activity.index', self::activityIndexQueryFromRequest($request));
+    }
+
+    /**
+     * Canonical URL for the current request (safe nested back= values with ? and #).
+     */
+    public static function requestNavigationUrl(Request $request): string
+    {
+        $query = $request->query();
+
+        if ($query === []) {
+            return $request->url();
+        }
+
+        return $request->url().'?'.http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    }
+
+    /**
+     * Re-encode query params so nested back URLs (dashboard hashes, etc.) survive in hrefs.
+     */
+    public static function encodeNavigationUrl(string $url): string
+    {
+        if (! str_contains($url, '://')) {
+            return $url;
+        }
+
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+        $host = parse_url($url, PHP_URL_HOST);
+        $port = parse_url($url, PHP_URL_PORT);
+        $path = parse_url($url, PHP_URL_PATH);
+
+        if (! is_string($scheme) || ! is_string($host) || ! is_string($path)) {
+            return $url;
+        }
+
+        $queryStart = strpos($url, '?');
+
+        if ($queryStart === false) {
+            return $url;
+        }
+
+        $queryString = substr($url, $queryStart + 1);
+        $query = self::parseQueryStringPreservingNestedUrls($queryString);
+
+        $built = $scheme.'://'.$host
+            .(is_int($port) ? ':'.$port : '')
+            .$path;
+
+        if ($query !== []) {
+            $built .= '?'.http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+        }
+
+        return $built;
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    private static function parseQueryStringPreservingNestedUrls(string $queryString): array
+    {
+        $query = [];
+
+        foreach (explode('&', $queryString) as $pair) {
+            if ($pair === '') {
+                continue;
+            }
+
+            $equalsAt = strpos($pair, '=');
+
+            if ($equalsAt === false) {
+                $query[rawurldecode($pair)] = '';
+
+                continue;
+            }
+
+            $key = rawurldecode(substr($pair, 0, $equalsAt));
+            $value = rawurldecode(substr($pair, $equalsAt + 1));
+            $query[$key] = $value;
+        }
+
+        return $query;
+    }
+
+    public static function isActivityIndexUrl(string $url): bool
+    {
+        $path = (string) (parse_url($url, PHP_URL_PATH) ?? '');
+
+        return (bool) preg_match('#/admin/ecom-activity/?$#', $path);
+    }
+
+    public static function isActivityShowUrl(string $url): bool
+    {
+        $path = (string) (parse_url($url, PHP_URL_PATH) ?? '');
+
+        return (bool) preg_match(
+            '#/admin/ecom-activity/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/?$#i',
+            $path,
+        );
     }
 
     /**
@@ -220,7 +346,7 @@ final class EcomTrackerViewData
 
     public static function dashboardShortcutUrl(Request $request): string
     {
-        return route('admin.ecom-tracker.dashboard', self::sharedNavigationQuery($request));
+        return route('admin.ecom-tracker.dashboard', $request->only(self::dashboardQueryKeys()));
     }
 
     public static function activityShortcutUrl(Request $request): string
@@ -261,8 +387,8 @@ final class EcomTrackerViewData
 
         $decoded = (string) $back;
 
-        for ($i = 0; $i < 3 && str_contains($decoded, '%'); $i++) {
-            $next = urldecode($decoded);
+        for ($i = 0; $i < 8 && str_contains($decoded, '%'); $i++) {
+            $next = rawurldecode($decoded);
 
             if ($next === $decoded) {
                 break;

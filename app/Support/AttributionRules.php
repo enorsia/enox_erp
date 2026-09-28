@@ -45,6 +45,8 @@ final class AttributionRules
         'wbraid' => ['utm_source' => 'google', 'utm_medium' => 'paid', 'qualifies_paid_touch' => true],
         'gad_source' => ['utm_source' => 'google', 'utm_medium' => 'paid', 'qualifies_paid_touch' => true],
         'gad_campaignid' => ['utm_source' => 'google', 'utm_medium' => 'paid', 'qualifies_paid_touch' => true],
+        // Google Search / Shopping product listings (not paid click IDs)
+        'srsltid' => ['utm_source' => 'google', 'utm_medium' => 'organic', 'qualifies_paid_touch' => false],
         'fbclid' => ['utm_source' => 'facebook', 'utm_medium' => 'paid', 'qualifies_paid_touch' => true],
         'msclkid' => ['utm_source' => 'bing', 'utm_medium' => 'cpc', 'qualifies_paid_touch' => true],
         'ttclid' => ['utm_source' => 'tiktok', 'utm_medium' => 'paid', 'qualifies_paid_touch' => true],

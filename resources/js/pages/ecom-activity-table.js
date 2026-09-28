@@ -1,4 +1,6 @@
 const ACTIVITY_TABLE_LOADER_MIN_MS = 250;
+const ACTIVITY_LIST_RESTORE_KEY = 'etd_activity_list_restore';
+const ACTIVITY_SHOW_PATH_PATTERN = /\/admin\/ecom-activity\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/i;
 
 function getActivityPage() {
     return document.querySelector('.etd-page--activity');
@@ -105,6 +107,135 @@ function cleanActivityUrl(url) {
     parsed.searchParams.delete('fragment');
 
     return parsed;
+}
+
+function canonicalActivityListUrl(url) {
+    const parsed = cleanActivityUrl(url);
+
+    if (!isActivityIndexUrl(parsed.toString())) {
+        return parsed.toString();
+    }
+
+    const params = new URLSearchParams(parsed.search);
+    const sorted = new URLSearchParams();
+
+    [...params.keys()].sort().forEach((key) => {
+        const values = params.getAll(key);
+
+        values.forEach((value) => {
+            sorted.append(key, value);
+        });
+    });
+
+    const query = sorted.toString();
+
+    return query === '' ? parsed.origin + parsed.pathname : `${parsed.origin}${parsed.pathname}?${query}`;
+}
+
+function isActivityIndexUrl(url) {
+    const parsed = cleanActivityUrl(url);
+    const path = parsed.pathname.replace(/\/$/, '');
+
+    return path === '/admin/ecom-activity';
+}
+
+function captureActivityListRestoreState() {
+    const page = getActivityPage();
+
+    if (!page) {
+        return;
+    }
+
+    const payload = {
+        url: canonicalActivityListUrl(window.location.href),
+        scrollTop: getActivityTableViewport(page)?.scrollTop ?? 0,
+        windowScrollY: window.scrollY,
+    };
+
+    try {
+        sessionStorage.setItem(ACTIVITY_LIST_RESTORE_KEY, JSON.stringify(payload));
+    } catch {
+        // ignore quota / private mode
+    }
+}
+
+function restoreActivityListRestoreState() {
+    const page = getActivityPage();
+
+    if (!page) {
+        return;
+    }
+
+    let payload = null;
+
+    try {
+        const raw = sessionStorage.getItem(ACTIVITY_LIST_RESTORE_KEY);
+
+        if (!raw) {
+            return;
+        }
+
+        sessionStorage.removeItem(ACTIVITY_LIST_RESTORE_KEY);
+        payload = JSON.parse(raw);
+    } catch {
+        return;
+    }
+
+    if (!payload?.url) {
+        return;
+    }
+
+    const currentUrl = canonicalActivityListUrl(window.location.href);
+
+    if (currentUrl !== payload.url || !isActivityIndexUrl(payload.url)) {
+        return;
+    }
+
+    const applyScroll = () => {
+        const viewport = getActivityTableViewport(page);
+
+        if (viewport && Number.isFinite(payload.scrollTop)) {
+            viewport.scrollTop = payload.scrollTop;
+        }
+
+        if (Number.isFinite(payload.windowScrollY)) {
+            window.scrollTo(0, payload.windowScrollY);
+        }
+    };
+
+    requestAnimationFrame(() => {
+        requestAnimationFrame(applyScroll);
+    });
+}
+
+function bindActivityShowLinkCapture(page) {
+    if (page._etdActivityShowCaptureBound) {
+        return;
+    }
+
+    page._etdActivityShowCaptureBound = true;
+
+    page.addEventListener('click', (event) => {
+        const link = event.target.closest('a[href]');
+
+        if (!link) {
+            return;
+        }
+
+        let parsed;
+
+        try {
+            parsed = new URL(link.href, window.location.origin);
+        } catch {
+            return;
+        }
+
+        if (!ACTIVITY_SHOW_PATH_PATTERN.test(parsed.pathname)) {
+            return;
+        }
+
+        captureActivityListRestoreState();
+    }, true);
 }
 
 function applySortSelection(value) {
@@ -229,6 +360,7 @@ async function fetchActivityTable(url) {
         }
 
         bindActivityTableNavigation(page);
+        bindActivityShowLinkCapture(page);
     } catch {
         window.location.href = cleanUrl.toString();
     } finally {
@@ -278,6 +410,8 @@ function bootActivityTableNavigation() {
     }
 
     bindActivityTableNavigation(page);
+    bindActivityShowLinkCapture(page);
+    restoreActivityListRestoreState();
 
     window.addEventListener('popstate', () => {
         fetchActivityTable(window.location.href);

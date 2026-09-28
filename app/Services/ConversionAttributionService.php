@@ -56,6 +56,8 @@ class ConversionAttributionService
         ];
 
         $session->update($payload);
+        $session->refresh();
+        SessionTrafficAttribution::syncListTrafficAttributionColumns($session);
 
         $orderId = trim((string) ($action->order_id ?? ''));
 
@@ -82,7 +84,10 @@ class ConversionAttributionService
 
         $serverTouch = VisitorLastPaidTouch::query()->find($visitorId);
 
-        if ($serverTouch !== null && $serverTouch->captured_at !== null && $serverTouch->captured_at->greaterThanOrEqualTo($windowStart)) {
+        if ($serverTouch !== null
+            && $serverTouch->captured_at !== null
+            && $serverTouch->captured_at->greaterThanOrEqualTo($windowStart)
+            && $serverTouch->captured_at->lessThanOrEqualTo($paymentAt)) {
             $candidates[] = [
                 'utm_source' => SessionTrafficAttribution::normalizeSource($serverTouch->utm_source) ?? $serverTouch->utm_source,
                 'utm_medium' => $serverTouch->utm_medium,
@@ -101,7 +106,9 @@ class ConversionAttributionService
                 $capturedAt = null;
             }
 
-            if ($capturedAt !== null && $capturedAt->greaterThanOrEqualTo($windowStart)) {
+            if ($capturedAt !== null
+                && $capturedAt->greaterThanOrEqualTo($windowStart)
+                && $capturedAt->lessThanOrEqualTo($paymentAt)) {
                 $parsed = [
                     'utm_source' => $clientTouch['utm_source'] ?? null,
                     'utm_medium' => $clientTouch['utm_medium'] ?? null,
@@ -118,6 +125,12 @@ class ConversionAttributionService
                     ];
                 }
             }
+        }
+
+        $historical = SessionTrafficAttribution::lastMarketingTouchForVisitorBefore($visitorId, $paymentAt);
+
+        if ($historical !== null) {
+            $candidates[] = $historical;
         }
 
         if ($candidates === []) {

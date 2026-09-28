@@ -69,6 +69,11 @@ class TrackerSessionClock
             return false;
         }
 
+        return self::eventFallsInActivitySpan($eventAt, $created, $lastActive);
+    }
+
+    public static function eventFallsInActivitySpan(Carbon $eventAt, Carbon $created, Carbon $lastActive): bool
+    {
         $windowStart = $created->copy()->subSeconds(self::clockSkewSeconds());
         $windowEnd = $lastActive->copy()->addSeconds(self::gapSeconds());
 

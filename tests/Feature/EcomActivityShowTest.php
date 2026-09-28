@@ -104,3 +104,58 @@ test('ecom activity show displays visitor trust panel', function () {
         ->assertSee('Real visitor')
         ->assertSee('Technical details');
 });
+
+test('ecom activity show lists other sessions for same visitor id', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.show');
+
+    $this->actingAs($user);
+
+    $visitorId = Str::uuid()->toString();
+    $currentSessionId = Str::uuid()->toString();
+    $otherSessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $currentSessionId,
+        'visitor_id' => $visitorId,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+        'actions_count' => 3,
+        'latest_funnel_stage' => 'product_view',
+    ]);
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $otherSessionId,
+        'visitor_id' => $visitorId,
+        'device_type' => 'mobile',
+        'last_active_at' => now()->subHour(),
+        'created_at' => now()->subHours(2),
+        'actions_count' => 1,
+        'latest_funnel_stage' => 'add_to_cart',
+    ]);
+
+    $this->get(route('admin.ecom-activity.show', ['session' => $currentSessionId]))
+        ->assertOk()
+        ->assertSee('Other sessions (same visitor)', false)
+        ->assertSee(substr($otherSessionId, 0, 12), false)
+        ->assertSee('etd-related-session-link--active', false);
+});
+
+test('ecom activity show hides related sessions when visitor id is missing', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.show');
+
+    $this->actingAs($user);
+
+    $sessionId = Str::uuid()->toString();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'device_type' => 'desktop',
+        'last_active_at' => now(),
+    ]);
+
+    $this->get(route('admin.ecom-activity.show', ['session' => $sessionId]))
+        ->assertOk()
+        ->assertDontSee('Other sessions (same visitor)', false);
+});

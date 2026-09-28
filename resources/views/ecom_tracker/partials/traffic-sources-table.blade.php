@@ -32,13 +32,13 @@
                     <th>
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Source',
-                            'tip' => 'UTM source from the session (utm_source). Direct when missing.',
+                            'tip' => 'Attributed source for this session: conversion on purchase, else last marketing touch for the same visitor within 7 days, else this visit. Direct when none apply.',
                         ])
                     </th>
                     <th>
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Medium',
-                            'tip' => 'UTM medium from the session (utm_medium).',
+                            'tip' => 'Attributed medium paired with the source above (same 7-day rule).',
                         ])
                     </th>
                     <th class="etd-num">

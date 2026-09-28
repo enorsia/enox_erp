@@ -56,35 +56,17 @@ test('activity index back url falls back to dashboard for traffic focus without 
         ->and($backUrl)->not->toContain('focus=');
 });
 
-test('dashboard and activity shortcut links preserve shared session filters', function () {
+test('dashboard query params are date range only', function () {
     $request = Request::create('https://example.test/admin/ecom-tracker/dashboard', 'GET', [
         'period' => '7d',
         'device_type' => 'mobile',
-        'logged_in' => '1',
-        'utm_source' => 'google',
-        'search' => 'shirt',
-        'focus' => 'products',
+        'date_from' => '2026-01-01',
     ]);
 
-    $activityUrl = EcomTrackerViewData::activityShortcutUrl($request);
-    $dashboardUrl = EcomTrackerViewData::dashboardShortcutUrl($request);
-
-    parse_str((string) parse_url($activityUrl, PHP_URL_QUERY), $activityQuery);
-    parse_str((string) parse_url($dashboardUrl, PHP_URL_QUERY), $dashboardQuery);
-
-    expect($activityQuery)->toMatchArray([
+    expect(EcomTrackerViewData::dashboardQueryParams($request))->toMatchArray([
         'period' => '7d',
-        'device_type' => 'mobile',
-        'logged_in' => '1',
-        'utm_source' => 'google',
-    ])->and($activityQuery)->not->toHaveKey('search')
-        ->and($activityQuery)->not->toHaveKey('focus')
-        ->and($dashboardQuery)->toMatchArray([
-            'period' => '7d',
-            'device_type' => 'mobile',
-            'logged_in' => '1',
-            'utm_source' => 'google',
-        ]);
+        'date_from' => '2026-01-01',
+    ])->and(EcomTrackerViewData::dashboardQueryParams($request))->not->toHaveKey('device_type');
 });
 
 test('activity index back url is omitted when there is no dashboard focus', function () {
@@ -116,6 +98,24 @@ test('activity back url keeps dashboard scroll hash', function () {
             'GET',
             ['focus' => 'duration', 'back' => $back],
         )))->toBe($back);
+});
+
+test('encode navigation url preserves nested dashboard hash in activity back param', function () {
+    $broken = 'http://127.0.0.1:8001/admin/ecom-activity?period=7d&focus=traffic&back=http://127.0.0.1:8001/admin/ecom-tracker/dashboard?period=7d#etd-y=2647';
+
+    $fixed = EcomTrackerViewData::encodeNavigationUrl($broken);
+
+    expect($fixed)->toContain('back=')
+        ->and($fixed)->toContain('%23etd-y%3D2647')
+        ->and($fixed)->not->toEndWith('#etd-y=2647');
+
+    $show = EcomTrackerViewData::activityShowUrl('dcaf63a0-df7b-48d0-bc9c-340e28594744', $broken);
+    $request = Request::create($show, 'GET');
+    $backOut = EcomTrackerViewData::activityListBackUrlForShow($request);
+
+    expect($backOut)->toContain('period=7d')
+        ->and($backOut)->toContain('focus=traffic')
+        ->and($backOut)->toContain('%23etd-y%3D2647');
 });
 
 test('compare day navigation uses prefixed period query keys', function () {

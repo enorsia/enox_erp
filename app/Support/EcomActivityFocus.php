@@ -225,6 +225,18 @@ final class EcomActivityFocus
             ));
         }
 
+        $existingKeys = collect($columns)->pluck('key')->all();
+
+        if (
+            $request !== null
+            && (TrackerMultiSelectFilter::requestFilled($request, 'utm_source')
+                || TrackerMultiSelectFilter::requestFilled($request, 'utm_medium'))
+            && ! in_array('traffic_source', $existingKeys, true)
+        ) {
+            $columns = self::appendExportColumn($columns, $existingKeys, 'traffic_source');
+            $columns = self::appendExportColumn($columns, $existingKeys, 'traffic_medium');
+        }
+
         return $columns;
     }
 

@@ -232,6 +232,50 @@ test('activity show link preserves list filters in back url', function () {
         ->and(urldecode((string) ($query['back'] ?? '')))->toBe(request()->fullUrl());
 });
 
+test('activity show link from session detail uses current session as back for related session', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+    $user->givePermissionTo('ecom_tracker.activity.show');
+
+    $firstSession = Str::uuid()->toString();
+    $secondSession = Str::uuid()->toString();
+
+    foreach ([$firstSession, $secondSession] as $sessionId) {
+        ActivityEcomUser::query()->create([
+            'session_id' => $sessionId,
+            'visitor_id' => Str::uuid()->toString(),
+            'device_type' => 'desktop',
+            'created_at' => now(),
+            'last_active_at' => now(),
+        ]);
+    }
+
+    $indexUrl = route('admin.ecom-activity.index', [
+        'period' => 'custom',
+        'date_from' => '2026-07-01',
+        'date_to' => '2026-10-01',
+        'page' => 3,
+        'search' => '2a02:c7e',
+    ]);
+
+    $showUrl = route('admin.ecom-activity.show', [
+        'session' => $firstSession,
+        'back' => $indexUrl,
+    ]);
+
+    $this->actingAs($user)
+        ->get($showUrl)
+        ->assertOk();
+
+    $nextShowUrl = EcomTrackerViewData::activityShowUrlFromRequest(request(), $secondSession);
+    parse_str((string) parse_url($nextShowUrl, PHP_URL_QUERY), $query);
+
+    $decodedBack = urldecode((string) ($query['back'] ?? ''));
+
+    expect($decodedBack)->toBe(request()->fullUrl())
+        ->and(EcomTrackerViewData::activityListBackUrlForShow(request()))->toBe($indexUrl);
+});
+
 test('activity index products focus filters sessions by product code', function () {
     $user = User::factory()->create();
     $user->givePermissionTo('ecom_tracker.activity.index');

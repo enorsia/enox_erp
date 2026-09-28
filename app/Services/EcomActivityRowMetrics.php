@@ -85,11 +85,23 @@ class EcomActivityRowMetrics
 
         if ($focus === 'traffic' || self::shouldAttachTrafficMetrics($focus, $request)) {
             foreach ($sessions as $session) {
-                $traffic = SessionTrafficAttribution::listRowSummary($session);
-                $metrics[$session->session_id]['traffic_source'] = $traffic['source'] ?? '—';
-                $metrics[$session->session_id]['traffic_medium'] = filled($traffic['utm'] ?? null)
-                    ? (string) $traffic['utm']
-                    : (filled($session->utm_medium) ? (string) $session->utm_medium : '—');
+                $bucket = filled($session->list_traffic_utm_source ?? null)
+                    ? [
+                        'source' => (string) $session->list_traffic_utm_source,
+                        'medium' => filled($session->list_traffic_utm_medium ?? null)
+                            ? (string) $session->list_traffic_utm_medium
+                            : 'none',
+                    ]
+                    : SessionTrafficAttribution::listTrafficDisplayBucket($session);
+
+                $sourceKey = $bucket['source'] ?? '(direct)';
+                $metrics[$session->session_id]['traffic_source'] = $sourceKey === '(direct)'
+                    ? 'Direct'
+                    : (SessionTrafficAttribution::displaySourceLabel($sourceKey) ?? $sourceKey);
+                $medium = filled($bucket['medium'] ?? null) && $bucket['medium'] !== 'none'
+                    ? (string) $bucket['medium']
+                    : '—';
+                $metrics[$session->session_id]['traffic_medium'] = $medium;
             }
         }
 

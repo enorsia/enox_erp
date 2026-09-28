@@ -15,6 +15,7 @@ use App\Services\EcomTrackerDashboardService;
 use App\Services\EcomTrackerFeatureGate;
 use App\Support\CommerceHasOrderFilter;
 use App\Support\EcomActivityFocus;
+use App\Support\EcomActivityRelatedSessions;
 use App\Support\EcomActivityKeywordSearch;
 use App\Support\EcomActivitySessionSort;
 use App\Support\EcomTrackerLogger;
@@ -62,12 +63,7 @@ class EcomActivityController extends EcomTrackerAdminController
         $isTableFragment = $request->input('fragment') === 'table' && $request->ajax();
         $focus = $request->input('focus');
         $range = $this->resolveActivityRange($request);
-        $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
-            $range['from'],
-            $range['to'],
-            [],
-            $range['period'],
-        );
+        $categoryFilterOptions = $this->categoryFilterOptionsForIndex($request, $range);
 
         $reconciledCatalogFilters = EcomActivityFocus::reconcileCatalogFilters($request, $categoryFilterOptions);
 
@@ -298,11 +294,7 @@ class EcomActivityController extends EcomTrackerAdminController
 
         $timeline->appends($request->except('timeline_page'));
 
-        $returnQuery = EcomTrackerViewData::activityIndexQueryFromRequest($request);
-        $backUrl = EcomTrackerViewData::resolveBackUrl(
-            $request->input('back'),
-            route('admin.ecom-activity.index', $returnQuery),
-        );
+        $backUrl = EcomTrackerViewData::activityListBackUrlForShow($request);
 
         EcomTrackerLogger::backend()->info('analytics.activity.show', 'Admin opened one user session', [
             'session_id' => $session,
@@ -311,7 +303,7 @@ class EcomActivityController extends EcomTrackerAdminController
         ]);
 
         $trafficAttribution = SessionTrafficAttribution::displayFields($activityUser, $actions);
-        $conversionAttribution = SessionTrafficAttribution::conversionDisplayFields($activityUser);
+        $conversionAttribution = SessionTrafficAttribution::conversionOrMarketingDisplayFields($activityUser);
         $landingPage = filled($activityUser->landing_page)
             ? $activityUser->landing_page
             : $actions
@@ -323,6 +315,8 @@ class EcomActivityController extends EcomTrackerAdminController
                 ->first()
                 ?->page_url;
 
+        $relatedVisitorSessions = EcomActivityRelatedSessions::forSession($activityUser);
+
         return view('ecom_activity.show', [
             'activityUser' => $activityUser,
             'timeline' => $timeline,
@@ -333,6 +327,7 @@ class EcomActivityController extends EcomTrackerAdminController
             'conversionAttribution' => $conversionAttribution,
             'landingPage' => $landingPage,
             'latestActionAt' => $latestActionAt,
+            'relatedVisitorSessions' => $relatedVisitorSessions,
         ]);
     }
 
@@ -486,12 +481,16 @@ class EcomActivityController extends EcomTrackerAdminController
             if (EcomActivityFocus::usesConversionSourceFilter($request)) {
                 TrackerUtmFilter::applyConversionSourceFilter($query, $request->input('utm_source'));
             } else {
-                TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
+                TrackerUtmFilter::applyListTrafficSourceFilter($query, $request->input('utm_source'));
             }
         }
 
         if (! in_array('utm_medium', $except, true)) {
-            TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
+            if (EcomActivityFocus::usesConversionSourceFilter($request)) {
+                TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
+            } else {
+                TrackerUtmFilter::applyListTrafficMediumFilter($query, $request->input('utm_medium'));
+            }
         }
 
         if (
@@ -684,5 +683,28 @@ class EcomActivityController extends EcomTrackerAdminController
 
             $request->merge([$key => $value]);
         }
+    }
+
+    /**
+     * @return array{departments: list<string>, categories_by_department: array<string, list<string>>}
+     */
+    private function categoryFilterOptionsForIndex(Request $request, array $range): array
+    {
+        $empty = ['departments' => [], 'categories_by_department' => []];
+
+        $needsOptions = TrackerMultiSelectFilter::requestFilled($request, 'category')
+            || TrackerMultiSelectFilter::requestFilled($request, 'department')
+            || EcomActivityFocus::showCatalogFiltersInDrawer($request);
+
+        if (! $needsOptions) {
+            return $empty;
+        }
+
+        return $this->dashboardService->categoryFilterOptionsForRange(
+            $range['from'],
+            $range['to'],
+            [],
+            $range['period'],
+        );
     }
 }
