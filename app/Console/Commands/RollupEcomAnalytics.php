@@ -16,12 +16,21 @@ class RollupEcomAnalytics extends Command
     public function handle(EcomDailyRollupService $rollup): int
     {
         $timezone = TrackerTime::timezone();
-        $day = $this->argument('date')
-            ? Carbon::parse((string) $this->argument('date'), $timezone)->startOfDay()
-            : Carbon::now($timezone)->subDay()->startOfDay();
+        $metricDate = $this->argument('date')
+            ? Carbon::parse((string) $this->argument('date'), $timezone)->toDateString()
+            : TrackerTime::defaultRollupMetricDate();
 
-        $rollup->rollupDateWithStatus($day->toDateString());
-        $this->info('Rolled up '.$day->toDateString());
+        [$fromUtc, $toUtc] = TrackerTime::localCalendarDateStorageRange($metricDate);
+        $this->line(sprintf(
+            'Metric date %s (%s) — session window %s → %s UTC',
+            $metricDate,
+            $timezone,
+            $fromUtc,
+            $toUtc,
+        ));
+
+        $rollup->rollupDateWithStatus($metricDate);
+        $this->info('Rolled up '.$metricDate);
 
         return self::SUCCESS;
     }

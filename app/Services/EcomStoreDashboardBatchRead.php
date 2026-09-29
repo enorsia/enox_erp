@@ -309,20 +309,7 @@ class EcomStoreDashboardBatchRead
      */
     private function unfilteredAbandonmentCounts(Carbon $from, Carbon $to, ?string $period): array
     {
-        $query = DB::table('activity_ecom_user');
-        TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period);
-
-        $row = $query->selectRaw(
-            'COALESCE(SUM(CASE WHEN has_add_to_cart = 1 AND has_begin_checkout = 0 AND has_proceed_checkout = 0 AND has_payment_success = 0 THEN 1 ELSE 0 END), 0) as cart_abandoned,
-             COALESCE(SUM(CASE WHEN has_begin_checkout = 1 AND has_proceed_checkout = 0 AND has_payment_success = 0 THEN 1 ELSE 0 END), 0) as begin_checkout_abandoned,
-             COALESCE(SUM(CASE WHEN has_proceed_checkout = 1 AND has_payment_success = 0 THEN 1 ELSE 0 END), 0) as proceed_checkout_abandoned',
-        )->first();
-
-        return [
-            'cart_abandoned_count' => (int) ($row->cart_abandoned ?? 0),
-            'begin_checkout_abandoned_count' => (int) ($row->begin_checkout_abandoned ?? 0),
-            'proceed_checkout_abandoned_count' => (int) ($row->proceed_checkout_abandoned ?? 0),
-        ];
+        return CommerceFunnelQuery::unfilteredAbandonmentCounts($from, $to, $period);
     }
 
     /**

@@ -36,9 +36,9 @@ class EcomDailyRollupService
     public function rollupDate(string $metricDate): void
     {
         $day = Carbon::parse($metricDate, TrackerTime::timezone())->startOfDay();
-        [$fromUtc, $toUtc] = TrackerTime::storageRange($day, $day->copy()->endOfDay());
-        $from = Carbon::parse($fromUtc, 'UTC');
-        $to = Carbon::parse($toUtc, 'UTC');
+        $bounds = TrackerTime::localCalendarDateStorageRange($metricDate);
+        $from = Carbon::parse($bounds[0], 'UTC');
+        $to = Carbon::parse($bounds[1], 'UTC');
 
         $this->rollupSiteMetrics($day, $from, $to);
         $this->rollupDailyVisitors($day, $from, $to);
@@ -71,7 +71,7 @@ class EcomDailyRollupService
             ->whereBetween('created_at', $bounds)
             ->count();
 
-        $orderTotals = CommerceFunnelQuery::paymentMetricTotals($from, $to, null, null);
+        $orderTotals = CommerceFunnelQuery::paymentMetricTotals($from, $to, null, 'custom');
 
         $sitePayload = [
                 'session_count' => (int) ($sessions->session_count ?? 0),
@@ -80,7 +80,7 @@ class EcomDailyRollupService
                 'add_to_cart_count' => (int) ($sessions->add_to_cart ?? 0),
                 'begin_checkout_count' => (int) ($sessions->begin_checkout ?? 0),
                 'proceed_checkout_count' => (int) ($sessions->proceed_checkout ?? 0),
-                'payment_success_count' => (int) ($sessions->payment_success ?? 0),
+                'payment_success_count' => (int) $orderTotals['purchases'],
                 'order_count' => $orderTotals['purchases'],
                 'revenue_total' => $orderTotals['revenue'],
                 'items_sold_qty' => $orderTotals['item_qty'],

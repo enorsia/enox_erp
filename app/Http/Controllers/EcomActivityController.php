@@ -60,6 +60,14 @@ class EcomActivityController extends EcomTrackerAdminController
         $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.activity.index');
 
+        if (! $request->ajax() && $request->input('fragment') !== 'table') {
+            $periodSync = $this->redirectIfActivityPeriodMismatchesDashboardBack($request);
+
+            if ($periodSync !== null) {
+                return $periodSync;
+            }
+        }
+
         $isTableFragment = $request->input('fragment') === 'table' && $request->ajax();
         $focus = $request->input('focus');
         $range = $this->resolveActivityRange($request);
@@ -334,6 +342,49 @@ class EcomActivityController extends EcomTrackerAdminController
     /**
      * @return array{from: Carbon, to: Carbon, label: string, period: ?string}
      */
+    /**
+     * Drill-down from a custom dashboard day sometimes keeps period=24h (Today) while back= still points at that day.
+     */
+    private function redirectIfActivityPeriodMismatchesDashboardBack(Request $request): ?RedirectResponse
+    {
+        if (! $request->filled('focus') || ! $request->filled('back')) {
+            return null;
+        }
+
+        if ($request->filled('date_from')) {
+            return null;
+        }
+
+        if ($request->input('period', '24h') !== '24h') {
+            return null;
+        }
+
+        $backQuery = EcomTrackerViewData::dashboardQueryFromBackUrl(
+            EcomTrackerViewData::resolveBackUrl($request->input('back')),
+        );
+
+        if ($backQuery === null) {
+            return null;
+        }
+
+        if (($backQuery['period'] ?? null) !== 'custom') {
+            return null;
+        }
+
+        if (! filled($backQuery['date_from'] ?? null) || ! filled($backQuery['date_to'] ?? null)) {
+            return null;
+        }
+
+        return redirect()->to(route('admin.ecom-activity.index', array_merge(
+            EcomTrackerViewData::activityIndexQueryFromRequest($request),
+            [
+                'period' => 'custom',
+                'date_from' => (string) $backQuery['date_from'],
+                'date_to' => (string) $backQuery['date_to'],
+            ],
+        )));
+    }
+
     private function resolveActivityRange(Request $request): array
     {
         if ($request->input('period') === 'all') {

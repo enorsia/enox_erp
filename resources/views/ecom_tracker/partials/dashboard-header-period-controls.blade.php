@@ -11,7 +11,7 @@
 
     $presetUrl = function (string $preset) use ($baseQuery, $routeName) {
         $query = $baseQuery ?? [];
-        unset($query['date_from'], $query['date_to']);
+        unset($query['date_from'], $query['date_to'], $query['back']);
         $query['period'] = $preset;
 
         return route($routeName, $query);

@@ -379,6 +379,34 @@ final class EcomTrackerViewData
     /**
      * Decode back URLs from query params (handles legacy double-encoded values).
      */
+    /**
+     * @return array<string, string>|null
+     */
+    public static function dashboardQueryFromBackUrl(?string $back): ?array
+    {
+        $resolved = self::resolveBackUrl($back);
+
+        if ($resolved === null || ! str_contains($resolved, 'ecom-tracker/dashboard')) {
+            return null;
+        }
+
+        $queryString = parse_url($resolved, PHP_URL_QUERY);
+
+        if (! is_string($queryString) || $queryString === '') {
+            return null;
+        }
+
+        $query = [];
+
+        parse_str($queryString, $query);
+
+        return array_filter([
+            'period' => isset($query['period']) ? (string) $query['period'] : null,
+            'date_from' => isset($query['date_from']) ? (string) $query['date_from'] : null,
+            'date_to' => isset($query['date_to']) ? (string) $query['date_to'] : null,
+        ], fn ($value) => filled($value));
+    }
+
     public static function resolveBackUrl(?string $back, ?string $fallback = null): ?string
     {
         if (! filled($back)) {

@@ -615,6 +615,7 @@ final class EcomActivityFocus
             self::drawerFunnelFilterValues($request),
             $from,
             $to,
+            $request->input('period', '24h'),
         );
     }
 
@@ -638,7 +639,7 @@ final class EcomActivityFocus
 
         if (! empty($definition['funnel']) || ! empty($definition['payment_success'])) {
             if (! empty($definition['payment_success'])) {
-                CommerceFunnelQuery::applyPaymentSuccessSessionFilter($query, $from, $to);
+                CommerceFunnelQuery::applyPaymentSuccessActivitySessionFilter($query, $from, $to, $period);
             } elseif (! empty($definition['funnel'])) {
                 $funnel = $definition['funnel'];
                 CommerceFunnelQuery::applyAbandonedSessionFilter(
@@ -780,11 +781,53 @@ final class EcomActivityFocus
     {
         $focus = $request->input('focus');
 
+        if (in_array($focus, ['payment_success', 'conversion'], true)) {
+            return true;
+        }
+
+        if (self::drawerFunnelFilterValues($request) === ['payment_success']) {
+            return true;
+        }
+
         if (! in_array($focus, ['products', 'categories'], true)) {
             return false;
         }
 
         return self::productCatalogFiltersFromRequest($request) !== [];
+    }
+
+    /**
+     * Commerce cells and row timestamps must not pull funnel state from outside the selected period.
+     */
+    public static function usesPeriodOnlyCommerce(?Request $request): bool
+    {
+        if ($request === null) {
+            return false;
+        }
+
+        if (self::usesActionScopedSessionDate($request)) {
+            return true;
+        }
+
+        $focus = $request->input('focus');
+
+        if (! self::isValid($focus)) {
+            return false;
+        }
+
+        $definition = self::definition($focus);
+
+        return ! empty($definition['payment_success']) || ! empty($definition['funnel']);
+    }
+
+    public static function usesPeriodEventTimestamps(?Request $request): bool
+    {
+        if ($request === null) {
+            return false;
+        }
+
+        return in_array($request->input('focus'), ['payment_success', 'conversion'], true)
+            || self::drawerFunnelFilterValues($request) === ['payment_success'];
     }
 
     public static function productCatalogFiltersFromRequest(Request $request, array $except = []): array
@@ -2161,7 +2204,7 @@ final class EcomActivityFocus
         $totals = self::paymentSaleTotalsFromFunnelMetrics($funnelMetrics);
 
         return array_merge(
-            [['label' => 'Orders', 'value' => number_format($sessionCount)]],
+            [['label' => 'Payments', 'value' => number_format($sessionCount)]],
             self::saleTotalsSummaryMetrics($totals),
         );
     }

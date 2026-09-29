@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\ActivityEcomUser;
 use App\Support\CommerceHasOrderFilter;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -379,7 +380,7 @@ final class CommerceFunnelQuery
 
         if ($allowedSessionIds !== null) {
             self::constrainToSessionIds($query, $allowedSessionIds, 'a.session_id');
-        } else {
+        } elseif ($period === '24h') {
             $query->whereIn('a.session_id', function ($sub) use ($from, $to, $period) {
                 $sub->from('activity_ecom_user')->select('session_id');
                 TrackerTime::applyEcomActivitySessionScope($sub, $from, $to, $period);
@@ -499,6 +500,7 @@ final class CommerceFunnelQuery
         array $funnelKeys,
         Carbon $from,
         Carbon $to,
+        ?string $period = null,
     ): void {
         $keys = array_values(array_filter(
             TrackerMultiSelectFilter::values($funnelKeys),
@@ -510,17 +512,17 @@ final class CommerceFunnelQuery
         }
 
         if (count($keys) === 1) {
-            self::applySingleSidebarFunnelKey($query, $keys[0], $from, $to);
+            self::applySingleSidebarFunnelKey($query, $keys[0], $from, $to, $period);
 
             return;
         }
 
-        $query->where(function (Builder $inner) use ($keys, $from, $to) {
+        $query->where(function (Builder $inner) use ($keys, $from, $to, $period) {
             foreach ($keys as $index => $funnelKey) {
                 $method = $index === 0 ? 'where' : 'orWhere';
 
-                $inner->{$method}(function (Builder $branch) use ($funnelKey, $from, $to) {
-                    self::applySingleSidebarFunnelKey($branch, $funnelKey, $from, $to);
+                $inner->{$method}(function (Builder $branch) use ($funnelKey, $from, $to, $period) {
+                    self::applySingleSidebarFunnelKey($branch, $funnelKey, $from, $to, $period);
                 });
             }
         });
@@ -534,14 +536,41 @@ final class CommerceFunnelQuery
         string $funnelKey,
         Carbon $from,
         Carbon $to,
+        ?string $period = null,
     ): void {
         match ($funnelKey) {
             'cart_abandonment' => self::applyAbandonedSessionFilter($query, 'add_to_cart', 'begin_checkout', $from, $to),
             'begin_checkout_abandonment' => self::applyAbandonedSessionFilter($query, 'begin_checkout', 'proceed_checkout', $from, $to),
             'proceed_checkout_abandonment' => self::applyAbandonedSessionFilter($query, 'proceed_checkout', 'payment_success', $from, $to),
-            'payment_success' => self::applyPaymentSuccessSessionFilter($query, $from, $to),
+            'payment_success' => self::applyPaymentSuccessActivitySessionFilter($query, $from, $to, $period),
             default => $query->whereRaw('1 = 0'),
         };
+    }
+
+    /**
+     * @return array{cart_abandoned_count: int, begin_checkout_abandoned_count: int, proceed_checkout_abandoned_count: int}
+     */
+    public static function unfilteredAbandonmentCounts(Carbon $from, Carbon $to, ?string $period = null): array
+    {
+        return [
+            'cart_abandoned_count' => self::countAbandonedSessionsInPeriod($from, $to, $period, 'add_to_cart', 'begin_checkout'),
+            'begin_checkout_abandoned_count' => self::countAbandonedSessionsInPeriod($from, $to, $period, 'begin_checkout', 'proceed_checkout'),
+            'proceed_checkout_abandoned_count' => self::countAbandonedSessionsInPeriod($from, $to, $period, 'proceed_checkout', 'payment_success'),
+        ];
+    }
+
+    public static function countAbandonedSessionsInPeriod(
+        Carbon $from,
+        Carbon $to,
+        ?string $period,
+        string $stage,
+        string $excludeActionType,
+    ): int {
+        $query = ActivityEcomUser::query();
+        TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period);
+        self::applyAbandonedSessionFilter($query, $stage, $excludeActionType, $from, $to);
+
+        return (int) $query->count();
     }
 
     /**
@@ -702,14 +731,60 @@ final class CommerceFunnelQuery
     }
 
     /**
+     * Activity payment-success drill-down: match dashboard Payments KPI (scoped sessions with
+     * payment_success) plus cross-day payers (ordered in range but session started before it).
+     *
+     * @param  Builder<ActivityEcomUser>  $query
+     */
+    public static function applyPaymentSuccessActivitySessionFilter(
+        Builder $query,
+        Carbon $from,
+        Carbon $to,
+        ?string $period = null,
+    ): void {
+        $query->where(function (Builder $outer) use ($from, $to, $period) {
+            $outer->where(function (Builder $scoped) use ($from, $to, $period) {
+                TrackerTime::applyEcomActivitySessionScope($scoped, $from, $to, $period);
+                $scoped->where('has_payment_success', true);
+            })->orWhere(function (Builder $crossDay) use ($from, $to, $period) {
+                self::applyPaymentSuccessSessionFilter($crossDay, $from, $to, $period);
+                $crossDay->whereNot(function (Builder $inScope) use ($from, $to, $period) {
+                    TrackerTime::applyEcomActivitySessionScope($inScope, $from, $to, $period);
+                });
+            });
+        });
+    }
+
+    /**
      * @param  Builder<ActivityEcomUser>  $query
      */
     public static function applyPaymentSuccessSessionFilter(
         Builder $query,
         Carbon $from,
         Carbon $to,
+        ?string $period = null,
     ): void {
-        CommerceHasOrderFilter::apply($query, true, $from, $to);
+        $table = $query->getModel()->getTable();
+        $range = TrackerTime::storageRange($from, $to);
+
+        $query->where(function (Builder $outer) use ($table, $range, $from, $to, $period) {
+            $outer->whereExists(function ($exists) use ($table, $range, $from, $to, $period) {
+                $exists->selectRaw('1')
+                    ->from('activity_ecom_orders as o')
+                    ->whereColumn('o.session_id', "{$table}.session_id")
+                    ->whereBetween('o.ordered_at', $range);
+
+                self::applySessionScope($exists, null, $from, $to, $period, 'o.session_id');
+            })->orWhereExists(function ($exists) use ($table, $range, $from, $to, $period) {
+                $exists->selectRaw('1')
+                    ->from('activity_ecom_user_actions as a')
+                    ->whereColumn('a.session_id', "{$table}.session_id")
+                    ->where('a.action_type', 'payment_success')
+                    ->whereBetween('a.created_at', $range);
+
+                self::applySessionScope($exists, null, $from, $to, $period, 'a.session_id');
+            });
+        });
     }
 
     public static function normalizeStage(string $stage): string

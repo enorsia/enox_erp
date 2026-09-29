@@ -244,6 +244,41 @@ class TrackerTime
     }
 
     /**
+     * Local calendar date (Y-m-d in visitor timezone) as inclusive UTC bounds for session `created_at`.
+     * Matches {@see applyEcomActivitySessionScope} for a single-day range.
+     *
+     * @return array{from: Carbon, to: Carbon}
+     */
+    public static function localCalendarDateBoundsUtc(string $localDateYmd): array
+    {
+        $fromLocal = Carbon::parse($localDateYmd, self::timezone())->startOfDay();
+        $toLocal = $fromLocal->copy()->endOfDay();
+
+        return [
+            'from' => $fromLocal->copy()->utc(),
+            'to' => $toLocal->copy()->utc(),
+        ];
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    public static function localCalendarDateStorageRange(string $localDateYmd): array
+    {
+        $bounds = self::localCalendarDateBoundsUtc($localDateYmd);
+
+        return self::storageRange($bounds['from'], $bounds['to']);
+    }
+
+    /**
+     * Default metric date for tracker:rollup-analytics (yesterday in visitor timezone).
+     */
+    public static function defaultRollupMetricDate(): string
+    {
+        return self::localNow()->subDay()->toDateString();
+    }
+
+    /**
      * @return array{from: Carbon, to: Carbon}
      */
     public static function yesterdayRangeUtc(): array

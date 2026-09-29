@@ -200,24 +200,84 @@ final class EcomActivitySessionSort
         $table = $query->getModel()->getTable();
         $dir = strtoupper($direction) === 'ASC' ? 'ASC' : 'DESC';
         $catalogOptions = is_array($scope['catalog_options'] ?? null) ? $scope['catalog_options'] : [];
-        $useCatalogScope = self::usesCatalogActionScope($catalogOptions);
+        $from = $scope['from'] ?? null;
+        $to = $scope['to'] ?? null;
 
-        if (! $useCatalogScope) {
-            return self::orderByFunnelStageFromSessionColumns($query, $dir);
+        if ($from instanceof Carbon && $to instanceof Carbon) {
+            return self::orderByFunnelStageInPeriod($query, $dir, $scope, $catalogOptions);
         }
 
+        return self::orderByFunnelStageFromSessionColumns($query, $dir);
+    }
+
+    /**
+     * Rank by highest funnel stage reached in the selected period (lines, orders, payment actions).
+     *
+     * @param  Builder<ActivityEcomUser>  $query
+     * @param  array{from?: ?Carbon, to?: ?Carbon, catalog_options?: array<string, mixed>}  $scope
+     * @param  array<string, mixed>  $catalogOptions
+     * @return Builder<ActivityEcomUser>
+     */
+    private static function orderByFunnelStageInPeriod(
+        Builder $query,
+        string $dir,
+        array $scope,
+        array $catalogOptions,
+    ): Builder {
+        $table = $query->getModel()->getTable();
+        $from = $scope['from'];
+        $to = $scope['to'];
+        [$start, $end] = TrackerTime::storageRange($from, $to);
+
         $lineSub = self::funnelLineTimesSubquery($scope, $catalogOptions);
+        $orderSub = DB::table('activity_ecom_orders')
+            ->selectRaw('session_id as order_session_id, MAX(ordered_at) as latest_order_at')
+            ->whereBetween('ordered_at', [$start, $end])
+            ->groupBy('session_id');
+        $paymentActionSub = DB::table('activity_ecom_user_actions')
+            ->selectRaw('session_id as action_session_id, MAX(created_at) as latest_payment_action_at')
+            ->where('action_type', 'payment_success')
+            ->whereBetween('created_at', [$start, $end])
+            ->groupBy('session_id');
+
+        $rankSql = <<<'SQL'
+GREATEST(
+    COALESCE(funnel_line_times.stage_rank, 0),
+    CASE WHEN period_orders.order_session_id IS NOT NULL OR period_payment_actions.action_session_id IS NOT NULL THEN 5 ELSE 0 END
+)
+SQL;
+
+        $stageTimeSql = <<<SQL
+CASE
+    WHEN {$rankSql} = 5 THEN COALESCE(
+        funnel_line_times.latest_payment_staged,
+        period_orders.latest_order_at,
+        period_payment_actions.latest_payment_action_at,
+        {$table}.first_payment_at,
+        {$table}.last_active_at,
+        {$table}.updated_at,
+        {$table}.created_at
+    )
+    WHEN {$rankSql} = 4 THEN COALESCE(funnel_line_times.latest_proceed, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN {$rankSql} = 3 THEN COALESCE(funnel_line_times.latest_begin, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN {$rankSql} = 2 THEN COALESCE(funnel_line_times.latest_cart, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    WHEN {$rankSql} = 1 THEN COALESCE(funnel_line_times.latest_view, {$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+    ELSE COALESCE({$table}.last_active_at, {$table}.updated_at, {$table}.created_at)
+END
+SQL;
 
         return $query
             ->leftJoinSub($lineSub, 'funnel_line_times', 'funnel_line_times.line_session_id', '=', "{$table}.session_id")
+            ->leftJoinSub($orderSub, 'period_orders', 'period_orders.order_session_id', '=', "{$table}.session_id")
+            ->leftJoinSub($paymentActionSub, 'period_payment_actions', 'period_payment_actions.action_session_id', '=', "{$table}.session_id")
             ->select("{$table}.*")
-            ->orderByRaw('COALESCE(funnel_line_times.stage_rank, 0) '.$dir)
-            ->orderByRaw(self::catalogStageTimeSql($table).' '.$dir)
+            ->orderByRaw($rankSql.' '.$dir)
+            ->orderByRaw($stageTimeSql.' '.$dir)
             ->orderByDesc("{$table}.id");
     }
 
     /**
-     * Default activity list sort: session funnel flags only (no line-item / order subqueries).
+     * Fallback when no period bounds are available (e.g. unbounded export).
      *
      * @param  Builder<ActivityEcomUser>  $query
      * @return Builder<ActivityEcomUser>
@@ -318,6 +378,12 @@ SQL;
         if ($from instanceof Carbon && $to instanceof Carbon) {
             [$start, $end] = TrackerTime::storageRange($from, $to);
 
+            $paymentActionSub = DB::table('activity_ecom_user_actions')
+                ->selectRaw('session_id as period_payment_session_id, MAX(CAST(COALESCE(amount_paid, commerce_total, 0) AS DECIMAL(12,2))) as period_payment_action_value')
+                ->where('action_type', 'payment_success')
+                ->whereBetween('created_at', [$start, $end])
+                ->groupBy('session_id');
+
             return $query
                 ->leftJoinSub(
                     DB::table('activity_ecom_orders')
@@ -329,8 +395,15 @@ SQL;
                     '=',
                     "{$table}.session_id"
                 )
+                ->leftJoinSub(
+                    $paymentActionSub,
+                    'period_payment_actions',
+                    'period_payment_actions.period_payment_session_id',
+                    '=',
+                    "{$table}.session_id"
+                )
                 ->select("{$table}.*")
-                ->orderByRaw('COALESCE(period_orders.period_order_value, 0) '.$direction)
+                ->orderByRaw('GREATEST(COALESCE(period_orders.period_order_value, 0), COALESCE(period_payment_actions.period_payment_action_value, 0)) '.$direction)
                 ->orderByDesc("{$table}.id");
         }
 

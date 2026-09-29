@@ -71,7 +71,23 @@ final class CommerceReadSupport
 
     public static function orderIdForAction(object $action): string
     {
-        return trim((string) (self::readScalar($action, 'order_id') ?? ''));
+        $orderId = trim((string) (self::readScalar($action, 'order_id') ?? ''));
+
+        if ($orderId !== '') {
+            return $orderId;
+        }
+
+        if ((string) ($action->action_type ?? '') !== 'payment_success') {
+            return '';
+        }
+
+        $payload = $action->payment_success ?? null;
+
+        if (! is_array($payload)) {
+            return '';
+        }
+
+        return trim((string) ($payload['order_id'] ?? $payload['checkout_info']['order_number'] ?? ''));
     }
 
     public static function itemQtyForAction(object $action): int
@@ -306,13 +322,74 @@ final class CommerceReadSupport
             return collect();
         }
 
-        return DB::table('activity_ecom_orders')
+        $range = TrackerTime::storageRange($from, $to);
+        $bySession = DB::table('activity_ecom_orders')
             ->selectRaw('session_id, SUM(amount_paid) as order_value, SUM(COALESCE(item_qty, 0)) as order_qty')
             ->whereIn('session_id', $sessionIds->all())
-            ->whereBetween('ordered_at', TrackerTime::storageRange($from, $to))
+            ->whereBetween('ordered_at', $range)
             ->groupBy('session_id')
             ->get()
             ->keyBy('session_id');
+
+        $actionRows = DB::table('activity_ecom_user_actions')
+            ->select(self::scalarActionColumns())
+            ->whereIn('session_id', $sessionIds->all())
+            ->where('action_type', 'payment_success')
+            ->whereBetween('created_at', $range)
+            ->orderByDesc('created_at')
+            ->get();
+
+        foreach ($actionRows->groupBy('session_id') as $sessionId => $actions) {
+            if ($bySession->has($sessionId)) {
+                continue;
+            }
+
+            $orderValue = 0.0;
+            $orderQty = 0;
+
+            foreach ($actions as $action) {
+                $amount = self::amountForAction($action);
+
+                if ($amount !== null && $amount > 0) {
+                    $orderValue += $amount;
+                }
+
+                $orderQty += self::itemQtyForAction($action);
+            }
+
+            if ($orderValue > 0 || $orderQty > 0) {
+                $bySession->put($sessionId, (object) [
+                    'session_id' => (string) $sessionId,
+                    'order_value' => $orderValue,
+                    'order_qty' => $orderQty,
+                ]);
+            }
+        }
+
+        return $bySession;
+    }
+
+    /**
+     * @param  Collection<int, string>  $sessionIds
+     * @return Collection<string, Collection<int, ActivityEcomUserAction>>
+     */
+    public static function paymentSuccessActionsForSessions(
+        Collection $sessionIds,
+        Carbon $from,
+        Carbon $to,
+    ): Collection {
+        if ($sessionIds->isEmpty()) {
+            return collect();
+        }
+
+        return ActivityEcomUserAction::query()
+            ->whereIn('session_id', $sessionIds->all())
+            ->where('action_type', 'payment_success')
+            ->whereBetween('created_at', TrackerTime::storageRange($from, $to))
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get()
+            ->groupBy(fn (ActivityEcomUserAction $action) => (string) $action->session_id);
     }
 
     /**

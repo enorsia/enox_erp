@@ -229,6 +229,59 @@ final class EcomActivityCommerceSummary
     }
 
     /**
+     * When normalized line items / orders are missing but payment_success actions exist in the period.
+     *
+     * @param  Collection<int, ActivityEcomUserAction>  $actions
+     * @return array{
+     *     commerce_label: ?string,
+     *     commerce_value: ?float,
+     *     commerce_has_order: bool,
+     *     commerce_display: string,
+     *     commerce_tip: ?string,
+     * }
+     */
+    public static function summarizeFromPaymentSuccessActions(Collection $actions): array
+    {
+        if ($actions->isEmpty()) {
+            return self::emptySummary();
+        }
+
+        $sorted = $actions->sortByDesc(fn (ActivityEcomUserAction $action) => [
+            $action->created_at?->timestamp ?? 0,
+            $action->id,
+        ])->values();
+
+        $latest = $sorted->first();
+        $value = 0.0;
+
+        foreach ($sorted as $action) {
+            $amount = CommerceReadSupport::amountForAction($action);
+
+            if ($amount !== null && $amount > 0) {
+                $value += $amount;
+            }
+        }
+
+        $value = round($value, 2);
+        $orderId = $latest instanceof ActivityEcomUserAction
+            ? self::orderIdFromPaymentAction($latest)
+            : '';
+
+        return [
+            'commerce_label' => 'Order',
+            'commerce_value' => $value > 0 ? $value : null,
+            'commerce_has_order' => true,
+            'commerce_display' => self::formatOrderDisplay($orderId, $value > 0 ? $value : null),
+            'commerce_tip' => self::tipFromParts(
+                'Order',
+                $value > 0 ? $value : null,
+                $orderId,
+                $latest?->created_at,
+            ),
+        ];
+    }
+
+    /**
      * @param  Collection<int, object>  $lines
      * @return array{
      *     commerce_label: string,

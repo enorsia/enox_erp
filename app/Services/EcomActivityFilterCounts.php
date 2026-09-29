@@ -2,8 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\ActivityEcomUser;
+use App\Models\ActivityEcomUserBotContext;
 use App\Models\TrackerUtmFilter;
-use App\Services\EcomDailyMetricsQuery;
 use App\Services\EcomTrackerDashboardService;
 use App\Support\EcomActivityFocus;
 use App\Support\TrackerTime;
@@ -21,6 +22,7 @@ class EcomActivityFilterCounts
         'device_type',
         'logged_in',
         'has_order',
+        'visitor_type',
         'utm_source',
         'utm_medium',
     ];
@@ -32,21 +34,6 @@ class EcomActivityFilterCounts
      */
     public function counts(Request $request, callable $queryBuilder, ?callable $deferredHasOrderCounter = null): array
     {
-        if ($this->shouldUseRollupFacets($request)) {
-            $range = app(EcomTrackerDashboardService::class)->resolveDateRange(
-                $request->only(['period', 'date_from', 'date_to']),
-            );
-            $rollupCounts = app(EcomDailyMetricsQuery::class)->hybridActivityFacetCounts(
-                $range['from'],
-                $range['to'],
-                $range['period'] ?? null,
-            );
-
-            if ($rollupCounts !== null) {
-                return $rollupCounts;
-            }
-        }
-
         $counts = [];
         $deviceQuery = $queryBuilder($request, ['device_type']);
         $loggedInQuery = $queryBuilder($request, ['logged_in']);
@@ -93,6 +80,7 @@ class EcomActivityFilterCounts
             'device_type' => $this->groupCount($query, 'device_type'),
             'logged_in' => $this->groupLoggedInCount($query),
             'has_order' => $this->countHasOrder($request, $query, $deferredHasOrderCounter),
+            'visitor_type' => $this->countVisitorType($query),
             'utm_source' => EcomActivityFocus::usesConversionSourceFilter($request)
                 ? TrackerUtmFilter::conversionSourceCountsFrom($query)
                 : $this->listTrafficFacetsForQuery($query)['utm_source'],
@@ -120,7 +108,11 @@ class EcomActivityFilterCounts
         $table = $query->getModel()->getTable();
         [$start, $end] = TrackerTime::storageRange($range['from'], $range['to']);
 
-        $row = self::aggregateQuery($query)
+        $row = DB::query()
+            ->fromSub(
+                self::aggregateQuery($query)->select("{$table}.id", "{$table}.session_id"),
+                'et_activity_sessions',
+            )
             ->leftJoinSub(
                 DB::table('activity_ecom_orders')
                     ->select('session_id')
@@ -129,10 +121,10 @@ class EcomActivityFilterCounts
                 'period_orders',
                 'period_orders.session_id',
                 '=',
-                "{$table}.session_id",
+                'et_activity_sessions.session_id',
             )
-            ->selectRaw('SUM(CASE WHEN period_orders.session_id IS NOT NULL THEN 1 ELSE 0 END) as with_order')
-            ->selectRaw('SUM(CASE WHEN period_orders.session_id IS NULL THEN 1 ELSE 0 END) as without_order')
+            ->selectRaw('COUNT(DISTINCT CASE WHEN period_orders.session_id IS NOT NULL THEN et_activity_sessions.id END) as with_order')
+            ->selectRaw('COUNT(DISTINCT CASE WHEN period_orders.session_id IS NULL THEN et_activity_sessions.id END) as without_order')
             ->first();
 
         return [
@@ -149,7 +141,7 @@ class EcomActivityFilterCounts
         $table = $query->getModel()->getTable();
 
         $rows = self::aggregateQuery($query)
-            ->selectRaw("{$table}.device_type as device_bucket, {$table}.is_logged_in as logged_in_flag, COUNT(*) as total")
+            ->selectRaw("{$table}.device_type as device_bucket, {$table}.is_logged_in as logged_in_flag, COUNT(DISTINCT {$table}.id) as total")
             ->groupBy("{$table}.device_type", "{$table}.is_logged_in")
             ->get();
 
@@ -183,7 +175,7 @@ class EcomActivityFilterCounts
         $table = $query->getModel()->getTable();
 
         $rows = self::aggregateQuery($query)
-            ->selectRaw("CASE WHEN {$table}.is_logged_in = 1 THEN '1' ELSE '0' END as bucket, COUNT(*) as total")
+            ->selectRaw("CASE WHEN {$table}.is_logged_in = 1 THEN '1' ELSE '0' END as bucket, COUNT(DISTINCT {$table}.id) as total")
             ->groupBy('bucket')
             ->pluck('total', 'bucket');
 
@@ -201,7 +193,7 @@ class EcomActivityFilterCounts
         $table = $query->getModel()->getTable();
 
         return self::aggregateQuery($query)
-            ->selectRaw("{$table}.{$column} as bucket, COUNT(*) as total")
+            ->selectRaw("{$table}.{$column} as bucket, COUNT(DISTINCT {$table}.id) as total")
             ->whereNotNull("{$table}.{$column}")
             ->where("{$table}.{$column}", '!=', '')
             ->groupBy('bucket')
@@ -209,6 +201,32 @@ class EcomActivityFilterCounts
             ->pluck('total', 'bucket')
             ->map(fn ($count) => (int) $count)
             ->all();
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function countVisitorType(Builder $query): array
+    {
+        $table = (new ActivityEcomUser)->getTable();
+        $botTable = (new ActivityEcomUserBotContext)->getTable();
+
+        $rows = DB::query()
+            ->fromSub(
+                self::aggregateQuery($query)->select("{$table}.id", "{$table}.session_id"),
+                'et_activity_sessions',
+            )
+            ->leftJoin($botTable, "{$botTable}.session_id", '=', 'et_activity_sessions.session_id')
+            ->selectRaw("CASE WHEN {$botTable}.id IS NULL THEN 'unclassified' WHEN {$botTable}.is_bot = 1 THEN 'bot' ELSE 'human' END as bucket")
+            ->selectRaw('COUNT(DISTINCT et_activity_sessions.id) as total')
+            ->groupBy('bucket')
+            ->pluck('total', 'bucket');
+
+        return [
+            'human' => (int) ($rows['human'] ?? 0),
+            'bot' => (int) ($rows['bot'] ?? 0),
+            'unclassified' => (int) ($rows['unclassified'] ?? 0),
+        ];
     }
 
     /**
@@ -239,20 +257,5 @@ class EcomActivityFilterCounts
         }
 
         return $this->listTrafficFacetCache[$cacheKey];
-    }
-
-    private function shouldUseRollupFacets(Request $request): bool
-    {
-        if (! config('tracker.use_daily_rollups', true)) {
-            return false;
-        }
-
-        if (EcomActivityFocus::usesConversionSourceFilter($request)) {
-            return false;
-        }
-
-        $sessionFilters = EcomActivityFocus::sessionFiltersFromRequest($request);
-
-        return $sessionFilters === [];
     }
 }

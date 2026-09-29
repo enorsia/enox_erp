@@ -10,6 +10,7 @@ use App\Support\TrackerSessionClock;
 use App\Support\TrackerTime;
 use App\Support\VisitorSessionRedis;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class VisitorSessionResolver
@@ -29,6 +30,23 @@ class VisitorSessionResolver
      * }
      */
     public function resolve(string $visitorId, array $context = []): array
+    {
+        $lock = Cache::lock('tracker:visitor_session_resolve:'.$visitorId, 10);
+
+        return $lock->block(5, fn () => $this->resolveWithinLock($visitorId, $context));
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     * @return array{
+     *     visitor_id: string,
+     *     session_id: string,
+     *     is_new_daily_visitor: bool,
+     *     is_new_unique_visitor: bool,
+     *     is_new_session: bool
+     * }
+     */
+    private function resolveWithinLock(string $visitorId, array $context = []): array
     {
         $startedAt = microtime(true);
         TrackerRedisSupport::logFrontendHealth('resolve_visit');
@@ -134,6 +152,26 @@ class VisitorSessionResolver
             || TrackerSessionClock::gapExpired($record['last_active_at'], $now);
 
         if ($needsFullResolve) {
+            $latest = $this->latestSession($visitorId);
+
+            if ($latest !== null && ! TrackerSessionClock::gapExpired((string) $latest->getRawOriginal('last_active_at'), $now)) {
+                $sessionId = $latest->session_id;
+
+                $this->redis->put($visitorId, [
+                    'last_active_at' => $now->toIso8601String(),
+                    'last_date' => $today,
+                    'session_id' => $sessionId,
+                ]);
+
+                EcomTrackerLogger::frontend()->debug('session.resolve.ingest', 'Resumed open session from database', [
+                    'visitor_id' => $visitorId,
+                    'session_id' => $sessionId,
+                    'proposed_session_id' => $proposedSessionId,
+                ]);
+
+                return $this->buildResult($visitorId, $sessionId, false, false);
+            }
+
             EcomTrackerLogger::frontend()->debug('session.resolve.ingest', 'Need new session for this visitor', [
                 'visitor_id' => $visitorId,
                 'proposed_session_id' => $proposedSessionId,
@@ -190,6 +228,13 @@ class VisitorSessionResolver
      */
     public function sessionIdForEventClock(string $visitorId, Carbon $eventAt, array $context = []): string
     {
+        $liveSessionId = isset($context['live_session_id']) ? (string) $context['live_session_id'] : '';
+        $reference = TrackerTime::nowUtc();
+
+        if ($liveSessionId !== '' && TrackerSessionClock::isLiveActivity($eventAt, $reference)) {
+            return $liveSessionId;
+        }
+
         $sessions = ActivityEcomUser::query()
             ->where('visitor_id', $visitorId)
             ->orderBy('created_at')
@@ -207,6 +252,16 @@ class VisitorSessionResolver
 
         if ($sessionId !== null) {
             return $sessionId;
+        }
+
+        $latest = $this->latestSession($visitorId);
+
+        if ($latest !== null && TrackerSessionClock::eventFallsInSessionWindow($eventAt, $latest)) {
+            return $latest->session_id;
+        }
+
+        if ($latest !== null && ! TrackerSessionClock::gapExpired((string) $latest->getRawOriginal('last_active_at'), $eventAt)) {
+            return $latest->session_id;
         }
 
         $sessionId = (string) Str::uuid();

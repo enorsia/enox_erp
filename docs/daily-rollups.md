@@ -27,7 +27,9 @@ Abandonment KPIs still use live `abandonedSessionCounts()` (not stored in site m
 
 ## Daily cron
 
-One run = **yesterday** (store timezone). Scheduled at 01:30 in `routes/console.php`.
+One run = **yesterday** (store timezone). Scheduled at 01:30 in `routes/console.php`. The command prints the exact UTC window; it uses the same bounds as dashboard/activity (`TrackerTime::localCalendarDateStorageRange`).
+
+**Session repair:** use `tracker:backfill-attribution` for 30-minute splits. Rollup backfill merges duplicate same-day sessions **per day being rolled up** only (not one merge across the whole backfill range).
 
 ```bash
 30 1 * * * cd /path/to/enox_erp && php artisan tracker:rollup-analytics
@@ -72,7 +74,7 @@ Skips `information_schema` column probes on each dashboard request.
 php artisan tracker:rollup-analytics
 ```
 
-**Backfill missing/failed days** — from first session through **today** (only days not already `success`; use `--force` to re-roll all):
+**Backfill missing/failed days** — from first session through **today**. First merges duplicate visitor sessions in that range (same local day, within `session_gap_minutes`), then rolls up only days not already `success` (`--force` re-rolls all). Use `--skip-session-merge` to roll up only.
 
 ```bash
 php artisan tracker:rollup-analytics-backfill

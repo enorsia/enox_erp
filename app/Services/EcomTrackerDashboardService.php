@@ -2064,7 +2064,14 @@ class EcomTrackerDashboardService
         $key = $this->periodRangePreloadKey($from, $to, $period);
 
         if ($this->periodCommercePreloadKey === $key && $this->periodCommercePreloadLines !== null) {
-            return;
+            // Batch dashboard read marks the range with an empty collection (catalog comes from rollups).
+            // Recoverable abandonment still needs commerce lines — do not treat that placeholder as warmed.
+            if (
+                $this->periodCommercePreloadLines->isNotEmpty()
+                || ! $this->storeDashboardSnapshotCoversRange($from, $to, $period)
+            ) {
+                return;
+            }
         }
 
         $this->periodCommercePreloadKey = $key;
@@ -2764,10 +2771,6 @@ class EcomTrackerDashboardService
         array $filters = [],
         ?string $period = null,
     ): array {
-        if ($filters === [] && $this->storeDashboardSnapshotCoversRange($from, $to, $period)) {
-            return $this->storeDashboardSnapshot->abandonmentCounts;
-        }
-
         if ($filters === []) {
             return $this->rememberQuery(
                 $this->queryCacheKey('abandonedSessionCountsUnfiltered', $from, $to, $period),
@@ -2814,20 +2817,7 @@ class EcomTrackerDashboardService
      */
     private function queryUnfilteredAbandonmentCounts(Carbon $from, Carbon $to, ?string $period): array
     {
-        $query = DB::table('activity_ecom_user');
-        TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period);
-
-        $row = $query->selectRaw(
-            'COALESCE(SUM(CASE WHEN has_add_to_cart = 1 AND has_begin_checkout = 0 AND has_proceed_checkout = 0 AND has_payment_success = 0 THEN 1 ELSE 0 END), 0) as cart_abandoned,
-             COALESCE(SUM(CASE WHEN has_begin_checkout = 1 AND has_proceed_checkout = 0 AND has_payment_success = 0 THEN 1 ELSE 0 END), 0) as begin_checkout_abandoned,
-             COALESCE(SUM(CASE WHEN has_proceed_checkout = 1 AND has_payment_success = 0 THEN 1 ELSE 0 END), 0) as proceed_checkout_abandoned',
-        )->first();
-
-        return [
-            'cart_abandoned_count' => (int) ($row->cart_abandoned ?? 0),
-            'begin_checkout_abandoned_count' => (int) ($row->begin_checkout_abandoned ?? 0),
-            'proceed_checkout_abandoned_count' => (int) ($row->proceed_checkout_abandoned ?? 0),
-        ];
+        return CommerceFunnelQuery::unfilteredAbandonmentCounts($from, $to, $period);
     }
 
     /**
@@ -2838,7 +2828,8 @@ class EcomTrackerDashboardService
         $row = $this->periodSessionAggregates($from, $to, $period);
         $abandoned = $this->abandonedSessionCounts($from, $to, [], $period);
         $totalSessions = $row['sessions'];
-        $convertedSessions = $row['payment_success'];
+        $sessionScopedPayments = (int) $row['payment_success'];
+        $paymentSuccessCount = $this->funnelPaymentSuccessCount($from, $to, $period, $sessionScopedPayments);
         $cartStageCount = $row['add_to_cart'];
         $beginCheckoutStageCount = $row['begin_checkout'];
         $proceedCheckoutStageCount = $row['proceed_checkout'];
@@ -2846,7 +2837,7 @@ class EcomTrackerDashboardService
         $beginCheckoutAbandoned = $abandoned['begin_checkout_abandoned_count'];
         $proceedCheckoutAbandoned = $abandoned['proceed_checkout_abandoned_count'];
 
-        $conversionRate = $totalSessions > 0 ? ($convertedSessions / $totalSessions) * 100 : 0;
+        $conversionRate = $totalSessions > 0 ? ($sessionScopedPayments / $totalSessions) * 100 : 0;
         $cartAbandonRate = $cartStageCount > 0 ? ($cartAbandoned / $cartStageCount) * 100 : 0;
         $beginCheckoutAbandonRate = $beginCheckoutStageCount > 0 ? ($beginCheckoutAbandoned / $beginCheckoutStageCount) * 100 : 0;
         $proceedCheckoutAbandonRate = $proceedCheckoutStageCount > 0 ? ($proceedCheckoutAbandoned / $proceedCheckoutStageCount) * 100 : 0;
@@ -2857,7 +2848,7 @@ class EcomTrackerDashboardService
             'cart_abandonment_rate' => round($cartAbandonRate, 1),
             'begin_checkout_abandonment_rate' => round($beginCheckoutAbandonRate, 1),
             'proceed_checkout_abandonment_rate' => round($proceedCheckoutAbandonRate, 1),
-            'payment_success_count' => $convertedSessions,
+            'payment_success_count' => $paymentSuccessCount,
             'cart_abandoned_count' => $cartAbandoned,
             'begin_checkout_abandoned_count' => $beginCheckoutAbandoned,
             'proceed_checkout_abandoned_count' => $proceedCheckoutAbandoned,
@@ -2868,8 +2859,35 @@ class EcomTrackerDashboardService
             'cart_stage_rate' => round($stageRate($cartStageCount), 1),
             'begin_checkout_stage_rate' => round($stageRate($beginCheckoutStageCount), 1),
             'proceed_checkout_stage_rate' => round($stageRate($proceedCheckoutStageCount), 1),
-            'payment_stage_rate' => round($stageRate($convertedSessions), 1),
+            'payment_stage_rate' => round($this->funnelPaymentStageRate($sessionScopedPayments, $totalSessions), 1),
         ];
+    }
+
+    /**
+     * Payments funnel count: rolling today uses session flags; calendar presets use completed orders in range
+     * (matches sale KPI, recoverable payment panel, and activity payment drill-down).
+     */
+    private function funnelPaymentSuccessCount(
+        Carbon $from,
+        Carbon $to,
+        ?string $period,
+        int $sessionScopedPayments,
+    ): int {
+        if ($period === '24h') {
+            return $sessionScopedPayments;
+        }
+
+        return (int) $this->periodOrderAggregates($from, $to, null, $period)['purchases'];
+    }
+
+    /** Share of sessions started in the period that paid (rate leg of the Payments card). */
+    private function funnelPaymentStageRate(int $sessionScopedPayments, int $totalSessions): float
+    {
+        if ($totalSessions <= 0) {
+            return 0.0;
+        }
+
+        return ($sessionScopedPayments / $totalSessions) * 100;
     }
 
     /**
@@ -3165,7 +3183,7 @@ class EcomTrackerDashboardService
             $currentRate,
             $previousRate,
             'percent',
-            'Share of all sessions that completed a payment (one count per session with payment_success).',
+            'Rate: sessions started in the period that paid. Count: completed orders in the period (matches sale KPI and payment drill-down). Today uses the same session window for both.',
             $comparisonLabel,
         );
         $card['formatted'] = $this->formatFunnelDropValue($currentRate, $currentCount);
@@ -6458,7 +6476,7 @@ class EcomTrackerDashboardService
             }
 
             $sessions = $this->periodCommercePreloadSessions;
-            $lines = $this->periodCommercePreloadLines ?? collect();
+            $lines = $this->periodLineItems($from, $to, null, $period);
         } else {
             $sessions = $this->periodSessionReadRows($from, $to, $allowedSessionIds, $period);
             $lines = $this->periodLineItems($from, $to, $allowedSessionIds, $period);

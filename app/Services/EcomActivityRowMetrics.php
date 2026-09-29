@@ -67,6 +67,7 @@ class EcomActivityRowMetrics
                     'order_qty' => $row['qty'] ?? 0,
                     'order_value' => $row['value'] ?? 0,
                     'abandoned_at' => TrackerTime::diffForHumansFromStorage($row['occurred_at'] ?? null) ?? '—',
+                    'period_event_at' => $row['occurred_at'] ?? null,
                 ]);
             }
         }
@@ -134,6 +135,7 @@ class EcomActivityRowMetrics
             $from,
             $to,
             $productCatalogOptions,
+            $request,
         );
 
         $this->attachCatalogContext($metrics, $sessionIds, $from, $to, $productCatalogOptions);
@@ -157,7 +159,9 @@ class EcomActivityRowMetrics
         Carbon $from,
         Carbon $to,
         array $catalogOptions = [],
+        ?Request $request = null,
     ): void {
+        $periodOnlyCommerce = EcomActivityFocus::usesPeriodOnlyCommerce($request);
         $sessionIds = $sessions->pluck('session_id');
         $useCatalogScope = EcomActivitySessionSort::usesCatalogActionScope($catalogOptions);
         $commerceFunnelStages = ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'];
@@ -193,6 +197,7 @@ class EcomActivityRowMetrics
         $cumulativeLinesBySession = $cumulativeLines->groupBy(fn (object $line) => (string) $line->session_id);
         $cumulativeOrdersBySession = $cumulativeOrders->groupBy(fn (object $order) => (string) $order->session_id);
         $viewLinesBySession = $viewLines->groupBy(fn (object $line) => (string) $line->session_id);
+        $paymentActionsBySession = CommerceReadSupport::paymentSuccessActionsForSessions($sessionIds, $from, $to);
 
         foreach ($sessions as $session) {
             $sessionId = (string) $session->session_id;
@@ -206,8 +211,78 @@ class EcomActivityRowMetrics
             $summary = EcomActivityCommerceSummary::summarizeFromCommerce($sessionLines, $sessionOrders);
             $eventLines = $sessionLines;
             $eventOrders = $sessionOrders;
+            $paymentActionsForEvents = null;
 
-            if (($summary['commerce_label'] ?? null) === null && $this->sessionHasCommerceFunnelState($session)) {
+            if (($summary['commerce_label'] ?? null) === null) {
+                $paymentActions = $paymentActionsBySession->get($sessionId, collect());
+
+                if ($paymentActions->isNotEmpty()) {
+                    $summary = EcomActivityCommerceSummary::summarizeFromPaymentSuccessActions($paymentActions);
+                    $paymentActionsForEvents = $paymentActions;
+
+                    if (($metrics[$sessionId]['period_event_at'] ?? null) === null) {
+                        $latestPayment = $paymentActions->first();
+                        $metrics[$sessionId]['period_event_at'] = $latestPayment?->created_at;
+                    }
+                }
+            }
+
+            if (
+                ($summary['commerce_label'] ?? null) === null
+                && $periodOnlyCommerce
+                && $request !== null
+                && EcomActivityFocus::usesPeriodEventTimestamps($request)
+                && ($session->has_payment_success ?? false)
+            ) {
+                $paymentDataUpper = TrackerTime::nowUtc();
+                $paymentFallbackOrders = CommerceReadSupport::ordersForSessions(
+                    collect([$sessionId]),
+                    $epoch,
+                    $paymentDataUpper,
+                );
+                $paymentFallbackLines = CommerceReadSupport::linesForSessions(
+                    collect([$sessionId]),
+                    $epoch,
+                    $paymentDataUpper,
+                    ['payment_success'],
+                    $catalogOptionsForQuery,
+                );
+                [$paymentFallbackLines, $paymentFallbackOrders] = $this->scopedCommerceRows(
+                    $paymentFallbackLines,
+                    $paymentFallbackOrders,
+                    $catalogOptions,
+                    $useCatalogScope,
+                );
+                $paymentFallbackSummary = EcomActivityCommerceSummary::summarizeFromCommerce(
+                    $paymentFallbackLines,
+                    $paymentFallbackOrders,
+                );
+
+                if (($paymentFallbackSummary['commerce_label'] ?? null) !== null) {
+                    $summary = $paymentFallbackSummary;
+                    $eventLines = $paymentFallbackLines;
+                    $eventOrders = $paymentFallbackOrders;
+
+                    if (($metrics[$sessionId]['period_event_at'] ?? null) === null) {
+                        $latestOrder = $paymentFallbackOrders
+                            ->sortByDesc(fn (object $order) => strtotime((string) ($order->ordered_at ?? '')) ?: 0)
+                            ->first();
+                        $latestLine = $paymentFallbackLines
+                            ->sortByDesc(fn (object $line) => strtotime((string) ($line->staged_at ?? '')) ?: 0)
+                            ->first();
+
+                        $metrics[$sessionId]['period_event_at'] = TrackerTime::fromStorage(
+                            $latestOrder->ordered_at ?? $latestLine->staged_at ?? null,
+                        );
+                    }
+
+                    if (($metrics[$sessionId]['order_value'] ?? 0) == 0 && ($paymentFallbackSummary['commerce_value'] ?? null) !== null) {
+                        $metrics[$sessionId]['order_value'] = round((float) $paymentFallbackSummary['commerce_value'], 2);
+                    }
+                }
+            }
+
+            if (($summary['commerce_label'] ?? null) === null && ! $periodOnlyCommerce && $this->sessionHasCommerceFunnelState($session)) {
                 [$cumulativeSessionLines, $cumulativeSessionOrders] = $this->scopedCommerceRows(
                     $cumulativeLinesBySession->get($sessionId, collect()),
                     $cumulativeOrdersBySession->get($sessionId, collect()),
@@ -226,7 +301,7 @@ class EcomActivityRowMetrics
                 }
             }
 
-            if (($summary['commerce_label'] ?? null) === null) {
+            if (($summary['commerce_label'] ?? null) === null && ! $periodOnlyCommerce) {
                 $viewSessionLines = $viewLinesBySession->get($sessionId, collect());
 
                 if ($useCatalogScope) {
@@ -260,8 +335,29 @@ class EcomActivityRowMetrics
                 }
             }
 
+            $commerceEvents = $paymentActionsForEvents instanceof Collection
+                ? EcomActivityCommerceEvents::fromActions($paymentActionsForEvents)
+                : EcomActivityCommerceEvents::fromCommerceRows($linesForEvents, $eventOrders);
+
+            if (
+                $request !== null
+                && EcomActivityFocus::usesPeriodEventTimestamps($request)
+                && ($metrics[$sessionId]['period_event_at'] ?? null) === null
+            ) {
+                $latestPayment = $paymentActionsBySession->get($sessionId, collect())->first();
+
+                if ($latestPayment !== null) {
+                    $metrics[$sessionId]['period_event_at'] = $latestPayment->created_at;
+                } elseif ($eventOrders->isNotEmpty()) {
+                    $latestOrder = $eventOrders
+                        ->sortByDesc(fn (object $order) => strtotime((string) ($order->ordered_at ?? '')) ?: 0)
+                        ->first();
+                    $metrics[$sessionId]['period_event_at'] = TrackerTime::fromStorage($latestOrder->ordered_at ?? null);
+                }
+            }
+
             $metrics[$sessionId] = array_merge($metrics[$sessionId] ?? [], $summary, [
-                'commerce_events' => EcomActivityCommerceEvents::fromCommerceRows($linesForEvents, $eventOrders),
+                'commerce_events' => $commerceEvents,
             ]);
         }
     }

@@ -15,10 +15,7 @@
                 @php
                     $fullId = $relatedSession->session_id;
                     $isCurrent = $fullId === $currentSessionId;
-                    $when = TrackerTime::formatFromStorage(
-                        $relatedSession->last_active_at ?? $relatedSession->created_at,
-                        'd M Y, h:i A',
-                    );
+                    $when = TrackerTime::formatFromStorage($relatedSession->created_at, 'd M Y, h:i:s A');
                     $showUrl = EcomTrackerViewData::activityShowUrlFromRequest(request(), $fullId);
                     $activeClasses = 'border-accent-400/70 bg-accent-500/10 dark:bg-accent-500/15 ring-1 ring-accent-500/25';
                     $idleClasses = 'border-slate-200/80 dark:border-slate-600/50 bg-slate-50/50 dark:bg-slate-800/30 hover:border-accent-400/40 hover:bg-accent-500/5 dark:hover:bg-accent-500/10';
