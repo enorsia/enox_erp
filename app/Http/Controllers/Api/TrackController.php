@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\TrackerClientContextResolver;
 use App\Services\TrackIngestService;
 use App\Support\EcomTrackerLogger;
 use Illuminate\Http\JsonResponse;
@@ -14,6 +15,7 @@ class TrackController extends Controller
 {
     public function __construct(
         private TrackIngestService $ingestService,
+        private TrackerClientContextResolver $clientContextResolver,
     ) {}
 
     public function store(Request $request): JsonResponse
@@ -75,7 +77,17 @@ class TrackController extends Controller
                 'events.*.created_at' => ['nullable'],
             ]);
 
-            $acceptedIds = $this->ingestService->ingest($request, $validated);
+            $clientContext = $this->clientContextResolver->resolve($request);
+
+            if ($clientContext !== null) {
+                EcomTrackerLogger::frontend()->info('ingest.client_context', 'Client context for batch', [
+                    'session_id' => $validated['session']['session_id'] ?? ($validated['events'][0]['session_id'] ?? null),
+                    'is_bot' => $clientContext['is_bot'] ?? null,
+                    'ip_country' => $clientContext['ip_country'] ?? null,
+                ]);
+            }
+
+            $acceptedIds = $this->ingestService->ingest($validated);
 
             EcomTrackerLogger::frontend()->info('api.track.success', 'User actions saved OK', [
                 'session_id' => $validated['session']['session_id'] ?? ($validated['events'][0]['session_id'] ?? null),

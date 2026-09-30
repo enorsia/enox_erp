@@ -16,10 +16,6 @@ use Illuminate\Support\Facades\Schema;
 
 class TrackerDataCleanupService
 {
-    public function __construct(
-        private TrackIngestService $trackIngestService,
-    ) {}
-
     /**
      * @return array{scanned: int, duplicate_groups: int, deleted_actions: int, kept_actions: int}
      */
@@ -165,7 +161,123 @@ class TrackerDataCleanupService
 
     public function backfillSessionCustomerFields(int $chunkSize = 100): int
     {
-        return $this->trackIngestService->backfillSessionCustomerFromCheckoutActions($chunkSize);
+        $updated = 0;
+
+        ActivityEcomUser::query()
+            ->where(function ($query) {
+                $query->whereNull('user_name')->orWhere('user_name', '')
+                    ->orWhereNull('user_email')->orWhere('user_email', '')
+                    ->orWhereNull('user_phone')->orWhere('user_phone', '');
+            })
+            ->orderBy('id')
+            ->chunkById($chunkSize, function ($sessions) use (&$updated) {
+                foreach ($sessions as $session) {
+                    $fields = $this->customerFieldsFromCheckoutActions($session->session_id);
+
+                    if ($fields === []) {
+                        continue;
+                    }
+
+                    $updates = [];
+
+                    foreach (['user_name', 'user_email', 'user_phone'] as $field) {
+                        if (filled($session->{$field}) || empty($fields[$field] ?? null)) {
+                            continue;
+                        }
+
+                        $updates[$field] = $fields[$field];
+                    }
+
+                    if ($updates === []) {
+                        continue;
+                    }
+
+                    $session->update($updates);
+                    $updated++;
+                }
+            });
+
+        return $updated;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function customerFieldsFromCheckoutActions(string $sessionId): array
+    {
+        $actions = ActivityEcomUserAction::query()
+            ->where('session_id', $sessionId)
+            ->whereIn('action_type', ['proceed_checkout', 'payment_success'])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $fields = [];
+
+        foreach ($actions as $action) {
+            foreach ([
+                $action->proceed_to_checkout['customer'] ?? null,
+                $action->payment_success['checkout_info']['customer'] ?? null,
+            ] as $customer) {
+                if (! is_array($customer)) {
+                    continue;
+                }
+
+                foreach ($this->customerFieldsFromPayload($customer) as $field => $value) {
+                    if (! isset($fields[$field]) && filled($value)) {
+                        $fields[$field] = $value;
+                    }
+                }
+            }
+        }
+
+        return $fields;
+    }
+
+    /**
+     * @param  array<string, mixed>  $customer
+     * @return array<string, string>
+     */
+    private function customerFieldsFromPayload(array $customer): array
+    {
+        $firstName = trim((string) ($customer['first_name'] ?? $customer['firstName'] ?? ''));
+        $lastName = trim((string) ($customer['last_name'] ?? $customer['lastName'] ?? ''));
+        $fullName = trim((string) ($customer['full_name'] ?? $customer['fullName'] ?? ''));
+        $email = trim((string) ($customer['email'] ?? ''));
+        $phone = $this->extractCustomerPhone($customer);
+        $name = trim($fullName !== '' ? $fullName : implode(' ', array_filter([$firstName, $lastName])));
+
+        $updates = [];
+
+        if ($name !== '') {
+            $updates['user_name'] = $name;
+        }
+
+        if ($email !== '') {
+            $updates['user_email'] = $email;
+        }
+
+        if ($phone !== null) {
+            $updates['user_phone'] = $phone;
+        }
+
+        return $updates;
+    }
+
+    /**
+     * @param  array<string, mixed>  $customer
+     */
+    private function extractCustomerPhone(array $customer): ?string
+    {
+        foreach (['phone', 'mobile', 'phone_number'] as $key) {
+            $value = trim((string) ($customer[$key] ?? ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /**
