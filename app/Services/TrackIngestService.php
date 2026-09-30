@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use Carbon\Carbon;
-use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
 
 class TrackIngestService
@@ -39,6 +39,22 @@ class TrackIngestService
 
         $events = $this->sortEventsByClock($events);
         $acceptedIds = [];
+        $sessionIds = [];
+
+        foreach ($events as $event) {
+            $eventId = $event['id'] ?? null;
+
+            if (! $eventId) {
+                continue;
+            }
+
+            $eventSessionId = (string) ($event['session_id'] ?? $sessionId);
+            $sessionIds[$eventSessionId] = true;
+        }
+
+        foreach (array_keys($sessionIds) as $eventSessionId) {
+            $this->ensureSessionRowExists($eventSessionId, $payload);
+        }
 
         foreach ($events as $event) {
             $eventId = $event['id'] ?? null;
@@ -58,6 +74,35 @@ class TrackIngestService
         }
 
         return $acceptedIds;
+    }
+
+    /**
+     * Parent row required by FK on activity_ecom_user_actions.session_id.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function ensureSessionRowExists(string $sessionId, array $payload): void
+    {
+        if (ActivityEcomUser::query()->where('session_id', $sessionId)->exists()) {
+            return;
+        }
+
+        $now = $this->formatUtc($this->nowUtc());
+        $sessionMeta = is_array($payload['session'] ?? null) ? $payload['session'] : [];
+
+        ActivityEcomUser::query()->insertOrIgnore([
+            'session_id' => $sessionId,
+            'visitor_id' => $sessionMeta['visitor_id'] ?? null,
+            'user_id' => $sessionMeta['user_id'] ?? null,
+            'user_name' => $sessionMeta['user_name'] ?? null,
+            'user_email' => $sessionMeta['user_email'] ?? null,
+            'user_phone' => $sessionMeta['user_phone'] ?? null,
+            'is_logged_in' => (bool) ($sessionMeta['is_logged_in'] ?? false),
+            'last_active_at' => $now,
+            'session_duration_seconds' => 0,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
     }
 
     /**

@@ -34,6 +34,9 @@ class ActivityEcomUserAction extends Model
         'start_time',
         'end_time',
         'created_at',
+        'sync_status',
+        'sync_attempts',
+        'sync_claimed_at',
         'commerce_total',
         'commerce_subtotal',
         'commerce_shipping',
@@ -62,6 +65,9 @@ class ActivityEcomUserAction extends Model
             'start_time' => 'datetime',
             'end_time' => 'datetime',
             'created_at' => 'datetime',
+            'sync_status' => 'integer',
+            'sync_attempts' => 'integer',
+            'sync_claimed_at' => 'datetime',
         ];
     }
 
