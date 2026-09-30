@@ -41,11 +41,55 @@ class EcomDailyMetricsQuery
             return false;
         }
 
-        if (config('tracker.dashboard_rollups_only', true)) {
-            return true;
+        return $split['use_rollups'] && $split['closed_dates'] !== [];
+    }
+
+    /**
+     * Closed days in the range that already have a site metrics rollup row.
+     *
+     * @param  list<string>  $closedDates
+     * @return list<string>
+     */
+    public function presentSiteRollupDates(array $closedDates): array
+    {
+        if ($closedDates === []) {
+            return [];
         }
 
-        return $this->hasCompleteSiteRollups($split['closed_dates']);
+        return DB::table('activity_ecom_daily_site_metrics')
+            ->whereIn('metric_date', $closedDates)
+            ->orderBy('metric_date')
+            ->pluck('metric_date')
+            ->map(fn ($date) => (string) $date)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Store dashboard payment rows when rollups-only: orders/actions only on rolled-up closed days + live today.
+     *
+     * @return list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>
+     */
+    public function dashboardPaymentRows(Carbon $from, Carbon $to, ?string $period): array
+    {
+        if (! config('tracker.dashboard_rollups_only', true)) {
+            return CommerceFunnelQuery::paymentRows($from, $to, null, $period);
+        }
+
+        $split = EcomAnalyticsRangeSplitter::split($from, $to, $period);
+        $rows = CommerceFunnelQuery::paymentRowsForLocalCalendarDates(
+            $this->presentSiteRollupDates($split['closed_dates']),
+            null,
+        );
+
+        if ($split['live_from'] !== null && $split['live_to'] !== null) {
+            $rows = array_merge(
+                $rows,
+                CommerceFunnelQuery::paymentRows($split['live_from'], $split['live_to'], null, '24h'),
+            );
+        }
+
+        return $rows;
     }
 
     /**
@@ -58,14 +102,20 @@ class EcomDailyMetricsQuery
             return ['expected' => 0, 'found' => 0, 'complete' => true];
         }
 
+        $expected = count($dates);
+
+        if ($this->hasCompleteSiteRollups($dates)) {
+            return ['expected' => $expected, 'found' => $expected, 'complete' => true];
+        }
+
         $found = (int) DB::table('activity_ecom_daily_site_metrics')
             ->whereIn('metric_date', $dates)
             ->count();
 
         return [
-            'expected' => count($dates),
+            'expected' => $expected,
             'found' => $found,
-            'complete' => $found === count($dates),
+            'complete' => false,
         ];
     }
 
@@ -134,22 +184,30 @@ class EcomDailyMetricsQuery
     public function sumSiteSessionAggregatesPartial(array $dates): array
     {
         if ($dates === []) {
-            return [
-                'sessions' => 0,
-                'unique_visitors' => 0,
-                'total_stay_seconds' => 0,
-                'avg_stay_seconds' => 0,
-                'add_to_cart' => 0,
-                'begin_checkout' => 0,
-                'proceed_checkout' => 0,
-                'payment_success' => 0,
-                'cart_abandoned' => 0,
-                'begin_checkout_abandoned' => 0,
-                'proceed_checkout_abandoned' => 0,
-            ];
+            return $this->emptySiteSessionAggregates();
         }
 
         return $this->fetchSiteSessionAggregatesFromRollupTables($dates);
+    }
+
+    /**
+     * @return array<string, int|float>
+     */
+    private function emptySiteSessionAggregates(): array
+    {
+        return [
+            'sessions' => 0,
+            'unique_visitors' => 0,
+            'total_stay_seconds' => 0,
+            'avg_stay_seconds' => 0,
+            'add_to_cart' => 0,
+            'begin_checkout' => 0,
+            'proceed_checkout' => 0,
+            'payment_success' => 0,
+            'cart_abandoned' => 0,
+            'begin_checkout_abandoned' => 0,
+            'proceed_checkout_abandoned' => 0,
+        ];
     }
 
     /**
@@ -334,9 +392,9 @@ class EcomDailyMetricsQuery
         $closed = $this->sumSiteSessionAggregates($split['closed_dates']);
 
         if ($closed === null) {
-            if ($split['closed_dates'] !== []
-                && config('tracker.use_daily_rollups', true)
-                && config('tracker.dashboard_rollups_only', true)) {
+            if (config('tracker.dashboard_rollups_only', true)) {
+                $closed = $this->sumSiteSessionAggregatesPartial($split['closed_dates']);
+            } elseif ($split['closed_dates'] !== [] && config('tracker.use_daily_rollups', true)) {
                 $closed = $this->sumSiteSessionAggregatesPartial($split['closed_dates']);
             } else {
                 return $liveSessionAggregates($from, $to, $period);
@@ -470,6 +528,11 @@ class EcomDailyMetricsQuery
             $liveDate = TrackerTime::toLocal($split['live_from'])?->toDateString()
                 ?? $split['live_from']->toDateString();
             $byDate[$liveDate] = $this->liveSiteMetricsForDay($split['live_from'], $split['live_to']);
+        }
+
+        if (config('tracker.dashboard_rollups_only', true)
+            && ! $this->hasCompleteSiteRollups($split['closed_dates'])) {
+            return $byDate;
         }
 
         $paymentRows = CommerceFunnelQuery::paymentRows($from, $to, null, $period);

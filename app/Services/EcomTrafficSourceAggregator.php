@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\TrackerUtmFilter;
+use App\Support\CommerceRollupSessionScope;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -32,6 +33,7 @@ class EcomTrafficSourceAggregator
 
         $sessionQuery = DB::table('activity_ecom_user as s');
         TrackerTime::applyEcomActivitySessionScope($sessionQuery, $from, $to, $period, 's');
+        CommerceRollupSessionScope::applyHumanSessionFilter($sessionQuery, 's');
         if ($sessionIds !== null) {
             $this->constrainSessionIds($sessionQuery, $sessionIds, 's.session_id');
         }
@@ -71,6 +73,7 @@ class EcomTrafficSourceAggregator
         } else {
             TrackerTime::applyEcomActivitySessionScope($viewQuery, $from, $to, $period, 's');
         }
+        CommerceRollupSessionScope::applyHumanSessionFilter($viewQuery, 's');
 
         foreach ($viewQuery
             ->selectRaw("{$sourceSql} as traffic_source")

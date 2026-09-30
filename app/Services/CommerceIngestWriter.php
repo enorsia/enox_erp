@@ -14,9 +14,18 @@ use App\Support\EcomTrackerLogger;
 use App\Support\TrackerTime;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class CommerceIngestWriter
 {
+    public function __construct(
+        private ?TrackerCatalogResolver $catalogResolver = null,
+    ) {}
+
+    private function catalogResolver(): TrackerCatalogResolver
+    {
+        return $this->catalogResolver ??= app(TrackerCatalogResolver::class);
+    }
     /** @var list<string> */
     public const COMMERCE_ACTION_TYPES = [
         'add_to_cart',
@@ -413,10 +422,12 @@ class CommerceIngestWriter
 
         $rows = array_map(function (array $line) {
             if (isset($line['product_snapshot_json']) && is_string($line['product_snapshot_json'])) {
+                $line = $this->enrichLineWithCatalogIds($line);
+
                 return $line;
             }
 
-            return $line;
+            return $this->enrichLineWithCatalogIds($line);
         }, $lines);
 
         if ($ignoreDuplicates) {
@@ -429,6 +440,34 @@ class CommerceIngestWriter
             'count' => count($rows),
             'event_id' => $rows[0]['event_id'] ?? null,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $line
+     * @return array<string, mixed>
+     */
+    private function enrichLineWithCatalogIds(array $line): array
+    {
+        if (! Schema::hasColumn('activity_ecom_commerce_line_items', 'tracker_product_id')) {
+            return $line;
+        }
+
+        try {
+            $ids = $this->catalogResolver()->resolveLineSnapshotIds($line);
+            $line['tracker_department_id'] = $ids['tracker_department_id'];
+            $line['tracker_category_id'] = $ids['tracker_category_id'];
+            $line['tracker_product_id'] = $ids['tracker_product_id'];
+        } catch (\Throwable $e) {
+            $sentinel = $this->catalogResolver()->sentinelIds();
+            $line['tracker_department_id'] = $sentinel['tracker_department_id'];
+            $line['tracker_category_id'] = $sentinel['tracker_category_id'];
+            $line['tracker_product_id'] = $sentinel['tracker_product_id'];
+            EcomTrackerLogger::frontend()->warning('commerce.catalog.resolve_failed', 'Catalog resolver failed; using sentinels', [
+                'message' => $e->getMessage(),
+            ]);
+        }
+
+        return $line;
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Support\CommerceFunnelQuery;
 use App\Support\EcomAnalyticsRangeSplitter;
 use App\Support\EcomDailyDimensionType;
 use App\Support\EcomDailyRollupSchema;
+use App\Support\EcomRecoverablePanelFormatter;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -109,10 +110,11 @@ class EcomStoreDashboardBatchRead
         }
 
         $closedAggregates = $this->sumSiteRows($siteRows);
+        $closedAggregates = $this->reconcileClosedSessionCount($closedAggregates, $dimensionRows);
         $closedAggregates['total_stay_seconds'] = $visitorStats['total_stay'];
         $closedVisitors = $visitorStats['closed_visitors'];
 
-        $orders = $this->loadOrders($from, $to, $period);
+        $orders = $this->loadOrders($from, $to, $period, $split, $rollupMetrics);
         $slimHydration = $this->useSlimSessionHydration($split);
 
         $prefetchedLastActiveAt = null;
@@ -160,8 +162,20 @@ class EcomStoreDashboardBatchRead
             (int) $visitorStats['overlap_visitors'],
         );
 
+        $engagement = $derived['engagement'];
+        $lastActiveAt = $derived['last_active_at'] ?? $prefetchedLastActiveAt;
+
+        $closedRevenue = (float) $siteRows->sum('revenue_total');
+        $revenueTotal = round($closedRevenue + $liveRevenue, 2);
+
+        $periodPaymentRows = $rollupMetrics->dashboardPaymentRows($from, $to, $period);
+
+        $recoverablePanels = $slimHydration
+            ? $this->buildSlimRecoverablePanels($from, $to, $period, $periodPaymentRows)
+            : null;
+
         if ($slimHydration) {
-            $abandonmentCounts = $this->unfilteredAbandonmentCounts($from, $to, $period);
+            $abandonmentCounts = $this->abandonmentCountsFromRecoverablePanels($recoverablePanels);
             $durationDistribution = $this->sessionPass->durationDistributionFromSql(
                 $from,
                 $to,
@@ -172,14 +186,6 @@ class EcomStoreDashboardBatchRead
             $abandonmentCounts = $derived['abandonment'];
             $durationDistribution = $derived['duration_distribution'];
         }
-
-        $engagement = $derived['engagement'];
-        $lastActiveAt = $derived['last_active_at'] ?? $prefetchedLastActiveAt;
-
-        $closedRevenue = (float) $siteRows->sum('revenue_total');
-        $revenueTotal = round($closedRevenue + $liveRevenue, 2);
-
-        $periodPaymentRows = CommerceFunnelQuery::paymentRows($from, $to, null, $period);
 
         $siteMetricsByDate = $rollupMetrics->siteMetricsByDateSkeleton($closedDates);
         foreach ($siteRows as $row) {
@@ -271,7 +277,78 @@ class EcomStoreDashboardBatchRead
             $orders,
             $lastActiveAt,
             $slimHydration,
+            $recoverablePanels,
         );
+    }
+
+    /**
+     * @param  array<string, array{session_count: int, at_stake: float, rows: array<int, array<string, mixed>>}>  $panels
+     * @return array{cart_abandoned_count: int, begin_checkout_abandoned_count: int, proceed_checkout_abandoned_count: int}
+     */
+    private function abandonmentCountsFromRecoverablePanels(array $panels): array
+    {
+        return [
+            'cart_abandoned_count' => (int) ($panels['cart_abandonment']['session_count'] ?? 0),
+            'begin_checkout_abandoned_count' => (int) ($panels['begin_checkout_abandonment']['session_count'] ?? 0),
+            'proceed_checkout_abandoned_count' => (int) ($panels['proceed_checkout_abandonment']['session_count'] ?? 0),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $periodPaymentRows
+     * @return array<string, array{session_count: int, at_stake: float, rows: array<int, array<string, mixed>>}>
+     */
+    private function buildSlimRecoverablePanels(
+        Carbon $from,
+        Carbon $to,
+        ?string $period,
+        array $periodPaymentRows,
+    ): array {
+        $limit = EcomRecoverablePanelFormatter::TABLE_DISPLAY_LIMIT;
+
+        return [
+            'cart_abandonment' => EcomRecoverablePanelFormatter::panelFromAbandonedRows(
+                CommerceFunnelQuery::abandonedRows($from, $to, 'add_to_cart', 'begin_checkout', null, $period),
+                $limit,
+            ),
+            'begin_checkout_abandonment' => EcomRecoverablePanelFormatter::panelFromAbandonedRows(
+                CommerceFunnelQuery::abandonedRows($from, $to, 'begin_checkout', 'proceed_checkout', null, $period),
+                $limit,
+            ),
+            'proceed_checkout_abandonment' => EcomRecoverablePanelFormatter::panelFromAbandonedRows(
+                CommerceFunnelQuery::abandonedRows($from, $to, 'proceed_checkout', 'payment_success', null, $period),
+                $limit,
+            ),
+            'payment_success_events' => EcomRecoverablePanelFormatter::panelFromPaymentRows($periodPaymentRows, $limit),
+        ];
+    }
+
+    /**
+     * Site rollup session_count can be zero on older backfills while dimension traffic rollups still have sessions.
+     *
+     * @param  array<string, int|float>  $closedAggregates
+     * @return array<string, int|float>
+     */
+    private function reconcileClosedSessionCount(array $closedAggregates, Collection $dimensionRows): array
+    {
+        if ((int) ($closedAggregates['sessions'] ?? 0) > 0) {
+            return $closedAggregates;
+        }
+
+        $trafficSessions = 0;
+        foreach ($dimensionRows as $row) {
+            if ((string) $row->dimension_type !== EcomDailyDimensionType::LIST_TRAFFIC) {
+                continue;
+            }
+
+            $trafficSessions += (int) ($row->sessions ?? 0);
+        }
+
+        if ($trafficSessions > 0) {
+            $closedAggregates['sessions'] = $trafficSessions;
+        }
+
+        return $closedAggregates;
     }
 
     /**
@@ -501,9 +578,14 @@ class EcomStoreDashboardBatchRead
         ];
     }
 
-    private function loadOrders(Carbon $from, Carbon $to, ?string $period): Collection
-    {
-        return DB::table('activity_ecom_orders')
+    private function loadOrders(
+        Carbon $from,
+        Carbon $to,
+        ?string $period,
+        array $split,
+        EcomDailyMetricsQuery $rollupMetrics,
+    ): Collection {
+        $query = DB::table('activity_ecom_orders')
             ->select(
                 'session_id',
                 'event_id',
@@ -513,9 +595,34 @@ class EcomStoreDashboardBatchRead
                 'ordered_at',
                 'conversion_utm_source',
                 'conversion_utm_medium',
-            )
-            ->whereBetween('ordered_at', TrackerTime::storageRange($from, $to))
-            ->get();
+            );
+
+        if (config('tracker.dashboard_rollups_only', true)) {
+            $presentDates = $rollupMetrics->presentSiteRollupDates($split['closed_dates']);
+            $hasLive = $split['live_from'] !== null && $split['live_to'] !== null;
+
+            if ($presentDates === [] && ! $hasLive) {
+                return collect();
+            }
+
+            $query->where(function ($builder) use ($presentDates, $split, $hasLive) {
+                foreach ($presentDates as $date) {
+                    [$start, $end] = TrackerTime::localCalendarDateStorageRange($date);
+                    $builder->orWhereBetween('ordered_at', [$start, $end]);
+                }
+
+                if ($hasLive) {
+                    $builder->orWhereBetween(
+                        'ordered_at',
+                        TrackerTime::storageRange($split['live_from'], $split['live_to']),
+                    );
+                }
+            });
+        } else {
+            $query->whereBetween('ordered_at', TrackerTime::storageRange($from, $to));
+        }
+
+        return $query->get();
     }
 
 }

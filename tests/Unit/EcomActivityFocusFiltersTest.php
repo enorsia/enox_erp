@@ -545,6 +545,17 @@ test('session and catalog filters exclude facet dimension when computing option 
         ->toHaveKey('department');
 });
 
+test('conversion focus defers redundant has_order filter so activity matches payment in period', function () {
+    $request = Request::create('/', 'GET', [
+        'focus' => 'conversion',
+        'has_order' => '1',
+        'period' => 'yesterday',
+    ]);
+
+    expect(EcomActivityFocus::shouldDeferHasOrderFilter($request))->toBeTrue()
+        ->and(EcomActivityFocus::sessionFiltersForFunnelMetrics($request))->toBe([]);
+});
+
 test('conversion summary totals use matched payment funnel metrics', function () {
     $request = Request::create('/', 'GET', [
         'focus' => 'conversion',

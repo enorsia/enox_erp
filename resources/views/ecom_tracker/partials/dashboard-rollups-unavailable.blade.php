@@ -1,7 +1,7 @@
 @php
     $message = $dashboard['rollups_unavailable_message'] ?? 'Daily rollups are not available for this date range.';
-    $expected = (int) ($dashboard['rollups_expected_days'] ?? 0);
-    $found = (int) ($dashboard['rollups_found_days'] ?? 0);
+    $expected = (int) ($dashboard['rollups_coverage']['expected'] ?? 0);
+    $found = (int) ($dashboard['rollups_coverage']['found'] ?? 0);
 @endphp
 
 <section class="etd-dashboard-section" aria-labelledby="rollups-unavailable-title">

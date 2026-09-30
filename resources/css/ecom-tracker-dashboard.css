@@ -3346,9 +3346,9 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 
 .etd-table--abandonment th.etd-abandon-value,
 .etd-table--abandonment td.etd-abandon-value {
-    width: 4.85rem;
-    min-width: 4.85rem;
-    max-width: 4.85rem;
+    width: 5.65rem;
+    min-width: 5.65rem;
+    max-width: 5.65rem;
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-weight: 600;
@@ -3363,7 +3363,7 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 .etd-table--abandonment th.etd-abandon-time,
 .etd-table--abandonment td.etd-abandon-time {
     width: auto;
-    min-width: 4.75rem;
+    min-width: 5.25rem;
     white-space: nowrap;
     color: #64748b;
     font-size: 10.5px;
@@ -3420,15 +3420,15 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 
     .etd-table--abandonment th.etd-abandon-value,
     .etd-table--abandonment td.etd-abandon-value {
-        width: 4.15rem;
-        min-width: 4.15rem;
-        max-width: 4.15rem;
+        width: 4.85rem;
+        min-width: 4.85rem;
+        max-width: 4.85rem;
         font-size: 10px;
     }
 
     .etd-table--abandonment th.etd-abandon-time,
     .etd-table--abandonment td.etd-abandon-time {
-        min-width: 4rem;
+        min-width: 4.5rem;
         font-size: 9.5px;
     }
 }

@@ -256,6 +256,54 @@ final class CommerceFunnelQuery
      * @param  Collection<int, string>|null  $allowedSessionIds
      * @return list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>
      */
+    /**
+     * Payment rows for specific local calendar days only (rollup-backed closed days).
+     *
+     * @param  list<string>  $localDatesYmd
+     * @param  Collection<int, string>|null  $allowedSessionIds
+     * @return list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>
+     */
+    public static function paymentRowsForLocalCalendarDates(array $localDatesYmd, ?Collection $allowedSessionIds): array
+    {
+        if ($localDatesYmd === []) {
+            return [];
+        }
+
+        ['rows' => $rows, 'seen' => $seen] = self::paymentRowsFromOrdersOnLocalDates($localDatesYmd, $allowedSessionIds);
+        $sessionsWithOrdersInPeriod = array_fill_keys(array_column($rows, 'session_id'), true);
+
+        foreach (self::paymentRowsFromPaymentSuccessActionsOnLocalDates($localDatesYmd, $allowedSessionIds) as $actionRow) {
+            $dedupeKey = $actionRow['_dedupe_key'] ?? '';
+            $eventId = $actionRow['_event_id'] ?? '';
+            $sessionId = (string) ($actionRow['session_id'] ?? '');
+            unset($actionRow['_dedupe_key'], $actionRow['_event_id']);
+
+            if ($sessionId !== '' && isset($sessionsWithOrdersInPeriod[$sessionId])) {
+                continue;
+            }
+
+            if ($dedupeKey !== '' && isset($seen[$dedupeKey])) {
+                continue;
+            }
+
+            if ($eventId !== '' && isset($seen['event:'.$eventId])) {
+                continue;
+            }
+
+            if ($dedupeKey !== '') {
+                $seen[$dedupeKey] = true;
+            }
+
+            if ($eventId !== '') {
+                $seen['event:'.$eventId] = true;
+            }
+
+            $rows[] = $actionRow;
+        }
+
+        return $rows;
+    }
+
     public static function paymentRows(
         Carbon $from,
         Carbon $to,
@@ -305,6 +353,53 @@ final class CommerceFunnelQuery
      * @param  Collection<int, string>|null  $allowedSessionIds
      * @return array{rows: list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>, seen: array<string, true>}
      */
+    /**
+     * @param  list<string>  $localDatesYmd
+     * @return array{rows: list<array{session_id: string, qty: int, value: float, occurred_at: mixed}>, seen: array<string, true>}
+     */
+    private static function paymentRowsFromOrdersOnLocalDates(array $localDatesYmd, ?Collection $allowedSessionIds): array
+    {
+        $query = DB::table('activity_ecom_orders')
+            ->select('session_id', 'ordered_at', 'amount_paid', 'item_qty', 'order_id', 'event_id')
+            ->orderByDesc('ordered_at');
+
+        self::applyTimestampOnLocalCalendarDates($query, 'ordered_at', $localDatesYmd);
+
+        if ($allowedSessionIds !== null) {
+            self::constrainToSessionIds($query, $allowedSessionIds, 'session_id');
+        }
+
+        $rows = [];
+        $seen = [];
+
+        foreach ($query->get() as $order) {
+            $orderId = trim((string) ($order->order_id ?? ''));
+            $eventId = (string) ($order->event_id ?? '');
+            $dedupeKey = $orderId !== '' ? $orderId : $eventId;
+
+            if ($dedupeKey !== '' && isset($seen[$dedupeKey])) {
+                continue;
+            }
+
+            if ($dedupeKey !== '') {
+                $seen[$dedupeKey] = true;
+            }
+
+            if ($eventId !== '') {
+                $seen['event:'.$eventId] = true;
+            }
+
+            $rows[] = [
+                'session_id' => (string) $order->session_id,
+                'qty' => max(1, (int) ($order->item_qty ?? 0)),
+                'value' => round((float) ($order->amount_paid ?? 0), 2),
+                'occurred_at' => $order->ordered_at,
+            ];
+        }
+
+        return ['rows' => $rows, 'seen' => $seen];
+    }
+
     private static function paymentRowsFromOrdersTable(
         Carbon $from,
         Carbon $to,
@@ -356,6 +451,82 @@ final class CommerceFunnelQuery
      * @param  Collection<int, string>|null  $allowedSessionIds
      * @return list<array{session_id: string, qty: int, value: float, occurred_at: mixed, _dedupe_key: string}>
      */
+    /**
+     * @param  list<string>  $localDatesYmd
+     * @return list<array{session_id: string, qty: int, value: float, occurred_at: mixed, _dedupe_key: string, _event_id?: string}>
+     */
+    private static function paymentRowsFromPaymentSuccessActionsOnLocalDates(
+        array $localDatesYmd,
+        ?Collection $allowedSessionIds,
+    ): array {
+        $query = DB::table('activity_ecom_user_actions as a')
+            ->select(
+                'a.session_id',
+                'a.event_id',
+                'a.order_id',
+                'a.amount_paid',
+                'a.commerce_total',
+                'a.item_qty',
+                'a.created_at',
+                'a.action_type',
+            )
+            ->where('a.action_type', 'payment_success')
+            ->orderByDesc('a.created_at');
+
+        self::applyTimestampOnLocalCalendarDates($query, 'a.created_at', $localDatesYmd);
+
+        if ($allowedSessionIds !== null) {
+            self::constrainToSessionIds($query, $allowedSessionIds, 'a.session_id');
+        }
+
+        $rows = [];
+        $seen = [];
+
+        foreach ($query->get() as $action) {
+            $orderId = CommerceReadSupport::orderIdForAction($action);
+            $eventId = (string) ($action->event_id ?? '');
+            $dedupeKey = $orderId !== '' ? $orderId : $eventId;
+
+            if ($dedupeKey !== '' && isset($seen[$dedupeKey])) {
+                continue;
+            }
+
+            if ($dedupeKey !== '') {
+                $seen[$dedupeKey] = true;
+            }
+
+            $amount = CommerceReadSupport::amountForAction($action);
+
+            if ($amount === null || $amount <= 0) {
+                continue;
+            }
+
+            $rows[] = [
+                'session_id' => (string) $action->session_id,
+                'qty' => max(1, CommerceReadSupport::itemQtyForAction($action)),
+                'value' => $amount,
+                'occurred_at' => $action->created_at,
+                '_dedupe_key' => $dedupeKey,
+                '_event_id' => $eventId,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<string>  $localDatesYmd
+     */
+    private static function applyTimestampOnLocalCalendarDates($query, string $column, array $localDatesYmd): void
+    {
+        $query->where(function ($builder) use ($column, $localDatesYmd) {
+            foreach ($localDatesYmd as $date) {
+                [$start, $end] = TrackerTime::localCalendarDateStorageRange($date);
+                $builder->orWhereBetween($column, [$start, $end]);
+            }
+        });
+    }
+
     private static function paymentRowsFromPaymentSuccessActions(
         Carbon $from,
         Carbon $to,
@@ -731,8 +902,9 @@ final class CommerceFunnelQuery
     }
 
     /**
-     * Activity payment-success drill-down: match dashboard Payments KPI (scoped sessions with
-     * payment_success) plus cross-day payers (ordered in range but session started before it).
+     * Activity payment-success drill-down: sessions that started in the period with a payment
+     * in the period (orders or payment_success actions), plus cross-day payers (ordered in range
+     * but session started outside it). Matches dashboard sale KPI (ordered_at), not only has_payment_success.
      *
      * @param  Builder<ActivityEcomUser>  $query
      */
@@ -745,7 +917,7 @@ final class CommerceFunnelQuery
         $query->where(function (Builder $outer) use ($from, $to, $period) {
             $outer->where(function (Builder $scoped) use ($from, $to, $period) {
                 TrackerTime::applyEcomActivitySessionScope($scoped, $from, $to, $period);
-                $scoped->where('has_payment_success', true);
+                self::applyPaymentSuccessSessionFilter($scoped, $from, $to, $period);
             })->orWhere(function (Builder $crossDay) use ($from, $to, $period) {
                 self::applyPaymentSuccessSessionFilter($crossDay, $from, $to, $period);
                 $crossDay->whereNot(function (Builder $inScope) use ($from, $to, $period) {

@@ -29,4 +29,18 @@ final class EcomDailyRollupSchema
 
         return self::$commerceViewColumns;
     }
+
+    private static ?bool $catalogIdColumns = null;
+
+    public static function hasCatalogIdColumns(): bool
+    {
+        if (self::$catalogIdColumns !== null) {
+            return self::$catalogIdColumns;
+        }
+
+        self::$catalogIdColumns = Schema::hasColumn('activity_ecom_commerce_line_items', 'tracker_product_id')
+            && Schema::hasColumn('activity_ecom_daily_product_metrics', 'tracker_product_id');
+
+        return self::$catalogIdColumns;
+    }
 }

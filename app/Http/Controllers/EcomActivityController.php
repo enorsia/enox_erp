@@ -106,7 +106,7 @@ class EcomActivityController extends EcomTrackerAdminController
                 $metricsFocus,
                 $range['from'],
                 $range['to'],
-                EcomActivityFocus::sessionFiltersFromRequest($request),
+                EcomActivityFocus::sessionFiltersForFunnelMetrics($request),
                 $range['period'],
                 $this->funnelSessions,
             );

@@ -18,6 +18,9 @@ final class EcomDailyDimensionType
 
     public const HAS_ORDER = 'has_order';
 
+    /** dimension_value = currency code or (none) */
+    public const CURRENCY = 'currency';
+
     public static function trafficDimensionValue(string $source, string $medium): string
     {
         return $source."\0".$medium;

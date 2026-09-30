@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\EcomDailyRollupService;
+use App\Services\TrackerAttributionBackfillService;
 use App\Services\TrackerDataCleanupService;
 use App\Support\EcomDailyRollupDayStatus;
 use App\Support\TrackerTime;
@@ -16,12 +17,16 @@ class BackfillEcomAnalyticsRollups extends Command
                             {from? : Start YYYY-MM-DD (default: first session day)}
                             {to? : End YYYY-MM-DD (default: today)}
                             {--force : Re-roll days that already succeeded}
-                            {--skip-session-merge : Skip merging duplicate visitor sessions in the backfill date range}';
+                            {--skip-session-merge : Skip merging duplicate visitor sessions in the backfill date range}
+                            {--skip-attribution : Skip tracker:backfill-attribution steps before rollups}';
 
-    protected $description = 'Merge duplicate sessions (30m gap), then roll up missing or failed days into activity_ecom_daily_*.';
+    protected $description = 'Attribution repair (default), merge duplicate sessions per day, then roll up into activity_ecom_daily_*.';
 
-    public function handle(EcomDailyRollupService $rollup, TrackerDataCleanupService $cleanup): int
-    {
+    public function handle(
+        EcomDailyRollupService $rollup,
+        TrackerDataCleanupService $cleanup,
+        TrackerAttributionBackfillService $attributionBackfill,
+    ): int {
         $timezone = TrackerTime::timezone();
         $today = Carbon::now($timezone)->startOfDay();
 
@@ -53,10 +58,16 @@ class BackfillEcomAnalyticsRollups extends Command
             return self::FAILURE;
         }
 
+        if (! $this->option('skip-attribution')) {
+            $this->info('Attribution backfill (session clock, UTMs, list traffic, conversion)...');
+            $attributionBackfill->run($this->output);
+            $this->newLine();
+        }
+
         if (! $this->option('skip-session-merge')) {
-            $this->warn(
+            $this->line(
                 'Session merge runs per rollup day (same local calendar date only). '
-                .'Use tracker:backfill-attribution for cross-session clock repair, not rollup backfill.',
+                .'Attribution clock repair already ran above unless you used --skip-attribution.',
             );
         }
 

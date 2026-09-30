@@ -713,6 +713,25 @@ final class EcomActivityFocus
     }
 
     /**
+     * Funnel summary rows (Sold qty / Sale) must not re-apply has_order when conversion focus already scopes payers in period.
+     *
+     * @return array<string, mixed>
+     */
+    public static function sessionFiltersForFunnelMetrics(Request $request): array
+    {
+        $except = [];
+
+        if (
+            in_array($request->input('focus'), ['conversion', 'payment_success'], true)
+            && $request->input('has_order') === '1'
+        ) {
+            $except[] = 'has_order';
+        }
+
+        return self::sessionFiltersFromRequest($request, $except);
+    }
+
+    /**
      * Catalog / keyword filters used for activity summary funnel totals.
      *
      * @return array<string, mixed>
@@ -1064,6 +1083,13 @@ final class EcomActivityFocus
     public static function shouldDeferHasOrderFilter(Request $request): bool
     {
         $focus = $request->input('focus');
+
+        if (
+            in_array($focus, ['conversion', 'payment_success'], true)
+            && $request->input('has_order') === '1'
+        ) {
+            return true;
+        }
 
         if (! in_array($focus, ['categories', 'products'], true)) {
             return false;

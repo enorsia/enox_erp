@@ -680,6 +680,41 @@ test('payment success filter matches in-period orders even when first payment is
         ->and($ids)->not->toContain($oldPaymentOnlyId);
 });
 
+test('activity payment success filter includes in-period orders when session flag is false', function () {
+    [$from, $to] = funnelWindow();
+    $sessionId = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'has_payment_success' => false,
+        'created_at' => $from->copy()->addHours(3),
+        'updated_at' => $from->copy()->addHours(3),
+    ]);
+
+    DB::table('activity_ecom_orders')->insert([
+        'order_id' => 'ORD-FLAG-OFF',
+        'event_id' => (string) Str::uuid(),
+        'session_id' => $sessionId,
+        'amount_paid' => 42,
+        'item_qty' => 2,
+        'ordered_at' => $from->copy()->addHours(4),
+        'created_at' => $from->copy()->addHours(4),
+        'updated_at' => $from->copy()->addHours(4),
+    ]);
+
+    $ids = ActivityEcomUser::query()
+        ->tap(fn ($query) => CommerceFunnelQuery::applyPaymentSuccessActivitySessionFilter(
+            $query,
+            $from,
+            $to,
+            null,
+        ))
+        ->pluck('session_id')
+        ->all();
+
+    expect($ids)->toContain($sessionId);
+});
+
 test('proceed checkout abandonment excludes sessions that paid in the period', function () {
     [$from, $to] = funnelWindow();
     $paidId = (string) Str::uuid();

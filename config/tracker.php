@@ -47,8 +47,8 @@ return [
      * For long rollup-backed ranges (7d/30d), skip loading every session/line item into memory.
      * Recoverable panels use SQL; counts and rollups stay the same.
      */
-    /** Use slim rollup batch when closed days >= this (7d preset = 6 closed + today). */
-    'dashboard_slim_batch_min_closed_days' => (int) env('TRACKER_DASHBOARD_SLIM_BATCH_MIN_CLOSED_DAYS', 6),
+    /** Use slim rollup batch when closed days >= this (yesterday = 1 closed day when today is live). */
+    'dashboard_slim_batch_min_closed_days' => (int) env('TRACKER_DASHBOARD_SLIM_BATCH_MIN_CLOSED_DAYS', 1),
 
     /**
      * Visitor quality (bot) strip on store dashboard — one extra SQL scan when true.
@@ -137,6 +137,12 @@ return [
     'analytics_cache_enabled' => (bool) env('TRACKER_ANALYTICS_CACHE_ENABLED', false),
 
     'analytics_cache_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_SECONDS', 300),
+
+    'analytics_cache_today_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_TODAY_SECONDS', 60),
+
+    'rollups_exclude_bots' => (bool) env('TRACKER_ROLLUPS_EXCLUDE_BOTS', true),
+
+    'rollups_aggregate_by_catalog_ids' => (bool) env('TRACKER_ROLLUPS_AGGREGATE_BY_CATALOG_IDS', false),
 
     'commerce_sync_batch_size' => (int) env('TRACKER_COMMERCE_SYNC_BATCH_SIZE', 100),
 

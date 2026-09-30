@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\CommerceFunnelQuery;
+use App\Support\CommerceRollupSessionScope;
 use App\Support\EcomDailyDimensionType;
 use App\Support\EcomDailyRollupDayStatus;
 use App\Support\EcomDailyRollupSchema;
@@ -44,6 +45,7 @@ class EcomDailyRollupService
         $this->rollupDailyVisitors($day, $from, $to);
         $this->rollupVisitorMetrics($day, $from, $to);
         $this->rollupTrafficDimensionMetrics($day, $from, $to);
+        $this->rollupCurrencyDimensionMetrics($day, $from, $to);
         if (EcomDailyRollupSchema::hasCommerceViewColumns()) {
             $this->rollupProductMetrics($day, $from, $to);
             $this->rollupCategoryMetrics($day, $from, $to);
@@ -55,21 +57,24 @@ class EcomDailyRollupService
     {
         $bounds = [$from->format('Y-m-d H:i:s'), $to->format('Y-m-d H:i:s')];
 
-        $sessions = DB::table('activity_ecom_user')
-            ->whereBetween('created_at', $bounds)
-            ->selectRaw(
+        $sessions = DB::table('activity_ecom_user as s')
+            ->whereBetween('s.created_at', $bounds);
+        CommerceRollupSessionScope::applyHumanSessionFilter($sessions, 's');
+        $sessions = $sessions->selectRaw(
                 'COUNT(*) as session_count,
-                 COUNT(DISTINCT visitor_id) as visitor_count,
-                 COALESCE(SUM(has_add_to_cart), 0) as add_to_cart,
-                 COALESCE(SUM(has_begin_checkout), 0) as begin_checkout,
-                 COALESCE(SUM(has_proceed_checkout), 0) as proceed_checkout,
-                 COALESCE(SUM(has_payment_success), 0) as payment_success',
+                 COUNT(DISTINCT s.visitor_id) as visitor_count,
+                 COALESCE(SUM(s.has_add_to_cart), 0) as add_to_cart,
+                 COALESCE(SUM(s.has_begin_checkout), 0) as begin_checkout,
+                 COALESCE(SUM(s.has_proceed_checkout), 0) as proceed_checkout,
+                 COALESCE(SUM(s.has_payment_success), 0) as payment_success',
             )
             ->first();
 
-        $actionCount = (int) DB::table('activity_ecom_user_actions')
-            ->whereBetween('created_at', $bounds)
-            ->count();
+        $actionCountQuery = DB::table('activity_ecom_user_actions as a')
+            ->join('activity_ecom_user as s', 's.session_id', '=', 'a.session_id')
+            ->whereBetween('a.created_at', $bounds);
+        CommerceRollupSessionScope::applyHumanSessionFilter($actionCountQuery, 's');
+        $actionCount = (int) $actionCountQuery->count();
 
         $orderTotals = CommerceFunnelQuery::paymentMetricTotals($from, $to, null, 'custom');
 
@@ -92,8 +97,9 @@ class EcomDailyRollupService
             $viewStats = DB::table('activity_ecom_commerce_line_items as li')
                 ->join('activity_ecom_user as s', 's.session_id', '=', 'li.session_id')
                 ->whereBetween('li.staged_at', $bounds)
-                ->whereBetween('s.created_at', $bounds)
-                ->selectRaw(
+                ->whereBetween('s.created_at', $bounds);
+            CommerceRollupSessionScope::applyHumanSessionFilter($viewStats, 's');
+            $viewStats = $viewStats->selectRaw(
                     "SUM(CASE WHEN li.funnel_stage = 'category_view' THEN 1 ELSE 0 END) as category_views,
                      SUM(CASE WHEN li.funnel_stage IN ('product_view', 'product_view_popup') THEN 1 ELSE 0 END) as product_views",
                 )
@@ -115,16 +121,17 @@ class EcomDailyRollupService
 
         DB::table('activity_ecom_daily_visitors')->where('visit_date', $visitDate)->delete();
 
-        $rows = DB::table('activity_ecom_user')
-            ->whereBetween('created_at', $bounds)
-            ->whereNotNull('visitor_id')
-            ->where('visitor_id', '!=', '')
-            ->selectRaw('visitor_id,
+        $rows = DB::table('activity_ecom_user as s')
+            ->whereBetween('s.created_at', $bounds)
+            ->whereNotNull('s.visitor_id')
+            ->where('s.visitor_id', '!=', '');
+        CommerceRollupSessionScope::applyHumanSessionFilter($rows, 's');
+        $rows = $rows->selectRaw('s.visitor_id as visitor_id,
                 COUNT(*) as session_count,
-                COALESCE(SUM(session_duration_seconds), 0) as total_duration_seconds,
-                MIN(created_at) as first_seen_at,
-                MAX(COALESCE(last_active_at, created_at)) as last_seen_at')
-            ->groupBy('visitor_id')
+                COALESCE(SUM(s.session_duration_seconds), 0) as total_duration_seconds,
+                MIN(s.created_at) as first_seen_at,
+                MAX(COALESCE(s.last_active_at, s.created_at)) as last_seen_at')
+            ->groupBy('s.visitor_id')
             ->get();
 
         $now = now();
@@ -160,12 +167,13 @@ class EcomDailyRollupService
             ->groupBy('s.visitor_id')
             ->pluck('revenue', 'visitor_id');
 
-        $rows = DB::table('activity_ecom_user')
-            ->whereBetween('created_at', $bounds)
-            ->whereNotNull('visitor_id')
-            ->where('visitor_id', '!=', '')
-            ->selectRaw('visitor_id, COUNT(*) as session_count, SUM(has_payment_success) as payment_count, MIN(created_at) as first_seen_at, MAX(COALESCE(last_active_at, created_at)) as last_seen_at')
-            ->groupBy('visitor_id')
+        $rows = DB::table('activity_ecom_user as s')
+            ->whereBetween('s.created_at', $bounds)
+            ->whereNotNull('s.visitor_id')
+            ->where('s.visitor_id', '!=', '');
+        CommerceRollupSessionScope::applyHumanSessionFilter($rows, 's');
+        $rows = $rows->selectRaw('s.visitor_id as visitor_id, COUNT(*) as session_count, SUM(s.has_payment_success) as payment_count, MIN(s.created_at) as first_seen_at, MAX(COALESCE(s.last_active_at, s.created_at)) as last_seen_at')
+            ->groupBy('s.visitor_id')
             ->get();
 
         $now = now();
@@ -217,6 +225,39 @@ class EcomDailyRollupService
         }
     }
 
+    private function rollupCurrencyDimensionMetrics(Carbon $day, Carbon $from, Carbon $to): void
+    {
+        $metricDate = $day->toDateString();
+        $bounds = [$from->format('Y-m-d H:i:s'), $to->format('Y-m-d H:i:s')];
+
+        DB::table('activity_ecom_daily_dimension_metrics')
+            ->where('metric_date', $metricDate)
+            ->where('dimension_type', EcomDailyDimensionType::CURRENCY)
+            ->delete();
+
+        $rows = DB::table('activity_ecom_orders')
+            ->selectRaw("COALESCE(NULLIF(currency, ''), '(none)') as currency_label, COUNT(*) as payment_count, COALESCE(SUM(amount_paid), 0) as revenue")
+            ->whereBetween('ordered_at', $bounds)
+            ->groupBy('currency_label')
+            ->get();
+
+        $now = now();
+
+        foreach ($rows as $row) {
+            DB::table('activity_ecom_daily_dimension_metrics')->insert([
+                'metric_date' => $metricDate,
+                'dimension_type' => EcomDailyDimensionType::CURRENCY,
+                'dimension_value' => (string) $row->currency_label,
+                'session_count' => 0,
+                'visitor_count' => 0,
+                'payment_count' => (int) $row->payment_count,
+                'revenue' => round((float) $row->revenue, 2),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+    }
+
     private function rollupProductMetrics(Carbon $day, Carbon $from, Carbon $to): void
     {
         $metricDate = $day->toDateString();
@@ -224,31 +265,41 @@ class EcomDailyRollupService
 
         DB::table('activity_ecom_daily_product_metrics')->where('metric_date', $metricDate)->delete();
 
-        $rows = DB::table('activity_ecom_commerce_line_items as li')
+        $aggregateByCatalogId = config('tracker.rollups_aggregate_by_catalog_ids', false)
+            && EcomDailyRollupSchema::hasCatalogIdColumns();
+
+        $productQuery = DB::table('activity_ecom_commerce_line_items as li')
             ->join('activity_ecom_user as s', 's.session_id', '=', 'li.session_id')
+            ->leftJoin('activity_ecom_user_bot_context as bc_li', 'bc_li.session_id', '=', 'li.session_id')
             ->whereBetween('li.staged_at', $bounds)
             ->whereBetween('s.created_at', $bounds)
             ->whereNotNull('li.product_code')
-            ->where('li.product_code', '!=', '')
-            ->selectRaw("li.product_code,
+            ->where('li.product_code', '!=', '');
+
+        $groupColumn = $aggregateByCatalogId ? 'li.tracker_product_id' : 'li.product_code';
+
+        $rows = $productQuery->selectRaw(
+            ($aggregateByCatalogId ? 'li.tracker_product_id' : 'li.product_code').' as group_key,
+                MAX(li.product_code) as product_code,
                 MAX(li.product_name) as product_name,
                 MAX(li.sku) as sku,
                 MAX(li.department_name) as department_name,
                 MAX(li.category_name) as category_name,
-                SUM(CASE WHEN li.funnel_stage IN ('product_view', 'product_view_popup') THEN 1 ELSE 0 END) as view_count,
-                SUM(CASE WHEN li.funnel_stage = 'add_to_cart' THEN 1 ELSE 0 END) as add_to_cart_count,
-                SUM(CASE WHEN li.funnel_stage = 'begin_checkout' THEN 1 ELSE 0 END) as begin_checkout_count,
-                SUM(CASE WHEN li.funnel_stage = 'proceed_checkout' THEN 1 ELSE 0 END) as proceed_checkout_count,
-                SUM(CASE WHEN li.funnel_stage = 'payment_success' THEN 1 ELSE 0 END) as payment_count,
-                COALESCE(SUM(CASE WHEN li.funnel_stage = 'payment_success' THEN li.qty ELSE 0 END), 0) as units_sold,
-                COALESCE(SUM(CASE WHEN li.funnel_stage = 'payment_success' THEN li.line_total ELSE 0 END), 0) as revenue")
-            ->groupBy('li.product_code')
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage IN ('product_view', 'product_view_popup')").' as view_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'add_to_cart'").' as add_to_cart_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'begin_checkout'").' as begin_checkout_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'proceed_checkout'").' as proceed_checkout_count,
+                '.CommerceRollupSessionScope::countPaymentSuccessLines().' as payment_count,
+                '.CommerceRollupSessionScope::sumPaymentQty().' as units_sold,
+                '.CommerceRollupSessionScope::sumPaymentRevenue().' as revenue',
+        )
+            ->groupBy($groupColumn)
             ->get();
 
         $now = now();
 
         foreach ($rows as $row) {
-            DB::table('activity_ecom_daily_product_metrics')->insert([
+            $payload = [
                 'metric_date' => $metricDate,
                 'product_code' => (string) $row->product_code,
                 'product_name' => $row->product_name,
@@ -264,7 +315,15 @@ class EcomDailyRollupService
                 'revenue' => (float) $row->revenue,
                 'created_at' => $now,
                 'updated_at' => $now,
-            ]);
+            ];
+
+            if (EcomDailyRollupSchema::hasCatalogIdColumns()) {
+                $payload['tracker_product_id'] = $aggregateByCatalogId
+                    ? (int) ($row->group_key ?? 0)
+                    : null;
+            }
+
+            DB::table('activity_ecom_daily_product_metrics')->insert($payload);
         }
     }
 
@@ -275,29 +334,55 @@ class EcomDailyRollupService
 
         DB::table('activity_ecom_daily_category_metrics')->where('metric_date', $metricDate)->delete();
 
-        $rows = DB::table('activity_ecom_commerce_line_items as li')
+        $aggregateByCatalogId = config('tracker.rollups_aggregate_by_catalog_ids', false)
+            && EcomDailyRollupSchema::hasCatalogIdColumns();
+
+        $categoryQuery = DB::table('activity_ecom_commerce_line_items as li')
             ->join('activity_ecom_user as s', 's.session_id', '=', 'li.session_id')
+            ->leftJoin('activity_ecom_user_bot_context as bc_li', 'bc_li.session_id', '=', 'li.session_id')
             ->whereBetween('li.staged_at', $bounds)
             ->whereBetween('s.created_at', $bounds)
             ->whereNotNull('li.category_name')
-            ->where('li.category_name', '!=', '')
-            ->selectRaw("COALESCE(li.department_name, '') as department_name,
+            ->where('li.category_name', '!=', '');
+
+        if ($aggregateByCatalogId) {
+            $rows = $categoryQuery->selectRaw(
+                'li.tracker_department_id,
+                li.tracker_category_id,
+                MAX(COALESCE(li.department_name, \'\')) as department_name,
+                MAX(li.category_name) as category_name,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'category_view'").' as category_view_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage IN ('product_view', 'product_view_popup')").' as product_view_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'add_to_cart'").' as add_to_cart_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'begin_checkout'").' as begin_checkout_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'proceed_checkout'").' as proceed_checkout_count,
+                '.CommerceRollupSessionScope::countPaymentSuccessLines().' as payment_count,
+                '.CommerceRollupSessionScope::sumPaymentQty().' as units_sold,
+                '.CommerceRollupSessionScope::sumPaymentRevenue().' as revenue',
+            )
+                ->groupBy('li.tracker_department_id', 'li.tracker_category_id')
+                ->get();
+        } else {
+            $rows = $categoryQuery->selectRaw(
+                "COALESCE(li.department_name, '') as department_name,
                 li.category_name,
-                SUM(CASE WHEN li.funnel_stage = 'category_view' THEN 1 ELSE 0 END) as category_view_count,
-                SUM(CASE WHEN li.funnel_stage IN ('product_view', 'product_view_popup') THEN 1 ELSE 0 END) as product_view_count,
-                SUM(CASE WHEN li.funnel_stage = 'add_to_cart' THEN 1 ELSE 0 END) as add_to_cart_count,
-                SUM(CASE WHEN li.funnel_stage = 'begin_checkout' THEN 1 ELSE 0 END) as begin_checkout_count,
-                SUM(CASE WHEN li.funnel_stage = 'proceed_checkout' THEN 1 ELSE 0 END) as proceed_checkout_count,
-                SUM(CASE WHEN li.funnel_stage = 'payment_success' THEN 1 ELSE 0 END) as payment_count,
-                COALESCE(SUM(CASE WHEN li.funnel_stage = 'payment_success' THEN li.qty ELSE 0 END), 0) as units_sold,
-                COALESCE(SUM(CASE WHEN li.funnel_stage = 'payment_success' THEN li.line_total ELSE 0 END), 0) as revenue")
-            ->groupBy('department_name', 'li.category_name')
-            ->get();
+                ".CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'category_view'").' as category_view_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage IN ('product_view', 'product_view_popup')").' as product_view_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'add_to_cart'").' as add_to_cart_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'begin_checkout'").' as begin_checkout_count,
+                '.CommerceRollupSessionScope::countLineItemsWhere("li.funnel_stage = 'proceed_checkout'").' as proceed_checkout_count,
+                '.CommerceRollupSessionScope::countPaymentSuccessLines().' as payment_count,
+                '.CommerceRollupSessionScope::sumPaymentQty().' as units_sold,
+                '.CommerceRollupSessionScope::sumPaymentRevenue().' as revenue',
+            )
+                ->groupBy('department_name', 'li.category_name')
+                ->get();
+        }
 
         $now = now();
 
         foreach ($rows as $row) {
-            DB::table('activity_ecom_daily_category_metrics')->insert([
+            $payload = [
                 'metric_date' => $metricDate,
                 'department_name' => (string) $row->department_name,
                 'category_name' => (string) $row->category_name,
@@ -311,7 +396,18 @@ class EcomDailyRollupService
                 'revenue' => (float) $row->revenue,
                 'created_at' => $now,
                 'updated_at' => $now,
-            ]);
+            ];
+
+            if (EcomDailyRollupSchema::hasCatalogIdColumns()) {
+                $payload['tracker_department_id'] = $aggregateByCatalogId
+                    ? (int) ($row->tracker_department_id ?? 0)
+                    : null;
+                $payload['tracker_category_id'] = $aggregateByCatalogId
+                    ? (int) ($row->tracker_category_id ?? 0)
+                    : null;
+            }
+
+            DB::table('activity_ecom_daily_category_metrics')->insert($payload);
         }
     }
 
@@ -335,9 +431,11 @@ class EcomDailyRollupService
 
         $now = now();
 
-        $deviceRows = DB::table('activity_ecom_user')
-            ->whereBetween('created_at', $bounds)
-            ->selectRaw("COALESCE(NULLIF(TRIM(device_type), ''), 'unknown') as bucket, COUNT(*) as sessions")
+        $deviceQuery = DB::table('activity_ecom_user as s')
+            ->whereBetween('s.created_at', $bounds);
+        CommerceRollupSessionScope::applyHumanSessionFilter($deviceQuery, 's');
+        $deviceRows = $deviceQuery
+            ->selectRaw("COALESCE(NULLIF(TRIM(s.device_type), ''), 'unknown') as bucket, COUNT(*) as sessions")
             ->groupBy('bucket')
             ->get();
 
@@ -345,9 +443,11 @@ class EcomDailyRollupService
             $this->insertDimensionRow($metricDate, EcomDailyDimensionType::DEVICE, (string) $row->bucket, (int) $row->sessions, $now);
         }
 
-        $browserRows = DB::table('activity_ecom_user')
-            ->whereBetween('created_at', $bounds)
-            ->selectRaw("COALESCE(NULLIF(TRIM(browser), ''), 'unknown') as bucket, COUNT(*) as sessions")
+        $browserQuery = DB::table('activity_ecom_user as s')
+            ->whereBetween('s.created_at', $bounds);
+        CommerceRollupSessionScope::applyHumanSessionFilter($browserQuery, 's');
+        $browserRows = $browserQuery
+            ->selectRaw("COALESCE(NULLIF(TRIM(s.browser), ''), 'unknown') as bucket, COUNT(*) as sessions")
             ->groupBy('bucket')
             ->get();
 
@@ -355,9 +455,11 @@ class EcomDailyRollupService
             $this->insertDimensionRow($metricDate, EcomDailyDimensionType::BROWSER, (string) $row->bucket, (int) $row->sessions, $now);
         }
 
-        $geoRows = DB::table('activity_ecom_user')
-            ->whereBetween('created_at', $bounds)
-            ->selectRaw("COALESCE(NULLIF(TRIM(city), ''), 'Unknown') as city, COALESCE(NULLIF(TRIM(country), ''), 'Unknown') as country, COUNT(*) as sessions")
+        $geoQuery = DB::table('activity_ecom_user as s')
+            ->whereBetween('s.created_at', $bounds);
+        CommerceRollupSessionScope::applyHumanSessionFilter($geoQuery, 's');
+        $geoRows = $geoQuery
+            ->selectRaw("COALESCE(NULLIF(TRIM(s.city), ''), 'Unknown') as city, COALESCE(NULLIF(TRIM(s.country), ''), 'Unknown') as country, COUNT(*) as sessions")
             ->groupBy('city', 'country')
             ->get();
 
@@ -366,22 +468,26 @@ class EcomDailyRollupService
             $this->insertDimensionRow($metricDate, EcomDailyDimensionType::GEO, $value, (int) $row->sessions, $now);
         }
 
-        $loggedInRows = DB::table('activity_ecom_user')
-            ->whereBetween('created_at', $bounds)
-            ->selectRaw('is_logged_in, COUNT(*) as sessions')
-            ->groupBy('is_logged_in')
+        $loggedInQuery = DB::table('activity_ecom_user as s')
+            ->whereBetween('s.created_at', $bounds);
+        CommerceRollupSessionScope::applyHumanSessionFilter($loggedInQuery, 's');
+        $loggedInRows = $loggedInQuery
+            ->selectRaw('s.is_logged_in as is_logged_in, COUNT(*) as sessions')
+            ->groupBy('s.is_logged_in')
             ->get();
 
         foreach ($loggedInRows as $row) {
             $this->insertDimensionRow($metricDate, EcomDailyDimensionType::LOGGED_IN, (int) $row->is_logged_in === 1 ? '1' : '0', (int) $row->sessions, $now);
         }
 
-        $hasOrder = DB::table('activity_ecom_user as s')
+        $hasOrderQuery = DB::table('activity_ecom_user as s')
             ->whereBetween('s.created_at', $bounds)
             ->leftJoin('activity_ecom_orders as o', function ($join) use ($bounds) {
                 $join->on('o.session_id', '=', 's.session_id')
                     ->whereBetween('o.ordered_at', $bounds);
-            })
+            });
+        CommerceRollupSessionScope::applyHumanSessionFilter($hasOrderQuery, 's');
+        $hasOrder = $hasOrderQuery
             ->selectRaw('CASE WHEN o.session_id IS NOT NULL THEN 1 ELSE 0 END as has_order, COUNT(*) as sessions')
             ->groupBy('has_order')
             ->get();

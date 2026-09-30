@@ -24,6 +24,7 @@ final class EcomStoreDashboardSnapshot
      * @param  Collection<int, object>  $commerceLineItems
      * @param  Collection<int, object>  $orders
      * @param  list<array<string, mixed>>  $periodPaymentRows
+     * @param  array<string, array{session_count: int, at_stake: float, rows: array<int, array<string, mixed>>}>|null  $recoverablePanels
      */
     public function __construct(
         public array $periodSessionAggregates,
@@ -43,5 +44,6 @@ final class EcomStoreDashboardSnapshot
         public Collection $orders,
         public ?string $lastActiveAt = null,
         public bool $slimRecoverableHydration = false,
+        public ?array $recoverablePanels = null,
     ) {}
 }

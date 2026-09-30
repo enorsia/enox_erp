@@ -12,6 +12,7 @@ use App\Support\CommerceReadSupport;
 use App\Support\EcomAnalyticsRangeSplitter;
 use App\Support\EcomActivityFocus;
 use App\Support\EcomDailyRollupSchema;
+use App\Support\EcomRecoverablePanelFormatter;
 use App\Support\EcomActivityKeywordSearch;
 use App\Support\EcomTrackerCompareSupport;
 use App\Support\EcomTrackerViewData;
@@ -88,12 +89,31 @@ class EcomTrackerDashboardService
         $this->storeDashboardSnapshot = null;
 
         try {
-            $data = $this->buildDashboardData($filters);
-            $data['live'] = $this->buildLiveStatus();
+            $responseCache = app(EcomStoreDashboardResponseCache::class);
+            $range = $this->resolveDateRange($filters);
+            $period = $range['period'] ?? null;
+            $split = EcomAnalyticsRangeSplitter::split($range['from'], $range['to'], $period);
+            $includesLiveSlice = $split['live_from'] !== null;
+
+            $loader = fn () => $this->buildDashboardDataWithLive($filters);
+
+            if ($includesLiveSlice) {
+                $data = $responseCache->rememberTodaySlice($filters, $loader);
+            } else {
+                $data = $responseCache->rememberClosedRange(
+                    $filters,
+                    $range['from'],
+                    $range['to'],
+                    $loader,
+                );
+            }
+
+            $meta = $responseCache->cacheMeta();
             $data['analytics_cache'] = [
-                'enabled' => false,
+                'enabled' => $meta['enabled'],
                 'cached_at' => null,
-                'ttl_seconds' => 0,
+                'ttl_seconds' => $includesLiveSlice ? $meta['today_ttl_seconds'] : $meta['closed_ttl_seconds'],
+                'slice' => $includesLiveSlice ? 'today' : 'closed',
             ];
 
             return $data;
@@ -132,7 +152,35 @@ class EcomTrackerDashboardService
             return true;
         }
 
-        return $this->rollupMetrics()->hasCompleteSiteRollups($split['closed_dates']);
+        return $split['use_rollups'] && $split['closed_dates'] !== [];
+    }
+
+    /**
+     * @return array{awaiting: bool, expected: int, found: int, message: ?string}
+     */
+    private function dashboardRollupsStatus(Carbon $from, Carbon $to, ?string $period): array
+    {
+        $split = EcomAnalyticsRangeSplitter::split($from, $to, $period);
+        $coverage = $this->rollupMetrics()->siteRollupsCoverage($split['closed_dates']);
+
+        return [
+            'awaiting' => false,
+            'expected' => $coverage['expected'],
+            'found' => $coverage['found'],
+            'message' => null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    private function buildDashboardDataWithLive(array $filters): array
+    {
+        $data = $this->buildDashboardData($filters);
+        $data['live'] = $this->buildLiveStatus();
+
+        return $data;
     }
 
     /**
@@ -162,6 +210,8 @@ class EcomTrackerDashboardService
                 $this->periodCommercePreloadLines = collect();
             }
         }
+
+        $rollupsStatus = $this->dashboardRollupsStatus($range['from'], $range['to'], $period);
 
         if ($isUnfiltered) {
             $currentSessions = collect();
@@ -277,6 +327,12 @@ class EcomTrackerDashboardService
                     ? $this->buildDurationDistributionFromQuery($range['from'], $range['to'], $period)
                     : $this->buildDurationDistribution($currentSessions)),
             'new_returning' => $this->buildNewReturningFromKpis($currentKpis),
+            'rollups_unavailable' => $rollupsStatus['awaiting'],
+            'rollups_unavailable_message' => $rollupsStatus['message'],
+            'rollups_coverage' => [
+                'expected' => $rollupsStatus['expected'],
+                'found' => $rollupsStatus['found'],
+            ],
         ];
     }
 
@@ -2059,6 +2115,37 @@ class EcomTrackerDashboardService
             && $this->periodRangeMatchesPreload($from, $to, $period);
     }
 
+    /**
+     * @return array{session_count: int, at_stake: float, rows: array<int, array<string, mixed>>}|null
+     */
+    private function recoverablePanelSlice(
+        string $panelKey,
+        Carbon $from,
+        Carbon $to,
+        ?string $period,
+        ?int $limit,
+    ): ?array {
+        if (! $this->storeDashboardSnapshotCoversRange($from, $to, $period)) {
+            return null;
+        }
+
+        $panels = $this->storeDashboardSnapshot->recoverablePanels;
+        if ($panels === null || ! isset($panels[$panelKey])) {
+            return null;
+        }
+
+        $full = $panels[$panelKey];
+        if ($limit === null) {
+            return $full;
+        }
+
+        return [
+            'session_count' => (int) $full['session_count'],
+            'at_stake' => (float) $full['at_stake'],
+            'rows' => array_slice($full['rows'], 0, $limit),
+        ];
+    }
+
     private function warmPeriodCommercePreload(Carbon $from, Carbon $to, ?string $period): void
     {
         $key = $this->periodRangePreloadKey($from, $to, $period);
@@ -2580,7 +2667,9 @@ class EcomTrackerDashboardService
             return $this->storeDashboardSnapshot->periodPaymentRows;
         }
 
-        $resolver = fn () => CommerceFunnelQuery::paymentRows($from, $to, $sessionIds, $period);
+        $resolver = fn () => $sessionIds === null && $this->dashboardUsesRollupsOnly()
+            ? $this->rollupMetrics()->dashboardPaymentRows($from, $to, $period)
+            : CommerceFunnelQuery::paymentRows($from, $to, $sessionIds, $period);
 
         if ($sessionIds !== null) {
             return $this->rememberQuery(
@@ -2607,6 +2696,42 @@ class EcomTrackerDashboardService
         return CommerceFunnelQuery::paymentMetricTotalsFromPaymentRows(
             $this->periodPaymentRows($from, $to, $sessionIds, $period),
         );
+    }
+
+    /**
+     * Closed days: activity_ecom_daily_site_metrics only. Today (if in range): live raw orders.
+     *
+     * @return array{revenue: float, item_qty: int, purchases: int}
+     */
+    private function periodOrderAggregatesFromSiteRollupsAndLiveToday(
+        Carbon $from,
+        Carbon $to,
+        ?string $period,
+    ): array {
+        $split = EcomAnalyticsRangeSplitter::split($from, $to, $period);
+        $revenue = $this->rollupMetrics()->sumRevenueForDates($split['closed_dates']);
+        $itemQty = $this->rollupMetrics()->sumItemsSoldQtyForDates($split['closed_dates']);
+        $purchases = (int) DB::table('activity_ecom_daily_site_metrics')
+            ->whereIn('metric_date', $split['closed_dates'])
+            ->sum('order_count');
+
+        if ($split['live_from'] !== null && $split['live_to'] !== null) {
+            $live = CommerceFunnelQuery::paymentMetricTotals(
+                $split['live_from'],
+                $split['live_to'],
+                null,
+                '24h',
+            );
+            $revenue += $live['revenue'];
+            $itemQty += $live['item_qty'];
+            $purchases += $live['purchases'];
+        }
+
+        return [
+            'revenue' => round($revenue, 2),
+            'item_qty' => $itemQty,
+            'purchases' => $purchases,
+        ];
     }
 
     private function sessionsInRange(Carbon $from, Carbon $to, ?string $period = null): Collection
@@ -2714,6 +2839,20 @@ class EcomTrackerDashboardService
         string $stage,
         string $excludeActionType,
     ): float {
+        $panelKey = match ($stage) {
+            'add_to_cart' => 'cart_abandonment',
+            'begin_checkout' => 'begin_checkout_abandonment',
+            'proceed_checkout' => 'proceed_checkout_abandonment',
+            default => null,
+        };
+
+        if ($panelKey !== null) {
+            $panel = $this->recoverablePanelSlice($panelKey, $from, $to, $period, null);
+            if ($panel !== null) {
+                return (float) $panel['at_stake'];
+            }
+        }
+
         if ($this->storeDashboardSnapshotCoversRange($from, $to, $period)
             && ! $this->storeDashboardSnapshot->slimRecoverableHydration) {
             return $this->buildRecoverableAbandonmentFromLoaded(
@@ -2771,6 +2910,10 @@ class EcomTrackerDashboardService
         array $filters = [],
         ?string $period = null,
     ): array {
+        if ($filters === [] && $this->storeDashboardSnapshotCoversRange($from, $to, $period)) {
+            return $this->storeDashboardSnapshot->abandonmentCounts;
+        }
+
         if ($filters === []) {
             return $this->rememberQuery(
                 $this->queryCacheKey('abandonedSessionCountsUnfiltered', $from, $to, $period),
@@ -2824,6 +2967,17 @@ class EcomTrackerDashboardService
      * @return array<string, float|int>
      */
     private function computeFunnelKpisFromAggregates(Carbon $from, Carbon $to, ?string $period = null): array
+    {
+        return $this->rememberQuery(
+            $this->queryCacheKey('computeFunnelKpisFromAggregates', $from, $to, $this->periodWindowKey($period)),
+            fn () => $this->resolveFunnelKpisFromAggregates($from, $to, $period),
+        );
+    }
+
+    /**
+     * @return array<string, float|int>
+     */
+    private function resolveFunnelKpisFromAggregates(Carbon $from, Carbon $to, ?string $period = null): array
     {
         $row = $this->periodSessionAggregates($from, $to, $period);
         $abandoned = $this->abandonedSessionCounts($from, $to, [], $period);
@@ -6270,6 +6424,13 @@ class EcomTrackerDashboardService
      */
     private function buildCartAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
     {
+        if ($filters === []) {
+            $fromSnapshot = $this->recoverablePanelSlice('cart_abandonment', $from, $to, $period, $limit);
+            if ($fromSnapshot !== null) {
+                return $fromSnapshot;
+            }
+        }
+
         if ($filters === [] && $this->storeDashboardSnapshotCoversRange($from, $to, $period)
             && ! $this->storeDashboardSnapshot->slimRecoverableHydration) {
             return $this->buildRecoverableAbandonmentFromLoaded(
@@ -6305,6 +6466,13 @@ class EcomTrackerDashboardService
      */
     private function buildBeginCheckoutAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
     {
+        if ($filters === []) {
+            $fromSnapshot = $this->recoverablePanelSlice('begin_checkout_abandonment', $from, $to, $period, $limit);
+            if ($fromSnapshot !== null) {
+                return $fromSnapshot;
+            }
+        }
+
         if ($filters === [] && $this->storeDashboardSnapshotCoversRange($from, $to, $period)
             && ! $this->storeDashboardSnapshot->slimRecoverableHydration) {
             return $this->buildRecoverableAbandonmentFromLoaded(
@@ -6340,6 +6508,13 @@ class EcomTrackerDashboardService
      */
     private function buildProceedCheckoutAbandonment(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
     {
+        if ($filters === []) {
+            $fromSnapshot = $this->recoverablePanelSlice('proceed_checkout_abandonment', $from, $to, $period, $limit);
+            if ($fromSnapshot !== null) {
+                return $fromSnapshot;
+            }
+        }
+
         if ($filters === [] && $this->storeDashboardSnapshotCoversRange($from, $to, $period)
             && ! $this->storeDashboardSnapshot->slimRecoverableHydration) {
             return $this->buildRecoverableAbandonmentFromLoaded(
@@ -6375,6 +6550,13 @@ class EcomTrackerDashboardService
      */
     private function buildPaymentSuccessEvents(Carbon $from, Carbon $to, ?int $limit = self::TABLE_DISPLAY_LIMIT, array $filters = [], ?string $period = null): array
     {
+        if ($filters === []) {
+            $fromSnapshot = $this->recoverablePanelSlice('payment_success_events', $from, $to, $period, $limit);
+            if ($fromSnapshot !== null) {
+                return $fromSnapshot;
+            }
+        }
+
         $allowedSessionIds = $this->activitySessionIds($from, $to, $filters, $period);
 
         $paymentRows = $this->periodPaymentRows($from, $to, $allowedSessionIds, $period);
@@ -6403,15 +6585,7 @@ class EcomTrackerDashboardService
      */
     private function formatRecoverableSessionRow(string $sessionId, float $value, mixed $occurredAt, int $qty = 1): array
     {
-        return [
-            'session_id' => $sessionId,
-            'session_label' => substr($sessionId, 0, 8).'…',
-            'qty' => max(0, $qty),
-            'value' => round($value, 2),
-            'occurred_ago' => TrackerTime::diffForHumansFromStorage($occurredAt) ?? '—',
-            'activity_url' => EcomTrackerViewData::activityShowUrl($sessionId),
-            '_sort_at' => TrackerTime::fromStorage($occurredAt),
-        ];
+        return EcomRecoverablePanelFormatter::formatRow($sessionId, $value, $occurredAt, $qty);
     }
 
     /**
@@ -6420,20 +6594,12 @@ class EcomTrackerDashboardService
      */
     private function finalizeRecoverableSessionRows(Collection $rows, ?int $limit): array
     {
-        $totalAtStake = round($rows->sum('value'), 2);
-        $limited = $limit !== null ? $rows->take($limit) : $rows;
-        $displayRows = $limited
-            ->map(function (array $row) {
-                unset($row['_sort_at']);
-
-                return $row;
-            })
-            ->all();
+        $panel = EcomRecoverablePanelFormatter::finalize($rows, $limit);
 
         return [
-            'total_count' => $rows->count(),
-            'total_at_stake' => $totalAtStake,
-            'rows' => $displayRows,
+            'total_count' => $panel['session_count'],
+            'total_at_stake' => $panel['at_stake'],
+            'rows' => $panel['rows'],
         ];
     }
 
@@ -6468,7 +6634,18 @@ class EcomTrackerDashboardService
     ): array {
         $allowedSessionIds = $this->activitySessionIds($from, $to, $filters, $period);
 
-        if ($filters === [] && $allowedSessionIds === null && $this->periodRangeMatchesPreload($from, $to, $period)) {
+        if ($filters === [] && $allowedSessionIds === null
+            && $this->storeDashboardSnapshotCoversRange($from, $to, $period)
+            && $this->storeDashboardSnapshot->slimRecoverableHydration) {
+            $abandonedRows = CommerceFunnelQuery::abandonedRows(
+                $from,
+                $to,
+                $stage,
+                $excludeActionType,
+                null,
+                $period,
+            );
+        } elseif ($filters === [] && $allowedSessionIds === null && $this->periodRangeMatchesPreload($from, $to, $period)) {
             $this->warmPeriodCommercePreload($from, $to, $period);
 
             if ($this->periodCommercePreloadSessions === null) {
@@ -6477,17 +6654,24 @@ class EcomTrackerDashboardService
 
             $sessions = $this->periodCommercePreloadSessions;
             $lines = $this->periodLineItems($from, $to, null, $period);
+
+            $abandonedRows = CommerceFunnelQuery::abandonedRowsFromLoadedData(
+                $sessions,
+                $lines,
+                $stage,
+                $excludeActionType,
+            );
         } else {
             $sessions = $this->periodSessionReadRows($from, $to, $allowedSessionIds, $period);
             $lines = $this->periodLineItems($from, $to, $allowedSessionIds, $period);
-        }
 
-        $abandonedRows = CommerceFunnelQuery::abandonedRowsFromLoadedData(
-            $sessions,
-            $lines,
-            $stage,
-            $excludeActionType,
-        );
+            $abandonedRows = CommerceFunnelQuery::abandonedRowsFromLoadedData(
+                $sessions,
+                $lines,
+                $stage,
+                $excludeActionType,
+            );
+        }
 
         $rows = collect($abandonedRows)->map(fn (array $row) => $this->formatRecoverableSessionRow(
             $row['session_id'],
