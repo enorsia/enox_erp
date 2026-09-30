@@ -61,6 +61,7 @@
                         'default_shipping' => $defaultShippingCost,
                         'confirm_selling_price' => $ch_price->confirm_selling_price,
                         'discount_price' => $d_price ? $d_price->price : 0,
+                        'department_id' => $chartInfo->department_id
                     ];
 
                     $profit_cal = calculatePlatformProfit($h_ch_price, $platform, $profitOptions);

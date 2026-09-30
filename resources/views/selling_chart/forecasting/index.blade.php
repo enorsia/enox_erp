@@ -386,7 +386,7 @@
                                                              $canSell  = $ch_price->{$p_code . '_can_sell'};
                                                            }else{
                                                              $platform = $platforms->get($p_code);
-                                                             $cal_val  = calculatePlatformProfit($ch_price, $platform);
+                                                             $cal_val  = calculatePlatformProfit($ch_price, $platform, ['department_id' => $chartInfo->department_id]);
                                                              $canSell  = ($cal_val['can_sell'] ?? 'No') === 'Yes';
                                                            }
                                                         @endphp

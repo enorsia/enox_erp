@@ -79,10 +79,10 @@ class SalesChartController extends Controller
             $chartInfos = $chartInfos->map(function ($chartInfo) use ($platform_ncs, $platforms, $platform_code) {
                 $hasCanSell = false;
 
-                $chartInfo->sellingChartPrices->map(function ($price) use ($platform_ncs, $platforms, $platform_code, &$hasCanSell) {
+                $chartInfo->sellingChartPrices->map(function ($price) use ($chartInfo, $platform_ncs, $platforms, $platform_code, &$hasCanSell) {
                     foreach ($platform_ncs as $p_code => $p_name) {
                         $platform = $platforms->get($p_code);
-                        $cal_val = calculatePlatformProfit($price, $platform);
+                        $cal_val = calculatePlatformProfit($price, $platform,['department_id' => $chartInfo->department_id]);
                         $price->{$p_code . '_can_sell'} = ($cal_val['can_sell'] ?? 'No') === 'Yes';
                         $price->{$p_code . '_cal_val'}   = $cal_val;
                         if ($price->{$platform_code . '_can_sell'}) {
@@ -1129,6 +1129,7 @@ class SalesChartController extends Controller
                 'default_shipping' => $expenseConfig['shipping_cost'],
                 'confirm_selling_price' => $m_confirm_selling_price,
                 'discount_price' => (float) $request->discount_price ?? 0,
+                'department_id' => $price?->sellingChartBasicInfo?->department_id
             ]
         );
 
