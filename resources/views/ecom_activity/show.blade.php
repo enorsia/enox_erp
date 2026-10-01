@@ -225,7 +225,7 @@
                 </div>
 
                 <div class="section-card">
-                    <div class="section-title">Traffic Attribution</div>
+                    <div class="section-title">Session traffic</div>
                     <div class="divide-y divide-slate-100 dark:divide-slate-700/60 text-[13px]">
                         @forelse ($trafficAttribution ?? [] as $label => $value)
                             <div class="py-2.5 first:pt-0 last:pb-0 min-w-0">
@@ -238,6 +238,25 @@
                     </div>
                 </div>
 
+                @if (($conversionAttribution ?? []) !== [])
+                    <div class="section-card">
+                        <div class="section-title">
+                            @include('ecom_activity.partials.section-title-with-tip', [
+                                'title' => 'Conversion',
+                                'tip' => 'After payment: purchase credit from last marketing touch within 7 days. Before payment: shows that same 7-day marketing attribution for this visitor. Session traffic above is this visit only.',
+                            ])
+                        </div>
+                        <div class="divide-y divide-slate-100 dark:divide-slate-700/60 text-[13px]">
+                            @foreach ($conversionAttribution as $label => $value)
+                                <div class="py-2.5 first:pt-0 last:pb-0 min-w-0">
+                                    <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
+                                    <div class="text-slate-700 dark:text-slate-200 break-all text-[13px]">{{ $value }}</div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
                 <div class="section-card">
                     <div class="section-title">Funnel Progress</div>
                     <div class="flex flex-wrap gap-2">
@@ -249,6 +268,11 @@
                         @endforeach
                     </div>
                 </div>
+
+                @include('ecom_activity.partials.related-visitor-sessions', [
+                    'activityUser' => $activityUser,
+                    'relatedVisitorSessions' => $relatedVisitorSessions ?? collect(),
+                ])
             </div>
         </div>
     </div>

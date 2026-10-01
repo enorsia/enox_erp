@@ -579,3 +579,19 @@ test('ecom activity product code search only shows sessions with matching produc
 
     expect($html)->not->toContain('MS99999999');
 });
+
+test('ecom activity index shows header period controls and hides drawer date range on desktop', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('ecom_tracker.activity.index');
+
+    $html = $this->actingAs($user)
+        ->get(route('admin.ecom-activity.index', ['period' => '24h']))
+        ->assertOk()
+        ->getContent();
+
+    expect($html)
+        ->toContain('etd-header-period-nav')
+        ->toContain('etd-filter-period--drawer-mobile')
+        ->toContain('period=7d')
+        ->toContain('admin/ecom-activity');
+});

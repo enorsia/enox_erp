@@ -7,12 +7,15 @@ use App\Support\CommerceLineItemQuery;
 use App\Support\CommerceReadSupport;
 use App\Support\EcomActivityCommerceEvents;
 use App\Support\EcomActivityCommerceSummary;
+use App\Support\EcomActivityFocus;
 use App\Support\EcomActivitySessionSort;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
+use App\Support\TrackerMultiSelectFilter;
 use App\Support\TrackerProductCatalogIdentity;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
 /**
@@ -37,6 +40,7 @@ class EcomActivityRowMetrics
         Carbon $to,
         array $funnelMetrics = [],
         array $productCatalogOptions = [],
+        ?Request $request = null,
     ): array {
         if ($sessions->isEmpty()) {
             return [];
@@ -63,11 +67,12 @@ class EcomActivityRowMetrics
                     'order_qty' => $row['qty'] ?? 0,
                     'order_value' => $row['value'] ?? 0,
                     'abandoned_at' => TrackerTime::diffForHumansFromStorage($row['occurred_at'] ?? null) ?? '—',
+                    'period_event_at' => $row['occurred_at'] ?? null,
                 ]);
             }
         }
 
-        if (in_array($focus, ['conversion', 'payment_success'], true) && $funnelMetrics === []) {
+        if ($request !== null && EcomActivityFocus::shouldAttachPaymentMetrics($focus, $request, $funnelMetrics)) {
             $this->attachPaymentMetrics($metrics, $sessionIds, $from, $to);
         }
 
@@ -79,13 +84,25 @@ class EcomActivityRowMetrics
             $this->attachCategoryMetrics($metrics, $sessionIds, $from, $to, $productCatalogOptions);
         }
 
-        if ($focus === 'traffic') {
+        if ($focus === 'traffic' || self::shouldAttachTrafficMetrics($focus, $request)) {
             foreach ($sessions as $session) {
-                $traffic = SessionTrafficAttribution::listRowSummary($session);
-                $metrics[$session->session_id]['traffic_source'] = $traffic['source'] ?? '—';
-                $metrics[$session->session_id]['traffic_medium'] = filled($traffic['utm'] ?? null)
-                    ? (string) $traffic['utm']
-                    : (filled($session->utm_medium) ? (string) $session->utm_medium : '—');
+                $bucket = filled($session->list_traffic_utm_source ?? null)
+                    ? [
+                        'source' => (string) $session->list_traffic_utm_source,
+                        'medium' => filled($session->list_traffic_utm_medium ?? null)
+                            ? (string) $session->list_traffic_utm_medium
+                            : 'none',
+                    ]
+                    : SessionTrafficAttribution::listTrafficDisplayBucket($session);
+
+                $sourceKey = $bucket['source'] ?? '(direct)';
+                $metrics[$session->session_id]['traffic_source'] = $sourceKey === '(direct)'
+                    ? 'Direct'
+                    : (SessionTrafficAttribution::displaySourceLabel($sourceKey) ?? $sourceKey);
+                $medium = filled($bucket['medium'] ?? null) && $bucket['medium'] !== 'none'
+                    ? (string) $bucket['medium']
+                    : '—';
+                $metrics[$session->session_id]['traffic_medium'] = $medium;
             }
         }
 
@@ -106,7 +123,7 @@ class EcomActivityRowMetrics
             $metrics[$session->session_id]['actions_count'] = $session->actions_count ?? 0;
         }
 
-        if ($focus === 'audience' || $focus === null) {
+        if ($focus === 'audience' || $focus === null || self::shouldAttachDeviceMetric($focus, $request)) {
             foreach ($sessions as $session) {
                 $metrics[$session->session_id]['device'] = ucfirst((string) ($session->device_type ?? '—'));
             }
@@ -118,6 +135,7 @@ class EcomActivityRowMetrics
             $from,
             $to,
             $productCatalogOptions,
+            $request,
         );
 
         $this->attachCatalogContext($metrics, $sessionIds, $from, $to, $productCatalogOptions);
@@ -141,7 +159,9 @@ class EcomActivityRowMetrics
         Carbon $from,
         Carbon $to,
         array $catalogOptions = [],
+        ?Request $request = null,
     ): void {
+        $periodOnlyCommerce = EcomActivityFocus::usesPeriodOnlyCommerce($request);
         $sessionIds = $sessions->pluck('session_id');
         $useCatalogScope = EcomActivitySessionSort::usesCatalogActionScope($catalogOptions);
         $commerceFunnelStages = ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success'];
@@ -177,6 +197,7 @@ class EcomActivityRowMetrics
         $cumulativeLinesBySession = $cumulativeLines->groupBy(fn (object $line) => (string) $line->session_id);
         $cumulativeOrdersBySession = $cumulativeOrders->groupBy(fn (object $order) => (string) $order->session_id);
         $viewLinesBySession = $viewLines->groupBy(fn (object $line) => (string) $line->session_id);
+        $paymentActionsBySession = CommerceReadSupport::paymentSuccessActionsForSessions($sessionIds, $from, $to);
 
         foreach ($sessions as $session) {
             $sessionId = (string) $session->session_id;
@@ -190,8 +211,78 @@ class EcomActivityRowMetrics
             $summary = EcomActivityCommerceSummary::summarizeFromCommerce($sessionLines, $sessionOrders);
             $eventLines = $sessionLines;
             $eventOrders = $sessionOrders;
+            $paymentActionsForEvents = null;
 
-            if (($summary['commerce_label'] ?? null) === null && $this->sessionHasCommerceFunnelState($session)) {
+            if (($summary['commerce_label'] ?? null) === null) {
+                $paymentActions = $paymentActionsBySession->get($sessionId, collect());
+
+                if ($paymentActions->isNotEmpty()) {
+                    $summary = EcomActivityCommerceSummary::summarizeFromPaymentSuccessActions($paymentActions);
+                    $paymentActionsForEvents = $paymentActions;
+
+                    if (($metrics[$sessionId]['period_event_at'] ?? null) === null) {
+                        $latestPayment = $paymentActions->first();
+                        $metrics[$sessionId]['period_event_at'] = $latestPayment?->created_at;
+                    }
+                }
+            }
+
+            if (
+                ($summary['commerce_label'] ?? null) === null
+                && $periodOnlyCommerce
+                && $request !== null
+                && EcomActivityFocus::usesPeriodEventTimestamps($request)
+                && ($session->has_payment_success ?? false)
+            ) {
+                $paymentDataUpper = TrackerTime::nowUtc();
+                $paymentFallbackOrders = CommerceReadSupport::ordersForSessions(
+                    collect([$sessionId]),
+                    $epoch,
+                    $paymentDataUpper,
+                );
+                $paymentFallbackLines = CommerceReadSupport::linesForSessions(
+                    collect([$sessionId]),
+                    $epoch,
+                    $paymentDataUpper,
+                    ['payment_success'],
+                    $catalogOptionsForQuery,
+                );
+                [$paymentFallbackLines, $paymentFallbackOrders] = $this->scopedCommerceRows(
+                    $paymentFallbackLines,
+                    $paymentFallbackOrders,
+                    $catalogOptions,
+                    $useCatalogScope,
+                );
+                $paymentFallbackSummary = EcomActivityCommerceSummary::summarizeFromCommerce(
+                    $paymentFallbackLines,
+                    $paymentFallbackOrders,
+                );
+
+                if (($paymentFallbackSummary['commerce_label'] ?? null) !== null) {
+                    $summary = $paymentFallbackSummary;
+                    $eventLines = $paymentFallbackLines;
+                    $eventOrders = $paymentFallbackOrders;
+
+                    if (($metrics[$sessionId]['period_event_at'] ?? null) === null) {
+                        $latestOrder = $paymentFallbackOrders
+                            ->sortByDesc(fn (object $order) => strtotime((string) ($order->ordered_at ?? '')) ?: 0)
+                            ->first();
+                        $latestLine = $paymentFallbackLines
+                            ->sortByDesc(fn (object $line) => strtotime((string) ($line->staged_at ?? '')) ?: 0)
+                            ->first();
+
+                        $metrics[$sessionId]['period_event_at'] = TrackerTime::fromStorage(
+                            $latestOrder->ordered_at ?? $latestLine->staged_at ?? null,
+                        );
+                    }
+
+                    if (($metrics[$sessionId]['order_value'] ?? 0) == 0 && ($paymentFallbackSummary['commerce_value'] ?? null) !== null) {
+                        $metrics[$sessionId]['order_value'] = round((float) $paymentFallbackSummary['commerce_value'], 2);
+                    }
+                }
+            }
+
+            if (($summary['commerce_label'] ?? null) === null && ! $periodOnlyCommerce && $this->sessionHasCommerceFunnelState($session)) {
                 [$cumulativeSessionLines, $cumulativeSessionOrders] = $this->scopedCommerceRows(
                     $cumulativeLinesBySession->get($sessionId, collect()),
                     $cumulativeOrdersBySession->get($sessionId, collect()),
@@ -210,7 +301,7 @@ class EcomActivityRowMetrics
                 }
             }
 
-            if (($summary['commerce_label'] ?? null) === null) {
+            if (($summary['commerce_label'] ?? null) === null && ! $periodOnlyCommerce) {
                 $viewSessionLines = $viewLinesBySession->get($sessionId, collect());
 
                 if ($useCatalogScope) {
@@ -227,8 +318,46 @@ class EcomActivityRowMetrics
                 }
             }
 
+            $linesForEvents = $eventLines;
+
+            if ($linesForEvents->isEmpty()) {
+                $viewSessionLines = $viewLinesBySession->get($sessionId, collect());
+
+                if ($useCatalogScope) {
+                    $viewSessionLines = TrackerProductCatalogIdentity::filterLinesMatchingCatalogOptions(
+                        $viewSessionLines,
+                        $catalogOptions,
+                    );
+                }
+
+                if ($viewSessionLines->isNotEmpty()) {
+                    $linesForEvents = $viewSessionLines;
+                }
+            }
+
+            $commerceEvents = $paymentActionsForEvents instanceof Collection
+                ? EcomActivityCommerceEvents::fromActions($paymentActionsForEvents)
+                : EcomActivityCommerceEvents::fromCommerceRows($linesForEvents, $eventOrders);
+
+            if (
+                $request !== null
+                && EcomActivityFocus::usesPeriodEventTimestamps($request)
+                && ($metrics[$sessionId]['period_event_at'] ?? null) === null
+            ) {
+                $latestPayment = $paymentActionsBySession->get($sessionId, collect())->first();
+
+                if ($latestPayment !== null) {
+                    $metrics[$sessionId]['period_event_at'] = $latestPayment->created_at;
+                } elseif ($eventOrders->isNotEmpty()) {
+                    $latestOrder = $eventOrders
+                        ->sortByDesc(fn (object $order) => strtotime((string) ($order->ordered_at ?? '')) ?: 0)
+                        ->first();
+                    $metrics[$sessionId]['period_event_at'] = TrackerTime::fromStorage($latestOrder->ordered_at ?? null);
+                }
+            }
+
             $metrics[$sessionId] = array_merge($metrics[$sessionId] ?? [], $summary, [
-                'commerce_events' => EcomActivityCommerceEvents::fromCommerceRows($eventLines, $eventOrders),
+                'commerce_events' => $commerceEvents,
             ]);
         }
     }
@@ -396,14 +525,19 @@ class EcomActivityRowMetrics
         Carbon $to,
         array $catalogOptions,
     ): void {
-        if (! filled($catalogOptions['department'] ?? null) && ! filled($catalogOptions['category'] ?? null)) {
+        if (
+            ! filled($catalogOptions['department'] ?? null)
+            && TrackerMultiSelectFilter::values($catalogOptions['category'] ?? null) === []
+        ) {
             return;
         }
 
-        if (filled($catalogOptions['department'] ?? null) && filled($catalogOptions['category'] ?? null)) {
+        $categoryFilters = TrackerMultiSelectFilter::values($catalogOptions['category'] ?? null);
+
+        if (filled($catalogOptions['department'] ?? null) && count($categoryFilters) === 1) {
             $catalogPath = TrackerCategoryIdentity::label(
                 (string) $catalogOptions['department'],
-                (string) $catalogOptions['category'],
+                $categoryFilters[0],
             );
 
             foreach ($sessionIds as $sessionId) {
@@ -442,5 +576,24 @@ class EcomActivityRowMetrics
 
             $metrics[$sessionId]['catalog_path'] = $rowCatalogPath ?? '—';
         }
+    }
+
+    private static function shouldAttachTrafficMetrics(?string $focus, ?Request $request): bool
+    {
+        if ($request === null || $focus === 'traffic') {
+            return false;
+        }
+
+        return TrackerMultiSelectFilter::requestFilled($request, 'utm_source')
+            || TrackerMultiSelectFilter::requestFilled($request, 'utm_medium');
+    }
+
+    private static function shouldAttachDeviceMetric(?string $focus, ?Request $request): bool
+    {
+        if ($request === null || in_array($focus, ['audience', 'devices'], true)) {
+            return false;
+        }
+
+        return TrackerMultiSelectFilter::requestFilled($request, 'device_type');
     }
 }

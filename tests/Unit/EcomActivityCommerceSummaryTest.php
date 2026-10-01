@@ -253,6 +253,41 @@ test('commerce summary from line items and orders prefers paid order over cart',
         ->and($summary['commerce_value'])->toBe(15.49);
 });
 
+test('commerce summary from view lines uses latest stage label', function () {
+    $lines = collect([
+        (object) [
+            'funnel_stage' => 'product_view',
+            'staged_at' => now()->subMinutes(10)->toDateTimeString(),
+            'id' => 1,
+        ],
+        (object) [
+            'funnel_stage' => 'category_view',
+            'staged_at' => now()->toDateTimeString(),
+            'id' => 2,
+        ],
+    ]);
+
+    $summary = EcomActivityCommerceSummary::summarizeFromViewLines($lines);
+
+    expect($summary['commerce_display'])->toBe('Category view')
+        ->and($summary['commerce_label'])->toBe('Category view');
+});
+
+test('commerce summary from view lines shows view for product view only', function () {
+    $lines = collect([
+        (object) [
+            'funnel_stage' => 'product_view',
+            'staged_at' => now()->toDateTimeString(),
+            'id' => 1,
+        ],
+    ]);
+
+    $summary = EcomActivityCommerceSummary::summarizeFromViewLines($lines);
+
+    expect($summary['commerce_display'])->toBe('View')
+        ->and($summary['commerce_label'])->toBe('View');
+});
+
 test('commerce summary from line items shows proceed when payment is missing', function () {
     $lines = collect([
         (object) [

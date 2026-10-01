@@ -8,7 +8,7 @@ class TrackerRedisCache
 {
     public function remember(string $key, int $ttlSeconds, callable $callback): array
     {
-        if (! config('tracker.analytics_cache_enabled', true) || $ttlSeconds <= 0) {
+        if (! config('tracker.analytics_cache_enabled', false) || $ttlSeconds <= 0) {
             EcomTrackerLogger::backend()->info('redis.cache.bypass', 'Analytics cache OFF — loading from database', [
                 'cache_key' => $key,
                 'reason' => 'cache_disabled',

@@ -51,6 +51,38 @@ test('consecutive product views for same product are grouped with summed dwell a
     expect((int) $timeline->first()->actions->first()->start_time->format('s'))->toBe(3);
 });
 
+test('grouped product view to url prefers marketing landing not last colour swatch', function () {
+    $presenter = new EcomActivityTimelinePresenter();
+
+    $adLanding = 'https://enorsia.com/style/jeans?color=deep+blue&gclid=abc123';
+    $lightSwatch = 'https://enorsia.com/style/jeans?color=light%20blue';
+
+    $actions = collect([
+        makeAction([
+            'action_type' => 'product_view',
+            'product_code' => 'JEANS-1',
+            'page_url' => $adLanding,
+            'referer' => 'https://www.google.com/',
+            'start_time' => '2026-07-13 10:00:00',
+            'end_time' => '2026-07-13 10:00:10',
+            'created_at' => '2026-07-13 10:00:00',
+        ]),
+        makeAction([
+            'action_type' => 'product_view',
+            'product_code' => 'JEANS-1',
+            'page_url' => $lightSwatch,
+            'referer' => 'https://www.google.com/',
+            'start_time' => '2026-07-13 10:00:10',
+            'end_time' => '2026-07-13 10:00:20',
+            'created_at' => '2026-07-13 10:00:10',
+        ]),
+    ]);
+
+    $item = $presenter->present($actions)->first();
+
+    expect($item->page_url)->toBe($adLanding);
+});
+
 test('product views separated by another action stay as separate timeline items', function () {
     $presenter = new EcomActivityTimelinePresenter();
 

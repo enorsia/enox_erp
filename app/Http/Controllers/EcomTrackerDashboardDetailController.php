@@ -61,20 +61,18 @@ class EcomTrackerDashboardDetailController extends EcomTrackerAdminController
         if ($section === 'colors') {
             return redirect()->route('admin.ecom-tracker.dashboard.details', array_merge(
                 ['section' => 'products'],
-                $request->query(),
+                $request->only(['period', 'date_from', 'date_to', 'back']),
             ));
         }
 
+        if ($redirect = $this->redirectIfDashboardDetailHasLegacyFilters($request, $section)) {
+            return $redirect;
+        }
+
         $dateFilters = $this->dashboardDateFilters($request);
-        $extraFilters = array_merge(
-            $this->dashboardSessionFilters($request),
-            $this->dashboardProductCatalogFilters($request),
-        );
 
-        $detail = $this->service->getSectionDetail($section, $dateFilters, $extraFilters, null);
+        $detail = $this->service->getSectionDetail($section, $dateFilters, [], null);
         [$detail['data'], $paginator] = $this->applyPagination($section, $detail['data'], $request);
-
-        $currentProductSort = $this->service->resolveProductCatalogSort($request->input('sort_by'));
 
         EcomTrackerLogger::backend()->info('analytics.dashboard.detail', 'Admin opened dashboard detail page', [
             'section' => $section,
@@ -85,22 +83,9 @@ class EcomTrackerDashboardDetailController extends EcomTrackerAdminController
             'section' => $section,
             'title' => self::SECTIONS[$section],
             'detail' => $detail,
-            'filters' => array_merge($dateFilters, $extraFilters),
-            'activeFilterCount' => $this->dashboardActiveFilterCount(
-                $request,
-                includeProductCatalog: in_array($section, ['products', 'colors'], true),
-            ),
+            'filters' => $dateFilters,
+            'activeFilterCount' => $this->dashboardDateActiveFilterCount($request),
             'paginator' => $paginator,
-            'productSortGroups' => in_array($section, ['products', 'colors'], true)
-                ? $this->service->productCatalogSortGroups()
-                : [],
-            'productActivityOptions' => in_array($section, ['products', 'colors'], true)
-                ? $this->service->productCatalogActivityFilterOptions()
-                : [],
-            'currentProductSort' => $currentProductSort,
-            'eventScenarioOptions' => in_array($section, ['products', 'colors'], true)
-                ? $this->service->productCatalogEventScenarioOptions()
-                : [],
         ]);
     }
 

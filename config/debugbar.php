@@ -17,6 +17,13 @@ return [
      */
 
     'enabled' => env('DEBUGBAR_ENABLED'),
+
+    /*
+     | When true, Spatie permission cache / roles SQL is still executed (and cached)
+     | but omitted from Debugbar query list and badge count. Tracker dashboard data
+     | is never cached — see TRACKER_ANALYTICS_CACHE_ENABLED in config/tracker.php.
+     */
+    'hide_infra_queries' => filter_var(env('DEBUGBAR_HIDE_INFRA_QUERIES', true), FILTER_VALIDATE_BOOL),
     'collect_jobs' => env('DEBUGBAR_COLLECT_JOBS', false),
     'except' => [
         'telescope*',
@@ -41,7 +48,9 @@ return [
         'memory'          => env('DEBUGBAR_COLLECTORS_MEMORY', true),           // Memory usage
         'exceptions'      => env('DEBUGBAR_COLLECTORS_EXCEPTIONS', true),       // Exception displayer
         'log'             => env('DEBUGBAR_COLLECTORS_LOG', true),              // Logs from Monolog (merged in messages if enabled)
-        'db'              => env('DEBUGBAR_COLLECTORS_DB', true),               // Show database (PDO) queries and bindings
+        // When hide_infra_queries is true, the default DB collector is off and
+        // App\Providers\DebugbarServiceProvider registers FilteredDatabaseCollectorProvider.
+        'db'              => env('DEBUGBAR_COLLECTORS_DB', true) && ! filter_var(env('DEBUGBAR_HIDE_INFRA_QUERIES', true), FILTER_VALIDATE_BOOL),
         'views'           => env('DEBUGBAR_COLLECTORS_VIEWS', true),            // Views with their data
         'route'           => env('DEBUGBAR_COLLECTORS_ROUTE', false),           // Current route information
         'auth'            => env('DEBUGBAR_COLLECTORS_AUTH', false),            // Display Laravel authentication status
@@ -53,7 +62,7 @@ return [
         'events'          => env('DEBUGBAR_COLLECTORS_EVENTS', false),          // All events fired
         'logs'            => env('DEBUGBAR_COLLECTORS_LOGS', false),            // Add the latest log messages
         'config'          => env('DEBUGBAR_COLLECTORS_CONFIG', false),          // Display config settings
-        'cache'           => env('DEBUGBAR_COLLECTORS_CACHE', true),            // Display cache events
+        'cache'           => env('DEBUGBAR_COLLECTORS_CACHE', false),           // Cache events (off by default; permission cache still runs)
         'models'          => env('DEBUGBAR_COLLECTORS_MODELS', true),           // Display models
         'livewire'        => env('DEBUGBAR_COLLECTORS_LIVEWIRE', true),         // Display Livewire (when available)
         'inertia'         => env('DEBUGBAR_COLLECTORS_INERTIA', true),          // Display Inertia (when available)
@@ -96,8 +105,15 @@ return [
         ],
         'db' => [
             'with_params'       => env('DEBUGBAR_OPTIONS_WITH_PARAMS', true),   // Render SQL with the parameters substituted
+            'exclude_sql_patterns' => [
+                '/\bfrom [`"]?cache[`"]?\b/i',
+                '/\bfrom [`"]?permissions[`"]?\b/i',
+                '/\bmodel_has_permissions\b/i',
+                '/\bmodel_has_roles\b/i',
+                '/\bfrom [`"]?users[`"]?\b/i',
+            ],
             'exclude_paths'     => [       // Paths to exclude entirely from the collector
-                //'vendor/laravel/framework/src/Illuminate/Session', // Exclude sessions queries
+                '/vendor/spatie/laravel-permission',
             ],
             'backtrace'         => env('DEBUGBAR_OPTIONS_DB_BACKTRACE', true),   // Use a backtrace to find the origin of the query in your files.
             'backtrace_exclude_paths' => [],   // Paths to exclude from backtrace. (in addition to defaults)

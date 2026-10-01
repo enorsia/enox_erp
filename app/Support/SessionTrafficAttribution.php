@@ -4,36 +4,38 @@ namespace App\Support;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Parse and persist UTM / click-id params from landing URLs.
  */
 final class SessionTrafficAttribution
 {
-    /** @var list<string> */
-    public const URL_PARAMS = [
-        'utm_source',
-        'utm_medium',
-        'utm_campaign',
-        'utm_id',
-        'utm_content',
-        'utm_term',
-        'media_type',
-        'fbclid',
-        'gclid',
-        'gbraid',
-        'wbraid',
-        'gad_source',
-        'gad_campaignid',
-        'msclkid',
-        'awc',
-        'ttclid',
-        'twclid',
-        'li_fat_id',
-        'epik',
-        'sc_cid',
-    ];
+    /**
+     * @return list<string>
+     */
+    public static function urlParamKeys(): array
+    {
+        static $keys = null;
+
+        if ($keys !== null) {
+            return $keys;
+        }
+
+        $keys = array_values(array_unique(array_merge([
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+            'utm_id',
+            'utm_content',
+            'utm_term',
+            'media_type',
+        ], AttributionRules::trackedPlatformQueryParamNames())));
+
+        return $keys;
+    }
 
     /** @var list<string> */
     private const SESSION_COLUMNS = [
@@ -66,7 +68,7 @@ final class SessionTrafficAttribution
 
         $parsed = [];
 
-        foreach (self::URL_PARAMS as $key) {
+        foreach (self::urlParamKeys() as $key) {
             $value = $params[$key] ?? null;
 
             if (! is_scalar($value) || $value === '') {
@@ -78,7 +80,10 @@ final class SessionTrafficAttribution
 
         return self::finalizeParsedAttribution(
             $params,
-            self::applyGoogleTrafficAliases($params, self::applyClickIdAliases($params, self::applyTrafficAliases($params, $parsed))),
+            self::applyGoogleTrafficAliases(
+                $params,
+                self::applyPlatformQueryAliases($params, self::applyTrafficAliases($params, $parsed)),
+            ),
         );
     }
 
@@ -121,29 +126,19 @@ final class SessionTrafficAttribution
      * @param  array<string, string>  $parsed
      * @return array<string, string>
      */
-    private static function applyClickIdAliases(array $params, array $parsed): array
+    private static function applyPlatformQueryAliases(array $params, array $parsed): array
     {
-        $clickIds = [
-            'fbclid' => ['utm_source' => 'facebook', 'utm_medium' => 'paid'],
-            'msclkid' => ['utm_source' => 'bing', 'utm_medium' => 'cpc'],
-            'ttclid' => ['utm_source' => 'tiktok', 'utm_medium' => 'paid'],
-            'twclid' => ['utm_source' => 'twitter', 'utm_medium' => 'paid'],
-            'li_fat_id' => ['utm_source' => 'linkedin', 'utm_medium' => 'paid'],
-            'epik' => ['utm_source' => 'pinterest', 'utm_medium' => 'paid'],
-            'sc_cid' => ['utm_source' => 'snapchat', 'utm_medium' => 'paid'],
-        ];
-
-        foreach ($clickIds as $param => $attribution) {
-            $hasClickId = isset($parsed[$param])
+        foreach (AttributionRules::PLATFORM_QUERY_PARAMS as $param => $definition) {
+            $hasParam = isset($parsed[$param])
                 || (is_scalar($params[$param] ?? null) && $params[$param] !== '');
 
-            if (! $hasClickId) {
+            if (! $hasParam) {
                 continue;
             }
 
-            foreach ($attribution as $field => $value) {
+            foreach (['utm_source', 'utm_medium'] as $field) {
                 if (! isset($parsed[$field])) {
-                    $parsed[$field] = $value;
+                    $parsed[$field] = $definition[$field];
                 }
             }
         }
@@ -227,7 +222,7 @@ final class SessionTrafficAttribution
      */
     private static function refererHostAttribution(): array
     {
-        return [
+        return array_merge([
             'google.' => [
                 'utm_source' => 'google',
                 'utm_medium' => 'organic',
@@ -284,7 +279,7 @@ final class SessionTrafficAttribution
                 'utm_source' => 'snapchat',
                 'utm_medium' => 'social',
             ],
-        ];
+        ], AttributionRules::refererHostAttributionMap());
     }
 
     /**
@@ -293,6 +288,16 @@ final class SessionTrafficAttribution
      */
     private static function mergeRefererAttribution(array $parsed, ?string $referer): array
     {
+        if (! filled($referer)) {
+            return $parsed;
+        }
+
+        foreach (self::parseFromUrl((string) $referer) as $key => $value) {
+            if (! isset($parsed[$key])) {
+                $parsed[$key] = $value;
+            }
+        }
+
         foreach (self::inferFromReferer($referer) as $key => $value) {
             if (! isset($parsed[$key])) {
                 $parsed[$key] = $value;
@@ -426,10 +431,12 @@ final class SessionTrafficAttribution
         array $actionPageUrls = [],
         ?string $referer = null,
     ): array {
+        $referer = filled($referer) ? $referer : self::refererFromActions($session, null);
+
         if ($parsed === []) {
             $parsed = self::buildParsedAttribution($session, $actionPageUrls, $referer);
         } else {
-            $parsed = self::mergeRefererAttribution($parsed, $referer ?? self::refererFromActions($session));
+            $parsed = self::mergeRefererAttribution($parsed, $referer);
         }
 
         $sessionSource = filled($session->utm_source ?? null)
@@ -469,6 +476,26 @@ final class SessionTrafficAttribution
         array $actionPageUrls = [],
         ?string $referer = null,
     ): array {
+        if ($actionPageUrls === [] && $referer === null) {
+            foreach (self::sessionAttributionUrls($session, null) as $url) {
+                $parsed = self::parseFromUrl($url);
+
+                if (! AttributionRules::isMarketingQualifyingTouch($parsed, $url)) {
+                    continue;
+                }
+
+                $source = self::normalizeSource((string) ($parsed['utm_source'] ?? '')) ?? ($parsed['utm_source'] ?? null);
+                $medium = filled($parsed['utm_medium'] ?? null) ? trim((string) $parsed['utm_medium']) : 'none';
+
+                if (filled($source)) {
+                    return [
+                        'source' => $source,
+                        'medium' => $medium,
+                    ];
+                }
+            }
+        }
+
         $utm = self::resolvedUtmFields($session, [], $actionPageUrls, $referer);
 
         $source = filled($utm['source'] ?? null)
@@ -493,7 +520,7 @@ final class SessionTrafficAttribution
     {
         $merged = [];
 
-        foreach (self::URL_PARAMS as $key) {
+        foreach (self::urlParamKeys() as $key) {
             if ($key === 'utm_source' || $key === 'utm_medium' || $key === 'utm_campaign') {
                 $columnValue = $session->{$key} ?? null;
 
@@ -505,7 +532,7 @@ final class SessionTrafficAttribution
             }
         }
 
-        foreach ([$session->landing_page ?? null, self::firstActionPageUrl($session, $actions)] as $url) {
+        foreach (self::sessionAttributionUrls($session, $actions) as $url) {
             foreach (self::parseFromUrl($url) as $key => $value) {
                 if (! isset($merged[$key])) {
                     $merged[$key] = $value;
@@ -519,12 +546,104 @@ final class SessionTrafficAttribution
     /**
      * @return array<string, string>
      */
+    public static function conversionDisplayFields(ActivityEcomUser $session): array
+    {
+        $fields = [];
+
+        if (filled($session->conversion_utm_source)) {
+            $fields['Conversion source'] = self::displaySourceLabel($session->conversion_utm_source)
+                ?? (string) $session->conversion_utm_source;
+        }
+
+        if (filled($session->conversion_utm_medium)) {
+            $fields['Conversion medium'] = (string) $session->conversion_utm_medium;
+        }
+
+        if (filled($session->conversion_utm_campaign)) {
+            $fields['Conversion campaign'] = (string) $session->conversion_utm_campaign;
+        }
+
+        if (filled($session->conversion_landing_page)) {
+            $fields['Conversion landing page'] = (string) $session->conversion_landing_page;
+        }
+
+        if ($session->conversion_touch_captured_at !== null) {
+            $fields['Conversion touch at'] = (string) $session->conversion_touch_captured_at;
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Purchase conversion when paid; otherwise 7-day visitor marketing attribution (if not direct).
+     *
+     * @return array<string, string>
+     */
+    public static function conversionOrMarketingDisplayFields(ActivityEcomUser $session): array
+    {
+        $conversion = self::conversionDisplayFields($session);
+
+        if ($conversion !== []) {
+            return $conversion;
+        }
+
+        $bucket = self::listTrafficDisplayBucket($session);
+
+        $source = $bucket['source'] ?? '(direct)';
+
+        if ($source === '(direct)') {
+            return [];
+        }
+
+        $fields = [
+            'Marketing source' => self::displaySourceLabel($source) ?? $source,
+        ];
+
+        $medium = $bucket['medium'] ?? null;
+
+        if (filled($medium) && $medium !== 'none') {
+            $fields['Marketing medium'] = (string) $medium;
+        }
+
+        $visitorId = trim((string) ($session->visitor_id ?? ''));
+        $referenceAt = TrackerTime::toUtc($session->last_active_at ?? $session->created_at);
+
+        if ($visitorId !== '' && $referenceAt !== null) {
+            $touch = self::lastMarketingTouchForVisitorBefore($visitorId, $referenceAt);
+            $touchSource = filled($touch['utm_source'] ?? null)
+                ? (self::normalizeSource((string) $touch['utm_source']) ?? $touch['utm_source'])
+                : null;
+
+            if ($touch !== null && $touchSource === $source) {
+                if (filled($touch['utm_campaign'] ?? null)) {
+                    $fields['Marketing campaign'] = (string) $touch['utm_campaign'];
+                }
+
+                $touchLanding = $touch['landing_page'] ?? null;
+
+                if (filled($touchLanding)
+                    && AttributionRules::isMarketingQualifyingTouch(
+                        self::parseFromUrl((string) $touchLanding),
+                        (string) $touchLanding,
+                    )) {
+                    $fields['Touch landing page'] = (string) $touchLanding;
+                }
+
+                if ($touch['captured_at'] !== null) {
+                    $fields['Touch at'] = TrackerTime::formatFromStorage($touch['captured_at'], 'd M Y, h:i A');
+                }
+            }
+        }
+
+        return $fields;
+    }
+
     public static function displayFields(ActivityEcomUser $session, ?Collection $actions = null): array
     {
         $attribution = self::forSession($session, $actions);
         $fields = [];
 
-        foreach (self::URL_PARAMS as $key) {
+        foreach (self::urlParamKeys() as $key) {
             if (! isset($attribution[$key])) {
                 continue;
             }
@@ -547,7 +666,7 @@ final class SessionTrafficAttribution
     public static function listRowSummary(ActivityEcomUser $session): array
     {
         $parsed = self::parseFromUrl($session->landing_page ?? null);
-        $utm = self::resolvedUtmFields($session, $parsed, [], '');
+        $utm = self::resolvedUtmFields($session, $parsed);
         $utmParts = array_values(array_filter([$utm['medium'], $utm['campaign']], fn ($value) => filled($value)));
         $source = $utm['source'] ?? null;
 
@@ -630,26 +749,154 @@ final class SessionTrafficAttribution
             return false;
         }
 
-        $updates = [];
+        $landing = filled($session->landing_page)
+            ? null
+            : ($pageUrl ?: ($urls[0] ?? null));
 
-        foreach (self::SESSION_COLUMNS as $column) {
-            if (filled($session->{$column})) {
+        return self::applyBackfillUpdates($session, $parsed, $landing);
+    }
+
+    public static function backfillFromFirstAction(ActivityEcomUser $session): bool
+    {
+        return self::backfillFromAllActions($session);
+    }
+
+    /**
+     * Re-parse landing page and every action page_url / referer (earliest wins for empty columns).
+     */
+    /**
+     * @return array{parsed: array<string, string>, first_page_url: ?string}
+     */
+    /**
+     * Last marketing touch for a visitor from stored actions on or before {@see $paymentAt} (7-day window).
+     *
+     * @return array{utm_source: ?string, utm_medium: ?string, utm_campaign: ?string, landing_page: ?string, captured_at: Carbon}|null
+     */
+    public static function lastMarketingTouchForVisitorBefore(string $visitorId, Carbon $paymentAt): ?array
+    {
+        if ($visitorId === '') {
+            return null;
+        }
+
+        $paymentAt = $paymentAt->copy()->utc();
+        $windowStart = $paymentAt->copy()->subDays(AttributionRules::attributionWindowDays());
+
+        $rows = DB::table('activity_ecom_user_actions as a')
+            ->join('activity_ecom_user as s', 's.session_id', '=', 'a.session_id')
+            ->where('s.visitor_id', $visitorId)
+            ->where('a.created_at', '>=', $windowStart)
+            ->where('a.created_at', '<=', $paymentAt)
+            ->orderBy('a.created_at')
+            ->orderBy('a.id')
+            ->get([
+                'a.page_url',
+                'a.referer',
+                'a.created_at',
+                's.landing_page',
+            ]);
+
+        $last = null;
+
+        foreach ($rows as $row) {
+            $capturedAt = Carbon::parse((string) $row->created_at)->utc();
+
+            $ingest = self::sessionAttributesFromIngest(
+                ['landing_page' => $row->landing_page],
+                filled($row->page_url) ? (string) $row->page_url : null,
+                filled($row->referer) ? (string) $row->referer : null,
+            );
+
+            $parsed = [
+                'utm_source' => $ingest['utm_source'] ?? null,
+                'utm_medium' => $ingest['utm_medium'] ?? null,
+                'utm_campaign' => $ingest['utm_campaign'] ?? null,
+            ];
+
+            $landing = $ingest['landing_page'] ?? ($row->page_url ?: $row->landing_page);
+
+            if (! AttributionRules::isMarketingQualifyingTouch($parsed, is_string($landing) ? $landing : null)) {
                 continue;
             }
 
-            if ($column === 'landing_page') {
-                $landing = $pageUrl ?: ($urls[0] ?? null);
+            $last = [
+                'utm_source' => self::normalizeSource((string) ($parsed['utm_source'] ?? '')) ?? $parsed['utm_source'],
+                'utm_medium' => $parsed['utm_medium'],
+                'utm_campaign' => $parsed['utm_campaign'],
+                'landing_page' => is_string($landing) ? $landing : null,
+                'captured_at' => $capturedAt,
+            ];
+        }
 
-                if (filled($landing)) {
-                    $updates[$column] = $landing;
-                }
+        return $last;
+    }
 
+    public static function collectAttributionFromSessionActions(ActivityEcomUser $session): array
+    {
+        $parsed = self::parseFromUrl($session->landing_page ?? null);
+        $firstPageUrl = null;
+
+        $actions = ActivityEcomUserAction::query()
+            ->where('session_id', $session->session_id)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['page_url', 'referer']);
+
+        foreach ($actions as $action) {
+            if ($firstPageUrl === null && filled($action->page_url)) {
+                $firstPageUrl = (string) $action->page_url;
+            }
+
+            if (filled($action->page_url)) {
+                $parsed = array_merge($parsed, self::parseFromUrl((string) $action->page_url));
+            }
+
+            $parsed = self::mergeRefererAttribution($parsed, filled($action->referer) ? (string) $action->referer : null);
+        }
+
+        return [
+            'parsed' => $parsed,
+            'first_page_url' => $firstPageUrl,
+        ];
+    }
+
+    public static function backfillFromAllActions(ActivityEcomUser $session): bool
+    {
+        $collected = self::collectAttributionFromSessionActions($session);
+        $parsed = $collected['parsed'];
+        $firstPageUrl = $collected['first_page_url'];
+
+        if ($parsed === [] && ! filled($session->landing_page) && $firstPageUrl === null) {
+            return false;
+        }
+
+        $landing = filled($session->landing_page) ? null : $firstPageUrl;
+
+        return self::applyBackfillUpdates($session, $parsed, $landing);
+    }
+
+    /**
+     * @param  array<string, string>  $parsed
+     */
+    private static function applyBackfillUpdates(ActivityEcomUser $session, array $parsed, ?string $preferredLandingPage = null): bool
+    {
+        $updates = [];
+
+        foreach (['utm_source', 'utm_medium', 'utm_campaign'] as $column) {
+            if ($column === 'utm_source' && ! AttributionRules::sessionUtmSourceIsEmpty($session->utm_source)) {
+                continue;
+            }
+
+            if ($column !== 'utm_source' && filled($session->{$column})) {
                 continue;
             }
 
             if (isset($parsed[$column])) {
                 $updates[$column] = $parsed[$column];
             }
+        }
+
+        if (! filled($session->landing_page) && filled($preferredLandingPage)) {
+            $updates['landing_page'] = $preferredLandingPage;
         }
 
         if ($updates === []) {
@@ -659,19 +906,6 @@ final class SessionTrafficAttribution
         $session->update($updates);
 
         return true;
-    }
-
-    public static function backfillFromFirstAction(ActivityEcomUser $session): bool
-    {
-        $action = ActivityEcomUserAction::query()
-            ->where('session_id', $session->session_id)
-            ->whereNotNull('page_url')
-            ->where('page_url', '!=', '')
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->first();
-
-        return self::backfillSession($session, $action?->page_url);
     }
 
     public static function backfillAllMissing(int $chunkSize = 100): int
@@ -694,6 +928,52 @@ final class SessionTrafficAttribution
             });
 
         return $updated;
+    }
+
+    /**
+     * Landing, first action URLs, and referers (earliest first) for session-level attribution display.
+     *
+     * @param  Collection<int, ActivityEcomUserAction>|null  $actions
+     * @return list<string>
+     */
+    private static function sessionAttributionUrls(object $session, ?Collection $actions = null): array
+    {
+        $urls = [];
+        $seen = [];
+
+        $push = static function (?string $url) use (&$urls, &$seen): void {
+            if (! filled($url)) {
+                return;
+            }
+
+            $url = (string) $url;
+
+            if (isset($seen[$url])) {
+                return;
+            }
+
+            $seen[$url] = true;
+            $urls[] = $url;
+        };
+
+        $push($session->landing_page ?? null);
+
+        if ($actions !== null) {
+            $sorted = $actions->sortBy([
+                ['created_at', 'asc'],
+                ['id', 'asc'],
+            ]);
+
+            foreach ($sorted as $action) {
+                $push(filled($action->page_url ?? null) ? (string) $action->page_url : null);
+                $push(filled($action->referer ?? null) ? (string) $action->referer : null);
+            }
+        } elseif (! filled($session->landing_page ?? null)) {
+            $push(self::firstActionPageUrl($session));
+            $push(self::refererFromActions($session));
+        }
+
+        return $urls;
     }
 
     /**
@@ -748,6 +1028,125 @@ final class SessionTrafficAttribution
             ->value('referer');
     }
 
+    /**
+     * @return array{utm_source: string, traffic_type: string, paid_click_id: string}
+     */
+    public static function exportTrafficFields(ActivityEcomUser $session): array
+    {
+        $attribution = self::attributionFromSessionRecord($session);
+        $sourceKey = filled($session->utm_source ?? null)
+            ? (self::normalizeSource((string) $session->utm_source) ?? (string) $session->utm_source)
+            : (isset($attribution['utm_source'])
+                ? (self::normalizeSource($attribution['utm_source']) ?? $attribution['utm_source'])
+                : null);
+        $medium = filled($session->utm_medium ?? null)
+            ? strtolower(trim((string) $session->utm_medium))
+            : strtolower(trim((string) ($attribution['utm_medium'] ?? '')));
+        $isPaid = self::isPaidTraffic($medium, $attribution);
+        $isOrganic = ! $isPaid && $medium === 'organic';
+
+        $trafficType = $isPaid
+            ? 'Paid'
+            : ($isOrganic ? 'Organic' : (filled($medium) && $medium !== 'none' ? ucfirst($medium) : '—'));
+
+        return [
+            'utm_source' => self::displaySourceLabel($sourceKey) ?? '—',
+            'traffic_type' => $trafficType,
+            'paid_click_id' => $isPaid ? (self::resolvePaidClickId($attribution, $sourceKey) ?? '—') : '—',
+        ];
+    }
+
+    /**
+     * Resolve attribution from persisted session fields only (no action queries).
+     *
+     * @return array<string, string>
+     */
+    private static function attributionFromSessionRecord(ActivityEcomUser $session): array
+    {
+        $merged = self::parseFromUrl($session->landing_page ?? null);
+
+        foreach (['utm_source', 'utm_medium', 'utm_campaign'] as $key) {
+            $columnValue = $session->{$key} ?? null;
+
+            if (filled($columnValue)) {
+                $merged[$key] = $key === 'utm_source'
+                    ? (self::normalizeSource((string) $columnValue) ?? (string) $columnValue)
+                    : (string) $columnValue;
+            }
+        }
+
+        return $merged;
+    }
+
+    private static function isPaidTraffic(string $medium, array $attribution): bool
+    {
+        if (in_array($medium, ['paid', 'cpc'], true)) {
+            return true;
+        }
+
+        foreach ([
+            'gclid',
+            'gbraid',
+            'wbraid',
+            'fbclid',
+            'msclkid',
+            'ttclid',
+            'twclid',
+            'li_fat_id',
+            'epik',
+            'sc_cid',
+        ] as $key) {
+            if (filled($attribution[$key] ?? null)) {
+                return true;
+            }
+        }
+
+        return isset($attribution['gad_campaignid']) || isset($attribution['gad_source']);
+    }
+
+    /**
+     * @param  array<string, string>  $attribution
+     */
+    private static function resolvePaidClickId(array $attribution, ?string $sourceKey): ?string
+    {
+        $sourceKey = self::normalizeSource($sourceKey ?? '') ?? $sourceKey;
+
+        if ($sourceKey === 'google') {
+            return $attribution['gclid']
+                ?? $attribution['gad_campaignid']
+                ?? $attribution['gbraid']
+                ?? $attribution['wbraid']
+                ?? null;
+        }
+
+        if (in_array($sourceKey, ['facebook', 'instagram'], true)) {
+            return $attribution['fbclid']
+                ?? $attribution['utm_id']
+                ?? null;
+        }
+
+        return match ($sourceKey) {
+            'bing' => $attribution['msclkid'] ?? null,
+            'tiktok' => $attribution['ttclid'] ?? null,
+            'twitter' => $attribution['twclid'] ?? null,
+            'linkedin' => $attribution['li_fat_id'] ?? null,
+            'pinterest' => $attribution['epik'] ?? null,
+            'snapchat' => $attribution['sc_cid'] ?? null,
+            'awin' => $attribution['awc'] ?? null,
+            default => $attribution['utm_id']
+                ?? $attribution['gclid']
+                ?? $attribution['fbclid']
+                ?? $attribution['msclkid']
+                ?? $attribution['ttclid']
+                ?? $attribution['twclid']
+                ?? $attribution['li_fat_id']
+                ?? $attribution['epik']
+                ?? $attribution['sc_cid']
+                ?? $attribution['gad_campaignid']
+                ?? null,
+        };
+    }
+
     private static function label(string $key): string
     {
         return match ($key) {
@@ -760,6 +1159,7 @@ final class SessionTrafficAttribution
             'media_type' => 'Media type',
             'fbclid' => 'Facebook click ID',
             'gclid' => 'Google click ID',
+            'srsltid' => 'Google Shopping / Search listing ID',
             'gbraid' => 'Google iOS click ID',
             'wbraid' => 'Google web click ID',
             'gad_source' => 'Google ad source',
@@ -773,5 +1173,130 @@ final class SessionTrafficAttribution
             'sc_cid' => 'Snapchat click ID',
             default => str_replace('_', ' ', ucfirst($key)),
         };
+    }
+
+    /**
+     * Activity list columns: stored 7-day bucket when present, else compute.
+     *
+     * @return array{source: string, medium: string}
+     */
+    public static function listTrafficDisplayBucket(object $session): array
+    {
+        if (filled($session->list_traffic_utm_source ?? null)) {
+            return [
+                'source' => (string) $session->list_traffic_utm_source,
+                'medium' => filled($session->list_traffic_utm_medium ?? null)
+                    ? (string) $session->list_traffic_utm_medium
+                    : 'none',
+            ];
+        }
+
+        $visitBucket = self::resolvedTrafficBucket($session);
+
+        if ($visitBucket['source'] !== '(direct)' && trim((string) ($session->visitor_id ?? '')) === '') {
+            return $visitBucket;
+        }
+
+        return self::resolveListTrafficBucket($session);
+    }
+
+    /**
+     * Dashboard traffic-source table: session-row fields only (no per-visitor touch queries).
+     *
+     * @return array{source: string, medium: string}
+     */
+    public static function dashboardTrafficDisplayBucket(object $session): array
+    {
+        if (filled($session->list_traffic_utm_source ?? null)) {
+            return [
+                'source' => (string) $session->list_traffic_utm_source,
+                'medium' => filled($session->list_traffic_utm_medium ?? null)
+                    ? (string) $session->list_traffic_utm_medium
+                    : 'none',
+            ];
+        }
+
+        if (! empty($session->has_payment_success) && filled($session->conversion_utm_source ?? null)) {
+            $source = self::normalizeSource((string) $session->conversion_utm_source)
+                ?? (string) $session->conversion_utm_source;
+            $medium = filled($session->conversion_utm_medium ?? null)
+                ? trim((string) $session->conversion_utm_medium)
+                : 'none';
+
+            return ['source' => $source, 'medium' => $medium];
+        }
+
+        if (filled($session->utm_source ?? null)) {
+            $source = self::normalizeSource((string) $session->utm_source)
+                ?? (string) $session->utm_source;
+
+            return [
+                'source' => $source,
+                'medium' => filled($session->utm_medium ?? null)
+                    ? trim((string) $session->utm_medium)
+                    : 'none',
+            ];
+        }
+
+        if (filled($session->landing_page ?? null)) {
+            return self::resolvedTrafficBucket($session);
+        }
+
+        return ['source' => '(direct)', 'medium' => 'none'];
+    }
+
+    /**
+     * Activity list / filters: conversion on paid orders, else 7-day visitor last touch, else this session.
+     *
+     * @return array{source: string, medium: string}
+     */
+    public static function resolveListTrafficBucket(object $session): array
+    {
+        if ($session->has_payment_success && filled($session->conversion_utm_source)) {
+            $source = self::normalizeSource((string) $session->conversion_utm_source)
+                ?? (string) $session->conversion_utm_source;
+            $medium = filled($session->conversion_utm_medium)
+                ? trim((string) $session->conversion_utm_medium)
+                : 'none';
+
+            return ['source' => $source, 'medium' => $medium];
+        }
+
+        $visitorId = trim((string) ($session->visitor_id ?? ''));
+        $referenceAt = TrackerTime::toUtc($session->last_active_at ?? $session->created_at);
+
+        if ($visitorId !== '' && $referenceAt !== null) {
+            $touch = self::lastMarketingTouchForVisitorBefore($visitorId, $referenceAt);
+
+            if ($touch !== null && filled($touch['utm_source'] ?? null)) {
+                $medium = filled($touch['utm_medium'] ?? null)
+                    ? trim((string) $touch['utm_medium'])
+                    : 'none';
+
+                return [
+                    'source' => self::normalizeSource((string) $touch['utm_source']) ?? (string) $touch['utm_source'],
+                    'medium' => $medium,
+                ];
+            }
+        }
+
+        return self::resolvedTrafficBucket($session);
+    }
+
+    public static function syncListTrafficAttributionColumns(ActivityEcomUser $session): bool
+    {
+        $bucket = self::resolveListTrafficBucket($session);
+
+        if ($session->list_traffic_utm_source === $bucket['source']
+            && $session->list_traffic_utm_medium === $bucket['medium']) {
+            return false;
+        }
+
+        $session->forceFill([
+            'list_traffic_utm_source' => $bucket['source'],
+            'list_traffic_utm_medium' => $bucket['medium'],
+        ])->save();
+
+        return true;
     }
 }

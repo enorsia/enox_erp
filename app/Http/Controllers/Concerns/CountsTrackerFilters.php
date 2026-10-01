@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Concerns;
 use App\Models\TrackerUtmFilter;
 use App\Services\EcomTrackerDashboardService;
 use App\Support\EcomActivityFocus;
+use App\Support\TrackerMultiSelectFilter;
 use App\Support\VisitorClassificationLabels;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 trait CountsTrackerFilters
@@ -59,8 +61,21 @@ trait CountsTrackerFilters
         );
         $filters = $request->only($keys);
 
-        $filters['utm_source'] = TrackerUtmFilter::resolveSource($filters['utm_source'] ?? null) ?? '';
-        $filters['utm_medium'] = TrackerUtmFilter::resolveMedium($filters['utm_medium'] ?? null) ?? '';
+        $sources = TrackerMultiSelectFilter::values($filters['utm_source'] ?? null);
+        $mediums = TrackerMultiSelectFilter::values($filters['utm_medium'] ?? null);
+
+        $filters['utm_source'] = $sources === []
+            ? ''
+            : (count($sources) === 1 ? (TrackerUtmFilter::resolveSource($sources[0]) ?? '') : array_values(array_filter(array_map(
+                static fn (string $value) => TrackerUtmFilter::resolveSource($value),
+                $sources,
+            ))));
+        $filters['utm_medium'] = $mediums === []
+            ? ''
+            : (count($mediums) === 1 ? (TrackerUtmFilter::resolveMedium($mediums[0]) ?? '') : array_values(array_filter(array_map(
+                static fn (string $value) => TrackerUtmFilter::resolveMedium($value),
+                $mediums,
+            ))));
 
         return $filters;
     }
@@ -74,6 +89,49 @@ trait CountsTrackerFilters
         $filters['period'] = filled($filters['period'] ?? null) ? $filters['period'] : '24h';
 
         return $filters;
+    }
+
+    protected function dashboardDateActiveFilterCount(Request $request): int
+    {
+        $count = 0;
+
+        if (($request->input('period') ?? '24h') !== '24h' || filled($request->input('date_from'))) {
+            $count++;
+        }
+
+        return $count;
+    }
+
+    protected function redirectIfDashboardHasLegacyFilters(Request $request): ?RedirectResponse
+    {
+        if (! $this->requestHasDashboardLegacyFilters($request)) {
+            return null;
+        }
+
+        return redirect()->route(
+            'admin.ecom-tracker.dashboard',
+            $request->only(['period', 'date_from', 'date_to']),
+        );
+    }
+
+    protected function redirectIfDashboardDetailHasLegacyFilters(Request $request, string $section): ?RedirectResponse
+    {
+        if (! $this->requestHasDashboardLegacyFilters($request)) {
+            return null;
+        }
+
+        return redirect()->route('admin.ecom-tracker.dashboard.details', array_merge(
+            ['section' => $section],
+            $request->only(['period', 'date_from', 'date_to', 'back']),
+        ));
+    }
+
+    protected function requestHasDashboardLegacyFilters(Request $request): bool
+    {
+        $legacy = $request->only(\App\Support\EcomTrackerViewData::dashboardLegacyFilterQueryKeys());
+        $legacy = array_filter($legacy, static fn ($value) => is_array($value) ? $value !== [] : filled($value));
+
+        return $legacy !== [];
     }
 
     /**
@@ -112,12 +170,26 @@ trait CountsTrackerFilters
             $addChip('Country: '.$request->country, 'country');
         }
 
-        if ($request->filled('utm_source')) {
-            $addChip('Source: '.$request->utm_source, 'utm_source');
+        if (TrackerMultiSelectFilter::requestFilled($request, 'utm_source')) {
+            $sourceLabels = collect(TrackerMultiSelectFilter::requestValues($request, 'utm_source'))
+                ->map(function (string $source): string {
+                    $key = TrackerUtmFilter::resolveSource($source) ?? $source;
+
+                    return TrackerUtmFilter::sources()[$key] ?? $key;
+                })
+                ->implode(', ');
+            $addChip('Source: '.$sourceLabels, 'utm_source');
         }
 
-        if ($request->filled('utm_medium')) {
-            $addChip('Medium: '.$request->utm_medium, 'utm_medium');
+        if (TrackerMultiSelectFilter::requestFilled($request, 'utm_medium')) {
+            $mediumLabels = collect(TrackerMultiSelectFilter::requestValues($request, 'utm_medium'))
+                ->map(function (string $medium): string {
+                    $key = TrackerUtmFilter::resolveMedium($medium) ?? $medium;
+
+                    return TrackerUtmFilter::mediums()[$key] ?? $key;
+                })
+                ->implode(', ');
+            $addChip('Medium: '.$mediumLabels, 'utm_medium');
         }
 
         if (! $includeProductCatalog) {

@@ -3,6 +3,7 @@
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerUtmFilter;
+use App\Support\AttributionRules;
 use App\Support\SessionTrafficAttribution;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -54,6 +55,18 @@ test('session traffic attribution parses google ads url aliases', function () {
     ]);
 });
 
+test('session traffic attribution parses google shopping srsltid as google organic', function () {
+    $url = 'https://enorsia.com/?srsltid=AU7gw4XiJboHLxigC8HTTtD5mvjiEa80RbjxTr9D6oRqf6_0oivU0qx8';
+
+    expect(SessionTrafficAttribution::parseFromUrl($url))->toMatchArray([
+        'srsltid' => 'AU7gw4XiJboHLxigC8HTTtD5mvjiEa80RbjxTr9D6oRqf6_0oivU0qx8',
+        'utm_source' => 'google',
+        'utm_medium' => 'organic',
+    ]);
+    expect(AttributionRules::isMarketingQualifyingTouch([], $url))->toBeTrue();
+    expect(AttributionRules::isPaidQualifyingTouch([], $url))->toBeFalse();
+});
+
 test('session traffic attribution normalizes utm_source aliases', function () {
     expect(SessionTrafficAttribution::normalizeSource('fb'))->toBe('facebook')
         ->and(SessionTrafficAttribution::normalizeSource('meta'))->toBe('facebook')
@@ -99,6 +112,21 @@ test('session traffic attribution infers social platforms from referer', functio
     expect(SessionTrafficAttribution::inferFromReferer('https://www.tiktok.com/'))->toMatchArray([
         'utm_source' => 'tiktok',
         'utm_medium' => 'social',
+    ]);
+});
+
+test('session traffic attribution resolves awin affiliate from same site referer query string', function () {
+    $referer = 'https://enorsia.com/shop/clearance-sale?source=aw&utm_source=awin&sv1=affiliate&sv_campaign_id=80338&awc=118905_1790326895_b0cb967922f7ef15871e672b564b1178';
+
+    expect(SessionTrafficAttribution::sessionAttributesFromIngest(
+        ['landing_page' => 'https://enorsia.com/order/tracking'],
+        'https://enorsia.com/style/womens-butterfly-print-sweatshirt?color=navy',
+        $referer,
+    ))->toMatchArray([
+        'utm_source' => 'awin',
+        'utm_medium' => 'affiliate',
+        'utm_campaign' => '80338',
+        'landing_page' => 'https://enorsia.com/style/womens-butterfly-print-sweatshirt?color=navy',
     ]);
 });
 
@@ -268,6 +296,42 @@ test('session traffic attribution backfills google organic from referer during b
     expect($session->utm_source)->toBe('google')
         ->and($session->utm_medium)->toBe('organic')
         ->and($session->landing_page)->toBe('https://enorsia.com/c/women');
+});
+
+test('session traffic attribution backfills awin from first action referer when page url is clean', function () {
+    $session = ActivityEcomUser::query()->create([
+        'session_id' => 'awin-referer-session',
+        'landing_page' => 'https://enorsia.com/order/tracking',
+        'device_type' => 'desktop',
+        'created_at' => now(),
+        'updated_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    $referer = 'https://enorsia.com/shop/clearance-sale?source=aw&utm_source=awin&sv1=affiliate&sv_campaign_id=80338&awc=abc123';
+
+    ActivityEcomUserAction::query()->create([
+        'session_id' => 'awin-referer-session',
+        'action_type' => 'product_view',
+        'page_url' => 'https://enorsia.com/style/test?color=navy',
+        'referer' => $referer,
+        'created_at' => now(),
+    ]);
+
+    expect(SessionTrafficAttribution::backfillFromFirstAction($session))->toBeTrue();
+
+    $session->refresh();
+
+    expect($session->utm_source)->toBe('awin')
+        ->and($session->utm_medium)->toBe('affiliate')
+        ->and($session->utm_campaign)->toBe('80338');
+
+    $session->load(['firstAction', 'firstRefererAction']);
+
+    expect(SessionTrafficAttribution::resolvedTrafficBucket($session))->toMatchArray([
+        'source' => 'awin',
+        'medium' => 'affiliate',
+    ]);
 });
 
 test('session traffic attribution backfills session columns from first action url', function () {

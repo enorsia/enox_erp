@@ -2,7 +2,8 @@
 
 namespace App\Support;
 
-use App\Models\TrackerUtmFilter;
+use App\Services\EcomTrackerDashboardService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 final class EcomTrackerViewData
@@ -12,8 +13,16 @@ final class EcomTrackerViewData
      */
     public static function dashboardQueryKeys(): array
     {
+        return ['period', 'date_from', 'date_to'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function dashboardLegacyFilterQueryKeys(): array
+    {
         return [
-            'period', 'date_from', 'date_to', 'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
+            'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
             'utm_source', 'utm_medium', 'search', 'category', 'color', 'size', 'sort_by', 'activity',
             'has_purchases', 'has_views', 'has_adds', 'event_scenario',
         ];
@@ -63,6 +72,33 @@ final class EcomTrackerViewData
     }
 
     /**
+     * @param  array<string, mixed>  $sideFilters
+     * @return array{activityFocusLink: callable, activitySourceLink: callable, detailLink: callable}
+     */
+    public static function forCompareColumn(array $sideFilters, string $compareSelfUrl): array
+    {
+        return [
+            'detailLink' => fn (string $section) => self::activityDrillDownLink(
+                EcomActivityFocus::fromSection($section) ?? 'audience',
+                $sideFilters,
+                self::dashboardSectionDrillExtras($section),
+                $compareSelfUrl,
+            ),
+            'activityFocusLink' => fn (string $focus, array $extra = []) => self::activityDrillDownLink(
+                $focus,
+                $sideFilters,
+                $extra,
+                $compareSelfUrl,
+            ),
+            'activitySourceLink' => fn (string $source) => self::activitySourceLink(
+                $sideFilters,
+                $source,
+                $compareSelfUrl,
+            ),
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function activityShowParams(string $sessionId, ?string $back = null): array
@@ -70,11 +106,9 @@ final class EcomTrackerViewData
         $params = ['session' => $sessionId];
 
         if (filled($back)) {
-            $params['back'] = $back;
-        } elseif (request()->filled('back')) {
-            $params['back'] = request()->input('back');
-        } else {
-            $params['back'] = request()->fullUrl();
+            $params['back'] = self::encodeNavigationUrl($back);
+        } elseif (request()->routeIs('admin.ecom-activity.index') || request()->routeIs('admin.ecom-activity.show')) {
+            $params['back'] = self::requestNavigationUrl(request());
         }
 
         return $params;
@@ -90,7 +124,7 @@ final class EcomTrackerViewData
             'device_type', 'logged_in', 'has_order', 'country', 'visitor_type',
             'utm_source', 'utm_medium', 'duration_bucket', 'search', 'category', 'department', 'color', 'size',
             'product_code', 'product_name', 'activity', 'has_purchases', 'has_views', 'has_adds', 'event_scenario',
-            'sort_by', 'sort_dir',
+            'sort_by', 'sort_dir', 'page',
         ];
     }
 
@@ -156,11 +190,131 @@ final class EcomTrackerViewData
     }
 
     /**
-     * Build show URL preserving current list filters for back navigation.
+     * Open a session from the current page; the current URL becomes the show page `back` target.
      */
     public static function activityShowUrlFromRequest(Request $request, string $sessionId): string
     {
-        return self::activityShowUrl($sessionId, $request->fullUrl());
+        if ($request->routeIs('admin.ecom-activity.show') || $request->routeIs('admin.ecom-activity.index')) {
+            return self::activityShowUrl($sessionId, self::requestNavigationUrl($request));
+        }
+
+        $back = self::resolveBackUrl($request->input('back'));
+
+        return self::activityShowUrl(
+            $sessionId,
+            $back ?? route('admin.ecom-activity.index', self::activityIndexQueryFromRequest($request)),
+        );
+    }
+
+    /**
+     * ← Back on session detail: previous page (list, dashboard, or another session).
+     */
+    public static function activityListBackUrlForShow(Request $request): string
+    {
+        $fromParam = self::resolveBackUrl($request->input('back'));
+
+        if ($fromParam !== null) {
+            return self::encodeNavigationUrl($fromParam);
+        }
+
+        return route('admin.ecom-activity.index', self::activityIndexQueryFromRequest($request));
+    }
+
+    /**
+     * Canonical URL for the current request (safe nested back= values with ? and #).
+     */
+    public static function requestNavigationUrl(Request $request): string
+    {
+        $query = $request->query();
+
+        if ($query === []) {
+            return $request->url();
+        }
+
+        return $request->url().'?'.http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    }
+
+    /**
+     * Re-encode query params so nested back URLs (dashboard hashes, etc.) survive in hrefs.
+     */
+    public static function encodeNavigationUrl(string $url): string
+    {
+        if (! str_contains($url, '://')) {
+            return $url;
+        }
+
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+        $host = parse_url($url, PHP_URL_HOST);
+        $port = parse_url($url, PHP_URL_PORT);
+        $path = parse_url($url, PHP_URL_PATH);
+
+        if (! is_string($scheme) || ! is_string($host) || ! is_string($path)) {
+            return $url;
+        }
+
+        $queryStart = strpos($url, '?');
+
+        if ($queryStart === false) {
+            return $url;
+        }
+
+        $queryString = substr($url, $queryStart + 1);
+        $query = self::parseQueryStringPreservingNestedUrls($queryString);
+
+        $built = $scheme.'://'.$host
+            .(is_int($port) ? ':'.$port : '')
+            .$path;
+
+        if ($query !== []) {
+            $built .= '?'.http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+        }
+
+        return $built;
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    private static function parseQueryStringPreservingNestedUrls(string $queryString): array
+    {
+        $query = [];
+
+        foreach (explode('&', $queryString) as $pair) {
+            if ($pair === '') {
+                continue;
+            }
+
+            $equalsAt = strpos($pair, '=');
+
+            if ($equalsAt === false) {
+                $query[rawurldecode($pair)] = '';
+
+                continue;
+            }
+
+            $key = rawurldecode(substr($pair, 0, $equalsAt));
+            $value = rawurldecode(substr($pair, $equalsAt + 1));
+            $query[$key] = $value;
+        }
+
+        return $query;
+    }
+
+    public static function isActivityIndexUrl(string $url): bool
+    {
+        $path = (string) (parse_url($url, PHP_URL_PATH) ?? '');
+
+        return (bool) preg_match('#/admin/ecom-activity/?$#', $path);
+    }
+
+    public static function isActivityShowUrl(string $url): bool
+    {
+        $path = (string) (parse_url($url, PHP_URL_PATH) ?? '');
+
+        return (bool) preg_match(
+            '#/admin/ecom-activity/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/?$#i',
+            $path,
+        );
     }
 
     /**
@@ -192,7 +346,7 @@ final class EcomTrackerViewData
 
     public static function dashboardShortcutUrl(Request $request): string
     {
-        return route('admin.ecom-tracker.dashboard', self::sharedNavigationQuery($request));
+        return route('admin.ecom-tracker.dashboard', $request->only(self::dashboardQueryKeys()));
     }
 
     public static function activityShortcutUrl(Request $request): string
@@ -225,6 +379,34 @@ final class EcomTrackerViewData
     /**
      * Decode back URLs from query params (handles legacy double-encoded values).
      */
+    /**
+     * @return array<string, string>|null
+     */
+    public static function dashboardQueryFromBackUrl(?string $back): ?array
+    {
+        $resolved = self::resolveBackUrl($back);
+
+        if ($resolved === null || ! str_contains($resolved, 'ecom-tracker/dashboard')) {
+            return null;
+        }
+
+        $queryString = parse_url($resolved, PHP_URL_QUERY);
+
+        if (! is_string($queryString) || $queryString === '') {
+            return null;
+        }
+
+        $query = [];
+
+        parse_str($queryString, $query);
+
+        return array_filter([
+            'period' => isset($query['period']) ? (string) $query['period'] : null,
+            'date_from' => isset($query['date_from']) ? (string) $query['date_from'] : null,
+            'date_to' => isset($query['date_to']) ? (string) $query['date_to'] : null,
+        ], fn ($value) => filled($value));
+    }
+
     public static function resolveBackUrl(?string $back, ?string $fallback = null): ?string
     {
         if (! filled($back)) {
@@ -233,8 +415,8 @@ final class EcomTrackerViewData
 
         $decoded = (string) $back;
 
-        for ($i = 0; $i < 3 && str_contains($decoded, '%'); $i++) {
-            $next = urldecode($decoded);
+        for ($i = 0; $i < 8 && str_contains($decoded, '%'); $i++) {
+            $next = rawurldecode($decoded);
 
             if ($next === $decoded) {
                 break;
@@ -248,17 +430,23 @@ final class EcomTrackerViewData
 
     /**
      * @param  array<string, mixed>  $baseQuery
-     * @param  array{from: \Carbon\Carbon, to: \Carbon\Carbon}  $range
+     * @param  array{from: Carbon, to: Carbon}  $range
      * @return array{previous_url: string, next_url: ?string, can_go_next: bool}
      */
-    public static function dashboardDayNavigation(array $baseQuery, array $range, string $routeName = 'admin.ecom-tracker.dashboard'): array
-    {
+    public static function dashboardDayNavigation(
+        array $baseQuery,
+        array $range,
+        string $routeName = 'admin.ecom-tracker.dashboard',
+        string $periodKey = 'period',
+        string $dateFromKey = 'date_from',
+        string $dateToKey = 'date_to',
+    ): array {
         $fromLocal = TrackerTime::toLocal($range['from']);
         $toLocal = TrackerTime::toLocal($range['to']);
 
         if ($fromLocal === null || $toLocal === null) {
             return [
-                'previous_url' => route($routeName, array_merge($baseQuery, ['period' => '24h'])),
+                'previous_url' => route($routeName, array_merge($baseQuery, [$periodKey => '24h'])),
                 'next_url' => null,
                 'can_go_next' => false,
             ];
@@ -273,6 +461,9 @@ final class EcomTrackerViewData
                 $fromLocal->copy()->subDay(),
                 $toLocal->copy()->subDay(),
                 $routeName,
+                $periodKey,
+                $dateFromKey,
+                $dateToKey,
             ),
             'next_url' => $canGoNext
                 ? self::dashboardPeriodUrl(
@@ -280,6 +471,9 @@ final class EcomTrackerViewData
                     $fromLocal->copy()->addDay(),
                     $toLocal->copy()->addDay(),
                     $routeName,
+                    $periodKey,
+                    $dateFromKey,
+                    $dateToKey,
                 )
                 : null,
             'can_go_next' => $canGoNext,
@@ -289,25 +483,34 @@ final class EcomTrackerViewData
     /**
      * @param  array<string, mixed>  $baseQuery
      */
-    private static function dashboardPeriodUrl(array $baseQuery, \Carbon\Carbon $fromLocal, \Carbon\Carbon $toLocal, string $routeName): string
-    {
+    private static function dashboardPeriodUrl(
+        array $baseQuery,
+        Carbon $fromLocal,
+        Carbon $toLocal,
+        string $routeName,
+        string $periodKey = 'period',
+        string $dateFromKey = 'date_from',
+        string $dateToKey = 'date_to',
+    ): string {
         $today = TrackerTime::localNow()->startOfDay();
         $yesterday = $today->copy()->subDay();
+        $query = $baseQuery;
+        unset($query[$dateFromKey], $query[$dateToKey]);
 
         if ($fromLocal->isSameDay($toLocal)) {
             if ($fromLocal->isSameDay($today)) {
-                return route($routeName, array_merge($baseQuery, ['period' => '24h']));
+                return route($routeName, array_merge($query, [$periodKey => '24h']));
             }
 
             if ($fromLocal->isSameDay($yesterday)) {
-                return route($routeName, array_merge($baseQuery, ['period' => 'yesterday']));
+                return route($routeName, array_merge($query, [$periodKey => 'yesterday']));
             }
         }
 
-        return route($routeName, array_merge($baseQuery, [
-            'period' => 'custom',
-            'date_from' => $fromLocal->toDateString(),
-            'date_to' => $toLocal->toDateString(),
+        return route($routeName, array_merge($query, [
+            $periodKey => 'custom',
+            $dateFromKey => $fromLocal->toDateString(),
+            $dateToKey => $toLocal->toDateString(),
         ]));
     }
 
@@ -345,7 +548,7 @@ final class EcomTrackerViewData
                 $query['utm_source'] = $resolved;
             }
         } elseif (filled($filters['utm_source'] ?? null)) {
-            $query['utm_source'] = (string) $filters['utm_source'];
+            $query['utm_source'] = $filters['utm_source'];
         }
 
         $period = $filters['period'] ?? '24h';
@@ -415,5 +618,149 @@ final class EcomTrackerViewData
             [],
             $back,
         );
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function compareSideFilterKeys(): array
+    {
+        return array_merge(
+            ['period', 'date_from', 'date_to', 'sort_by'],
+            self::sharedNavigationQueryKeys(),
+        );
+    }
+
+    public static function compareSidePrefix(string $side): string
+    {
+        return $side === 'right' ? 'right_' : 'left_';
+    }
+
+    public static function compareShortcutUrl(Request $request): string
+    {
+        $leftFilters = array_merge(
+            ['period' => $request->input('period', '24h')],
+            $request->only(array_merge(
+                ['date_from', 'date_to'],
+                self::sharedNavigationQueryKeys(),
+            )),
+        );
+
+        $service = app(EcomTrackerDashboardService::class);
+        $leftRange = $service->resolveDateRange($leftFilters);
+        $prevRange = $service->resolvePreviousPeriodRange($leftRange);
+        $fromLocal = TrackerTime::toLocal($prevRange['from']);
+        $toLocal = TrackerTime::toLocal($prevRange['to']);
+
+        $rightFilters = array_merge(
+            collect($leftFilters)
+                ->except(['period', 'date_from', 'date_to'])
+                ->filter(fn ($value) => filled($value))
+                ->all(),
+            [
+                'period' => 'custom',
+                'date_from' => $fromLocal?->toDateString(),
+                'date_to' => $toLocal?->toDateString(),
+            ],
+        );
+
+        $query = array_merge(
+            self::compareSideQuery('left', $leftFilters),
+            self::compareSideQuery('right', $rightFilters),
+        );
+        $query['back'] = $request->fullUrl();
+
+        return route('admin.ecom-tracker.dashboard.compare', $query);
+    }
+
+    public static function compareBackUrl(Request $request): string
+    {
+        $explicit = self::resolveBackUrl($request->input('back'));
+
+        return $explicit ?? route('admin.ecom-tracker.dashboard');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    public static function compareSideQuery(string $side, array $filters): array
+    {
+        $prefix = self::compareSidePrefix($side);
+        $query = [];
+
+        foreach (self::compareSideFilterKeys() as $key) {
+            $value = $filters[$key] ?? null;
+
+            if (filled($value)) {
+                $query["{$prefix}{$key}"] = $value;
+            }
+        }
+
+        if (($filters['period'] ?? '24h') === '24h' && $side === 'left' && ! array_key_exists("{$prefix}period", $query)) {
+            $query["{$prefix}period"] = '24h';
+        }
+
+        return $query;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function compareSideFiltersFromRequest(Request $request, string $side): array
+    {
+        $prefix = self::compareSidePrefix($side);
+        $period = $request->input("{$prefix}period");
+
+        $filters = [
+            'period' => filled($period) ? (string) $period : '24h',
+            'date_from' => $request->input("{$prefix}date_from"),
+            'date_to' => $request->input("{$prefix}date_to"),
+            'sort_by' => $request->input("{$prefix}sort_by"),
+        ];
+
+        foreach (self::sharedNavigationQueryKeys() as $key) {
+            if ($key === 'period' || $key === 'date_from' || $key === 'date_to') {
+                continue;
+            }
+
+            $filters[$key] = $request->input("{$prefix}{$key}");
+        }
+
+        return array_filter(
+            $filters,
+            fn ($value, string $key) => $key === 'period' || filled($value),
+            ARRAY_FILTER_USE_BOTH,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $leftFilters
+     * @param  array<string, mixed>  $rightFilters
+     * @return array<string, mixed>
+     */
+    public static function comparePageQuery(Request $request, array $leftFilters, array $rightFilters): array
+    {
+        $query = array_merge(
+            self::compareSideQuery('left', $leftFilters),
+            self::compareSideQuery('right', $rightFilters),
+        );
+
+        if ($request->filled('back')) {
+            $query['back'] = $request->input('back');
+        }
+
+        unset($query['period'], $query['date_from'], $query['date_to']);
+
+        return $query;
+    }
+
+    public static function hasCompareSideParams(Request $request, string $side): bool
+    {
+        $prefix = self::compareSidePrefix($side);
+
+        return $request->filled("{$prefix}period")
+            || $request->filled("{$prefix}date_from")
+            || $request->filled("{$prefix}date_to");
     }
 }

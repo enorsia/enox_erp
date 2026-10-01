@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\ActivityEcomUserAction;
+use App\Support\AttributionRules;
+use App\Support\SessionTrafficAttribution;
 use Illuminate\Support\Collection;
 
 class EcomActivityTimelinePresenter
@@ -162,7 +164,7 @@ class EcomActivityTimelinePresenter
             'sku' => $first->sku,
             'product_price' => $last->product_price,
             'referer' => $first->referer,
-            'page_url' => $last->page_url,
+            'page_url' => $this->preferredProductViewPageUrl($group) ?? $first->page_url,
             'start_time' => $first->start_time,
             'end_time' => $last->end_time,
             'created_at' => $first->created_at ?? $first->start_time,
@@ -203,5 +205,28 @@ class EcomActivityTimelinePresenter
         }
 
         return (int) $action->start_time->diffInSeconds($action->end_time);
+    }
+
+    /**
+     * @param  Collection<int, ActivityEcomUserAction>  $group
+     */
+    private function preferredProductViewPageUrl(Collection $group): ?string
+    {
+        foreach ($group as $action) {
+            if (! filled($action->page_url)) {
+                continue;
+            }
+
+            $url = (string) $action->page_url;
+            $parsed = SessionTrafficAttribution::parseFromUrl($url);
+
+            if (AttributionRules::isMarketingQualifyingTouch($parsed, $url)) {
+                return $url;
+            }
+        }
+
+        $firstUrl = $group->first()?->page_url;
+
+        return filled($firstUrl) ? (string) $firstUrl : null;
     }
 }

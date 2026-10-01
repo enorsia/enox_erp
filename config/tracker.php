@@ -13,6 +13,49 @@ return [
     */
     'enabled' => (bool) env('ECOM_TRACKER_ENABLED', false),
 
+    /**
+     * When true, dashboard reads closed calendar days from activity_ecom_daily_* rollups
+     * and only scans raw tables for today (store timezone). Rollups never replace ingest.
+     */
+    'use_daily_rollups' => (bool) env('TRACKER_USE_DAILY_ROLLUPS', true),
+
+    /**
+     * Store dashboard: closed days come only from activity_ecom_daily_* rollups.
+     * Today stays live on raw tables. If any closed day in the range lacks a site rollup row, the dashboard shows no metrics (no slow raw fallback).
+     */
+    'dashboard_rollups_only' => (bool) env('TRACKER_DASHBOARD_ROLLUPS_ONLY', true),
+
+    /**
+     * When true, hybrid dashboard catalog reads product/category daily rollups (migration 2026_09_28_000007).
+     * Set false only before that migration runs; avoids information_schema probes per request.
+     */
+    'daily_rollups_commerce_view_columns' => filter_var(
+        env('TRACKER_DAILY_ROLLUPS_COMMERCE_VIEW_COLUMNS', true),
+        FILTER_VALIDATE_BOOL,
+    ),
+
+    /**
+     * When true and batch snapshot is unavailable, recoverable-sale panels show counts only (no session table).
+     * With batch read enabled, rows are hydrated from the snapshot without extra queries.
+     */
+    'dashboard_fast_recovery_rows' => (bool) env('TRACKER_DASHBOARD_FAST_RECOVERY_ROWS', false),
+
+    /** One batched DB read for the unfiltered store dashboard (date range only). */
+    'dashboard_batch_read' => (bool) env('TRACKER_DASHBOARD_BATCH_READ', true),
+
+    /**
+     * For long rollup-backed ranges (7d/30d), skip loading every session/line item into memory.
+     * Recoverable panels use SQL; counts and rollups stay the same.
+     */
+    /** Use slim rollup batch when closed days >= this (yesterday = 1 closed day when today is live). */
+    'dashboard_slim_batch_min_closed_days' => (int) env('TRACKER_DASHBOARD_SLIM_BATCH_MIN_CLOSED_DAYS', 1),
+
+    /**
+     * Visitor quality (bot) strip on store dashboard — one extra SQL scan when true.
+     * Activity list / visitor analytics are unchanged.
+     */
+    'dashboard_visitor_quality' => filter_var(env('TRACKER_DASHBOARD_VISITOR_QUALITY', false), FILTER_VALIDATE_BOOL),
+
     'api_key_hash' => env('TRACKER_API_KEY_HASH'),
 
     /*
@@ -91,9 +134,15 @@ return [
 
     'queue_async' => (bool) env('TRACKER_QUEUE_ASYNC', true),
 
-    'analytics_cache_enabled' => (bool) env('TRACKER_ANALYTICS_CACHE_ENABLED', true),
+    'analytics_cache_enabled' => (bool) env('TRACKER_ANALYTICS_CACHE_ENABLED', false),
 
     'analytics_cache_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_SECONDS', 300),
+
+    'analytics_cache_today_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_TODAY_SECONDS', 60),
+
+    'rollups_exclude_bots' => (bool) env('TRACKER_ROLLUPS_EXCLUDE_BOTS', true),
+
+    'rollups_aggregate_by_catalog_ids' => (bool) env('TRACKER_ROLLUPS_AGGREGATE_BY_CATALOG_IDS', false),
 
     'commerce_sync_batch_size' => (int) env('TRACKER_COMMERCE_SYNC_BATCH_SIZE', 100),
 
@@ -130,6 +179,25 @@ return [
         'twitter' => 'Twitter / X',
         'snapchat' => 'Snapchat',
         'email' => 'Email',
+        'klaviyo' => 'Klaviyo',
+        'mailchimp' => 'Mailchimp',
+        'omnisend' => 'Omnisend',
+        'hubspot' => 'HubSpot',
+        'brevo' => 'Brevo',
+        'iterable' => 'Iterable',
+        'customerio' => 'Customer.io',
+        'attentive' => 'Attentive',
+        'postscript' => 'Postscript',
+        'dotdigital' => 'Dotdigital',
+        'activecampaign' => 'ActiveCampaign',
+        'salesforce' => 'Salesforce MC',
+        'reddit' => 'Reddit',
+        'yahoo' => 'Yahoo',
+        'impact' => 'Impact',
+        'cj' => 'CJ Affiliate',
+        'shareasale' => 'ShareASale',
+        'rakuten' => 'Rakuten',
+        'partnerize' => 'Partnerize',
         '(direct)' => 'Direct',
     ],
 
@@ -139,19 +207,65 @@ return [
     |--------------------------------------------------------------------------
     */
     'utm_source_aliases' => [
+        // Social / paid (common short utm_source values in ad links)
         'fb' => 'facebook',
+        'fbook' => 'facebook',
+        'face' => 'facebook',
         'meta' => 'facebook',
         'ig' => 'instagram',
         'insta' => 'instagram',
         'yt' => 'youtube',
         'tt' => 'tiktok',
+        'tik' => 'tiktok',
+        'tok' => 'tiktok',
+        'tik-tok' => 'tiktok',
         'x' => 'twitter',
+        'tw' => 'twitter',
+        'twitter' => 'twitter',
         'pin' => 'pinterest',
         'li' => 'linkedin',
+        'link' => 'linkedin',
+        'ln' => 'linkedin',
+        'in' => 'linkedin',
         'snap' => 'snapchat',
+        'sc' => 'snapchat',
+        'rd' => 'reddit',
+        'redd' => 'reddit',
         'ms' => 'bing',
+        'goog' => 'google',
+        'adwords' => 'google',
+        'googleads' => 'google',
+        'google_ads' => 'google',
+        'gads' => 'google',
+        'yahoo' => 'yahoo',
+        'ycl' => 'yahoo',
+        // Affiliate
         'aw' => 'awin',
+        'sas' => 'shareasale',
+        'share-a-sale' => 'shareasale',
+        'rak' => 'rakuten',
+        'impactradius' => 'impact',
+        // Email / CRM / SMS
+        'kv' => 'klaviyo',
+        'kl' => 'klaviyo',
+        'mc' => 'mailchimp',
+        'omni' => 'omnisend',
+        'hs' => 'hubspot',
+        'cio' => 'customerio',
+        'att' => 'attentive',
+        'ps' => 'postscript',
+        'sfmc' => 'salesforce',
+        'ac' => 'activecampaign',
+        'dd' => 'dotdigital',
+        'sendinblue' => 'brevo',
+        'generic' => 'email',
+        'newsletter' => 'email',
     ],
+
+    // Last-touch attribution window (days) for all platforms on conversion_* — paid, email, affiliate, etc.
+    'conversion_window_days' => (int) env('TRACKER_CONVERSION_WINDOW_DAYS', 7),
+
+    'attribution_touch_log_retention_days' => (int) env('TRACKER_ATTRIBUTION_TOUCH_LOG_RETENTION_DAYS', 90),
 
     'utm_mediums' => [
         'organic' => 'Organic',

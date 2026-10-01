@@ -6,11 +6,13 @@ use App\Models\ActivityEcomUser;
 use App\Models\TrackerUtmFilter;
 use App\Support\CommerceHasOrderFilter;
 use App\Support\EcomTrackerLogger;
+use App\Support\TrackerMultiSelectFilter;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Visitor quality metrics for dashboard and visitor analytics strips.
@@ -29,6 +31,35 @@ class BotTrafficAnalyticsService
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
+    /**
+     * Store dashboard (date-only filters): one query, no cache.
+     *
+     * @param  array<string, mixed>  $dateFilters
+     * @return array<string, array<string, mixed>>
+     */
+    public function summaryForStoreDashboard(array $dateFilters): array
+    {
+        $currentRange = $this->resolveRange($dateFilters);
+        $emptyComparison = [
+            'from' => $currentRange['from'],
+            'to' => $currentRange['to'],
+            'label' => '',
+            'mode' => 'none',
+        ];
+
+        $counts = $this->countVisitorQualityMetricsCombined($currentRange['from'], $currentRange['to'], $dateFilters['period'] ?? null);
+        $summary = [];
+
+        foreach ($counts as $key => $current) {
+            $summary[$key] = array_merge(
+                $this->computeMetricSummary($current, 0, [], 'none'),
+                ['comparison_label' => ''],
+            );
+        }
+
+        return $summary;
+    }
+
     public function summaryOnly(array $filters): array
     {
         $currentRange = $this->resolveRange($filters);
@@ -200,6 +231,28 @@ class BotTrafficAnalyticsService
     }
 
     /**
+     * @return array{real_shoppers: int, automated_traffic: int, not_classified: int}
+     */
+    private function countVisitorQualityMetricsCombined(Carbon $from, Carbon $to, ?string $period): array
+    {
+        $query = DB::table('activity_ecom_user as s')
+            ->leftJoin('activity_ecom_user_bot_context as bc', 'bc.session_id', '=', 's.session_id');
+        TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, 's');
+
+        $row = $query->selectRaw(
+            'COALESCE(SUM(CASE WHEN bc.is_bot = 0 THEN 1 ELSE 0 END), 0) as real_shoppers,
+             COALESCE(SUM(CASE WHEN bc.is_bot = 1 THEN 1 ELSE 0 END), 0) as automated_traffic,
+             COALESCE(SUM(CASE WHEN bc.id IS NULL THEN 1 ELSE 0 END), 0) as not_classified',
+        )->first();
+
+        return [
+            'real_shoppers' => (int) ($row->real_shoppers ?? 0),
+            'automated_traffic' => (int) ($row->automated_traffic ?? 0),
+            'not_classified' => (int) ($row->not_classified ?? 0),
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $filters
      */
     private function countClassification(Carbon $from, Carbon $to, string $type, array $filters): int
@@ -261,7 +314,14 @@ class BotTrafficAnalyticsService
         }
 
         if (! empty($filters['device_type'])) {
-            $query->where('device_type', $filters['device_type']);
+            $devices = TrackerMultiSelectFilter::allowedValues(
+                $filters['device_type'],
+                ['desktop', 'mobile', 'tablet'],
+            );
+
+            if ($devices !== []) {
+                $query->whereIn('device_type', $devices);
+            }
         }
 
         if (array_key_exists('logged_in', $filters) && $filters['logged_in'] !== '' && $filters['logged_in'] !== null) {
@@ -289,7 +349,7 @@ class BotTrafficAnalyticsService
      */
     private function remember(string $key, int $ttlSeconds, callable $callback): mixed
     {
-        if (! config('tracker.analytics_cache_enabled', true)) {
+        if (! config('tracker.analytics_cache_enabled', false)) {
             EcomTrackerLogger::backend()->info('redis.cache.bypass', 'Analytics cache OFF — loading from database', [
                 'cache_key' => $key,
                 'reason' => 'cache_disabled',

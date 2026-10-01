@@ -34,6 +34,11 @@ class ActivityEcomOrder extends Model
         'customer_email',
         'customer_phone',
         'ordered_at',
+        'conversion_utm_source',
+        'conversion_utm_medium',
+        'conversion_utm_campaign',
+        'conversion_landing_page',
+        'conversion_touch_captured_at',
     ];
 
     protected function casts(): array
@@ -50,6 +55,7 @@ class ActivityEcomOrder extends Model
             'scs_discount' => 'decimal:2',
             'sms_discount' => 'decimal:2',
             'ordered_at' => 'datetime',
+            'conversion_touch_captured_at' => 'datetime',
         ];
     }
 

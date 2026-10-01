@@ -83,9 +83,9 @@ final class CommerceLineItemQuery
             });
         }
 
-        $category = trim((string) ($catalogOptions['category'] ?? ''));
-        if ($category !== '') {
-            self::applyCategoryNameFilter($query, $category, $prefix.'category_name');
+        $categories = TrackerMultiSelectFilter::values($catalogOptions['category'] ?? null);
+        if ($categories !== []) {
+            self::applyCategoryNamesFilter($query, $categories, $prefix.'category_name');
         }
 
         $department = trim((string) ($catalogOptions['department'] ?? ''));
@@ -109,19 +109,44 @@ final class CommerceLineItemQuery
         string $category,
         string $column = 'category_name',
     ): void {
-        $categoryNames = TrackerCategoryIdentity::storedCategoryNamesForFilter($category);
+        self::applyCategoryNamesFilter($query, [$category], $column);
+    }
 
-        if ($categoryNames === []) {
+    /**
+     * @param  list<string>|string|null  $categories
+     */
+    public static function applyCategoryNamesFilter(
+        Builder $query,
+        mixed $categories,
+        string $column = 'category_name',
+    ): void {
+        $categoryFilters = TrackerMultiSelectFilter::values($categories);
+
+        if ($categoryFilters === []) {
             return;
         }
 
-        if (count($categoryNames) === 1) {
-            $query->where($column, $categoryNames[0]);
+        $storedNames = [];
+
+        foreach ($categoryFilters as $category) {
+            foreach (TrackerCategoryIdentity::storedCategoryNamesForFilter($category) as $name) {
+                $storedNames[$name] = true;
+            }
+        }
+
+        $storedNames = array_keys($storedNames);
+
+        if ($storedNames === []) {
+            return;
+        }
+
+        if (count($storedNames) === 1) {
+            $query->where($column, $storedNames[0]);
 
             return;
         }
 
-        $query->whereIn($column, $categoryNames);
+        $query->whereIn($column, $storedNames);
     }
 
     public static function applyDepartmentFilter(

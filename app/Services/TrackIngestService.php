@@ -10,6 +10,7 @@ use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerRedisSupport;
+use App\Support\TrackerSessionClock;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use Carbon\Carbon;
@@ -26,6 +27,8 @@ class TrackIngestService
         private BotContextPersister $botContextPersister,
         private TrackerPaymentCheckoutEnricher $paymentCheckoutEnricher,
         private CommerceIngestWriter $commerceIngestWriter,
+        private VisitorPaidTouchService $visitorPaidTouchService,
+        private ConversionAttributionService $conversionAttributionService,
     ) {}
 
     /**
@@ -56,35 +59,80 @@ class TrackIngestService
 
         $clientContext = $this->clientContextResolver->resolve($request);
 
+        $sessionContext = $this->buildSessionContext($request, $clientContext);
+        $liveSessionId = $sessionId;
+
         if (! empty($visitorId)) {
             $resolved = $this->visitorSessionResolver->resolveForIngest(
                 $visitorId,
                 $sessionId,
-                $this->buildSessionContext($request, $clientContext),
+                $sessionContext,
             );
 
-            $sessionId = $resolved['session_id'];
+            $liveSessionId = $resolved['session_id'];
             $sessionData['visitor_id'] = $visitorId;
-            $sessionData['session_id'] = $sessionId;
+            $sessionData['session_id'] = $liveSessionId;
+        } else {
+            $this->upsertSession($request, $sessionId, $sessionData, $clientContext);
         }
 
+        $events = $this->sortEventsByClock($events);
+
         $this->logInfo('ingest.start', 'Saving user actions started', [
-            'session_id' => $sessionId,
+            'session_id' => $liveSessionId,
             'visitor_id' => $visitorId,
             'event_count' => count($events),
         ]);
 
-        $this->upsertSession($request, $sessionId, $sessionData, $clientContext);
-
         $acceptedIds = [];
+        $liveSessionLatestClock = null;
+        $now = TrackerTime::nowUtc();
+        $ensuredSessions = [];
+        $backfillPlan = [];
+        $listTrafficSyncSessionIds = [];
+
+        if (! empty($visitorId)) {
+            $this->visitorPaidTouchService->mergeClientSnapshot(
+                $visitorId,
+                is_array($sessionData['last_paid_touch'] ?? null) ? $sessionData['last_paid_touch'] : null,
+            );
+        }
 
         foreach ($events as $event) {
-            $event['session_id'] = $sessionId;
             $eventId = $event['id'] ?? null;
+            $eventSessionId = $liveSessionId;
+            $eventAt = TrackerSessionClock::activityAt($event) ?? $now;
+
+            if (! empty($visitorId)) {
+                $eventSessionId = $this->visitorSessionResolver->sessionIdForEventClock(
+                    $visitorId,
+                    $eventAt,
+                    array_merge($sessionContext, [
+                        'live_session_id' => $liveSessionId,
+                        'backfill_plan' => $backfillPlan,
+                    ]),
+                );
+
+                $this->rememberBackfillPlanBounds($backfillPlan, $eventSessionId, $eventAt);
+            }
+
+            if (! isset($ensuredSessions[$eventSessionId])) {
+                $anchor = null;
+
+                if (! ActivityEcomUser::query()->where('session_id', $eventSessionId)->exists()) {
+                    $anchor = $eventAt;
+                }
+
+                $eventSessionData = array_merge($sessionData, ['session_id' => $eventSessionId]);
+                $this->upsertSession($request, $eventSessionId, $eventSessionData, $clientContext, $anchor);
+                $ensuredSessions[$eventSessionId] = true;
+            }
+
+            $event['session_id'] = $eventSessionId;
 
             if (! $eventId) {
                 $this->logWarning('ingest.skip_event', 'Skipped one action (no ID)', [
-                    'session_id' => $sessionId,
+                    'session_id' => $eventSessionId,
                     'action_type' => $event['action_type'] ?? null,
                 ]);
 
@@ -97,7 +145,7 @@ class TrackIngestService
                 $acceptedIds[] = $eventId;
 
                 $this->logWarning('ingest.skip_empty_checkout', 'Skipped checkout action without cart data', [
-                    'session_id' => $sessionId,
+                    'session_id' => $eventSessionId,
                     'event_id' => $eventId,
                     'action_type' => $event['action_type'] ?? null,
                     'page_url' => $event['page_url'] ?? null,
@@ -107,13 +155,13 @@ class TrackIngestService
             }
 
             if ($this->isDuplicatePaymentSuccess($event)) {
-                $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
+                $this->syncSessionUserFromPaymentSuccess($eventSessionId, $event);
                 $this->ensureCanonicalCommerceOrder($event);
 
                 $acceptedIds[] = $eventId;
 
                 $this->logWarning('ingest.skip_duplicate_payment', 'Skipped duplicate payment_success for order', [
-                    'session_id' => $sessionId,
+                    'session_id' => $eventSessionId,
                     'event_id' => $eventId,
                     'order_id' => $this->paymentSuccessOrderId($event),
                 ]);
@@ -121,14 +169,14 @@ class TrackIngestService
                 continue;
             }
 
-            $row = $this->mapEventToRow($sessionId, $event);
+            $row = $this->mapEventToRow($eventSessionId, $event);
             $actionAlreadyStored = ActivityEcomUserAction::query()
                 ->where('event_id', $eventId)
                 ->exists();
 
             try {
                 if (CommerceIngestWriter::isSyncableActionType($event['action_type'] ?? '')) {
-                    DB::transaction(function () use ($eventId, $row, $event, $actionAlreadyStored, $sessionId) {
+                    DB::transaction(function () use ($eventId, $row, $event, $actionAlreadyStored, $eventSessionId) {
                         ActivityEcomUserAction::query()->updateOrInsert(
                             ['event_id' => $eventId],
                             $row
@@ -136,7 +184,7 @@ class TrackIngestService
 
                         if (! $actionAlreadyStored) {
                             ActivityEcomUser::query()
-                                ->where('session_id', $sessionId)
+                                ->where('session_id', $eventSessionId)
                                 ->increment('actions_count');
                         }
 
@@ -153,13 +201,13 @@ class TrackIngestService
 
                     if (! $actionAlreadyStored) {
                         ActivityEcomUser::query()
-                            ->where('session_id', $sessionId)
+                            ->where('session_id', $eventSessionId)
                             ->increment('actions_count');
                     }
                 }
             } catch (Throwable $e) {
                 EcomTrackerLogger::frontend()->error('commerce.ingest.failed', 'Commerce ingest failed', [
-                    'session_id' => $sessionId,
+                    'session_id' => $eventSessionId,
                     'event_id' => $eventId,
                     'action_type' => $event['action_type'] ?? null,
                     'message' => $e->getMessage(),
@@ -169,23 +217,54 @@ class TrackIngestService
             }
 
             $this->backfillSessionAttribution(
-                $sessionId,
+                $eventSessionId,
                 $event['page_url'] ?? null,
                 $event['referer'] ?? null,
             );
 
+            if (! empty($visitorId)) {
+                $this->visitorPaidTouchService->recordFromIngestEvent(
+                    $visitorId,
+                    $eventSessionId,
+                    $event['page_url'] ?? null,
+                    $event['referer'] ?? null,
+                    $eventAt,
+                    $eventId,
+                    $sessionData,
+                );
+            }
+
             if (($event['action_type'] ?? '') === 'proceed_checkout') {
-                $this->syncSessionUserFromProceedCheckout($sessionId, $event);
+                $this->syncSessionUserFromProceedCheckout($eventSessionId, $event);
             }
 
             if (($event['action_type'] ?? '') === 'payment_success') {
-                $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
+                $this->syncSessionUserFromPaymentSuccess($eventSessionId, $event);
+
+                $paymentAction = ActivityEcomUserAction::query()->where('event_id', $eventId)->first();
+
+                if ($paymentAction !== null) {
+                    $this->conversionAttributionService->applyForPaymentSuccess(
+                        $paymentAction,
+                        $sessionData,
+                        $eventAt,
+                    );
+                }
             }
 
             $acceptedIds[] = $eventId;
+            $listTrafficSyncSessionIds[$eventSessionId] = true;
+
+            $this->syncSessionLastActiveFromEvents($eventSessionId, [$event]);
+
+            if ($eventSessionId === $liveSessionId && TrackerSessionClock::isLiveActivity($eventAt, $now)) {
+                if ($liveSessionLatestClock === null || $eventAt->greaterThan($liveSessionLatestClock)) {
+                    $liveSessionLatestClock = $eventAt;
+                }
+            }
 
             $this->logInfo('ingest.event_stored', 'One action saved', [
-                'session_id' => $sessionId,
+                'session_id' => $eventSessionId,
                 'event_id' => $eventId,
                 'action_type' => $event['action_type'] ?? null,
                 'page_url' => $event['page_url'] ?? null,
@@ -194,10 +273,21 @@ class TrackIngestService
             ]);
         }
 
-        $this->syncSessionLastActiveFromEvents($sessionId, $events);
+        if (! empty($visitorId)) {
+            $redisClock = $liveSessionLatestClock ?? $now;
+            $this->visitorSessionResolver->recordActivityClock($visitorId, $liveSessionId, $redisClock);
+        }
+
+        foreach (array_keys($listTrafficSyncSessionIds) as $syncSessionId) {
+            $session = ActivityEcomUser::query()->where('session_id', $syncSessionId)->first();
+
+            if ($session !== null) {
+                SessionTrafficAttribution::syncListTrafficAttributionColumns($session);
+            }
+        }
 
         $this->logInfo('ingest.complete', 'All actions saved', [
-            'session_id' => $sessionId,
+            'session_id' => $liveSessionId,
             'accepted_count' => count($acceptedIds),
             'redis_bypass' => TrackerRedisSupport::usesMemoryBypass(),
             'redis_working' => TrackerRedisSupport::ping(),
@@ -207,14 +297,38 @@ class TrackIngestService
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $events
+     * @return array<int, array<string, mixed>>
+     */
+    private function sortEventsByClock(array $events): array
+    {
+        usort($events, function (array $left, array $right): int {
+            $leftAt = TrackerSessionClock::activityAt($left)?->getTimestamp() ?? PHP_INT_MAX;
+            $rightAt = TrackerSessionClock::activityAt($right)?->getTimestamp() ?? PHP_INT_MAX;
+
+            return $leftAt <=> $rightAt;
+        });
+
+        return $events;
+    }
+
+    /**
      * @param  array<string, mixed>  $sessionData
      * @param  array<string, mixed>|null  $clientContext
      */
-    private function upsertSession(Request $request, string $sessionId, array $sessionData, ?array $clientContext = null): void
-    {
+    private function upsertSession(
+        Request $request,
+        string $sessionId,
+        array $sessionData,
+        ?array $clientContext = null,
+        ?Carbon $sessionAnchor = null,
+    ): void {
         $userAgent = $clientContext['user_agent'] ?? $request->userAgent();
         $parsed = UserAgentParser::parse($userAgent);
         $now = TrackerTime::formatUtc(TrackerTime::nowUtc());
+        $anchor = $sessionAnchor !== null
+            ? (TrackerTime::formatUtc($sessionAnchor) ?? $now)
+            : $now;
 
         $existing = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
 
@@ -244,7 +358,8 @@ class TrackIngestService
             $attributes['utm_medium'] = $ingestAttribution['utm_medium'] ?? $sessionData['utm_medium'] ?? null;
             $attributes['utm_campaign'] = $ingestAttribution['utm_campaign'] ?? $sessionData['utm_campaign'] ?? null;
             $attributes['landing_page'] = $ingestAttribution['landing_page'] ?? $sessionData['landing_page'] ?? null;
-            $attributes['created_at'] = $now;
+            $attributes['created_at'] = $anchor;
+            $attributes['last_active_at'] = $anchor;
             $attributes['updated_at'] = $now;
             $attributes['session_duration_seconds'] = 0;
 
@@ -724,6 +839,29 @@ class TrackIngestService
     }
 
     /**
+     * @param  array<string, array{first_at: Carbon, last_at: Carbon}>  $backfillPlan
+     */
+    private function rememberBackfillPlanBounds(array &$backfillPlan, string $sessionId, Carbon $eventAt): void
+    {
+        if (! isset($backfillPlan[$sessionId])) {
+            $backfillPlan[$sessionId] = [
+                'first_at' => $eventAt->copy(),
+                'last_at' => $eventAt->copy(),
+            ];
+
+            return;
+        }
+
+        if ($eventAt->lessThan($backfillPlan[$sessionId]['first_at'])) {
+            $backfillPlan[$sessionId]['first_at'] = $eventAt->copy();
+        }
+
+        if ($eventAt->greaterThan($backfillPlan[$sessionId]['last_at'])) {
+            $backfillPlan[$sessionId]['last_at'] = $eventAt->copy();
+        }
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $events
      */
     private function syncSessionLastActiveFromEvents(string $sessionId, array $events): void
@@ -731,7 +869,7 @@ class TrackIngestService
         $latest = null;
 
         foreach ($events as $event) {
-            $at = TrackerTime::toUtc($event['created_at'] ?? null);
+            $at = TrackerSessionClock::activityAt($event);
 
             if ($at === null) {
                 continue;
@@ -742,14 +880,8 @@ class TrackIngestService
             }
         }
 
-        $ingestedAt = TrackerTime::nowUtc();
-
         if ($latest === null) {
-            $latest = $ingestedAt;
-        } elseif ($ingestedAt->greaterThan($latest)) {
-            // Client event timestamps can predate session creation (view start time).
-            // Admin "last active" should reflect when we last heard from this session.
-            $latest = $ingestedAt;
+            $latest = TrackerTime::nowUtc();
         }
 
         $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();

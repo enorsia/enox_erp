@@ -10,6 +10,10 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
-        config(['tracker.enabled' => true]);
+        config([
+            'tracker.enabled' => true,
+            // Tests seed raw activity rows, not daily rollups.
+            'tracker.dashboard_rollups_only' => false,
+        ]);
     }
 }
