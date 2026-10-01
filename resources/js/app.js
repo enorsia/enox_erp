@@ -51,3 +51,4 @@ if (has('#ads-performance-report-content'))  import('./pages/ads-performance-rep
 
 
 if (has('#enox_style_stock_report'))  import('./pages/style-stock-report');
+if (has('#enox_home'))                import('./pages/dashboard-home');
