@@ -166,7 +166,7 @@
                                 <tbody class="divide-y divide-slate-100 dark:divide-slate-700/40">
                                     @foreach ($chartInfo->sellingChartPrices as $ch_price)
                                         @php
-                                            $profit_cal = calculatePlatformProfit($ch_price, $platform);
+                                            $profit_cal = calculatePlatformProfit($ch_price, $platform, ['department_id' => $chartInfo->department_id]);
                                             $canSell    = ($profit_cal['can_sell'] ?? 'No') === 'Yes';
                                         @endphp
                                         <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-700/20 transition-colors">

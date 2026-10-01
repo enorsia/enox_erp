@@ -199,7 +199,7 @@ if (!function_exists('calculatePlatformProfit')) {
         $data['commission_vat'] = $data['commission'] + ($data['commission'] * 0.20);
         $data['selling_price'] = $price->confirm_selling_price - $data['commission_vat'];
 
-        $data['selling_vat'] = ($data['selling_price'] / 120) * 100;
+        $data['selling_vat'] = !empty($options['department_id']) && in_array($options['department_id'], [1926, 1927]) ? ($data['selling_price'] / 120) * 100 : $data['selling_price'];
         $data['vat_value'] = $data['selling_price'] - $data['selling_vat'];
         $data['selling_price_and_vat'] = $data['selling_vat'] + ($data['commission_vat'] - $data['commission']);
         $data['net_profit'] = $data['selling_price_and_vat'] - $baseCost;
