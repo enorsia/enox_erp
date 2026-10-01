@@ -1,6 +1,90 @@
 html {
     overflow: hidden;
 }
+
+/* ── Sidebar collapse / hover expand (desktop) ── */
+#sidebar {
+    white-space: nowrap;
+}
+@media (min-width: 1024px) {
+    #sidebar.small-sidebar .menu-title {
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    #sidebar.small-sidebar {
+        width: 53px !important;
+        min-width: 53px !important;
+    }
+    #sidebar.small-sidebar a,
+    #sidebar.small-sidebar button,
+    #sidebar.small-sidebar p,
+    #sidebar.small-sidebar {
+        text-indent: -99rem !important;
+    }
+    #sidebar.small-sidebar svg {
+        text-indent: 0 !important;
+    }
+    #sidebar.expanded-hover {
+        width: 230px !important;
+        min-width: 230px !important;
+    }
+    #sidebar.expanded-hover a,
+    #sidebar.expanded-hover button,
+    #sidebar.expanded-hover p,
+    #sidebar.expanded-hover {
+        text-indent: 0 !important;
+    }
+    #sidebar.expanded-hover .menu-title {
+        border-top: none;
+    }
+    #sidebar.small-sidebar:not(.expanded-hover) .sidebar-chevron {
+        display: none;
+    }
+    #sidebar.small-sidebar:not(.expanded-hover) .sidebar-submenu {
+        display: none !important;
+    }
+}
+
+@media (min-width: 1024px) {
+    .sidebar-small-layout #sidebar:not(.expanded-hover) {
+        width: 53px !important;
+        min-width: 53px !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) a,
+    .sidebar-small-layout #sidebar:not(.expanded-hover) button,
+    .sidebar-small-layout #sidebar:not(.expanded-hover) p,
+    .sidebar-small-layout #sidebar:not(.expanded-hover) {
+        text-indent: -99rem !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) svg {
+        text-indent: 0 !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) #menuIcon {
+        display: none !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) #closeIcon {
+        display: inline-block !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) .sidebar-submenu {
+        display: none !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) .menu-title {
+        border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+    #sidebar.small-sidebar:not(.expanded-hover) .sidebar-header,
+    .sidebar-small-layout #sidebar:not(.expanded-hover) .sidebar-header {
+        justify-content: center !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    #sidebar.small-sidebar:not(.expanded-hover) .logo-text-group,
+    .sidebar-small-layout #sidebar:not(.expanded-hover) .logo-text-group {
+        display: none !important;
+    }
+}
+
+.sidebar-header {
+    height: 70px !important;
+}
 /* ── Custom scrollbar ── */
 .sidebar-scroll::-webkit-scrollbar {
     width: 3px;

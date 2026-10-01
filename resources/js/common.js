@@ -48,6 +48,48 @@ window.closeSidebar = function () {
 };
 
 /* ══════════════════════════════════════
+   DESKTOP SIDEBAR COLLAPSE + HOVER EXPAND
+══════════════════════════════════════ */
+$(document).ready(function () {
+    const $sidebar = $('#sidebar');
+    const $toggle = $('#sidebarToggle');
+    if (!$sidebar.length || !$toggle.length) return;
+
+    if (localStorage.getItem('sidebar') === 'small') {
+        $sidebar.addClass('small-sidebar');
+    }
+    document.documentElement.classList.remove('sidebar-small-layout');
+
+    updateSidebarCollapseUI();
+
+    $toggle.on('click', function () {
+        $sidebar.toggleClass('small-sidebar');
+        localStorage.setItem(
+            'sidebar',
+            $sidebar.hasClass('small-sidebar') ? 'small' : 'large',
+        );
+        updateSidebarCollapseUI();
+    });
+
+    $sidebar.on('mouseenter', function () {
+        if ($(this).hasClass('small-sidebar')) {
+            $(this).addClass('expanded-hover');
+        }
+    });
+
+    $sidebar.on('mouseleave', function () {
+        $(this).removeClass('expanded-hover');
+    });
+
+    function updateSidebarCollapseUI() {
+        const isSmall = $sidebar.hasClass('small-sidebar');
+        $('.menu-title').toggleClass('border-t border-white/10', isSmall);
+        $('#menuIcon').toggleClass('hidden', isSmall);
+        $('#closeIcon').toggleClass('hidden', !isSmall);
+    }
+});
+
+/* ══════════════════════════════════════
    TOGGLE SWITCH (status toggles)
 ══════════════════════════════════════ */
 window.toggleSwitch = function (id, event) {

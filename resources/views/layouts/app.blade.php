@@ -15,6 +15,9 @@
             if (isDark) {
                 document.documentElement.classList.add('dark');
             }
+            if (localStorage.getItem('sidebar') === 'small') {
+                document.documentElement.classList.add('sidebar-small-layout');
+            }
         })();
     </script>
 
