@@ -7,6 +7,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ActivityEcomUserAction extends Model
 {
+    public const SYNC_PENDING = 0;
+
+    public const SYNC_SYNCED = 1;
+
+    public const SYNC_FAILED = 2;
+
     public $timestamps = false;
 
     protected $table = 'activity_ecom_user_actions';

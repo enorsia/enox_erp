@@ -21,12 +21,18 @@ return new class extends Migration
             $table->timestamp('sync_claimed_at')
                 ->nullable()
                 ->after('sync_attempts');
+
+            $table->index(
+                ['sync_status', 'sync_attempts', 'created_at'],
+                'aeua_sync_queue_idx',
+            );
         });
     }
 
     public function down(): void
     {
         Schema::table('activity_ecom_user_actions', function (Blueprint $table) {
+            $table->dropIndex('aeua_sync_queue_idx');
             $table->dropColumn(['sync_status', 'sync_attempts', 'sync_claimed_at']);
         });
     }

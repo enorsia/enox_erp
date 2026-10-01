@@ -778,6 +778,278 @@ if (dashboardRoot) {
 
     document.getElementById('etdDashboardPrintBtn')?.addEventListener('click', printEcomTrackerDashboard);
 
+    const syncBtn = document.getElementById('etdDashboardSyncBtn');
+    const syncPanelRow = document.getElementById('etdHeaderSyncProgressRow');
+    const syncPanel = document.getElementById('etdHeaderSyncProgress');
+    const syncTrack = document.getElementById('etdHeaderSyncTrack');
+    const syncBar = document.getElementById('etdHeaderSyncBar');
+    const syncMessage = document.getElementById('etdHeaderSyncMessage');
+    const syncCancelBtn = document.getElementById('etdHeaderSyncCancel');
+
+    let syncStatusTimer = null;
+
+    const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    const setSyncButtonBusy = (busy) => {
+        if (!syncBtn) {
+            return;
+        }
+
+        syncBtn.disabled = busy;
+        if (busy) {
+            syncBtn.setAttribute('aria-busy', 'true');
+        } else {
+            syncBtn.removeAttribute('aria-busy');
+        }
+    };
+
+    const updateSyncBadge = (queue) => {
+        if (!syncBtn) {
+            return;
+        }
+
+        const count = Number(queue ?? 0);
+        let badge = syncBtn.querySelector('.etd-header-btn-badge');
+
+        if (count <= 0) {
+            badge?.remove();
+            syncBtn.classList.remove('etd-header-btn--has-badge');
+            return;
+        }
+
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'etd-header-btn-badge etd-header-btn-badge--corner';
+            badge.setAttribute('aria-hidden', 'true');
+            syncBtn.appendChild(badge);
+            syncBtn.classList.add('etd-header-btn--has-badge');
+        }
+
+        badge.textContent = count > 99 ? '99+' : String(count);
+    };
+
+    const showSyncMessageOnly = (text, { success = false } = {}) => {
+        if (!syncPanelRow || !syncPanel || !syncMessage) {
+            return;
+        }
+
+        stopSyncStatusPolling();
+        syncPanel.classList.add('etd-header-sync-progress--message-only');
+        syncPanel.classList.toggle('etd-header-sync-progress--success', success);
+        syncPanelRow.hidden = false;
+        syncMessage.textContent = text;
+        if (syncCancelBtn) {
+            syncCancelBtn.hidden = true;
+        }
+        if (syncTrack) {
+            syncTrack.hidden = true;
+        }
+        setSyncButtonBusy(false);
+    };
+
+    const renderSyncProgress = (progress, queue) => {
+        const done = Number(progress?.done_count ?? 0);
+        const total = Number(progress?.total_count ?? 0);
+        const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+        const active = Boolean(progress?.active);
+        const message = progress?.step_message || '';
+
+        if (!syncPanelRow || !syncPanel) {
+            return;
+        }
+
+        if (!active && !message) {
+            syncPanelRow.hidden = true;
+            syncPanel.classList.remove('etd-header-sync-progress--message-only');
+            return;
+        }
+
+        if (!active && message && total === 0 && done === 0) {
+            showSyncMessageOnly(message);
+            return;
+        }
+
+        const syncFinished = !active && total > 0 && done >= total;
+        const syncCompleteMessage = /^sync complete/i.test(message);
+
+        if (syncFinished || syncCompleteMessage) {
+            showSyncMessageOnly(message || 'Synced successfully.', { success: true });
+            updateSyncBadge(queue);
+            return;
+        }
+
+        syncPanel.classList.remove('etd-header-sync-progress--message-only');
+        syncPanel.classList.remove('etd-header-sync-progress--success');
+        syncPanelRow.hidden = false;
+
+        if (syncCancelBtn) {
+            syncCancelBtn.hidden = !active;
+        }
+
+        if (syncTrack) {
+            syncTrack.hidden = total <= 0;
+        }
+
+        if (syncBar) {
+            syncBar.style.width = `${percent}%`;
+        }
+
+        if (syncMessage) {
+            syncMessage.textContent = message;
+        }
+
+        updateSyncBadge(queue);
+        setSyncButtonBusy(Boolean(progress?.lock_sync_button));
+    };
+
+    const stopSyncStatusPolling = () => {
+        if (syncStatusTimer !== null) {
+            window.clearInterval(syncStatusTimer);
+            syncStatusTimer = null;
+        }
+    };
+
+    const postJson = async (url, method = 'POST') => {
+        const response = await fetch(url, {
+            method,
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            throw new Error(data.message || `Request failed (${response.status})`);
+        }
+
+        return data;
+    };
+
+    const pollSyncStatus = async (statusUrl) => {
+        if (!statusUrl) {
+            return;
+        }
+
+        try {
+            const response = await fetch(statusUrl, {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                return;
+            }
+
+            const progress = data.progress || {};
+            const queue = Number(data.queue ?? progress.queue_remaining ?? 0);
+
+            if (data.complete) {
+                stopSyncStatusPolling();
+                setSyncButtonBusy(false);
+                updateSyncBadge(queue);
+
+                const total = Number(progress.total_count ?? 0);
+                const done = Number(progress.done_count ?? 0);
+                const msg = progress.step_message || '';
+
+                if (msg && total > 0) {
+                    const succeeded =
+                        progress.sync_succeeded === true || /^sync complete/i.test(msg);
+                    showSyncMessageOnly(msg, { success: succeeded });
+                    return;
+                }
+
+                if (msg && total === 0 && done === 0) {
+                    showSyncMessageOnly(msg);
+                    return;
+                }
+
+                if (!msg && !progress.active) {
+                    syncPanelRow.hidden = true;
+                    syncPanel?.classList.remove('etd-header-sync-progress--message-only');
+                    syncPanel?.classList.remove('etd-header-sync-progress--success');
+                }
+
+                return;
+            }
+
+            renderSyncProgress(progress, queue);
+        } catch {
+            // Retry on next interval.
+        }
+    };
+
+    const startSyncStatusPolling = (statusUrl) => {
+        stopSyncStatusPolling();
+        pollSyncStatus(statusUrl);
+        syncStatusTimer = window.setInterval(() => pollSyncStatus(statusUrl), 2000);
+    };
+
+    if (syncBtn) {
+        const syncUrl = syncBtn.dataset.syncUrl;
+        const statusUrl = syncBtn.dataset.syncStatusUrl;
+        const chainActiveOnLoad = syncBtn.dataset.syncChainActive === '1';
+
+        if (chainActiveOnLoad && statusUrl) {
+            startSyncStatusPolling(statusUrl);
+        }
+
+        syncCancelBtn?.addEventListener('click', async () => {
+            const cancelUrl = syncCancelBtn.dataset.cancelUrl;
+            if (!cancelUrl) {
+                return;
+            }
+
+            stopSyncStatusPolling();
+
+            try {
+                const data = await postJson(cancelUrl);
+                if (syncPanelRow) {
+                    syncPanelRow.hidden = true;
+                }
+                updateSyncBadge(data.progress?.queue_remaining ?? 0);
+                setSyncButtonBusy(false);
+            } catch {
+                setSyncButtonBusy(false);
+            }
+        });
+
+        syncBtn.addEventListener('click', async () => {
+            if (!syncUrl || syncBtn.disabled) {
+                return;
+            }
+
+            setSyncButtonBusy(true);
+
+            try {
+                const data = await postJson(syncUrl);
+                const progress = data.progress || data.result?.progress || {};
+                const queue = Number(data.result?.queue ?? progress.queue_remaining ?? 0);
+
+                if (data.result?.started || progress.active || data.result?.chain_active) {
+                    renderSyncProgress(progress, queue);
+                    startSyncStatusPolling(statusUrl);
+                    return;
+                }
+
+                showSyncMessageOnly(
+                    data.message || data.result?.message || 'Already up to date.',
+                );
+            } catch (error) {
+                showSyncMessageOnly(error?.message || 'Sync failed.');
+            }
+        });
+    }
+
     bindActivityScrollRestore(dashboardRoot);
 }
 

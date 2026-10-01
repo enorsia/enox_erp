@@ -91,8 +91,20 @@
                         'url' => route('admin.ecom-tracker.dashboard'),
                         'active' => $hasActiveFilters,
                     ])
-                    @include('ecom_tracker.partials.header-print-button')
+                    <div class="etd-header-toolbar-icon-group">
+                        @include('ecom_tracker.partials.header-print-button')
+                        @include('ecom_tracker.partials.header-sync-button', [
+                            'syncUrl' => route('admin.ecom-tracker.dashboard.sync-actions'),
+                            'syncStatusUrl' => route('admin.ecom-tracker.dashboard.sync-actions-status'),
+                            'pending' => (int) ($action_sync['queue'] ?? 0),
+                            'lastSyncedAt' => $action_sync['last_synced_at'] ?? null,
+                            'chainActive' => (bool) ($action_sync_chain_active ?? false),
+                        ])
+                    </div>
                 </div>
+                @include('ecom_tracker.partials.header-sync-progress', [
+                    'cancelUrl' => route('admin.ecom-tracker.dashboard.sync-actions-cancel'),
+                ])
             </div>
         </div>
     </header>

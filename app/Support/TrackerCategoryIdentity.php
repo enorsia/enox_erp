@@ -63,13 +63,71 @@ class TrackerCategoryIdentity
             return '';
         }
 
-        if (! preg_match('#/c/(men|women|boys|girls)(?:/|$)#i', $path, $matches)
-            && ! preg_match('#/style/(men|women|boys|girls)(?:/|$)#i', $path, $matches)
-            && ! preg_match('#^/(men|women|boys|girls)(?:/|$)#i', $path, $matches)) {
+        if (preg_match('#/c/(men|women|boys|girls)(?:/|$)#i', $path, $matches)
+            || preg_match('#/style/(men|women|boys|girls)(?:/|$)#i', $path, $matches)
+            || preg_match('#^/(men|women|boys|girls)(?:/|$)#i', $path, $matches)
+            || preg_match('#^/(men|women|boys|girls)-#i', $path, $matches)) {
+            return self::URL_DEPARTMENT_SLUG_MAP[strtolower($matches[1])] ?? '';
+        }
+
+        return '';
+    }
+
+    /**
+     * Legacy category landing URLs such as /women-everyday-essentials.
+     */
+    public static function categoryNameFromPageUrl(?string $pageUrl, string $departmentName = ''): string
+    {
+        $pageUrl = trim((string) $pageUrl);
+
+        if ($pageUrl === '') {
             return '';
         }
 
-        return self::URL_DEPARTMENT_SLUG_MAP[strtolower($matches[1])] ?? '';
+        $path = parse_url($pageUrl, PHP_URL_PATH);
+
+        if (! is_string($path) || $path === '') {
+            return '';
+        }
+
+        $path = trim($path, '/');
+
+        if ($path === '') {
+            return '';
+        }
+
+        if (preg_match('#^(?:c|style)/(men|women|boys|girls)/([^/]+)#i', $path, $matches)) {
+            return self::displayName(self::titleFromUrlSlug($matches[2]));
+        }
+
+        if (preg_match('#^(men|women|boys|girls)/([^/]+)#i', $path, $matches)) {
+            return self::displayName(self::titleFromUrlSlug($matches[2]));
+        }
+
+        if (preg_match('#^(men|women|boys|girls)-(.+)$#i', $path, $matches)) {
+            $slugDepartment = self::URL_DEPARTMENT_SLUG_MAP[strtolower($matches[1])] ?? '';
+
+            if ($departmentName !== '' && strcasecmp($departmentName, $slugDepartment) !== 0) {
+                return '';
+            }
+
+            return self::displayName(self::titleFromUrlSlug($matches[2]));
+        }
+
+        return '';
+    }
+
+    private static function titleFromUrlSlug(string $slug): string
+    {
+        $slug = trim($slug);
+
+        if ($slug === '') {
+            return '';
+        }
+
+        $slug = preg_replace('/-\d+$/', '', $slug) ?? $slug;
+
+        return ucwords(str_replace(['-', '_'], ' ', $slug));
     }
 
     /**
