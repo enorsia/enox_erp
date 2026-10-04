@@ -6,7 +6,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
-class EcomActivityController extends EcomTrackerAdminController
+class EcomActivityController extends Controller
 {
     public function index(Request $request): View
     {

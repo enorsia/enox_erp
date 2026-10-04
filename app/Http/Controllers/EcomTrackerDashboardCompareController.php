@@ -2,18 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\EcomTrackerFeatureGate;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
-class EcomTrackerDashboardCompareController extends EcomTrackerAdminController
+class EcomTrackerDashboardCompareController extends Controller
 {
-    public function __construct(EcomTrackerFeatureGate $featureGate)
-    {
-        parent::__construct($featureGate);
-    }
-
     public function index(Request $request): View
     {
         Gate::authorize('ecom_tracker.dashboard.index');
