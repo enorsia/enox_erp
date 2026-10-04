@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Support\EcomDailyRollupDayStatus;
 use App\Support\TrackerRedisCache;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -60,13 +59,11 @@ class EcomStoreDashboardResponseCache
 
     private function rollupVersionToken(Carbon $from, Carbon $to): string
     {
-        if (! EcomDailyRollupDayStatus::hasTable()) {
-            return 'no_status';
-        }
+        [$rangeStart, $rangeEnd] = TrackerTime::storageRange($from, $to);
 
-        $max = \Illuminate\Support\Facades\DB::table(EcomDailyRollupDayStatus::table())
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->max('rolled_up_at');
+        $max = \Illuminate\Support\Facades\DB::table('activity_ecom_commerce_line_items')
+            ->whereBetween('staged_at', [$rangeStart, $rangeEnd])
+            ->max('created_at');
 
         return $max ? (string) $max : 'none';
     }

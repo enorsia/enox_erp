@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Support\CommerceFunnelQuery;
 use App\Support\EcomAnalyticsRangeSplitter;
 use App\Support\EcomDailyDimensionType;
-use App\Support\EcomDailyRollupSchema;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -27,21 +26,7 @@ class EcomDailyMetricsQuery
      */
     public function rollupHybridCatalogReady(Carbon $from, Carbon $to, ?string $period): bool
     {
-        if (! config('tracker.use_daily_rollups', true)) {
-            return false;
-        }
-
-        if (! EcomDailyRollupSchema::hasCommerceViewColumns()) {
-            return false;
-        }
-
-        $split = EcomAnalyticsRangeSplitter::split($from, $to, $period);
-
-        if (! $split['use_rollups'] || $split['closed_dates'] === []) {
-            return false;
-        }
-
-        return $split['use_rollups'] && $split['closed_dates'] !== [];
+        return false;
     }
 
     /**
@@ -72,24 +57,7 @@ class EcomDailyMetricsQuery
      */
     public function dashboardPaymentRows(Carbon $from, Carbon $to, ?string $period): array
     {
-        if (! config('tracker.dashboard_rollups_only', true)) {
-            return CommerceFunnelQuery::paymentRows($from, $to, null, $period);
-        }
-
-        $split = EcomAnalyticsRangeSplitter::split($from, $to, $period);
-        $rows = CommerceFunnelQuery::paymentRowsForLocalCalendarDates(
-            $this->presentSiteRollupDates($split['closed_dates']),
-            null,
-        );
-
-        if ($split['live_from'] !== null && $split['live_to'] !== null) {
-            $rows = array_merge(
-                $rows,
-                CommerceFunnelQuery::paymentRows($split['live_from'], $split['live_to'], null, '24h'),
-            );
-        }
-
-        return $rows;
+        return CommerceFunnelQuery::paymentRows($from, $to, null, $period);
     }
 
     /**

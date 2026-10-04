@@ -2,7 +2,7 @@
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
-use App\Services\CommerceIngestWriter;
+use App\Services\ActivityEcomActionSyncWriter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\CommerceTestSchema;
@@ -45,7 +45,7 @@ test('commerce ingest writer creates order and payment lines', function () {
         'created_at' => now(),
     ]);
 
-    app(CommerceIngestWriter::class)->syncFromAction($action);
+    app(ActivityEcomActionSyncWriter::class)->syncFromAction($action);
 
     expect(DB::table('activity_ecom_orders')->where('order_id', 'ORD-100')->exists())->toBeTrue()
         ->and(DB::table('activity_ecom_commerce_line_items')->where('event_id', $action->event_id)->count())->toBe(1);
@@ -85,7 +85,7 @@ test('commerce ingest writer keeps earlier canonical order on duplicate payment'
         'created_at' => now(),
     ]);
 
-    $writer = app(CommerceIngestWriter::class);
+    $writer = app(ActivityEcomActionSyncWriter::class);
     $writer->syncFromAction($later);
     $writer->syncFromAction($earlier);
 
@@ -112,7 +112,7 @@ test('add to cart resume is idempotent', function () {
         'created_at' => now(),
     ]);
 
-    $writer = app(CommerceIngestWriter::class);
+    $writer = app(ActivityEcomActionSyncWriter::class);
     $writer->syncFromAction($action);
     $writer->syncFromAction($action);
 

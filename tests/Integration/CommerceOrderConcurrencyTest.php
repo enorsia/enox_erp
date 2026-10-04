@@ -2,7 +2,7 @@
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
-use App\Services\CommerceIngestWriter;
+use App\Services\ActivityEcomActionSyncWriter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\CommerceTestSchema;
@@ -49,7 +49,7 @@ test('concurrent canonical order upsert keeps single row', function () {
         'created_at' => now(),
     ]);
 
-    $writer = app(CommerceIngestWriter::class);
+    $writer = app(ActivityEcomActionSyncWriter::class);
     $writer->syncFromAction($second);
     $writer->syncFromAction($first);
 

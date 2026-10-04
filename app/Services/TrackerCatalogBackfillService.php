@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Support\EcomDailyRollupSchema;
 use App\Support\TrackerCatalogSentinels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -73,53 +72,4 @@ class TrackerCatalogBackfillService
         return $updated;
     }
 
-    public function stampRollupRowsForDate(string $metricDate): void
-    {
-        if (! EcomDailyRollupSchema::hasCatalogIdColumns()) {
-            return;
-        }
-
-        DB::table('activity_ecom_daily_product_metrics')
-            ->where('metric_date', $metricDate)
-            ->whereNull('tracker_product_id')
-            ->orderBy('id')
-            ->chunkById(200, function ($rows) {
-                foreach ($rows as $row) {
-                    $productId = (int) DB::table('tracker_products')
-                        ->where('product_code', $row->product_code)
-                        ->value('id');
-
-                    if ($productId <= 0) {
-                        $productId = TrackerCatalogSentinels::PRODUCT_ID;
-                    }
-
-                    DB::table('activity_ecom_daily_product_metrics')
-                        ->where('id', $row->id)
-                        ->update(['tracker_product_id' => $productId]);
-                }
-            });
-
-        DB::table('activity_ecom_daily_category_metrics')
-            ->where('metric_date', $metricDate)
-            ->where(function ($query) {
-                $query->whereNull('tracker_department_id')->orWhereNull('tracker_category_id');
-            })
-            ->orderBy('id')
-            ->chunkById(200, function ($rows) {
-                foreach ($rows as $row) {
-                    $ids = $this->resolver->resolveLineSnapshotIds([
-                        'department_name' => $row->department_name,
-                        'category_name' => $row->category_name,
-                        'product_code' => '',
-                    ]);
-
-                    DB::table('activity_ecom_daily_category_metrics')
-                        ->where('id', $row->id)
-                        ->update([
-                            'tracker_department_id' => $ids['tracker_department_id'],
-                            'tracker_category_id' => $ids['tracker_category_id'],
-                        ]);
-                }
-            });
-    }
 }

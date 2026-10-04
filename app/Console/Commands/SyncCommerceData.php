@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackerBackfillCheckpoint;
-use App\Services\CommerceIngestWriter;
+use App\Services\ActivityEcomActionSyncWriter;
 use App\Services\CommerceSyncValidator;
 use App\Services\TrackerDataCleanupService;
 use App\Support\EcomTrackerLogger;
@@ -37,7 +37,7 @@ class SyncCommerceData extends Command
     private const JOB_NAME = 'commerce_backfill';
 
     public function handle(
-        CommerceIngestWriter $writer,
+        ActivityEcomActionSyncWriter $writer,
         CommerceSyncValidator $validator,
         TrackerDataCleanupService $cleanup,
     ): int {
@@ -108,7 +108,7 @@ class SyncCommerceData extends Command
                         ->orderBy('id')
                         ->chunkById($batchSize, function ($actions) use ($writer, $checkpoint, &$chunkSessions) {
                             $batch = $actions->all();
-                            $result = $writer->syncBatch($batch, true, true);
+                            $result = $writer->syncBatch($batch);
 
                             foreach ($batch as $action) {
                                 $chunkSessions[$action->session_id] = true;

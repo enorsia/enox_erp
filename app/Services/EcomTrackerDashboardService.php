@@ -11,7 +11,6 @@ use App\Support\CommerceLineItemQuery;
 use App\Support\CommerceReadSupport;
 use App\Support\EcomAnalyticsRangeSplitter;
 use App\Support\EcomActivityFocus;
-use App\Support\EcomDailyRollupSchema;
 use App\Support\EcomRecoverablePanelFormatter;
 use App\Support\EcomActivityKeywordSearch;
 use App\Support\EcomTrackerCompareSupport;
@@ -132,43 +131,12 @@ class EcomTrackerDashboardService
 
     public function dashboardUsesRollupsOnly(): bool
     {
-        return config('tracker.use_daily_rollups', true)
-            && config('tracker.dashboard_rollups_only', true);
+        return false;
     }
 
     public function dashboardRollupsReadyForRange(Carbon $from, Carbon $to, ?string $period): bool
     {
-        if (! $this->dashboardUsesRollupsOnly()) {
-            return true;
-        }
-
-        if (! EcomDailyRollupSchema::hasCommerceViewColumns()) {
-            return false;
-        }
-
-        $split = EcomAnalyticsRangeSplitter::split($from, $to, $period);
-
-        if (! $split['use_rollups'] || $split['closed_dates'] === []) {
-            return true;
-        }
-
-        return $split['use_rollups'] && $split['closed_dates'] !== [];
-    }
-
-    /**
-     * @return array{awaiting: bool, expected: int, found: int, message: ?string}
-     */
-    private function dashboardRollupsStatus(Carbon $from, Carbon $to, ?string $period): array
-    {
-        $split = EcomAnalyticsRangeSplitter::split($from, $to, $period);
-        $coverage = $this->rollupMetrics()->siteRollupsCoverage($split['closed_dates']);
-
-        return [
-            'awaiting' => false,
-            'expected' => $coverage['expected'],
-            'found' => $coverage['found'],
-            'message' => null,
-        ];
+        return true;
     }
 
     /**
@@ -195,23 +163,6 @@ class EcomTrackerDashboardService
 
         $period = $range['period'] ?? null;
         $isUnfiltered = $extraFilters === [];
-
-        if ($isUnfiltered && config('tracker.dashboard_batch_read', true)) {
-            $this->storeDashboardSnapshot = app(EcomStoreDashboardBatchRead::class)->tryLoad(
-                $range['from'],
-                $range['to'],
-                $period,
-                $filters,
-                $this->rollupMetrics(),
-            );
-
-            if ($this->storeDashboardSnapshot !== null) {
-                $this->periodCommercePreloadKey = $this->periodRangePreloadKey($range['from'], $range['to'], $period);
-                $this->periodCommercePreloadLines = collect();
-            }
-        }
-
-        $rollupsStatus = $this->dashboardRollupsStatus($range['from'], $range['to'], $period);
 
         if ($isUnfiltered) {
             $currentSessions = collect();
@@ -327,12 +278,6 @@ class EcomTrackerDashboardService
                     ? $this->buildDurationDistributionFromQuery($range['from'], $range['to'], $period)
                     : $this->buildDurationDistribution($currentSessions)),
             'new_returning' => $this->buildNewReturningFromKpis($currentKpis),
-            'rollups_unavailable' => $rollupsStatus['awaiting'],
-            'rollups_unavailable_message' => $rollupsStatus['message'],
-            'rollups_coverage' => [
-                'expected' => $rollupsStatus['expected'],
-                'found' => $rollupsStatus['found'],
-            ],
         ];
     }
 

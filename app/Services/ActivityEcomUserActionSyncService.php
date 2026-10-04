@@ -578,7 +578,7 @@ class ActivityEcomUserActionSyncService
     public function syncPendingBatch(?int $limit = null): array
     {
         $limit = max(1, $limit ?? (int) config('tracker.action_sync_batch_size', 25));
-        $writer = app(CommerceIngestWriter::class);
+        $writer = app(ActivityEcomActionSyncWriter::class);
 
         $synced = 0;
         $failed = 0;
@@ -599,22 +599,10 @@ class ActivityEcomUserActionSyncService
                 $action->sync_claimed_at = $claimedAt;
 
                 try {
-                    if (CommerceIngestWriter::isSyncableActionType($action->action_type)) {
-                        $result = $writer->syncFromAction($action, true);
-
-                        $status = (string) ($result['status'] ?? '');
-
-                        if ($status === 'ok') {
-                            $action->sync_status = ActivityEcomUserAction::SYNC_SYNCED;
-                            $synced++;
-                        } elseif ($status === 'skipped') {
-                            $action->sync_status = ActivityEcomUserAction::SYNC_FAILED;
-                            $skipped++;
-                            $failed++;
-                        } else {
-                            $action->sync_status = ActivityEcomUserAction::SYNC_FAILED;
-                            $failed++;
-                        }
+                    if (ActivityEcomActionSyncWriter::isSyncableActionType($action->action_type)) {
+                        $writer->syncFromAction($action);
+                        $action->sync_status = ActivityEcomUserAction::SYNC_SYNCED;
+                        $synced++;
                     } else {
                         $action->sync_status = ActivityEcomUserAction::SYNC_SYNCED;
                         $synced++;

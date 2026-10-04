@@ -2,7 +2,7 @@
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
-use App\Services\CommerceIngestWriter;
+use App\Services\ActivityEcomActionSyncWriter;
 use App\Support\CommerceLineItemParser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -40,7 +40,7 @@ test('ingest writes category view line items without sync command', function () 
         'created_at' => now(),
     ]);
 
-    app(CommerceIngestWriter::class)->syncFromAction($action);
+    app(ActivityEcomActionSyncWriter::class)->syncFromAction($action);
 
     $line = DB::table('activity_ecom_commerce_line_items')->where('event_id', $eventId)->first();
 
@@ -66,7 +66,7 @@ test('ingest writes product view line items without sync command', function () {
         'created_at' => now(),
     ]);
 
-    app(CommerceIngestWriter::class)->syncFromAction($action);
+    app(ActivityEcomActionSyncWriter::class)->syncFromAction($action);
 
     $line = DB::table('activity_ecom_commerce_line_items')->where('event_id', $eventId)->first();
 
@@ -121,7 +121,7 @@ test('ingest stores per cart item department and category from frontend payload'
         'created_at' => now(),
     ]);
 
-    app(CommerceIngestWriter::class)->syncFromAction($action);
+    app(ActivityEcomActionSyncWriter::class)->syncFromAction($action);
 
     $lines = DB::table('activity_ecom_commerce_line_items')
         ->where('event_id', $eventId)
@@ -182,7 +182,7 @@ test('commerce line item parser keeps each cart line category separate', functio
 
 test('full catalog funnel sequence writes line items on each ingest step', function () {
     $session = createCatalogSession();
-    $writer = app(CommerceIngestWriter::class);
+    $writer = app(ActivityEcomActionSyncWriter::class);
 
     $categoryEventId = (string) Str::uuid();
     $writer->syncFromAction(ActivityEcomUserAction::query()->create([

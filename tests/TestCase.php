@@ -13,7 +13,6 @@ abstract class TestCase extends BaseTestCase
         config([
             'tracker.enabled' => true,
             // Tests seed raw activity rows, not daily rollups.
-            'tracker.dashboard_rollups_only' => false,
         ]);
     }
 }
