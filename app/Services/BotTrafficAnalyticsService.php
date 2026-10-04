@@ -6,6 +6,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\TrackerUtmFilter;
 use App\Support\CommerceHasOrderFilter;
 use App\Support\EcomTrackerLogger;
+use App\Support\EcomTrackerPeriodRange;
 use App\Support\TrackerMultiSelectFilter;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
@@ -21,9 +22,7 @@ class BotTrafficAnalyticsService
 {
     private const CACHE_TTL_SUMMARY_SECONDS = 300;
 
-    public function __construct(
-        private EcomTrackerDashboardService $dashboardService,
-    ) {}
+    public function __construct() {}
 
     /**
      * Compact summary for dashboard / visitor analytics strips.
@@ -173,14 +172,14 @@ class BotTrafficAnalyticsService
     public function resolveRange(array $filters): array
     {
         if (! empty($filters['date_from']) && ! empty($filters['date_to'])) {
-            return $this->dashboardService->resolveDateRange([
+            return EcomTrackerPeriodRange::resolve([
                 'period' => 'custom',
                 'date_from' => $filters['date_from'],
                 'date_to' => $filters['date_to'],
             ]);
         }
 
-        return $this->dashboardService->resolveDateRange([
+        return EcomTrackerPeriodRange::resolve([
             'period' => $filters['period'] ?? '7d',
             'date_from' => $filters['date_from'] ?? null,
             'date_to' => $filters['date_to'] ?? null,

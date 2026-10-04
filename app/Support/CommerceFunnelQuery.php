@@ -17,6 +17,13 @@ use Illuminate\Support\Facades\DB;
  */
 final class CommerceFunnelQuery
 {
+    public const SIDEBAR_FUNNEL_FILTER_KEYS = [
+        'cart_abandonment',
+        'begin_checkout_abandonment',
+        'proceed_checkout_abandonment',
+        'payment_success',
+    ];
+
     private const SESSION_ID_CHUNK = 1000;
 
     /** @var list<string> */
@@ -675,7 +682,7 @@ final class CommerceFunnelQuery
     ): void {
         $keys = array_values(array_filter(
             TrackerMultiSelectFilter::values($funnelKeys),
-            static fn (string $key) => in_array($key, EcomActivityFocus::SIDEBAR_FUNNEL_FILTER_KEYS, true),
+            static fn (string $key) => in_array($key, self::SIDEBAR_FUNNEL_FILTER_KEYS, true),
         ));
 
         if ($keys === []) {

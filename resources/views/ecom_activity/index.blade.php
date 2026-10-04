@@ -63,9 +63,6 @@
                 <button type="button" id="ecom-activity-filter-open" class="etd-header-btn etd-header-btn--icon-only js-ecom-activity-filter-open" aria-label="Filters" aria-expanded="false">
                     <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
                 </button>
-                <button type="button" class="etd-header-btn etd-header-btn--icon-only js-activity-export-open" aria-label="Export" title="Export">
-                    <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 16.5V3m0 0L7.5 7.5M12 3l4.5 4.5M4.5 19.5h15"/></svg>
-                </button>
             </div>
         </div>
     </div>
@@ -123,37 +120,4 @@
 
 </div>
 
-<div id="activity-export-modal" class="export-report-modal fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true" style="display:none;">
-    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm js-activity-export-close"></div>
-    <div class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-            <h3 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100">Export User Activity</h3>
-            <button type="button" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 js-activity-export-close">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-        </div>
-        <div class="px-5 py-4 space-y-4">
-            <div>
-                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">Current filters</p>
-                <p id="activity-export-modal-filter-summary" class="text-[13px] text-slate-700 dark:text-slate-200">Today</p>
-                <p class="text-[12px] text-slate-400 dark:text-slate-500 mt-1">Export runs in the background. You can keep working.</p>
-            </div>
-            <div>
-                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-2">Format</p>
-                <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-600 cursor-pointer mb-2">
-                    <input type="radio" name="activity_export_format" value="xlsx" checked class="mt-0.5 accent-blue-600">
-                    <div><p class="text-[13px] font-medium">Excel (.xlsx)</p><p class="text-[11px] text-slate-400">Best for pivoting &amp; analysis</p></div>
-                </label>
-                <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-600 cursor-pointer">
-                    <input type="radio" name="activity_export_format" value="csv" class="mt-0.5 accent-blue-600">
-                    <div><p class="text-[13px] font-medium">CSV (.csv)</p><p class="text-[11px] text-slate-400">Fastest — raw data</p></div>
-                </label>
-            </div>
-        </div>
-        <div class="flex gap-2.5 px-5 py-4 border-t border-slate-200 dark:border-slate-700">
-            <button type="button" class="flex-1 py-2.5 text-[13px] border rounded-xl bg-slate-50 dark:bg-slate-700 js-activity-export-close">Cancel</button>
-            <button type="button" id="activity-export-start-btn" class="flex-1 py-2.5 text-[13px] rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold">Start Export</button>
-        </div>
-    </div>
-</div>
 @endsection

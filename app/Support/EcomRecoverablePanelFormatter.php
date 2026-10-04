@@ -60,7 +60,7 @@ final class EcomRecoverablePanelFormatter
             'qty' => max(0, $qty),
             'value' => round($value, 2),
             'occurred_ago' => TrackerTime::diffForHumansFromStorage($occurredAt) ?? '—',
-            'activity_url' => EcomTrackerViewData::activityShowUrl($sessionId),
+            'activity_url' => route('admin.ecom-activity.show', $sessionId),
             '_sort_at' => TrackerTime::fromStorage($occurredAt),
         ];
     }

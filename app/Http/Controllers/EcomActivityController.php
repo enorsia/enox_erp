@@ -25,8 +25,13 @@ class EcomActivityController extends EcomTrackerAdminController
     {
         Gate::authorize('ecom_tracker.activity.show');
 
+        $backUrl = filled($request->input('back'))
+            ? (string) $request->input('back')
+            : route('admin.ecom-activity.index');
+
         return view('ecom_activity.show', [
             'session' => $session,
+            'backUrl' => $backUrl,
         ]);
     }
 }

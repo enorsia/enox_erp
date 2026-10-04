@@ -48,7 +48,6 @@ if (has('#ecom-tracker-dashboard-content') || has('#ecom-tracker-compare-content
     import('./lib/etd-tip-position');
 }
 if (has('#ecom-activity-page-content'))       import('./pages/ecom-activity-table');
-if (has('#ecom-activity-page-content'))       import('./pages/ecom-activity-export');
 if (has('#sale-tracking-page'))               import('./pages/sale-tracking');
 if (has('#ads-performance-report-content'))  import('./pages/ads-performance-report');
 

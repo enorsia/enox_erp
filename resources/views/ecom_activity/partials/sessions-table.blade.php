@@ -153,7 +153,7 @@
                     </td>
                     <td class="etd-col-action" data-label="View">
                         @can('ecom_tracker.activity.show')
-                            <a href="{{ route('admin.ecom-activity.show', \App\Support\EcomTrackerViewData::activityShowParams($session->session_id, $activityShowBack)) }}" class="etd-link">View session</a>
+                            <a href="{{ route('admin.ecom-activity.show', ['session' => $session->session_id, 'back' => $activityShowBack ?? null]) }}" class="etd-link">View session</a>
                         @endcan
                     </td>
                 </tr>

@@ -3,11 +3,8 @@
 namespace App\Providers;
 
 use App\Models\User;
-use App\View\Composers\EcomActivityShowComposer;
-use App\View\Composers\EcomTrackerUtmFilterComposer;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Activitylog\Models\Activity;
 
@@ -26,10 +23,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        View::composer('ecom_tracker.partials.utm-filters', EcomTrackerUtmFilterComposer::class);
-
-        View::composer('ecom_activity.show', EcomActivityShowComposer::class);
-
         Gate::before(function (User $user) {
             if ($user->isSystem()) {
                 return true;

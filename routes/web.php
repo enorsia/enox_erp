@@ -20,7 +20,6 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\EcomActivityController;
 use App\Http\Controllers\EcomTrackerDashboardController;
 use App\Http\Controllers\EcomTrackerDashboardCompareController;
-use App\Http\Controllers\EcomTrackerDashboardDetailController;
 use App\Http\Controllers\Exports\UserExportController;
 use App\Http\Controllers\SaleTrackingController;
 use App\Http\Controllers\StyleStockReportController;
@@ -47,7 +46,6 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
         'ecom-activity' => 'session',
     ]);
     Route::prefix('exports')->name('exports.')->controller(UserExportController::class)->group(function () {
-        Route::post('ecom-activity/start', 'startEcomActivityReport')->name('ecom-activity.start');
         Route::get('active', 'active')->name('active');
         Route::get('{export}/status', 'status')->name('status');
         Route::get('{export}/download', 'download')->name('download');
@@ -55,13 +53,6 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     });
     Route::get('ecom-tracker/dashboard', [EcomTrackerDashboardController::class, 'index'])->name('ecom-tracker.dashboard');
     Route::get('ecom-tracker/dashboard/compare', [EcomTrackerDashboardCompareController::class, 'index'])->name('ecom-tracker.dashboard.compare');
-    Route::get('ecom-tracker/dashboard/export', [EcomTrackerDashboardController::class, 'export'])->name('ecom-tracker.dashboard.export');
-    Route::post('ecom-tracker/dashboard/sync-actions', [EcomTrackerDashboardController::class, 'syncActions'])->name('ecom-tracker.dashboard.sync-actions');
-    Route::get('ecom-tracker/dashboard/sync-actions/status', [EcomTrackerDashboardController::class, 'syncActionsStatus'])->name('ecom-tracker.dashboard.sync-actions-status');
-    Route::post('ecom-tracker/dashboard/sync-actions/pause', [EcomTrackerDashboardController::class, 'pauseSyncActions'])->name('ecom-tracker.dashboard.sync-actions-pause');
-    Route::post('ecom-tracker/dashboard/sync-actions/resume', [EcomTrackerDashboardController::class, 'resumeSyncActions'])->name('ecom-tracker.dashboard.sync-actions-resume');
-    Route::post('ecom-tracker/dashboard/sync-actions/cancel', [EcomTrackerDashboardController::class, 'cancelSyncActions'])->name('ecom-tracker.dashboard.sync-actions-cancel');
-    Route::get('ecom-tracker/dashboard/details/{section}', [EcomTrackerDashboardDetailController::class, 'show'])->name('ecom-tracker.dashboard.details');
 
     Route::controller(SalesChartController::class)->group(function () {
         Route::get('selling-chart/manage', 'index')->name('selling_chart.index');

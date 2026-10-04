@@ -1,5 +1,4 @@
 @php
-    use App\Support\EcomActivityFocus;
     use App\Support\TrackerMultiSelectFilter;
 
     $includeDateRange = $includeDateRange ?? true;
@@ -7,8 +6,13 @@
     $utmFilterState = $utmFilterState ?? null;
     $includeSessionSearch = $includeSessionSearch ?? true;
     $categoryFilterOptions = $categoryFilterOptions ?? ['departments' => [], 'categories_by_department' => []];
-    $funnelOptions = EcomActivityFocus::sidebarFunnelFilterOptions();
-    $selectedFunnels = EcomActivityFocus::drawerFunnelSelectedValues(request());
+    $funnelOptions = [
+        'cart_abandonment' => 'Cart abandoned',
+        'begin_checkout_abandonment' => 'Begin checkout abandoned',
+        'proceed_checkout_abandonment' => 'Proceed checkout abandoned',
+        'payment_success' => 'Payment success',
+    ];
+    $selectedFunnels = TrackerMultiSelectFilter::requestValues(request(), 'funnel');
     $selectedDevices = TrackerMultiSelectFilter::allowedValues(request('device_type'), ['desktop', 'mobile', 'tablet']);
     $selectedDurations = TrackerMultiSelectFilter::requestValues(request(), 'duration_bucket');
     $selectedSources = $utmFilterState['selected_sources'] ?? TrackerMultiSelectFilter::requestValues(request(), 'utm_source');

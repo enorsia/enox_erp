@@ -11,12 +11,5 @@ return [
 
     'company_name' => env('EXPORT_COMPANY_NAME', 'PFD ENORSIA UK LTD'),
 
-    'types' => [
-        'ecom_activity_report' => [
-            'label' => 'User Activity Report',
-            'route' => 'admin.ecom-activity.index',
-            'permission' => 'ecom_tracker.activity.index',
-            'filename_prefix' => 'User Activity Report',
-        ],
-    ],
+    'types' => [],
 ];

@@ -2,7 +2,7 @@
 
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
-use App\Services\EcomTrackerDashboardService;
+use App\Support\EcomTrackerPeriodRange;
 use App\Services\VisitorAnalyticsService;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -209,20 +209,8 @@ test('unique visitors only count first ever visit not each calendar day', functi
     expect($service->countReturningVisitors($from))->toBe(1);
 });
 
-test('dashboard detail sections return uncapped data', function () {
-    $service = app(EcomTrackerDashboardService::class);
-
-    foreach (['trend', 'categories', 'products', 'colors', 'cart-abandonment', 'begin-checkout-abandonment', 'proceed-checkout-abandonment', 'payment-success-events', 'devices', 'traffic-sources', 'geography', 'engagement'] as $section) {
-        $detail = $service->getSectionDetail($section, ['period' => '30d'], [], null);
-
-        expect($detail['section'])->toBe($section === 'colors' ? 'products' : $section);
-        expect($detail['range'])->toHaveKeys(['from', 'to', 'label']);
-    }
-});
-
-test('dashboard resolve date range uses london day boundaries in utc', function () {
-    $service = app(EcomTrackerDashboardService::class);
-    $range = $service->resolveDateRange(['period' => '7d']);
+test('ecom tracker period range uses london day boundaries in utc', function () {
+    $range = EcomTrackerPeriodRange::resolve(['period' => '7d']);
 
     expect($range['from']->timezone->getName())->toBe('UTC');
     expect(TrackerTime::toLocal($range['from'])?->format('H:i:s'))->toBe('00:00:00');
