@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\ActivityEcomUserAction;
-use App\Models\TrackerBackfillCheckpoint;
 use App\Services\ActivityEcomActionSyncWriter;
 use App\Services\CommerceSyncValidator;
 use App\Services\TrackerDataCleanupService;
@@ -21,7 +20,6 @@ class SyncCommerceData extends Command
                             {--to= : End date YYYY-MM-DD}
                             {--chunk-days= : Days per chunk}
                             {--batch-size= : Actions per DB transaction}
-                            {--resume : Continue from checkpoints}
                             {--validate : Run integrity checks after each chunk}
                             {--only= : Limit stages: payments,cart,checkout,views}
                             {--with-cleanup : Run cleanup before sync}
@@ -33,8 +31,6 @@ class SyncCommerceData extends Command
                             {--cleanup-only : Run cleanup only}';
 
     protected $description = 'One-time sync of historical commerce JSON into normalized orders and line-item tables.';
-
-    private const JOB_NAME = 'commerce_backfill';
 
     public function handle(
         ActivityEcomActionSyncWriter $writer,
@@ -77,15 +73,6 @@ class SyncCommerceData extends Command
             }
 
             $chunkKey = $cursor->toDateString().'_'.$chunkEnd->toDateString();
-            $checkpoint = TrackerBackfillCheckpoint::query()->firstOrCreate(
-                ['job_name' => self::JOB_NAME, 'chunk_key' => $chunkKey],
-                ['status' => 'pending'],
-            );
-
-            if ($this->option('resume') && $checkpoint->status === 'completed') {
-                $cursor = $chunkEnd->copy()->addSecond();
-                continue;
-            }
 
             EcomTrackerLogger::frontend()->info('commerce.sync.chunk.start', 'Processing commerce chunk', [
                 'chunk_key' => $chunkKey,
@@ -101,23 +88,16 @@ class SyncCommerceData extends Command
             $chunkSessions = [];
 
             try {
-                $checkpoint->update(['status' => 'running', 'started_at' => now()]);
-
                 foreach ($actionTypes as $stage) {
                     $this->actionQuery($cursor, $chunkEnd, [$stage])
                         ->orderBy('id')
-                        ->chunkById($batchSize, function ($actions) use ($writer, $checkpoint, &$chunkSessions) {
+                        ->chunkById($batchSize, function ($actions) use ($writer, &$chunkSessions) {
                             $batch = $actions->all();
                             $result = $writer->syncBatch($batch);
 
                             foreach ($batch as $action) {
                                 $chunkSessions[$action->session_id] = true;
                             }
-
-                            $checkpoint->update([
-                                'last_action_id' => $result['last_action_id'],
-                                'records_processed' => ($checkpoint->records_processed ?? 0) + $result['processed'],
-                            ]);
 
                             $this->line(sprintf(
                                 '  batch: processed %d skipped %d last_id %s',
@@ -137,17 +117,7 @@ class SyncCommerceData extends Command
                     $validator->writeReport($issues, $cursor);
                 }
 
-                $checkpoint->update([
-                    'status' => 'completed',
-                    'completed_at' => now(),
-                ]);
             } catch (Throwable $e) {
-                $checkpoint->update([
-                    'status' => 'failed',
-                    'error_message' => $e->getMessage(),
-                    'completed_at' => now(),
-                ]);
-
                 EcomTrackerLogger::frontend()->error('commerce.sync.chunk.failed', 'Commerce chunk failed', [
                     'chunk_key' => $chunkKey,
                     'message' => $e->getMessage(),
