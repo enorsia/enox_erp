@@ -6591,22 +6591,6 @@ main:has(> .etd-page--activity) {
     scrollbar-width: thin;
 }
 
-.etd-page--activity .etd-page-header-toolbar::after {
-    content: '';
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 1.25rem;
-    background: linear-gradient(to right, transparent, #fff);
-    pointer-events: none;
-    z-index: 1;
-}
-
-.dark .etd-page--activity .etd-page-header-toolbar::after {
-    background: linear-gradient(to right, transparent, #1e293b);
-}
-
 @media (min-width: 1024px) {
     .etd-page--activity .etd-header-toolbar-row {
         width: 100%;

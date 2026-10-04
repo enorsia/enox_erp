@@ -29,7 +29,7 @@
                 <input type="text"
                        name="search"
                        value="{{ request('search') }}"
-                       placeholder="Session, visitor, email, phone, IP, product, SKU, category, department, UTM…"
+                       placeholder="Session, visitor, email, phone, IP, product, SKU, category, department…"
                        class="etd-filter-input etd-filter-input--sm w-full">
             </label>
         </section>
@@ -96,8 +96,8 @@
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">Device</span>
                 <select name="device_type[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
-                    @foreach (['desktop', 'mobile', 'tablet'] as $device)
-                        <option value="{{ $device }}" @selected($isSelected($selectedDevices, $device))>{{ $countLabel($device, ucfirst($device), $filterOptionCounts['device_type'] ?? []) }}</option>
+                    @foreach (array_keys($filterOptionCounts['device_type'] ?? []) as $device)
+                        <option value="{{ $device }}" @selected($isSelected($selectedDevices, (string) $device))>{{ $countLabel((string) $device, ucfirst((string) $device), $filterOptionCounts['device_type'] ?? []) }}</option>
                     @endforeach
                 </select>
             </label>
