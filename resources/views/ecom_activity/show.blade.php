@@ -3,20 +3,6 @@
 @section('title', 'Session Activity')
 
 @section('content')
-    @php
-        use App\Support\TrackerTime;
-
-        $badgeColors = [
-            'category_view' => 'badge-blue',
-            'product_view' => 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
-            'product_view_popup' => 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
-            'add_to_cart' => 'badge-amber',
-            'begin_checkout' => 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
-            'proceed_checkout' => 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-            'payment_success' => 'badge-green',
-        ];
-    @endphp
-
     <div class="max-w-6xl mx-auto px-5 py-6 pb-28">
 
         <div class="flex items-start justify-between mb-6 flex-wrap gap-3">
@@ -30,7 +16,7 @@
                 <div>
                     <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Visitor Session</h1>
                     <p class="text-[12px] font-mono text-slate-400 mt-0.5">{{ $activityUser->session_id }}</p>
-                    <p class="text-[11px] text-slate-400 mt-1">All times {{ TrackerTime::timezoneLabel() }}</p>
+                    <p class="text-[11px] text-slate-400 mt-1">All times {{ \App\Support\TrackerTime::timezoneLabel() }}</p>
                 </div>
             </div>
             <a href="{{ $backUrl }}"
@@ -78,7 +64,7 @@
                             <div class="flex flex-wrap items-center gap-2 mb-2">
                                 <span class="badge-custom {{ $badgeClass }}">{{ str_replace('_', ' ', $item->action_type) }}</span>
                                 <span class="text-[12px] text-slate-400">
-                                    {{ TrackerTime::formatFromStorage($item->created_at, 'd M Y, h:i:s A') }}
+                                    {{ \App\Support\TrackerTime::formatFromStorage($item->created_at, 'd M Y, h:i:s A') }}
                                 </span>
                                 @if ($item->dwell_seconds !== null)
                                     <span class="text-[11px] text-slate-500">
@@ -181,7 +167,7 @@
                                                 @if ($segmentSeconds !== null)
                                                     <span class="text-slate-400">· {{ $segmentSeconds }}s</span>
                                                 @endif
-                                                <span class="text-slate-400">· {{ TrackerTime::formatFromStorage($segmentAction->created_at ?? $segmentAction->start_time, 'h:i:s A') }}</span>
+                                                <span class="text-slate-400">· {{ \App\Support\TrackerTime::formatFromStorage($segmentAction->created_at ?? $segmentAction->start_time, 'h:i:s A') }}</span>
                                             </div>
                                         @endforeach
                                     </div>
@@ -205,8 +191,8 @@
                         @foreach ([
                             'Device' => ucfirst($activityUser->device_type ?? '—') . ' · ' . ($activityUser->browser ?? '') . ' · ' . ($activityUser->os ?? ''),
                             'User' => $activityUser->identitySummary(),
-                            'First seen' => TrackerTime::formatFromStorage($activityUser->created_at, 'd M Y, h:i A'),
-                            'Last active' => TrackerTime::formatFromStorage($latestActionAt ?? $activityUser->last_active_at, 'd M Y, h:i A'),
+                            'First seen' => \App\Support\TrackerTime::formatFromStorage($activityUser->created_at, 'd M Y, h:i A'),
+                            'Last active' => \App\Support\TrackerTime::formatFromStorage($latestActionAt ?? $activityUser->last_active_at, 'd M Y, h:i A'),
                         ] as $label => $value)
                             <div class="py-2.5 first:pt-0 min-w-0">
                                 <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>

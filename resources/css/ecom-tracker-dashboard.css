@@ -283,6 +283,19 @@ body.etd-filter-panel-open {
     overflow: hidden;
 }
 
+.etd-filter-panel__backdrop.etd-filter-panel--closed,
+.etd-filter-panel.etd-filter-panel--closed {
+    display: none !important;
+}
+
+.etd-custom-dates--header.etd-custom-dates--closed {
+    display: none !important;
+}
+
+.etd-filter-period__custom.etd-filter-period__custom--closed {
+    display: none !important;
+}
+
 .etd-filter-panel {
     position: fixed;
     z-index: 201;
@@ -1015,7 +1028,21 @@ body.etd-filter-panel-open {
     overflow: visible;
 }
 
-#ecom-tracker-dashboard-content .etd-header-toolbar-icon-group .etd-header-btn--icon-only {
+#ecom-tracker-dashboard-content .etd-header-toolbar-icon-group.etd-header-toolbar-icon-group--actions {
+    gap: 0.35rem;
+    min-width: 0;
+    padding-right: 0;
+    margin-left: 0.05rem;
+}
+
+#ecom-tracker-dashboard-content .etd-header-toolbar-icon-group.etd-header-toolbar-icon-group--actions .etd-header-btn--icon-only {
+    width: 2.25rem;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    flex-shrink: 0;
+}
+
+#ecom-tracker-dashboard-content .etd-header-toolbar-icon-group:not(.etd-header-toolbar-icon-group--actions) .etd-header-btn--icon-only {
     width: 2.5rem;
     min-width: 2.5rem;
     height: 2.5rem;

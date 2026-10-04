@@ -105,6 +105,26 @@
                 triggerExportDownload();
             });
         }
+
+        document.querySelectorAll(".js-activity-export-open").forEach((button) => {
+            if (button.dataset.exportOpenBound) {
+                return;
+            }
+            button.dataset.exportOpenBound = "1";
+            button.addEventListener("click", () => {
+                window.openActivityExportModal?.();
+            });
+        });
+
+        document.querySelectorAll(".js-activity-export-close").forEach((button) => {
+            if (button.dataset.exportCloseBound) {
+                return;
+            }
+            button.dataset.exportCloseBound = "1";
+            button.addEventListener("click", () => {
+                window.closeActivityExportModal?.();
+            });
+        });
     }
 
     async function triggerExportDownload() {

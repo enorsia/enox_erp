@@ -17,7 +17,7 @@ import {
     bindTrendTooltipDismiss,
     createTrendTooltipHandler,
 } from '../lib/ecom-tracker-trend-tooltip';
-import { bindActivityScrollRestore } from '../lib/ecom-tracker-scroll-restore';
+import './ecom-tracker-filters';
 
 Chart.register(
     CategoryScale,
@@ -34,10 +34,264 @@ Chart.register(
     DoughnutController,
 );
 
-const D = window.ecomTrackerDashboardData || {};
-
 Chart.defaults.font.family = "'DM Sans', ui-sans-serif, system-ui, sans-serif";
 Chart.defaults.font.size = 11;
+
+const ETD_FILTER_PANEL_CLOSED_CLASS = 'etd-filter-panel--closed';
+const ETD_CUSTOM_DATES_CLOSED_CLASS = 'etd-custom-dates--closed';
+const ETD_DRAWER_CUSTOM_CLOSED_CLASS = 'etd-filter-period__custom--closed';
+
+function getDashboardPage() {
+    return document.getElementById('ecom-tracker-dashboard-content');
+}
+
+function isDashboardFilterDrawerOpen(drawer) {
+    return drawer && !drawer.classList.contains(ETD_FILTER_PANEL_CLOSED_CLASS);
+}
+
+function initDashboardFilterDrawer(page) {
+    const backdrop = document.getElementById('ecom-dashboard-filter-backdrop');
+    const drawer = document.getElementById('ecom-dashboard-filter-drawer');
+    const openButton = page.querySelector('#ecom-dashboard-filter-open');
+
+    if (!backdrop || !drawer) {
+        return;
+    }
+
+    const setOpen = (isOpen) => {
+        backdrop.classList.toggle(ETD_FILTER_PANEL_CLOSED_CLASS, !isOpen);
+        drawer.classList.toggle(ETD_FILTER_PANEL_CLOSED_CLASS, !isOpen);
+        backdrop.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        drawer.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        document.body.classList.toggle('etd-filter-panel-open', isOpen);
+        openButton?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+
+        if (isOpen && typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(drawer);
+        }
+    };
+
+    const close = () => setOpen(false);
+    const toggle = () => setOpen(!isDashboardFilterDrawerOpen(drawer));
+
+    page.querySelectorAll('.js-ecom-dashboard-filter-open').forEach((el) => {
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            toggle();
+        });
+    });
+
+    page.querySelectorAll('.js-ecom-dashboard-filter-close').forEach((el) => {
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            close();
+        });
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && isDashboardFilterDrawerOpen(drawer)) {
+            close();
+        }
+    });
+
+    window.closeFilterDrawer = close;
+}
+
+function syncDashboardCustomFlatpickr(customPanel, drawerCustom, from, to) {
+    if (!from || !to) {
+        return;
+    }
+
+    const rangeDisplay = customPanel?.querySelector('.etd-flatpickr-date-range');
+    const fpRange = rangeDisplay?._etdFlatpickr;
+
+    if (fpRange) {
+        fpRange.setDate([from, to], false);
+    }
+
+    const drawerFrom = drawerCustom?.querySelector('[name="date_from"]');
+    const drawerTo = drawerCustom?.querySelector('[name="date_to"]');
+
+    if (drawerFrom?._etdFlatpickr) {
+        drawerFrom._etdFlatpickr.setDate(from, false);
+    }
+
+    if (drawerTo?._etdFlatpickr) {
+        drawerTo._etdFlatpickr.setDate(to, false);
+    }
+}
+
+function initDashboardPeriodControls(page) {
+    const headerNav = page.querySelector('.etd-header-period-nav');
+    const customToggle = headerNav?.querySelector('.js-ecom-dashboard-period-custom-toggle');
+    const customPanel = document.getElementById('ecom-dashboard-header-custom-dates');
+    const fromInput = document.getElementById('ecom-dashboard-header-date-from');
+    const toInput = document.getElementById('ecom-dashboard-header-date-to');
+    const applyBtn = customPanel?.querySelector('.js-ecom-dashboard-header-custom-apply');
+    const presetLinks = headerNav?.querySelectorAll('.etd-segmented .etd-segmented-btn[href]');
+    const drawerCustom = document.getElementById('ecom-dashboard-drawer-custom-dates');
+    const periodInput = document.getElementById('ecom-dashboard-filter-period');
+
+    const showHeaderCustom = (show) => {
+        if (!customPanel) {
+            return;
+        }
+
+        customPanel.classList.toggle(ETD_CUSTOM_DATES_CLOSED_CLASS, !show);
+        customToggle?.classList.toggle('active', show);
+
+        if (show) {
+            presetLinks?.forEach((link) => link.classList.remove('active'));
+
+            if (typeof window.refreshEtdFilterControls === 'function') {
+                window.refreshEtdFilterControls(customPanel);
+            }
+
+            syncDashboardCustomFlatpickr(
+                customPanel,
+                drawerCustom,
+                fromInput?.value ?? '',
+                toInput?.value ?? '',
+            );
+        }
+    };
+
+    customToggle?.addEventListener('click', (event) => {
+        event.preventDefault();
+        const isOpen = customPanel && !customPanel.classList.contains(ETD_CUSTOM_DATES_CLOSED_CLASS);
+        showHeaderCustom(!isOpen);
+    });
+
+    applyBtn?.addEventListener('click', () => {
+        const url = new URL(window.location.href);
+
+        url.searchParams.set('period', 'custom');
+
+        const from = fromInput?.value?.trim() ?? '';
+        const to = toInput?.value?.trim() ?? '';
+
+        if (from) {
+            url.searchParams.set('date_from', from);
+        } else {
+            url.searchParams.delete('date_from');
+        }
+
+        if (to) {
+            url.searchParams.set('date_to', to);
+        } else {
+            url.searchParams.delete('date_to');
+        }
+
+        window.location.href = url.toString();
+    });
+
+    page.querySelector('.js-ecom-dashboard-drawer-custom-preset')?.addEventListener('click', () => {
+        if (periodInput) {
+            periodInput.value = 'custom';
+        }
+
+        drawerCustom?.classList.remove(ETD_DRAWER_CUSTOM_CLOSED_CLASS);
+        drawerCustom?.querySelectorAll('[name="date_from"], [name="date_to"]').forEach((input) => {
+            input.disabled = false;
+        });
+
+        if (typeof window.syncEtdFlatpickrEnabled === 'function') {
+            window.syncEtdFlatpickrEnabled(drawerCustom, true);
+        }
+
+        if (typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(drawerCustom);
+        }
+
+        syncDashboardCustomFlatpickr(
+            customPanel,
+            drawerCustom,
+            drawerCustom?.querySelector('[name="date_from"]')?.value ?? '',
+            drawerCustom?.querySelector('[name="date_to"]')?.value ?? '',
+        );
+    });
+
+    const from = fromInput?.value?.trim() ?? '';
+    const to = toInput?.value?.trim() ?? '';
+
+    if (!from || !to) {
+        return;
+    }
+
+    if (customPanel && !customPanel.classList.contains(ETD_CUSTOM_DATES_CLOSED_CLASS)) {
+        if (typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(customPanel);
+        }
+    }
+
+    if (drawerCustom && !drawerCustom.classList.contains(ETD_DRAWER_CUSTOM_CLOSED_CLASS)) {
+        if (typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(drawerCustom);
+        }
+    }
+
+    syncDashboardCustomFlatpickr(customPanel, drawerCustom, from, to);
+}
+
+/** Sample trend series for UI preview (no API). */
+const DEMO_DASHBOARD_TREND = {
+    labels: ['28 Sep', '29 Sep', '30 Sep', '1 Oct', '2 Oct', '3 Oct', '4 Oct'],
+    use_log_scale: true,
+    series: [
+        { key: 'unique_visitors', label: 'Unique visitors', chart_type: 'line', data: [418, 392, 508, 476, 612, 568, 704] },
+        { key: 'sessions', label: 'Sessions', chart_type: 'line', data: [502, 468, 598, 562, 718, 672, 847] },
+        { key: 'product_views', label: 'Product views', chart_type: 'line', data: [820, 760, 980, 910, 1180, 1090, 1324] },
+        { key: 'add_to_cart', label: 'Add to cart', chart_type: 'bar', data: [42, 38, 52, 48, 64, 58, 72] },
+        { key: 'begin_checkout', label: 'Begin checkout', chart_type: 'bar', data: [22, 18, 28, 24, 34, 30, 38] },
+        { key: 'purchases', label: 'Purchases', chart_type: 'bar', data: [8, 6, 10, 9, 12, 11, 14] },
+        {
+            key: 'conversion_rate',
+            label: 'Conversion rate',
+            chart_type: 'line',
+            y_axis_id: 'y1',
+            data: [1.6, 1.3, 1.7, 1.6, 1.7, 1.6, 1.9],
+        },
+    ],
+};
+
+const DEMO_NEW_RETURNING = {
+    labels: ['Unique', 'Returning'],
+    values: [704, 143],
+};
+
+window.ecomTrackerDashboardData = window.ecomTrackerDashboardData || {
+    trend: DEMO_DASHBOARD_TREND,
+    new_returning: DEMO_NEW_RETURNING,
+};
+
+const D = window.ecomTrackerDashboardData;
+const dashboardRoot = document.getElementById('ecom-tracker-dashboard-content');
+
+const TREND_SERIES_COLORS = {
+    unique_visitors: '#7c3aed',
+    sessions: '#2563eb',
+    category_views: '#0d9488',
+    product_views: '#0284c7',
+    add_to_cart: '#d97706',
+    begin_checkout: '#ea580c',
+    proceed_checkout: '#e11d48',
+    purchases: '#16a34a',
+    items_sold_qty: '#65a30d',
+    conversion_rate: '#a21caf',
+};
+
+const TREND_SERIES_ORDER = [
+    'unique_visitors',
+    'sessions',
+    'category_views',
+    'product_views',
+    'add_to_cart',
+    'begin_checkout',
+    'proceed_checkout',
+    'purchases',
+    'items_sold_qty',
+    'conversion_rate',
+];
 
 const isDark = () => document.documentElement.classList.contains('dark');
 const isNarrow = () => window.matchMedia('(max-width: 639px)').matches;
@@ -46,26 +300,6 @@ const gridClr = () => (isDark() ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)')
 const accent = () => getComputedStyle(document.querySelector('.etd-page') || document.body)
     .getPropertyValue('--etd-accent')
     .trim() || '#1D9E75';
-const gold = () => '#f59e0b';
-const purchaseGreen = () => '#22c55e';
-
-/** Semantic colors per trend metric — each series gets a unique, meaningful color. */
-const TREND_SERIES_COLORS = {
-    unique_visitors: '#7c3aed',   // violet — distinct people
-    sessions: '#2563eb',          // blue — visits
-    category_views: '#0d9488',    // teal — category browsing
-    product_views: '#0284c7',     // sky — product pages
-    add_to_cart: '#d97706',       // amber — cart action
-    begin_checkout: '#ea580c',    // orange — checkout started
-    proceed_checkout: '#e11d48',  // rose — checkout in progress
-    purchases: '#16a34a',         // green — completed orders
-    items_sold_qty: '#65a30d',    // lime — units sold
-    conversion_rate: '#a21caf',   // fuchsia — conversion %
-};
-
-function trendSeriesColor(key) {
-    return TREND_SERIES_COLORS[key] || accent();
-}
 
 const tipStyle = () => ({
     backgroundColor: isDark() ? '#1e293b' : '#fff',
@@ -77,10 +311,17 @@ const tipStyle = () => ({
     cornerRadius: 8,
 });
 
-function ctx(id) {
-    const el = document.getElementById(id);
+function trendSeriesColor(key) {
+    return TREND_SERIES_COLORS[key] || '#1D9E75';
+}
 
-    return el ? el.getContext('2d') : null;
+function sortTrendSeries(series) {
+    return [...series].sort((a, b) => {
+        const aIndex = TREND_SERIES_ORDER.indexOf(a.key);
+        const bIndex = TREND_SERIES_ORDER.indexOf(b.key);
+
+        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+    });
 }
 
 function trendTickLimit(labelCount, useHorizontalScroll = false) {
@@ -119,6 +360,14 @@ function trendMinWidth(labelCount) {
     const pixelsPerLabel = isNarrow() ? 34 : 30;
 
     return Math.max(labelCount * pixelsPerLabel, 320);
+}
+
+function sessionsForLogScale(values) {
+    return values.map((value) => {
+        const numeric = Number(value) || 0;
+
+        return numeric > 0 ? numeric : null;
+    });
 }
 
 function applyTrendChartLayout(labelCount) {
@@ -160,40 +409,27 @@ function renderTrendLegend(series) {
     }).join('');
 }
 
-function sessionsForLogScale(values) {
-    return values.map((value) => {
-        const numeric = Number(value) || 0;
+function initDashboardTrendChart(trend) {
+    const canvas = document.getElementById('etdTrendChart');
 
-        return numeric > 0 ? numeric : null;
-    });
-}
+    if (!canvas || !trend) {
+        return;
+    }
 
-const TREND_SERIES_ORDER = [
-    'unique_visitors',
-    'sessions',
-    'category_views',
-    'product_views',
-    'add_to_cart',
-    'begin_checkout',
-    'proceed_checkout',
-    'purchases',
-    'items_sold_qty',
-    'conversion_rate',
-];
+    const chartCtx = canvas.getContext('2d');
+    const {
+        labels = [],
+        series = [],
+        use_log_scale: useLogScale = false,
+    } = trend;
 
-function sortTrendSeries(series) {
-    return [...series].sort((a, b) => {
-        const aIndex = TREND_SERIES_ORDER.indexOf(a.key);
-        const bIndex = TREND_SERIES_ORDER.indexOf(b.key);
-
-        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-    });
-}
-
-function buildTrendDatasets(orderedSeries, labels, useLogScale) {
+    const orderedSeries = sortTrendSeries(series);
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
 
-    return orderedSeries.map((entry, index) => {
+    applyTrendChartLayout(labels.length);
+    renderTrendLegend(orderedSeries);
+
+    const datasets = orderedSeries.map((entry, index) => {
         const color = trendSeriesColor(entry.key);
         const isConversion = entry.key === 'conversion_rate';
         const isBar = entry.chart_type === 'bar';
@@ -221,55 +457,17 @@ function buildTrendDatasets(orderedSeries, labels, useLogScale) {
             maxBarThickness: isBar ? 14 : undefined,
         };
     });
-}
 
-function applyTrendChartOptions(chart, labels) {
-    const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
-
-    chart.options.layout.padding.right = useHorizontalScroll ? 8 : 0;
-    chart.options.plugins.legend.display = !isCompactChart();
-    chart.options.scales.x.ticks.maxRotation = useHorizontalScroll || labels.length > 20 ? 45 : 0;
-    chart.options.scales.x.ticks.minRotation = useHorizontalScroll ? 35 : 0;
-    chart.options.scales.x.ticks.autoSkip = !useHorizontalScroll && labels.length > 24;
-    chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, useHorizontalScroll);
-    chart.options.scales.x.ticks.font.size = isNarrow() ? 9 : 11;
-    chart.options.scales.y.ticks.font.size = isNarrow() ? 9 : 11;
-    chart.options.scales.y1.ticks.font.size = isNarrow() ? 9 : 11;
-}
-
-function refreshTrendChart(chart, orderedSeries, labels, useLogScale) {
-    chart.data.datasets = buildTrendDatasets(orderedSeries, labels, useLogScale);
-    applyTrendChartOptions(chart, labels);
-    chart.update('none');
-    chart.resize();
-}
-
-const trendCtx = ctx('etdTrendChart');
-if (trendCtx && D.trend) {
-    const {
-        labels = [],
-        series = [],
-        use_log_scale: useLogScale = false,
-    } = D.trend;
-
-    const orderedSeries = sortTrendSeries(series);
-
-    applyTrendChartLayout(labels.length);
-    renderTrendLegend(orderedSeries);
-
-    const trendChart = new Chart(trendCtx, {
+    const chart = new Chart(chartCtx, {
         type: 'bar',
-        data: {
-            labels,
-            datasets: buildTrendDatasets(orderedSeries, labels, useLogScale),
-        },
+        data: { labels, datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             layout: {
                 padding: {
-                    right: trendUsesHorizontalScroll(labels.length) ? 8 : 0,
+                    right: useHorizontalScroll ? 8 : 0,
                 },
             },
             plugins: {
@@ -293,10 +491,10 @@ if (trendCtx && D.trend) {
                 x: {
                     grid: { display: false },
                     ticks: {
-                        maxRotation: trendUsesHorizontalScroll(labels.length) || labels.length > 20 ? 45 : 0,
-                        minRotation: trendUsesHorizontalScroll(labels.length) ? 35 : 0,
-                        autoSkip: !trendUsesHorizontalScroll(labels.length) && labels.length > 24,
-                        maxTicksLimit: trendTickLimit(labels.length, trendUsesHorizontalScroll(labels.length)),
+                        maxRotation: useHorizontalScroll || labels.length > 20 ? 45 : 0,
+                        minRotation: useHorizontalScroll ? 35 : 0,
+                        autoSkip: !useHorizontalScroll && labels.length > 24,
+                        maxTicksLimit: trendTickLimit(labels.length, useHorizontalScroll),
                         font: { size: isNarrow() ? 9 : 11 },
                     },
                 },
@@ -306,12 +504,6 @@ if (trendCtx && D.trend) {
                     grid: { color: gridClr() },
                     beginAtZero: !useLogScale,
                     min: useLogScale ? 1 : 0,
-                    title: {
-                        display: useLogScale,
-                        text: 'Log scale',
-                        color: isDark() ? '#94a3b8' : '#64748b',
-                        font: { size: 10 },
-                    },
                     ticks: {
                         precision: 0,
                         font: { size: isNarrow() ? 9 : 11 },
@@ -330,152 +522,26 @@ if (trendCtx && D.trend) {
         },
     });
 
-    let resizeFrame = null;
-    const trendChartScroll = document.getElementById('etdTrendChartScroll');
-
-    bindTrendTooltipDismiss(trendChartScroll);
-
     window.addEventListener('resize', () => {
-        if (resizeFrame) {
-            cancelAnimationFrame(resizeFrame);
-        }
-
-        resizeFrame = requestAnimationFrame(() => {
-            applyTrendChartLayout(labels.length);
-            renderTrendLegend(orderedSeries);
-            refreshTrendChart(trendChart, orderedSeries, labels, useLogScale);
-        });
+        applyTrendChartLayout(labels.length);
+        renderTrendLegend(orderedSeries);
+        chart.options.plugins.legend.display = !isCompactChart();
+        chart.resize();
     });
+
+    bindTrendTooltipDismiss(document.getElementById('etdTrendChartScroll'));
 }
 
-const dwellCtx = ctx('etdDwellChart');
+function initDashboardNewReturningChart() {
+    const canvas = document.getElementById('etdNewReturningChart');
 
-function formatDwellSeconds(seconds) {
-    const value = Math.max(0, Number(seconds) || 0);
-
-    if (value <= 0) {
-        return '0s';
+    if (!canvas || !D.new_returning) {
+        return;
     }
 
-    const hours = Math.floor(value / 3600);
-    const minutes = Math.floor((value % 3600) / 60);
-    const remaining = value % 60;
+    const chartCtx = canvas.getContext('2d');
 
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    }
-
-    if (minutes > 0) {
-        return `${minutes}m ${remaining}s`;
-    }
-
-    return `${value}s`;
-}
-
-function formatDwellAxisTick(value) {
-    const seconds = Number(value) || 0;
-
-    if (seconds >= 3600) {
-        return `${Math.round(seconds / 3600)}h`;
-    }
-
-    if (seconds >= 60) {
-        return `${Math.round(seconds / 60)}m`;
-    }
-
-    return `${seconds}s`;
-}
-
-if (dwellCtx && D.engagement) {
-    const { labels = [], buyers = [], non_buyers: nonBuyers = [] } = D.engagement;
-    const rows = D.engagement.rows || [];
-
-    new Chart(dwellCtx, {
-        type: 'bar',
-        data: {
-            labels,
-            datasets: [
-                {
-                    label: 'Buyers',
-                    data: buyers,
-                    backgroundColor: `${gold()}D9`,
-                    borderColor: gold(),
-                    borderWidth: 1,
-                    borderRadius: 6,
-                    borderSkipped: false,
-                    barPercentage: 0.62,
-                    categoryPercentage: 0.72,
-                },
-                {
-                    label: 'Non-buyers',
-                    data: nonBuyers,
-                    backgroundColor: `${accent()}66`,
-                    borderColor: `${accent()}B3`,
-                    borderWidth: 1,
-                    borderRadius: 6,
-                    borderSkipped: false,
-                    barPercentage: 0.62,
-                    categoryPercentage: 0.72,
-                },
-            ],
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    ...tipStyle(),
-                    callbacks: {
-                        title: (items) => items[0]?.label || '',
-                        label: (context) => {
-                            const row = rows[context.dataIndex];
-                            const formatted = context.dataset.label === 'Buyers'
-                                ? row?.buyers_formatted
-                                : row?.non_buyers_formatted;
-
-                            return `${context.dataset.label}: ${formatted || formatDwellSeconds(context.parsed.x)}`;
-                        },
-                        afterBody: (items) => {
-                            const row = rows[items[0]?.dataIndex];
-
-                            if (!row || row.delta_seconds === 0) {
-                                return [];
-                            }
-
-                            return [`Gap: ${row.delta_formatted}`];
-                        },
-                    },
-                },
-            },
-            scales: {
-                x: {
-                    grid: { color: gridClr() },
-                    beginAtZero: true,
-                    ticks: {
-                        callback: (value) => formatDwellAxisTick(value),
-                        font: { size: isNarrow() ? 9 : 10 },
-                    },
-                },
-                y: {
-                    grid: { display: false },
-                    ticks: {
-                        font: { size: isNarrow() ? 10 : 11 },
-                    },
-                },
-            },
-        },
-    });
-}
-
-const newReturningCtx = ctx('etdNewReturningChart');
-if (newReturningCtx && D.new_returning) {
-    new Chart(newReturningCtx, {
+    new Chart(chartCtx, {
         type: 'doughnut',
         data: {
             labels: D.new_returning.labels || [],
@@ -500,78 +566,7 @@ if (newReturningCtx && D.new_returning) {
     });
 }
 
-function syncKpiPanelCardHeights() {
-    const panel = document.querySelector('.etd-kpi-panel');
-
-    if (!panel) {
-        return;
-    }
-
-    const cards = panel.querySelectorAll('.etd-kpi--compact');
-
-    if (!cards.length) {
-        return;
-    }
-
-    if (window.matchMedia('(max-width: 767px)').matches) {
-        panel.style.removeProperty('--etd-kpi-sync-height');
-        cards.forEach((card) => {
-            card.style.minHeight = '';
-        });
-
-        return;
-    }
-
-    panel.style.removeProperty('--etd-kpi-sync-height');
-
-    let maxHeight = 0;
-
-    cards.forEach((card) => {
-        card.style.minHeight = '';
-        maxHeight = Math.max(maxHeight, card.getBoundingClientRect().height);
-    });
-
-    if (maxHeight <= 0) {
-        return;
-    }
-
-    const height = `${Math.ceil(maxHeight)}px`;
-    panel.style.setProperty('--etd-kpi-sync-height', height);
-    cards.forEach((card) => {
-        card.style.minHeight = height;
-    });
-}
-
-const kpiPanel = document.querySelector('.etd-kpi-panel');
-
-if (kpiPanel) {
-    syncKpiPanelCardHeights();
-
-    let syncFrame = null;
-
-    const scheduleKpiHeightSync = () => {
-        if (syncFrame !== null) {
-            cancelAnimationFrame(syncFrame);
-        }
-
-        syncFrame = requestAnimationFrame(() => {
-            syncFrame = null;
-            syncKpiPanelCardHeights();
-        });
-    };
-
-    window.addEventListener('resize', scheduleKpiHeightSync);
-
-    if (typeof ResizeObserver !== 'undefined') {
-        const kpiResizeObserver = new ResizeObserver(scheduleKpiHeightSync);
-        kpiResizeObserver.observe(kpiPanel);
-        kpiPanel.querySelectorAll('.etd-kpi-group').forEach((group) => kpiResizeObserver.observe(group));
-    }
-}
-
-const dashboardRoot = document.getElementById('ecom-tracker-dashboard-content');
-
-const DASHBOARD_CHART_IDS = ['etdTrendChart', 'etdNewReturningChart', 'etdDwellChart'];
+const DASHBOARD_CHART_IDS = ['etdTrendChart', 'etdNewReturningChart'];
 
 let dashboardPrintSession = null;
 
@@ -770,286 +765,38 @@ function printEcomTrackerDashboard() {
     });
 }
 
-window.printEcomTrackerDashboard = printEcomTrackerDashboard;
+function bootDashboardPage() {
+    const page = getDashboardPage();
 
-if (dashboardRoot) {
-    window.addEventListener('beforeprint', prepareDashboardForPrint);
-    window.addEventListener('afterprint', restoreDashboardAfterPrint);
-
-    document.getElementById('etdDashboardPrintBtn')?.addEventListener('click', printEcomTrackerDashboard);
-
-    const syncBtn = document.getElementById('etdDashboardSyncBtn');
-    const syncPanelRow = document.getElementById('etdHeaderSyncProgressRow');
-    const syncPanel = document.getElementById('etdHeaderSyncProgress');
-    const syncTrack = document.getElementById('etdHeaderSyncTrack');
-    const syncBar = document.getElementById('etdHeaderSyncBar');
-    const syncMessage = document.getElementById('etdHeaderSyncMessage');
-    const syncCancelBtn = document.getElementById('etdHeaderSyncCancel');
-
-    let syncStatusTimer = null;
-
-    const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-
-    const setSyncButtonBusy = (busy) => {
-        if (!syncBtn) {
-            return;
-        }
-
-        syncBtn.disabled = busy;
-        if (busy) {
-            syncBtn.setAttribute('aria-busy', 'true');
-        } else {
-            syncBtn.removeAttribute('aria-busy');
-        }
-    };
-
-    const updateSyncBadge = (queue) => {
-        if (!syncBtn) {
-            return;
-        }
-
-        const count = Number(queue ?? 0);
-        let badge = syncBtn.querySelector('.etd-header-btn-badge');
-
-        if (count <= 0) {
-            badge?.remove();
-            syncBtn.classList.remove('etd-header-btn--has-badge');
-            return;
-        }
-
-        if (!badge) {
-            badge = document.createElement('span');
-            badge.className = 'etd-header-btn-badge etd-header-btn-badge--corner';
-            badge.setAttribute('aria-hidden', 'true');
-            syncBtn.appendChild(badge);
-            syncBtn.classList.add('etd-header-btn--has-badge');
-        }
-
-        badge.textContent = count > 99 ? '99+' : String(count);
-    };
-
-    const showSyncMessageOnly = (text, { success = false } = {}) => {
-        if (!syncPanelRow || !syncPanel || !syncMessage) {
-            return;
-        }
-
-        stopSyncStatusPolling();
-        syncPanel.classList.add('etd-header-sync-progress--message-only');
-        syncPanel.classList.toggle('etd-header-sync-progress--success', success);
-        syncPanelRow.hidden = false;
-        syncMessage.textContent = text;
-        if (syncCancelBtn) {
-            syncCancelBtn.hidden = true;
-        }
-        if (syncTrack) {
-            syncTrack.hidden = true;
-        }
-        setSyncButtonBusy(false);
-    };
-
-    const renderSyncProgress = (progress, queue) => {
-        const done = Number(progress?.done_count ?? 0);
-        const total = Number(progress?.total_count ?? 0);
-        const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-        const active = Boolean(progress?.active);
-        const message = progress?.step_message || '';
-
-        if (!syncPanelRow || !syncPanel) {
-            return;
-        }
-
-        if (!active && !message) {
-            syncPanelRow.hidden = true;
-            syncPanel.classList.remove('etd-header-sync-progress--message-only');
-            return;
-        }
-
-        if (!active && message && total === 0 && done === 0) {
-            showSyncMessageOnly(message);
-            return;
-        }
-
-        const syncFinished = !active && total > 0 && done >= total;
-        const syncCompleteMessage = /^sync complete/i.test(message);
-
-        if (syncFinished || syncCompleteMessage) {
-            showSyncMessageOnly(message || 'Synced successfully.', { success: true });
-            updateSyncBadge(queue);
-            return;
-        }
-
-        syncPanel.classList.remove('etd-header-sync-progress--message-only');
-        syncPanel.classList.remove('etd-header-sync-progress--success');
-        syncPanelRow.hidden = false;
-
-        if (syncCancelBtn) {
-            syncCancelBtn.hidden = !active;
-        }
-
-        if (syncTrack) {
-            syncTrack.hidden = total <= 0;
-        }
-
-        if (syncBar) {
-            syncBar.style.width = `${percent}%`;
-        }
-
-        if (syncMessage) {
-            syncMessage.textContent = message;
-        }
-
-        updateSyncBadge(queue);
-        setSyncButtonBusy(Boolean(progress?.lock_sync_button));
-    };
-
-    const stopSyncStatusPolling = () => {
-        if (syncStatusTimer !== null) {
-            window.clearInterval(syncStatusTimer);
-            syncStatusTimer = null;
-        }
-    };
-
-    const postJson = async (url, method = 'POST') => {
-        const response = await fetch(url, {
-            method,
-            headers: {
-                Accept: 'application/json',
-                'X-CSRF-TOKEN': csrfToken(),
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-            credentials: 'same-origin',
-        });
-
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-            throw new Error(data.message || `Request failed (${response.status})`);
-        }
-
-        return data;
-    };
-
-    const pollSyncStatus = async (statusUrl) => {
-        if (!statusUrl) {
-            return;
-        }
-
-        try {
-            const response = await fetch(statusUrl, {
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                credentials: 'same-origin',
-            });
-
-            const data = await response.json().catch(() => ({}));
-
-            if (!response.ok) {
-                return;
-            }
-
-            const progress = data.progress || {};
-            const queue = Number(data.queue ?? progress.queue_remaining ?? 0);
-
-            if (data.complete) {
-                stopSyncStatusPolling();
-                setSyncButtonBusy(false);
-                updateSyncBadge(queue);
-
-                const total = Number(progress.total_count ?? 0);
-                const done = Number(progress.done_count ?? 0);
-                const msg = progress.step_message || '';
-
-                if (msg && total > 0) {
-                    const succeeded =
-                        progress.sync_succeeded === true || /^sync complete/i.test(msg);
-                    showSyncMessageOnly(msg, { success: succeeded });
-                    return;
-                }
-
-                if (msg && total === 0 && done === 0) {
-                    showSyncMessageOnly(msg);
-                    return;
-                }
-
-                if (!msg && !progress.active) {
-                    syncPanelRow.hidden = true;
-                    syncPanel?.classList.remove('etd-header-sync-progress--message-only');
-                    syncPanel?.classList.remove('etd-header-sync-progress--success');
-                }
-
-                return;
-            }
-
-            renderSyncProgress(progress, queue);
-        } catch {
-            // Retry on next interval.
-        }
-    };
-
-    const startSyncStatusPolling = (statusUrl) => {
-        stopSyncStatusPolling();
-        pollSyncStatus(statusUrl);
-        syncStatusTimer = window.setInterval(() => pollSyncStatus(statusUrl), 2000);
-    };
-
-    if (syncBtn) {
-        const syncUrl = syncBtn.dataset.syncUrl;
-        const statusUrl = syncBtn.dataset.syncStatusUrl;
-        const chainActiveOnLoad = syncBtn.dataset.syncChainActive === '1';
-
-        if (chainActiveOnLoad && statusUrl) {
-            startSyncStatusPolling(statusUrl);
-        }
-
-        syncCancelBtn?.addEventListener('click', async () => {
-            const cancelUrl = syncCancelBtn.dataset.cancelUrl;
-            if (!cancelUrl) {
-                return;
-            }
-
-            stopSyncStatusPolling();
-
-            try {
-                const data = await postJson(cancelUrl);
-                if (syncPanelRow) {
-                    syncPanelRow.hidden = true;
-                }
-                updateSyncBadge(data.progress?.queue_remaining ?? 0);
-                setSyncButtonBusy(false);
-            } catch {
-                setSyncButtonBusy(false);
-            }
-        });
-
-        syncBtn.addEventListener('click', async () => {
-            if (!syncUrl || syncBtn.disabled) {
-                return;
-            }
-
-            setSyncButtonBusy(true);
-
-            try {
-                const data = await postJson(syncUrl);
-                const progress = data.progress || data.result?.progress || {};
-                const queue = Number(data.result?.queue ?? progress.queue_remaining ?? 0);
-
-                if (data.result?.started || progress.active || data.result?.chain_active) {
-                    renderSyncProgress(progress, queue);
-                    startSyncStatusPolling(statusUrl);
-                    return;
-                }
-
-                showSyncMessageOnly(
-                    data.message || data.result?.message || 'Already up to date.',
-                );
-            } catch (error) {
-                showSyncMessageOnly(error?.message || 'Sync failed.');
-            }
-        });
+    if (!page) {
+        return;
     }
 
-    bindActivityScrollRestore(dashboardRoot);
+    initDashboardFilterDrawer(page);
+    initDashboardPeriodControls(page);
+    initDashboardTrendChart(D.trend);
+    initDashboardNewReturningChart();
 }
 
+window.printEcomTrackerDashboard = printEcomTrackerDashboard;
+
+function bindDashboardPrintControls() {
+    if (!dashboardRoot || dashboardRoot.dataset.etdPrintBound === '1') {
+        return;
+    }
+
+    dashboardRoot.dataset.etdPrintBound = '1';
+    window.addEventListener('beforeprint', prepareDashboardForPrint);
+    window.addEventListener('afterprint', restoreDashboardAfterPrint);
+    document.getElementById('etdDashboardPrintBtn')?.addEventListener('click', printEcomTrackerDashboard);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        bindDashboardPrintControls();
+        bootDashboardPage();
+    });
+} else {
+    bindDashboardPrintControls();
+    bootDashboardPage();
+}

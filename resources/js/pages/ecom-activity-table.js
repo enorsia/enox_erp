@@ -302,77 +302,202 @@ function bindActivityTableNavigation(page) {
     bindSortSelect(page.querySelector('[data-etd-activity-sort-select]'));
 }
 
-async function fetchActivityTable(url) {
-    const page = getActivityPage();
-    const cleanUrl = cleanActivityUrl(url);
+function fetchActivityTable(url) {
+    window.location.href = cleanActivityUrl(url).toString();
+}
 
-    if (!page) {
-        window.location.href = cleanUrl.toString();
+const ETD_FILTER_PANEL_CLOSED_CLASS = 'etd-filter-panel--closed';
 
+function isActivityFilterDrawerOpen(drawer) {
+    return drawer && !drawer.classList.contains(ETD_FILTER_PANEL_CLOSED_CLASS);
+}
+
+function initActivityFilterDrawer(page) {
+    const backdrop = document.getElementById('ecom-activity-filter-backdrop');
+    const drawer = document.getElementById('ecom-activity-filter-drawer');
+    const openButton = page.querySelector('#ecom-activity-filter-open');
+
+    if (!backdrop || !drawer) {
         return;
     }
 
-    const fetchUrl = new URL(cleanUrl.toString(), window.location.origin);
-    fetchUrl.searchParams.set('fragment', 'table');
-    const startedAt = performance.now();
+    const setOpen = (isOpen) => {
+        backdrop.classList.toggle(ETD_FILTER_PANEL_CLOSED_CLASS, !isOpen);
+        drawer.classList.toggle(ETD_FILTER_PANEL_CLOSED_CLASS, !isOpen);
+        backdrop.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        drawer.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        document.body.classList.toggle('etd-filter-panel-open', isOpen);
+        openButton?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
 
-    setActivityTableLoading(true);
-    await waitForNextPaint();
+        if (isOpen && typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(drawer);
+        }
+    };
 
-    try {
-        const response = await fetch(fetchUrl.toString(), {
-            headers: {
-                Accept: 'text/html',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
+    const open = () => setOpen(true);
+    const close = () => setOpen(false);
+    const toggle = () => setOpen(!isActivityFilterDrawerOpen(drawer));
+
+    page.querySelectorAll('.js-ecom-activity-filter-open').forEach((el) => {
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            toggle();
+        });
+    });
+
+    page.querySelectorAll('.js-ecom-activity-filter-close').forEach((el) => {
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            close();
+        });
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && isActivityFilterDrawerOpen(drawer)) {
+            close();
+        }
+    });
+
+    window.closeFilterDrawer = close;
+}
+
+const ETD_CUSTOM_DATES_CLOSED_CLASS = 'etd-custom-dates--closed';
+const ETD_DRAWER_CUSTOM_CLOSED_CLASS = 'etd-filter-period__custom--closed';
+
+function syncActivityCustomFlatpickr(customPanel, drawerCustom, from, to) {
+    if (!from || !to) {
+        return;
+    }
+
+    const rangeDisplay = customPanel?.querySelector('.etd-flatpickr-date-range');
+    const fpRange = rangeDisplay?._etdFlatpickr;
+
+    if (fpRange) {
+        fpRange.setDate([from, to], false);
+    }
+
+    const drawerFrom = drawerCustom?.querySelector('[name="date_from"]');
+    const drawerTo = drawerCustom?.querySelector('[name="date_to"]');
+
+    if (drawerFrom?._etdFlatpickr) {
+        drawerFrom._etdFlatpickr.setDate(from, false);
+    }
+
+    if (drawerTo?._etdFlatpickr) {
+        drawerTo._etdFlatpickr.setDate(to, false);
+    }
+}
+
+function initActivityPeriodControls(page) {
+    const headerNav = page.querySelector('.etd-header-period-nav');
+    const customToggle = headerNav?.querySelector('.js-ecom-activity-period-custom-toggle');
+    const customPanel = document.getElementById('ecom-activity-header-custom-dates');
+    const fromInput = document.getElementById('ecom-activity-header-date-from');
+    const toInput = document.getElementById('ecom-activity-header-date-to');
+    const applyBtn = customPanel?.querySelector('.js-ecom-activity-header-custom-apply');
+    const presetLinks = headerNav?.querySelectorAll('.etd-segmented .etd-segmented-btn[href]');
+    const drawerCustom = document.getElementById('ecom-activity-drawer-custom-dates');
+    const periodInput = document.getElementById('ecom-activity-filter-period');
+
+    const showHeaderCustom = (show) => {
+        if (!customPanel) {
+            return;
+        }
+
+        customPanel.classList.toggle(ETD_CUSTOM_DATES_CLOSED_CLASS, !show);
+        customToggle?.classList.toggle('active', show);
+
+        if (show) {
+            presetLinks?.forEach((link) => link.classList.remove('active'));
+
+            if (typeof window.refreshEtdFilterControls === 'function') {
+                window.refreshEtdFilterControls(customPanel);
+            }
+
+            syncActivityCustomFlatpickr(
+                customPanel,
+                drawerCustom,
+                fromInput?.value ?? '',
+                toInput?.value ?? '',
+            );
+        }
+    };
+
+    customToggle?.addEventListener('click', (event) => {
+        event.preventDefault();
+        const isOpen = customPanel && !customPanel.classList.contains(ETD_CUSTOM_DATES_CLOSED_CLASS);
+        showHeaderCustom(!isOpen);
+    });
+
+    applyBtn?.addEventListener('click', () => {
+        const url = new URL(window.location.href);
+
+        url.searchParams.set('period', 'custom');
+
+        const from = fromInput?.value?.trim() ?? '';
+        const to = toInput?.value?.trim() ?? '';
+
+        if (from) {
+            url.searchParams.set('date_from', from);
+        } else {
+            url.searchParams.delete('date_from');
+        }
+
+        if (to) {
+            url.searchParams.set('date_to', to);
+        } else {
+            url.searchParams.delete('date_to');
+        }
+
+        window.location.href = url.toString();
+    });
+
+    page.querySelector('.js-ecom-activity-drawer-custom-preset')?.addEventListener('click', () => {
+        if (periodInput) {
+            periodInput.value = 'custom';
+        }
+
+        drawerCustom?.classList.remove(ETD_DRAWER_CUSTOM_CLOSED_CLASS);
+        drawerCustom?.querySelectorAll('[name="date_from"], [name="date_to"]').forEach((input) => {
+            input.disabled = false;
         });
 
-        if (!response.ok) {
-            throw new Error(`Activity table fragment failed (${response.status})`);
+        if (typeof window.syncEtdFlatpickrEnabled === 'function') {
+            window.syncEtdFlatpickrEnabled(drawerCustom, true);
         }
 
-        const html = await response.text();
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const panel = doc.querySelector('.etd-panel');
-        const pagination = doc.querySelector('.etd-activity-pagination');
-
-        if (!panel || !pagination) {
-            throw new Error('Activity table fragment missing expected markup');
+        if (typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(drawerCustom);
         }
 
-        const scrollTop = getActivityTableViewport(page)?.scrollTop ?? 0;
+        syncActivityCustomFlatpickr(
+            customPanel,
+            drawerCustom,
+            drawerCustom?.querySelector('[name="date_from"]')?.value ?? '',
+            drawerCustom?.querySelector('[name="date_to"]')?.value ?? '',
+        );
+    });
 
-        page.querySelector('.etd-panel')?.replaceWith(panel);
-        page.querySelector('.etd-activity-pagination')?.replaceWith(pagination);
+    const from = fromInput?.value?.trim() ?? '';
+    const to = toInput?.value?.trim() ?? '';
 
-        const nextViewport = getActivityTableViewport(page);
-        if (nextViewport) {
-            nextViewport.scrollTop = scrollTop;
-        }
-
-        const nextUrl = cleanUrl.toString();
-        if (window.location.href !== nextUrl) {
-            history.pushState({}, '', nextUrl);
-        }
-
-        if (typeof window.refreshTomSelectIn === 'function') {
-            window.refreshTomSelectIn(page.querySelector('.etd-panel'));
-        }
-
-        bindActivityTableNavigation(page);
-        bindActivityShowLinkCapture(page);
-    } catch {
-        window.location.href = cleanUrl.toString();
-    } finally {
-        const elapsed = performance.now() - startedAt;
-        const remaining = ACTIVITY_TABLE_LOADER_MIN_MS - elapsed;
-
-        if (remaining > 0) {
-            await wait(remaining);
-        }
-
-        setActivityTableLoading(false);
+    if (!from || !to) {
+        return;
     }
+
+    if (customPanel && !customPanel.classList.contains(ETD_CUSTOM_DATES_CLOSED_CLASS)) {
+        if (typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(customPanel);
+        }
+    }
+
+    if (drawerCustom && !drawerCustom.classList.contains(ETD_DRAWER_CUSTOM_CLOSED_CLASS)) {
+        if (typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(drawerCustom);
+        }
+    }
+
+    syncActivityCustomFlatpickr(customPanel, drawerCustom, from, to);
 }
 
 function onSortLinkClick(event) {
@@ -412,10 +537,8 @@ function bootActivityTableNavigation() {
     bindActivityTableNavigation(page);
     bindActivityShowLinkCapture(page);
     restoreActivityListRestoreState();
-
-    window.addEventListener('popstate', () => {
-        fetchActivityTable(window.location.href);
-    });
+    initActivityFilterDrawer(page);
+    initActivityPeriodControls(page);
 }
 
 if (document.readyState === 'loading') {

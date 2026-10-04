@@ -1,35 +1,17 @@
-@props([
-    'context',
-    'export_key' => null,
-    'export' => null,
-])
-
-@if (! empty($context))
-    @php
-        $sessionMetric = collect($context['metrics'] ?? [])->firstWhere('label', 'Matching sessions');
-        $extraMetrics = collect($context['metrics'] ?? [])->reject(
-            fn (array $metric) => ($metric['label'] ?? '') === 'Matching sessions'
-        );
-        $sessionCount = (int) ($sessionMetric['value'] ?? 0);
-        $filterChips = collect($context['filter_chips'] ?? [])->filter(
-            fn (array $chip) => filled($chip['label'] ?? null)
-        )->values();
-        $tooltip = trim((string) ($context['description'] ?? ''));
-    @endphp
-
+@if ($drillDownUi)
     <div
         class="etd-activity-context"
         role="region"
-        aria-label="{{ ($context['clear_label'] ?? 'Clear section') === 'Clear filters' ? 'Filtered activity summary' : 'Dashboard drill-down summary' }}"
-        @if ($tooltip !== '') title="{{ $tooltip }}" @endif
+        aria-label="{{ $drillDownUi['contextAriaLabel'] }}"
+        @if ($drillDownUi['tooltip'] !== '') title="{{ $drillDownUi['tooltip'] }}" @endif
     >
         <div class="etd-activity-context__summary">
             <div class="etd-activity-context__metrics" role="status">
                 <span class="etd-activity-context__metric etd-activity-context__metric--sessions">
-                    <span class="sr-only">Matching sessions: </span>{{ number_format($sessionCount) }} {{ $sessionCount === 1 ? 'session' : 'sessions' }}
+                    <span class="sr-only">Matching sessions: </span>{{ number_format($drillDownUi['sessionCount']) }} {{ $drillDownUi['sessionCountLabel'] }}
                 </span>
 
-                @foreach ($extraMetrics as $metric)
+                @foreach ($drillDownUi['extraMetrics'] as $metric)
                     <span class="etd-activity-context__metric">
                         <span class="etd-activity-context__metric-label">{{ $metric['label'] }}</span>
                         {{ $metric['value'] }}
@@ -37,20 +19,20 @@
                 @endforeach
             </div>
 
-            @if (filled($export_key))
+            @if ($drillDownUi['showExport'])
                 <div class="etd-activity-context__export">
                     @include('ecom_tracker.partials.exports.export-header-status', [
-                        'export_key' => $export_key,
-                        'export' => $export,
+                        'export_key' => $drillDownUi['exportKey'],
+                        'export' => $activityExport,
                     ])
                 </div>
             @endif
         </div>
 
-        @if ($filterChips->isNotEmpty())
+        @if ($drillDownUi['filterChips'] !== [])
             <div class="etd-activity-context__filters">
                 <div class="etd-activity-context__filter-chips">
-                    @foreach ($filterChips as $chip)
+                    @foreach ($drillDownUi['filterChips'] as $chip)
                         <span class="etd-activity-context__chip">
                             <span class="etd-activity-context__chip-label">{{ $chip['label'] }}</span>
                             @if (! empty($chip['remove_url']))

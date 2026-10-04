@@ -1,24 +1,3 @@
-@props([
-    'sessions',
-    'focusColumns' => [],
-    'rowMetrics' => [],
-    'emptyMessage' => 'No visitor sessions found.',
-    'clearFocusUrl' => null,
-    'hasFocus' => false,
-])
-
-@php
-    use App\Support\EcomActivityCommerceEvents;
-    use App\Support\EcomActivityFocus;
-    use App\Support\TrackerTime;
-    use App\Support\EcomTrackerViewData;
-
-    $focusColspan = count($focusColumns);
-    $usePeriodEventTime = EcomActivityFocus::usesPeriodEventTimestamps(request());
-    $showCatalogFilterColumn = request()->filled('department') || request()->filled('category');
-    $totalCols = 8 + $focusColspan + ($showCatalogFilterColumn ? 1 : 0);
-@endphp
-
 <div class="etd-activity-table-shell" data-etd-activity-table-shell>
     <div class="etd-activity-table-loading" data-etd-activity-table-loading aria-hidden="true">
         <svg class="etd-activity-table-loading__spinner" fill="none" viewBox="0 0 24 24" aria-hidden="true">
@@ -31,9 +10,9 @@
     <div
         @class([
             'etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity',
-            'etd-table-scroll--activity-wide' => $focusColspan > 0,
+            'etd-table-scroll--activity-wide' => $tableShell['tableWide'],
         ])
-        style="--etd-activity-focus-cols: {{ $focusColspan }}"
+        style="--etd-activity-focus-cols: {{ $tableShell['focusColspan'] }}"
         data-etd-activity-table-viewport
         x-data="{ openEvent: null }"
         @keydown.escape.window="openEvent = null"
@@ -44,7 +23,7 @@
             <tr>
                 <th class="etd-col-session">
                     @include('ecom_activity.partials.sortable-column-header', [
-                        'sortKey' => 'session',
+                        'header' => $sortHeaders['session'],
                         'label' => 'Session',
                         'tip' => 'When the session started',
                     ])
@@ -58,20 +37,20 @@
                 </th>
                 <th class="etd-col-commerce">
                     @include('ecom_activity.partials.sortable-column-header', [
-                        'sortKey' => 'funnel_stage',
+                        'header' => $sortHeaders['funnel_stage'],
                         'label' => 'Commerce',
                         'tip' => 'Highest funnel stage reached in this period: Order, Proceed, Checkout, Cart, or View',
                     ])
                 </th>
                 <th class="etd-col-actions etd-num">
                     @include('ecom_activity.partials.sortable-column-header', [
-                        'sortKey' => 'actions',
+                        'header' => $sortHeaders['actions'],
                         'label' => 'Actions',
                         'tip' => 'Total tracked events in this session',
                         'align' => 'center',
                     ])
                 </th>
-                @if ($showCatalogFilterColumn)
+                @if ($tableShell['showCatalogFilterColumn'])
                     <th class="etd-col-catalog-filter">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Category',
@@ -94,14 +73,14 @@
                 @endforeach
                 <th class="etd-col-duration etd-activity-col--optional">
                     @include('ecom_activity.partials.sortable-column-header', [
-                        'sortKey' => 'duration',
+                        'header' => $sortHeaders['duration'],
                         'label' => 'Duration',
                     ])
                 </th>
                 <th class="etd-col-last-active etd-activity-col--optional">
                     @include('ecom_activity.partials.sortable-column-header', [
-                        'sortKey' => 'last_active',
-                        'label' => $usePeriodEventTime ? 'Paid' : 'Last active',
+                        'header' => $sortHeaders['last_active'],
+                        'label' => $tableShell['usePeriodEventTime'] ? 'Paid' : 'Last active',
                     ])
                 </th>
                 <th class="etd-col-action">View</th>
@@ -133,7 +112,7 @@
                         @php
                             $periodEventAt = $metrics['period_event_at'] ?? null;
                         @endphp
-                        @if ($usePeriodEventTime && filled($periodEventAt))
+                        @if ($tableShell['usePeriodEventTime'] && filled($periodEventAt))
                             <div class="etd-subtle mt-0.5">{{ TrackerTime::formatFromStorage($periodEventAt, 'd M Y, H:i') }}</div>
                         @else
                             <div class="etd-subtle mt-0.5">{{ TrackerTime::formatFromStorage($session->created_at) }}</div>
@@ -153,7 +132,7 @@
                         ])
                     </td>
                     <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($session->actions_count ?? $metrics['actions_count'] ?? 0)) }}</td>
-                    @if ($showCatalogFilterColumn)
+                    @if ($tableShell['showCatalogFilterColumn'])
                         @php $catalogPath = trim((string) ($metrics['catalog_path'] ?? '')); @endphp
                         <td class="etd-col-catalog-filter" data-label="Category">
                             {{ ($catalogPath !== '' && $catalogPath !== '—') ? $catalogPath : '—' }}
@@ -166,7 +145,7 @@
                     @endforeach
                     <td class="etd-col-duration etd-activity-col--optional" data-label="Duration">{{ format_duration((int) ($session->session_duration_seconds ?? 0)) }}</td>
                     <td class="etd-col-last-active etd-activity-col--optional" data-label="Last active">
-                        @if ($usePeriodEventTime && filled($periodEventAt))
+                        @if ($tableShell['usePeriodEventTime'] && filled($periodEventAt))
                             {{ TrackerTime::diffForHumansFromStorage($periodEventAt) ?? '—' }}
                         @else
                             {{ TrackerTime::diffForHumansLatestActivity($session->updated_at, $session->last_active_at, $session->created_at) ?? '—' }}
@@ -174,7 +153,7 @@
                     </td>
                     <td class="etd-col-action" data-label="View">
                         @can('ecom_tracker.activity.show')
-                            <a href="{{ EcomTrackerViewData::activityShowUrlFromRequest(request(), $session->session_id) }}" class="etd-link">View session</a>
+                            <a href="{{ route('admin.ecom-activity.show', \App\Support\EcomTrackerViewData::activityShowParams($session->session_id, $activityShowBack)) }}" class="etd-link">View session</a>
                         @endcan
                     </td>
                 </tr>
@@ -185,14 +164,14 @@
                         :class="{ 'is-open': openEvent === @js($eventKey) }"
                         x-cloak
                     >
-                        <td colspan="{{ $totalCols }}" class="etd-commerce-event-row__cell">
+                        <td colspan="{{ $tableShell['totalCols'] }}" class="etd-commerce-event-row__cell">
                             @include('ecom_activity.partials.commerce-event-detail', ['event' => $event])
                         </td>
                     </tr>
                 @endforeach
             @empty
                 <tr class="etd-activity-empty-row">
-                    <td colspan="{{ $totalCols }}" class="text-center text-slate-500 py-10">
+                    <td colspan="{{ $tableShell['totalCols'] }}" class="text-center text-slate-500 py-10">
                         {{ $emptyMessage }}
                         @if ($hasFocus && filled($clearFocusUrl))
                             <div class="mt-2">

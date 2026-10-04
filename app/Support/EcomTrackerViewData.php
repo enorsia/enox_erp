@@ -377,6 +377,73 @@ final class EcomTrackerViewData
     }
 
     /**
+     * UTC date range for the activity index header and period navigation.
+     *
+     * @return array{from: Carbon, to: Carbon, label: string, period: string}
+     */
+    public static function activityIndexRange(Request $request): array
+    {
+        if ($request->input('period') === 'all') {
+            return [
+                'from' => Carbon::parse('2000-01-01', 'UTC'),
+                'to' => TrackerTime::nowUtc(),
+                'label' => 'All sessions',
+                'period' => 'all',
+            ];
+        }
+
+        $period = $request->input('period', '24h') ?: '24h';
+        if ($period === '90d') {
+            $period = '30d';
+        }
+
+        if ($period === 'custom' && $request->filled('date_from') && $request->filled('date_to')) {
+            $fromLocal = Carbon::parse((string) $request->input('date_from'), TrackerTime::timezone())->startOfDay();
+            $toLocal = Carbon::parse((string) $request->input('date_to'), TrackerTime::timezone())->endOfDay();
+
+            return [
+                'from' => $fromLocal->copy()->utc(),
+                'to' => $toLocal->copy()->utc(),
+                'label' => TrackerTime::formatLocalDateRangeLabel($fromLocal, $toLocal),
+                'period' => 'custom',
+            ];
+        }
+
+        if ($period === '24h') {
+            $today = TrackerTime::todayRangeUtc();
+
+            return [
+                'from' => $today['from'],
+                'to' => $today['to'],
+                'label' => TrackerTime::todayPresetLabel(),
+                'period' => '24h',
+            ];
+        }
+
+        if ($period === 'yesterday') {
+            $yesterday = TrackerTime::yesterdayRangeUtc();
+
+            return [
+                'from' => $yesterday['from'],
+                'to' => $yesterday['to'],
+                'label' => TrackerTime::yesterdayPresetLabel(),
+                'period' => 'yesterday',
+            ];
+        }
+
+        $days = $period === '7d' ? 7 : 30;
+        $toLocal = TrackerTime::localNow()->endOfDay();
+        $fromLocal = TrackerTime::localNow()->subDays($days - 1)->startOfDay();
+
+        return [
+            'from' => $fromLocal->copy()->utc(),
+            'to' => $toLocal->copy()->utc(),
+            'label' => "Last {$days} days",
+            'period' => $period === '7d' ? '7d' : '30d',
+        ];
+    }
+
+    /**
      * Decode back URLs from query params (handles legacy double-encoded values).
      */
     /**

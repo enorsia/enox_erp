@@ -30,41 +30,17 @@ class EcomTrackerDashboardController extends EcomTrackerAdminController
         parent::__construct($featureGate);
     }
 
-    public function index(Request $request): View|RedirectResponse
+    public function index(Request $request): View
     {
-        $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.dashboard.index');
 
-        if ($redirect = $this->redirectIfDashboardHasLegacyFilters($request)) {
-            return $redirect;
-        }
+        $data = [
+            'period' => $request->input('period', '24h'),
+            'dateFrom' => (string) $request->input('date_from', ''),
+            'dateTo' => (string) $request->input('date_to', ''),
+        ];
 
-        $filters = $this->dashboardDateFilters($request);
-
-        $dashboard = $this->service->getDashboardData($filters);
-        $dashboard['chart_payload'] = $this->service->chartPayload($dashboard);
-        $activeFilterCount = $this->dashboardDateActiveFilterCount($request);
-
-        TrackerRedisSupport::logBackendHealth('store_dashboard');
-
-        EcomTrackerLogger::backend()->info('analytics.dashboard', 'Admin opened store dashboard', [
-            'date_from' => $filters['date_from'] ?? null,
-            'date_to' => $filters['date_to'] ?? null,
-            'active_filter_count' => $activeFilterCount,
-            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
-        ]);
-
-        return view('ecom_tracker.dashboard', [
-            'dashboard' => $dashboard,
-            'filters' => $dashboard['filters'],
-            'action_sync' => $this->actionSyncService->summary(),
-            'action_sync_chain_active' => $this->actionSyncService->isSyncChainActive(),
-            'page' => EcomTrackerViewData::forDashboard(
-                $request,
-                $dashboard['filters'],
-                $activeFilterCount,
-            ),
-        ]);
+        return view('ecom_tracker.dashboard', compact('data'));
     }
 
     public function syncActions(Request $request): JsonResponse

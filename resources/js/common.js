@@ -32,6 +32,10 @@ window.toggleDark = function () {
    MOBILE SIDEBAR
 ══════════════════════════════════════ */
 window.toggleSidebar = function () {
+    if (typeof window.closeFilterDrawer === 'function') {
+        window.closeFilterDrawer();
+    }
+
     const sidebar  = document.getElementById('sidebar');
     const backdrop = document.getElementById('sidebarBackdrop');
     if (!sidebar) return;

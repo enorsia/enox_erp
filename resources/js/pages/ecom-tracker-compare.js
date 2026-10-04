@@ -10,6 +10,8 @@ import {
     Legend,
     BarController,
     LineController,
+    DoughnutController,
+    ArcElement,
 } from 'chart.js';
 import {
     bindTrendTooltipDismiss,
@@ -30,9 +32,49 @@ Chart.register(
     Legend,
     BarController,
     LineController,
+    DoughnutController,
+    ArcElement,
 );
 
-const compareData = window.ecomTrackerCompareData || {};
+const DEMO_COMPARE_TREND = {
+    labels: ['28 Sep', '29 Sep', '30 Sep', '1 Oct', '2 Oct', '3 Oct', '4 Oct'],
+    use_log_scale: true,
+    series: [
+        { key: 'unique_visitors', label: 'Unique visitors', chart_type: 'line', data: [418, 392, 508, 476, 612, 568, 704] },
+        { key: 'sessions', label: 'Sessions', chart_type: 'line', data: [502, 468, 598, 562, 718, 672, 847] },
+        { key: 'add_to_cart', label: 'Add to cart', chart_type: 'bar', data: [42, 38, 52, 48, 64, 58, 72] },
+        { key: 'purchases', label: 'Purchases', chart_type: 'bar', data: [8, 6, 10, 9, 12, 11, 14] },
+    ],
+};
+
+const DEMO_COMPARE_TREND_RIGHT = {
+    labels: ['27 Sep', '28 Sep', '29 Sep', '30 Sep', '1 Oct', '2 Oct', '3 Oct'],
+    use_log_scale: true,
+    series: [
+        { key: 'unique_visitors', label: 'Unique visitors', chart_type: 'line', data: [360, 340, 420, 410, 520, 490, 612] },
+        { key: 'sessions', label: 'Sessions', chart_type: 'line', data: [440, 420, 510, 500, 620, 590, 768] },
+        { key: 'add_to_cart', label: 'Add to cart', chart_type: 'bar', data: [36, 32, 44, 40, 54, 50, 62] },
+        { key: 'purchases', label: 'Purchases', chart_type: 'bar', data: [6, 5, 8, 7, 10, 9, 12] },
+    ],
+};
+
+const DEMO_COMPARE_NEW_RETURNING_LEFT = {
+    labels: ['Unique', 'Returning'],
+    values: [704, 143],
+};
+
+const DEMO_COMPARE_NEW_RETURNING_RIGHT = {
+    labels: ['Unique', 'Returning'],
+    values: [612, 156],
+};
+
+window.ecomTrackerCompareData = window.ecomTrackerCompareData || {
+    left: { trend: DEMO_COMPARE_TREND, new_returning: DEMO_COMPARE_NEW_RETURNING_LEFT },
+    right: { trend: DEMO_COMPARE_TREND_RIGHT, new_returning: DEMO_COMPARE_NEW_RETURNING_RIGHT },
+};
+
+const compareData = window.ecomTrackerCompareData;
+const compareRoot = document.getElementById('ecom-tracker-compare-content');
 const compareSyncQuery = window.matchMedia('(min-width: 1200px)');
 let comparePrintSyncPaused = false;
 
@@ -499,6 +541,58 @@ initCompareTrendChart({
     trend: compareData.right?.trend,
 });
 
+function accent() {
+    return getComputedStyle(document.documentElement).getPropertyValue('--color-accent-500').trim() || '#7c3aed';
+}
+
+function tipStyle() {
+    return {
+        backgroundColor: isDark() ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.98)',
+        titleColor: isDark() ? '#f8fafc' : '#0f172a',
+        bodyColor: isDark() ? '#e2e8f0' : '#334155',
+        borderColor: isDark() ? 'rgba(148, 163, 184, 0.3)' : 'rgba(148, 163, 184, 0.4)',
+        borderWidth: 1,
+        padding: 10,
+    };
+}
+
+function initCompareNewReturningChart(canvasId, newReturning) {
+    const canvas = document.getElementById(canvasId);
+
+    if (!canvas || !newReturning) {
+        return;
+    }
+
+    const chartCtx = canvas.getContext('2d');
+
+    new Chart(chartCtx, {
+        type: 'doughnut',
+        data: {
+            labels: newReturning.labels || [],
+            datasets: [{
+                data: newReturning.values || [],
+                backgroundColor: [accent(), '#64748b'],
+                borderWidth: 0,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '68%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 10, padding: 12 },
+                },
+                tooltip: tipStyle(),
+            },
+        },
+    });
+}
+
+initCompareNewReturningChart('etdNewReturningChartLeft', compareData.left?.new_returning);
+initCompareNewReturningChart('etdNewReturningChartRight', compareData.right?.new_returning);
+
 scheduleCompareSectionSync();
 
 const compareTrendChartConfigs = [
@@ -664,9 +758,15 @@ function restoreCompareTrendChartAfterPrint({ canvasId, wrapId, legendId, hintId
     chart.resize();
 }
 
+const COMPARE_DOUGHNUT_CHART_IDS = ['etdNewReturningChartLeft', 'etdNewReturningChartRight'];
+
 function resizeCompareTrendChartsForPrint() {
     compareTrendChartConfigs.forEach(({ canvasId }) => {
         Chart.getChart(canvasId)?.resize();
+    });
+
+    COMPARE_DOUGHNUT_CHART_IDS.forEach((id) => {
+        Chart.getChart(id)?.resize();
     });
 }
 
@@ -740,13 +840,25 @@ function printEcomTrackerCompare() {
 
 window.printEcomTrackerCompare = printEcomTrackerCompare;
 
-window.addEventListener('beforeprint', prepareCompareForPrint);
-window.addEventListener('afterprint', restoreCompareAfterPrint);
+function bindComparePrintControls() {
+    if (!compareRoot || compareRoot.dataset.etdPrintBound === '1') {
+        return;
+    }
 
-document.getElementById('etdComparePrintBtn')?.addEventListener('click', printEcomTrackerCompare);
-
-const compareRoot = document.getElementById('ecom-tracker-compare-content');
-
-if (compareRoot) {
+    compareRoot.dataset.etdPrintBound = '1';
+    window.addEventListener('beforeprint', prepareCompareForPrint);
+    window.addEventListener('afterprint', restoreCompareAfterPrint);
+    document.getElementById('etdComparePrintBtn')?.addEventListener('click', printEcomTrackerCompare);
     bindActivityScrollRestore(compareRoot, { stabilizeRestore: true });
+}
+
+function bootComparePage() {
+    bindComparePrintControls();
+    scheduleCompareSectionSync();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootComparePage);
+} else {
+    bootComparePage();
 }
