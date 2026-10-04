@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
 use App\Models\TrackerUtmFilter;
 use App\Support\TrackerMultiSelectFilter;

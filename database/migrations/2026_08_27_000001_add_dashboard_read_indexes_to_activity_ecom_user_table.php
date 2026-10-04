@@ -23,13 +23,6 @@ return new class extends Migration
             );
             $table->index(['created_at', 'city', 'country'], 'idx_aeus_created_geo');
         });
-
-        Schema::table('activity_ecom_commerce_line_items', function (Blueprint $table) {
-            $table->index(
-                ['staged_at', 'funnel_stage', 'session_id'],
-                'idx_line_staged_funnel_session',
-            );
-        });
     }
 
     public function down(): void
@@ -37,10 +30,6 @@ return new class extends Migration
         Schema::table('activity_ecom_user', function (Blueprint $table) {
             $table->dropIndex('idx_aeus_created_dashboard_agg');
             $table->dropIndex('idx_aeus_created_geo');
-        });
-
-        Schema::table('activity_ecom_commerce_line_items', function (Blueprint $table) {
-            $table->dropIndex('idx_line_staged_funnel_session');
         });
     }
 };

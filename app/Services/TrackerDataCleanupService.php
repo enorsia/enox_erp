@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\ActivityEcomCommerceLineItem;
-use App\Models\ActivityEcomOrder;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\ActivityEcomUserBotContext;
@@ -407,13 +405,17 @@ class TrackerDataCleanupService
 
                             $actionsReassigned += $moved;
 
-                            ActivityEcomOrder::query()
-                                ->where('session_id', $fromId)
-                                ->update(['session_id' => $keeperId]);
+                            if (Schema::hasTable('activity_ecom_orders')) {
+                                DB::table('activity_ecom_orders')
+                                    ->where('session_id', $fromId)
+                                    ->update(['session_id' => $keeperId]);
+                            }
 
-                            ActivityEcomCommerceLineItem::query()
-                                ->where('session_id', $fromId)
-                                ->update(['session_id' => $keeperId]);
+                            if (Schema::hasTable('activity_ecom_commerce_line_items')) {
+                                DB::table('activity_ecom_commerce_line_items')
+                                    ->where('session_id', $fromId)
+                                    ->update(['session_id' => $keeperId]);
+                            }
 
                             if (Schema::hasTable('attribution_touch_log')) {
                                 DB::table('attribution_touch_log')

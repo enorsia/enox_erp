@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\ActivityEcomOrder;
 use App\Models\ActivityEcomUserAction;
+use Illuminate\Support\Facades\Schema;
 use App\Support\CommercePricingExtractor;
 use App\Support\EcomTrackerLogger;
 use App\Support\TrackerTime;
@@ -18,6 +18,11 @@ class CommerceSyncValidator
      */
     public function validateChunk(Carbon $from, Carbon $to): array
     {
+        if (! Schema::hasTable('activity_ecom_orders')
+            || ! Schema::hasTable('activity_ecom_commerce_line_items')) {
+            return [];
+        }
+
         $issues = [];
 
         $orders = DB::table('activity_ecom_orders')
@@ -48,7 +53,7 @@ class CommerceSyncValidator
                     return false;
                 }
 
-                return ! ActivityEcomOrder::query()->where('order_id', $orderId)->exists();
+                return ! DB::table('activity_ecom_orders')->where('order_id', $orderId)->exists();
             });
 
         foreach ($missingOrders as $action) {

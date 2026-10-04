@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
 use App\Services\BotContextPersister;
 use App\Support\EcomTrackerLogger;
@@ -15,7 +14,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class RecordVisitorActivityJob implements ShouldQueue
@@ -53,18 +51,15 @@ class RecordVisitorActivityJob implements ShouldQueue
 
         $now = TrackerTime::toUtc($this->resolvedAt ?? TrackerTime::nowUtc()) ?? TrackerTime::nowUtc();
         $formattedNow = TrackerTime::formatUtc($now);
-        $visitDate = TrackerTime::localDate($now);
 
         $session = ActivityEcomUser::query()
             ->where('session_id', $this->sessionId)
             ->first();
 
         if ($this->isNewSession) {
-            $this->ensureDailyLedgerRow($formattedNow, $visitDate);
-
             if ($session === null) {
                 $session = $this->createSession($formattedNow);
-                $this->afterSessionCreated($session, $formattedNow, $visitDate);
+                $this->afterSessionCreated($session);
             } else {
                 $this->updateExistingSession($session, $now, $formattedNow);
                 EcomTrackerLogger::frontend()->debug('job.record_visitor.idempotent', 'Session already exists — updated instead of insert', [
@@ -83,15 +78,6 @@ class RecordVisitorActivityJob implements ShouldQueue
 
         if ($this->isNewDailyVisitor) {
             app(VisitorSessionRedis::class)->markSeenBefore($this->visitorId);
-        }
-
-        if (app(VisitorSessionRedis::class)->acquireRollupLock($this->visitorId, $visitDate)) {
-            $this->rollupDailyDuration($this->visitorId, $visitDate, $formattedNow);
-
-            EcomTrackerLogger::frontend()->debug('job.record_visitor.rollup', 'Daily visit time counted', [
-                'visitor_id' => $this->visitorId,
-                'visit_date' => $visitDate,
-            ]);
         }
 
         EcomTrackerLogger::frontend()->info('job.record_visitor.complete', 'Background job done', [
@@ -132,7 +118,7 @@ class RecordVisitorActivityJob implements ShouldQueue
         );
     }
 
-    private function afterSessionCreated(ActivityEcomUser $session, string $formattedNow, string $visitDate): void
+    private function afterSessionCreated(ActivityEcomUser $session): void
     {
         if (! $session->wasRecentlyCreated) {
             return;
@@ -150,14 +136,6 @@ class RecordVisitorActivityJob implements ShouldQueue
         if (is_array($botResolved)) {
             app(BotContextPersister::class)->persistIfAbsent($this->sessionId, $botResolved);
         }
-
-        ActivityEcomDailyVisitor::query()
-            ->where('visitor_id', $this->visitorId)
-            ->whereDate('visit_date', $visitDate)
-            ->update([
-                'last_seen_at' => $formattedNow,
-                'session_count' => DB::raw('session_count + 1'),
-            ]);
     }
 
     private function updateExistingSession(ActivityEcomUser $session, Carbon $now, string $formattedNow): void
@@ -199,55 +177,4 @@ class RecordVisitorActivityJob implements ShouldQueue
         return max(0, (int) $createdAt->diffInSeconds($now, true));
     }
 
-    private function ensureDailyLedgerRow(string $formattedNow, string $visitDate): void
-    {
-        $existing = ActivityEcomDailyVisitor::query()
-            ->where('visitor_id', $this->visitorId)
-            ->whereDate('visit_date', $visitDate)
-            ->first();
-
-        if ($existing !== null) {
-            return;
-        }
-
-        ActivityEcomDailyVisitor::query()->create([
-            'visitor_id' => $this->visitorId,
-            'visit_date' => $visitDate,
-            'first_seen_at' => $formattedNow,
-            'last_seen_at' => $formattedNow,
-            'total_duration_seconds' => 0,
-            'session_count' => 0,
-        ]);
-
-        EcomTrackerLogger::frontend()->debug('job.record_visitor.daily_ledger', 'New daily visitor record created', [
-            'visitor_id' => $this->visitorId,
-            'visit_date' => $visitDate,
-        ]);
-    }
-
-    private function rollupDailyDuration(string $visitorId, string $visitDate, string $now): void
-    {
-        $localStart = TrackerTime::toLocal($visitDate.' 00:00:00');
-        $localEnd = TrackerTime::toLocal($visitDate.' 23:59:59');
-
-        if ($localStart === null || $localEnd === null) {
-            return;
-        }
-
-        $utcFrom = $localStart->copy()->utc()->format('Y-m-d H:i:s');
-        $utcTo = $localEnd->copy()->utc()->format('Y-m-d H:i:s');
-
-        $totalDuration = (int) ActivityEcomUser::query()
-            ->where('visitor_id', $visitorId)
-            ->whereBetween('created_at', [$utcFrom, $utcTo])
-            ->sum('session_duration_seconds');
-
-        ActivityEcomDailyVisitor::query()
-            ->where('visitor_id', $visitorId)
-            ->whereDate('visit_date', $visitDate)
-            ->update([
-                'last_seen_at' => $now,
-                'total_duration_seconds' => $totalDuration,
-            ]);
-    }
 }
