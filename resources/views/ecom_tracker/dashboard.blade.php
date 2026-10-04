@@ -56,6 +56,9 @@
                     <button type="button" id="ecom-dashboard-filter-open" class="etd-header-btn etd-header-btn--icon-only js-ecom-dashboard-filter-open" aria-label="Filters" aria-expanded="false">
                         <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
                     </button>
+                    <button type="button" id="ecom-dashboard-sync" class="etd-header-btn etd-header-btn--icon etd-header-btn--sync etd-print-hide" aria-label="Sync" title="Sync">
+                        <span class="etd-header-btn-text">Sync</span>
+                    </button>
                 </div>
             </div>
         </div>
