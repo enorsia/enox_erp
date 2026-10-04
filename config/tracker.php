@@ -114,28 +114,6 @@ return [
 
     'analytics_cache_today_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_TODAY_SECONDS', 60),
 
-    'action_sync_batch_size' => (int) env('TRACKER_ACTION_SYNC_BATCH_SIZE', 25),
-
-    'action_sync_max_attempts' => (int) env('TRACKER_ACTION_SYNC_MAX_ATTEMPTS', 5),
-
-    /*
-     * Dashboard action sync uses the DB `jobs` table by default (QUEUE_CONNECTION=database).
-     * Visitor resolve jobs still use TRACKER_QUEUE_* (Redis). Do not mix them unless intended.
-     */
-    'action_sync_queue_connection' => env('TRACKER_ACTION_SYNC_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'database')),
-
-    'action_sync_queue_name' => env('TRACKER_ACTION_SYNC_QUEUE_NAME', env('DB_QUEUE', 'default')),
-
-    /**
-     * When true, the dashboard status poll runs one database queue job if batches are
-     * queued but nothing is reserved (no queue:work process). Disable if you always
-     * run a dedicated worker and want polls to stay read-only.
-     */
-    'action_sync_process_on_status_poll' => filter_var(
-        env('TRACKER_ACTION_SYNC_PROCESS_ON_STATUS_POLL', true),
-        FILTER_VALIDATE_BOOL,
-    ),
-
     'commerce_sync_batch_size' => (int) env('TRACKER_COMMERCE_SYNC_BATCH_SIZE', 100),
 
     'commerce_sync_chunk_days' => (int) env('TRACKER_COMMERCE_SYNC_CHUNK_DAYS', 7),

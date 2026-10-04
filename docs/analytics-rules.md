@@ -1,6 +1,6 @@
 # EnoxTracker analytics rules
 
-Commerce metrics come from **`activity_ecom_user_actions`** synced by **`ActivityEcomActionSyncWriter`** (dashboard queue job) into line items, daily metric tables, and orders.
+Commerce metrics (legacy) were derived from **`activity_ecom_user_actions`** via **`ActivityEcomActionSyncWriter`** / `tracker:sync-commerce-data`. Dashboard sync is **`TrackerDashboardSyncService`** (see `POST admin/ecom-tracker/dashboard/sync`).
 
 ## Day boundary
 
@@ -19,8 +19,3 @@ Commerce metrics come from **`activity_ecom_user_actions`** synced by **`Activit
 
 - Line items store event-time department/category/product fields; optional `tracker_*_id` columns after catalog stamp.
 - Command: `php artisan tracker:backfill-catalog` stamps line item catalog IDs.
-
-## Action sync
-
-- Dashboard **Sync** queues `SyncActivityEcomUserActionsJob` on the database `jobs` table.
-- Each batch reads pending/failed rows from `activity_ecom_user_actions` and writes commerce line items (and orders for payment).
