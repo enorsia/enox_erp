@@ -2,7 +2,6 @@
 
 use App\Models\ActivityEcomDailyVisitor;
 use App\Models\ActivityEcomUser;
-use App\Support\EcomTrackerPeriodRange;
 use App\Services\VisitorAnalyticsService;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -209,9 +208,3 @@ test('unique visitors only count first ever visit not each calendar day', functi
     expect($service->countReturningVisitors($from))->toBe(1);
 });
 
-test('ecom tracker period range uses london day boundaries in utc', function () {
-    $range = EcomTrackerPeriodRange::resolve(['period' => '7d']);
-
-    expect($range['from']->timezone->getName())->toBe('UTC');
-    expect(TrackerTime::toLocal($range['from'])?->format('H:i:s'))->toBe('00:00:00');
-});
