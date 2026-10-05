@@ -18,6 +18,8 @@ class TrackerDashboardSyncService
 {
     private const MAX_SYNC_TRY = 5;
 
+    private const FAILED_RETRY_COOLDOWN_MINUTES = 5;
+
     /** @var array<string, int|null> */
     private array $cache = [];
 
@@ -78,21 +80,25 @@ class TrackerDashboardSyncService
         $sessionPk = (int) $sessionRow['id'];
         $rawSessionId = (string) ($sessionRow['session_id'] ?? '');
         $actionIds = $actions->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $cacheBefore = $this->cache;
+        $sessionUpdatedAt = $sessionRow['updated_at'] ?? null;
 
         try {
-            DB::transaction(function () use ($sessionRow, $actions, $actionIds, $sessionPk): void {
+            DB::transaction(function () use ($sessionRow, $actions, $actionIds, $sessionPk, $cacheBefore, $sessionUpdatedAt): void {
+                $this->cache = $cacheBefore;
                 $this->upsertTrackingFromSession($sessionRow, $actions);
-                $this->markSessionSynced($sessionPk);
+                $this->markSessionSynced($sessionPk, $sessionUpdatedAt);
                 $this->markActionsSyncedByIds($actionIds);
             }, 3);
 
             return true;
         } catch (Throwable $e) {
+            $this->cache = $cacheBefore;
+
             Log::error('tracker.dashboard.sync: session failed', [
                 'activity_ecom_user_id' => $sessionPk,
                 'session_id' => $rawSessionId,
                 'exception' => $e,
-                'message' => $e->getMessage(),
             ]);
 
             try {
@@ -110,14 +116,20 @@ class TrackerDashboardSyncService
 
     private function fetchPendingSessions(int $afterId, int $limit): Collection
     {
+        $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
+
         return DB::table('activity_ecom_user as u')
             ->select('u.*')
             ->where('u.id', '>', $afterId)
-            ->where(function ($query): void {
+            ->where('u.sync_try', '<', self::MAX_SYNC_TRY)
+            ->where(function ($query) use ($retryAfter): void {
                 $query->where('u.is_sync', ActivityEcomUser::SYNC_PENDING)
-                    ->orWhere(function ($q): void {
+                    ->orWhere(function ($q) use ($retryAfter): void {
                         $q->where('u.is_sync', ActivityEcomUser::SYNC_FAILED)
-                            ->where('u.sync_try', '<', self::MAX_SYNC_TRY);
+                            ->where(function ($cooldown) use ($retryAfter): void {
+                                $cooldown->whereNull('u.sync_at')
+                                    ->orWhere('u.sync_at', '<', $retryAfter);
+                            });
                     })
                     ->orWhere(function ($q): void {
                         $q->where('u.is_sync', ActivityEcomUser::SYNC_DONE)
@@ -258,37 +270,57 @@ class TrackerDashboardSyncService
         $visitorId = Str::limit($visitorId, 36, '');
         $cacheKey = 'main_visitor:'.$visitorId;
 
-        return $this->remember($cacheKey, function () use ($visitorId, $sessionRow): int {
-            $existing = DB::table('tracking_main_visitor')->where('visitor_id', $visitorId)->first();
+        $name = $sessionRow['user_name'] ?? null;
+        $email = $sessionRow['user_email'] ?? null;
+        $phone = $sessionRow['user_phone'] ?? null;
 
-            $name = $sessionRow['user_name'] ?? null;
-            $email = $sessionRow['user_email'] ?? null;
-            $phone = $sessionRow['user_phone'] ?? null;
+        if (array_key_exists($cacheKey, $this->cache)) {
+            $this->updateMainVisitorById((int) $this->cache[$cacheKey], $name, $email, $phone);
 
-            if ($existing) {
-                $updates = $this->diffUpdates((array) $existing, [
-                    'name' => $name,
-                    'email' => $email,
-                    'phone' => $phone,
-                ]);
+            return (int) $this->cache[$cacheKey];
+        }
 
-                if ($updates !== []) {
-                    $updates['updated_at'] = now();
-                    DB::table('tracking_main_visitor')->where('id', $existing->id)->update($updates);
-                }
+        $existing = DB::table('tracking_main_visitor')->where('visitor_id', $visitorId)->first();
 
-                return (int) $existing->id;
-            }
+        if ($existing) {
+            $this->updateMainVisitorById((int) $existing->id, $name, $email, $phone, $existing);
+            $this->cache[$cacheKey] = (int) $existing->id;
 
-            return $this->insertOrFetch('tracking_main_visitor', [
-                'visitor_id' => $visitorId,
-                'name' => $name,
-                'email' => $email,
-                'phone' => $phone,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ], ['visitor_id' => $visitorId]);
-        }) ?? throw new \RuntimeException('Failed to resolve main visitor');
+            return (int) $existing->id;
+        }
+
+        $id = $this->insertOrFetch('tracking_main_visitor', [
+            'visitor_id' => $visitorId,
+            'name' => $name,
+            'email' => $email,
+            'phone' => $phone,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], ['visitor_id' => $visitorId]);
+
+        $this->cache[$cacheKey] = $id;
+
+        return $id;
+    }
+
+    private function updateMainVisitorById(
+        int $mainVisitorId,
+        mixed $name,
+        mixed $email,
+        mixed $phone,
+        ?object $existing = null,
+    ): void {
+        $existing ??= DB::table('tracking_main_visitor')->where('id', $mainVisitorId)->first();
+
+        if ($existing === null) {
+            return;
+        }
+
+        $this->applyTableUpdates('tracking_main_visitor', $existing, [
+            'name' => $name ?? $existing->name,
+            'email' => $email ?? $existing->email,
+            'phone' => $phone ?? $existing->phone,
+        ]);
     }
 
     /**
@@ -340,27 +372,24 @@ class TrackerDashboardSyncService
             'name' => $sessionRow['user_name'] ?? null,
             'email' => $sessionRow['user_email'] ?? null,
             'phone' => $sessionRow['user_phone'] ?? null,
-            'is_logged_in' => (bool) ($sessionRow['is_logged_in'] ?? false),
+            'is_logged_in' => (int) (bool) ($sessionRow['is_logged_in'] ?? false),
             'duration_seconds' => (int) ($sessionRow['session_duration_seconds'] ?? 0),
             'last_active_at' => $sessionRow['last_active_at'] ?? null,
             'latest_funnel_stage' => $this->funnelStageCode($sessionRow['latest_funnel_stage'] ?? null),
-            'has_order' => (bool) ($sessionRow['has_payment_success'] ?? false),
-            'updated_at' => now(),
+            'has_order' => (int) (bool) ($sessionRow['has_payment_success'] ?? false),
         ];
 
         $existing = DB::table('tracking_session')->where('session_id', $sessionId)->first();
 
         if ($existing) {
-            $updates = $this->diffUpdates((array) $existing, $payload);
-            if ($updates !== []) {
-                DB::table('tracking_session')->where('id', $existing->id)->update($updates);
-            }
+            $this->applyTableUpdates('tracking_session', $existing, $payload);
 
             return (int) $existing->id;
         }
 
         $payload['session_id'] = $sessionId;
         $payload['created_at'] = now();
+        $payload['updated_at'] = now();
 
         return $this->insertOrFetch('tracking_session', $payload, ['session_id' => $sessionId]);
     }
@@ -387,7 +416,6 @@ class TrackerDashboardSyncService
             'landing_page' => $sessionRow['landing_page'] ?? null,
             'referer' => null,
             'user_agent' => $sessionRow['user_agent'] ?? null,
-            'updated_at' => now(),
         ];
 
         $existing = DB::table('tracking_session_details')
@@ -395,15 +423,13 @@ class TrackerDashboardSyncService
             ->first();
 
         if ($existing) {
-            $updates = $this->diffUpdates((array) $existing, $payload);
-            if ($updates !== []) {
-                DB::table('tracking_session_details')->where('id', $existing->id)->update($updates);
-            }
+            $this->applyTableUpdates('tracking_session_details', $existing, $payload);
 
             return;
         }
 
         $payload['created_at'] = now();
+        $payload['updated_at'] = now();
 
         try {
             DB::table('tracking_session_details')->insert($payload);
@@ -597,6 +623,21 @@ class TrackerDashboardSyncService
     }
 
     /**
+     * @param  array<string, mixed>  $desired
+     */
+    private function applyTableUpdates(string $table, object $existing, array $desired): void
+    {
+        $updates = $this->diffUpdates((array) $existing, $desired);
+
+        if ($updates === []) {
+            return;
+        }
+
+        $updates['updated_at'] = now();
+        DB::table($table)->where('id', $existing->id)->update($updates);
+    }
+
+    /**
      * @param  array<string, mixed>  $existing
      * @param  array<string, mixed>  $desired
      * @return array<string, mixed>
@@ -610,12 +651,25 @@ class TrackerDashboardSyncService
                 continue;
             }
 
-            if ((string) $existing[$column] !== (string) $value) {
+            if ($this->diffValue($existing[$column]) !== $this->diffValue($value)) {
                 $updates[$column] = $value;
             }
         }
 
         return $updates;
+    }
+
+    private function diffValue(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (is_bool($value)) {
+            return (string) (int) $value;
+        }
+
+        return (string) $value;
     }
 
     private function normalizeSessionId(string $sessionId): string
@@ -644,12 +698,20 @@ class TrackerDashboardSyncService
         };
     }
 
-    private function markSessionSynced(int $sessionPk): void
+    private function markSessionSynced(int $sessionPk, mixed $sessionUpdatedAt): void
     {
-        DB::table('activity_ecom_user')->where('id', $sessionPk)->update([
-            'is_sync' => ActivityEcomUser::SYNC_DONE,
-            'sync_at' => now(),
-        ]);
+        $updated = DB::table('activity_ecom_user')
+            ->where('id', $sessionPk)
+            ->where('updated_at', $sessionUpdatedAt)
+            ->update([
+                'is_sync' => ActivityEcomUser::SYNC_DONE,
+                'sync_at' => now(),
+                'sync_try' => 0,
+            ]);
+
+        if ($updated === 0) {
+            throw new \RuntimeException('Session row changed during sync');
+        }
     }
 
     private function markSessionFailed(int $sessionPk): void

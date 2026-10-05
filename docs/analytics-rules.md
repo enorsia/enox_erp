@@ -1,7 +1,5 @@
 # EnoxTracker analytics rules
 
-Commerce metrics (legacy) were derived from **`activity_ecom_user_actions`** via **`ActivityEcomActionSyncWriter`** / `tracker:sync-commerce-data`.
-
 Dashboard sync: `POST admin/ecom-tracker/dashboard/sync` dispatches **`TrackerDashboardSyncJob`** on the **database** queue (`jobs` table). Batch size is **`TrackerDashboardSyncJob::$batchSize`**. Each job calls **`TrackerDashboardSyncService::processBatch()`** and re-dispatches until the service returns `null`.
 
 ## Day boundary

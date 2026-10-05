@@ -14,8 +14,6 @@ Columns on `activity_ecom_user`:
 - `list_traffic_utm_source`, `list_traffic_utm_medium` — activity list + dashboard traffic table
 - `conversion_utm_*` — paid conversion attribution (conversion focus / orders)
 
-Populate with: `php artisan tracker:backfill-attribution`
-
 Indexes:
 
 - `idx_activity_ecom_user_list_traffic_source`
