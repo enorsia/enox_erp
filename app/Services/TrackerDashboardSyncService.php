@@ -43,6 +43,7 @@ class TrackerDashboardSyncService
         'add_to_cart' => 'add_to_cart',
         'begin_checkout' => 'begin_checkout',
         'proceed_checkout' => 'proceed_to_checkout',
+        'proceed_to_checkout' => 'proceed_to_checkout', // alias if action_type matches JSON key name
         'payment_success' => 'payment_success',
     ];
 
@@ -384,9 +385,6 @@ class TrackerDashboardSyncService
     /**
      * @param  array<string, mixed>  $item
      * @param  array<string, mixed>  $json
-     * @return array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string}
-     */
-    /**
      * @return array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string}|null
      */
     private function commerceLineFromItem(object $action, array $item, array $json): ?array

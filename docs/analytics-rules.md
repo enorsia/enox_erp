@@ -1,6 +1,6 @@
 # EnoxTracker analytics rules
 
-Dashboard sync: `POST admin/ecom-tracker/dashboard/sync` dispatches **`TrackerDashboardSyncJob`** on the **database** queue (`jobs` table). Batch size is **`TrackerDashboardSyncJob::$batchSize`**. Each job calls **`TrackerDashboardSyncService::processBatch()`** and re-dispatches until the service returns `null`.
+Dashboard sync: `POST admin/ecom-tracker/dashboard/sync` (or the scheduler) dispatches **`TrackerDashboardSyncJob`** on the **database** queue. Batch size: **`config('tracker.dashboard_sync_batch_size')`** (env `TRACKER_DASHBOARD_SYNC_BATCH_SIZE`). Each job runs **`processBatch()`** in a loop (~50s wall time, no self-dispatch chain). Job implements **`ShouldBeUnique`**.
 
 ## Day boundary
 

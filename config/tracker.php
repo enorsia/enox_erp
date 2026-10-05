@@ -84,6 +84,8 @@ return [
 
     'dashboard_sync_queue_name' => env('TRACKER_DASHBOARD_SYNC_QUEUE_NAME', env('DB_QUEUE', 'default')),
 
+    'dashboard_sync_batch_size' => (int) env('TRACKER_DASHBOARD_SYNC_BATCH_SIZE', 25),
+
     'analytics_windows' => [
         'hours' => [1, 3, 6, 12, 24],
         'days' => [1, 7, 14, 30, 90],

@@ -68,7 +68,9 @@ class TrackIngestService
 
             ActivityEcomUserAction::query()->updateOrInsert(
                 ['event_id' => $eventId],
-                $this->mapEventToRow($eventSessionId, $event),
+                $this->mapEventToRow($eventSessionId, $event) + [
+                    'is_sync' => ActivityEcomUserAction::SYNC_PENDING,
+                ],
             );
 
             // Only is_sync — leave sync_try so permanently failed sessions stay out of the queue.

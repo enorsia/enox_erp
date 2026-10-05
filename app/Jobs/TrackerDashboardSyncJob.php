@@ -13,12 +13,9 @@ class TrackerDashboardSyncJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable;
 
-    public int $timeout = 300;
+    public int $timeout = 120;
 
-    public int $uniqueFor = 3600;
-
-    /** Rows per job run — change here. */
-    public int $batchSize = 25;
+    public int $uniqueFor = 600;
 
     public function __construct(
         public ?int $afterId = null,
@@ -34,10 +31,12 @@ class TrackerDashboardSyncJob implements ShouldBeUnique, ShouldQueue
 
     public function handle(TrackerDashboardSyncService $syncService): void
     {
-        $nextAfterId = $syncService->processBatch($this->afterId, $this->batchSize);
+        $batchSize = max(1, (int) config('tracker.dashboard_sync_batch_size', 25));
+        $deadline = time() + 50;
+        $afterId = $this->afterId;
 
-        if ($nextAfterId !== null) {
-            self::dispatch($nextAfterId);
-        }
+        do {
+            $afterId = $syncService->processBatch($afterId, $batchSize);
+        } while ($afterId !== null && time() < $deadline);
     }
 }
