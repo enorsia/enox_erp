@@ -18,8 +18,6 @@ class TrackerDashboardSyncChunkJob implements ShouldQueue
 
     public int $tries = 2;
 
-    public int $timeout = 120;
-
     /**
      * @param  list<int>  $sessionIds
      */

@@ -2,6 +2,8 @@
 
 Dashboard sync: **`TrackerDashboardSyncJob`** (planner, unique) plans chunks via **`planChunks()`** for **all** eligible unsynced idle sessions and dispatches a **`Bus::batch`** of **`TrackerDashboardSyncChunkJob`** (`TRACKER_DASHBOARD_SYNC_BATCH_SIZE` ids each). Chunk work: **`syncSessionIds()`**. Scheduler and Sync button both dispatch the planner. Queue: **database**; requires **`job_batches`** table.
 
+**Worker (stay running, no job time limit):** `php artisan queue:work database --queue=default --sleep=3 --timeout=0 --memory=0` — do not use `--stop-when-empty`. Default `queue:work` uses **60s** job timeout and **128MB** memory, which stops the process while rows remain in `jobs`.
+
 ## Day boundary
 
 - Store timezone: `config('tracker.visitor_timezone')`.

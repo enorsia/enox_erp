@@ -23,8 +23,6 @@ class TrackerDashboardSyncJob implements ShouldBeUnique, ShouldQueue
 
     private const RUNNING_LOCK = 'tracker-dashboard-sync-running';
 
-    public int $timeout = 120;
-
     public int $uniqueFor = 600;
 
     public function __construct()
