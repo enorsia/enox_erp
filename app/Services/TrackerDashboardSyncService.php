@@ -465,6 +465,7 @@ class TrackerDashboardSyncService
         $productName = trim((string) ($item['product_name'] ?? $item['name'] ?? ''));
         $sku = trim((string) ($item['sku'] ?? ''));
         $department = trim((string) ($item['department_name'] ?? ''));
+        $departmentCode = trim((string) ($item['department_id'] ?? $item['department_code'] ?? ''));
         $category = trim((string) ($item['category_name'] ?? ''));
         $categoryCode = trim((string) ($item['category_code'] ?? $item['category_id'] ?? ''));
         $colorCode = trim((string) ($item['color_id'] ?? $item['product_color_id'] ?? ''));
@@ -479,6 +480,7 @@ class TrackerDashboardSyncService
             'category_code' => $categoryCode !== '' ? $categoryCode : $scalar['category_code'],
             'category_name' => $category !== '' ? $category : $scalar['category_name'],
             'department_name' => $department !== '' ? $department : $scalar['department_name'],
+            'department_code' => $departmentCode !== '' ? $departmentCode : $scalar['department_code'],
             'color_code' => $colorCode !== '' ? $colorCode : $scalar['color_code'],
             'color_name' => $colorName !== '' ? $colorName : $scalar['color_name'],
             'size_code' => $sizeCode !== '' ? $sizeCode : $scalar['size_code'],
@@ -499,6 +501,7 @@ class TrackerDashboardSyncService
             'category_code' => trim((string) (($action->category_code ?? '') ?: ($json['category_code'] ?? ($json['category_id'] ?? '')))),
             'category_name' => trim((string) (($action->category_name ?? '') ?: ($json['category_name'] ?? ''))),
             'department_name' => trim((string) (($action->department_name ?? '') ?: ($json['department_name'] ?? ''))),
+            'department_code' => trim((string) (($action->department_id ?? '') ?: ($json['department_id'] ?? ($json['department_code'] ?? '')))),
             'color_code' => trim((string) (($action->product_color_id ?? '') ?: ($json['color_id'] ?? ''))),
             'color_name' => trim((string) (($action->general_color_name ?? '') ?: ($json['color_name'] ?? ''))),
             'size_code' => '',
@@ -512,17 +515,16 @@ class TrackerDashboardSyncService
     private function resolveCategoryIdFromLine(array $line): ?int
     {
         $categoryName = trim($line['category_name']);
-        $categoryCode = trim($line['category_code']);
-
-        if ($categoryName === '' && $categoryCode === '') {
+        if ($categoryName === '') {
             return null;
         }
 
-        if ($categoryName === '' && $categoryCode !== '') {
-            $categoryName = 'Category '.$categoryCode;
-        }
-
-        return $this->resolveCategoryId($categoryCode, $categoryName, $line['department_name']);
+        return $this->resolveCategoryId(
+            trim($line['category_code']),
+            $categoryName,
+            $line['department_name'],
+            trim($line['department_code'] ?? ''),
+        );
     }
 
     /**
@@ -749,12 +751,20 @@ class TrackerDashboardSyncService
         $source = Str::limit(trim($source !== '' ? $source : '(direct)'), 100, '');
         $medium = Str::limit(trim($medium !== '' ? $medium : 'none'), 100, '');
 
+        $existing = DB::table('tracking_traffic_source')->where('name', $source)->first();
+        if ($existing !== null && (string) ($existing->medium ?? '') !== $medium) {
+            DB::table('tracking_traffic_source')->where('id', $existing->id)->update([
+                'medium' => $medium,
+                'updated_at' => now(),
+            ]);
+        }
+
         return $this->insertOrFetch('tracking_traffic_source', [
             'name' => $source,
             'medium' => $medium,
             'created_at' => now(),
             'updated_at' => now(),
-        ], ['name' => $source, 'medium' => $medium]);
+        ], ['name' => $source]);
     }
 
     private function findOrCreateProduct(string $code, string $sku, string $title): ?int
@@ -765,16 +775,16 @@ class TrackerDashboardSyncService
         }
 
         $code = Str::limit($code, 100, '');
-        $cacheKey = 'product:'.$code;
+        $skuVal = $sku !== '' ? Str::limit($sku, 100, '') : null;
+        $titleVal = $title !== '' ? Str::limit($title, 500, '') : null;
+        $where = $this->productIdentityWhere($code, $skuVal);
+        $cacheKey = 'product:'.$code.'|'.($skuVal ?? '');
 
-        return $this->remember($cacheKey, function () use ($code, $sku, $title): int {
-            $existing = DB::table('tracking_product')->where('code', $code)->first();
-            $skuVal = $sku !== '' ? Str::limit($sku, 100, '') : null;
-            $titleVal = $title !== '' ? Str::limit($title, 500, '') : null;
+        return $this->remember($cacheKey, function () use ($code, $skuVal, $titleVal, $where): int {
+            $existing = $this->lookupProductRow($code, $skuVal);
 
-            if ($existing) {
+            if ($existing !== null) {
                 $updates = $this->diffUpdates((array) $existing, [
-                    'sku' => $skuVal ?? $existing->sku,
                     'title' => $titleVal ?? $existing->title,
                 ]);
                 if ($updates !== []) {
@@ -791,58 +801,100 @@ class TrackerDashboardSyncService
                 'title' => $titleVal,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ], ['code' => $code]);
+            ], $where);
         });
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function productIdentityWhere(string $code, ?string $sku): array
+    {
+        return [
+            'code' => $code,
+            'sku' => $sku,
+        ];
+    }
+
+    private function lookupProductRow(string $code, ?string $sku): ?object
+    {
+        return $this->lookupRowQuery('tracking_product', $this->productIdentityWhere($code, $sku))->first();
+    }
+
+    /**
+     * @param  array<string, mixed>  $where
+     */
+    private function lookupRowQuery(string $table, array $where): \Illuminate\Database\Query\Builder
+    {
+        $query = DB::table($table);
+
+        foreach ($where as $column => $value) {
+            if ($value === null) {
+                $query->whereNull($column);
+            } else {
+                $query->where($column, $value);
+            }
+        }
+
+        return $query;
     }
 
     private function findOrCreateColor(string $code, string $name): ?int
     {
-        $code = trim($code);
         $name = trim($name);
-
-        if ($code === '' && $name === '') {
+        if ($name === '') {
             return null;
         }
 
-        if ($code === '') {
-            $code = Str::slug($name) !== '' ? Str::slug($name) : 'unknown';
-        }
+        $nameVal = Str::limit($name, 255, '');
+        $codeVal = trim($code) !== '' ? Str::limit(trim($code), 100, '') : null;
+        $cacheKey = 'color:'.$nameVal;
 
-        $code = Str::limit($code, 100, '');
-        $nameVal = $name !== '' ? Str::limit($name, 255, '') : null;
-        $cacheKey = 'color:'.$code;
+        return $this->remember($cacheKey, function () use ($codeVal, $nameVal): int {
+            $existing = DB::table('tracking_color')->where('name', $nameVal)->first();
+            if ($existing !== null && $codeVal !== null && (string) ($existing->code ?? '') !== $codeVal) {
+                DB::table('tracking_color')->where('id', $existing->id)->update([
+                    'code' => $codeVal,
+                    'updated_at' => now(),
+                ]);
+            }
 
-        return $this->remember($cacheKey, fn (): int => $this->insertOrFetch('tracking_color', [
-            'code' => $code,
-            'name' => $nameVal,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ], ['code' => $code]));
+            return $this->insertOrFetch('tracking_color', [
+                'code' => $codeVal,
+                'name' => $nameVal,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ], ['name' => $nameVal]);
+        });
     }
 
     private function findOrCreateSize(string $code, string $name): ?int
     {
-        $code = trim($code);
         $name = trim($name);
-
-        if ($code === '' && $name === '') {
+        if ($name === '') {
             return null;
         }
 
-        if ($code === '') {
-            $code = Str::slug($name) !== '' ? Str::slug($name) : 'unknown';
-        }
+        $nameVal = Str::limit($name, 255, '');
+        $codeVal = trim($code) !== '' ? Str::limit(trim($code), 100, '') : null;
+        $cacheKey = 'size:'.$nameVal;
 
-        $code = Str::limit($code, 100, '');
-        $nameVal = $name !== '' ? Str::limit($name, 255, '') : null;
-        $cacheKey = 'size:'.$code;
+        return $this->remember($cacheKey, function () use ($codeVal, $nameVal): int {
+            $existing = DB::table('tracking_size')->where('name', $nameVal)->first();
+            if ($existing !== null && $codeVal !== null && (string) ($existing->code ?? '') !== $codeVal) {
+                DB::table('tracking_size')->where('id', $existing->id)->update([
+                    'code' => $codeVal,
+                    'updated_at' => now(),
+                ]);
+            }
 
-        return $this->remember($cacheKey, fn (): int => $this->insertOrFetch('tracking_size', [
-            'code' => $code,
-            'name' => $nameVal,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ], ['code' => $code]));
+            return $this->insertOrFetch('tracking_size', [
+                'code' => $codeVal,
+                'name' => $nameVal,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ], ['name' => $nameVal]);
+        });
     }
 
     private function normalizeDepartmentName(string $departmentName): string
@@ -852,86 +904,86 @@ class TrackerDashboardSyncService
         return $departmentName !== '' ? $departmentName : self::NO_DEPARTMENT_LABEL;
     }
 
-    private function departmentCode(string $departmentName): string
-    {
-        $slug = Str::slug($departmentName);
-        if ($slug === '') {
-            $slug = 'unknown';
-        }
-
-        return Str::limit('dept:'.$slug, 100, '');
-    }
-
-    private function findOrCreateDepartment(string $departmentName): int
+    private function findOrCreateDepartment(string $departmentName, string $departmentCode = ''): int
     {
         $departmentName = Str::limit($this->normalizeDepartmentName($departmentName), 255, '');
-        $deptCode = $this->departmentCode($departmentName);
-        $cacheKey = 'department:'.$deptCode;
+        $codeVal = trim($departmentCode) !== '' ? Str::limit(trim($departmentCode), 100, '') : null;
+        $cacheKey = 'department:'.$departmentName;
 
-        return $this->remember($cacheKey, function () use ($departmentName, $deptCode): int {
-            $existing = DB::table('tracking_category')->where('code', $deptCode)->first();
+        return $this->remember($cacheKey, function () use ($departmentName, $codeVal): int {
+            $existing = DB::table('tracking_category')
+                ->whereNull('parent_id')
+                ->where('name', $departmentName)
+                ->first();
 
-            if ($existing) {
+            if ($existing !== null) {
+                if ($codeVal !== null && (string) ($existing->code ?? '') !== $codeVal) {
+                    DB::table('tracking_category')->where('id', $existing->id)->update([
+                        'code' => $codeVal,
+                        'updated_at' => now(),
+                    ]);
+                }
+
                 return (int) $existing->id;
             }
 
             return $this->insertOrFetch('tracking_category', [
                 'parent_id' => null,
-                'code' => $deptCode,
+                'code' => $codeVal,
                 'name' => $departmentName,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ], ['code' => $deptCode]);
+            ], [
+                'parent_id' => null,
+                'name' => $departmentName,
+            ]);
         }) ?? throw new \RuntimeException('Failed to resolve department');
     }
 
-    private function resolveCategoryId(string $code, string $categoryName, string $departmentName): ?int
+    private function resolveCategoryId(string $code, string $categoryName, string $departmentName, string $departmentCode = ''): ?int
     {
-        $categoryName = trim($categoryName);
+        $categoryName = Str::limit(trim($categoryName), 255, '');
         if ($categoryName === '') {
             return null;
         }
 
-        $departmentId = $this->findOrCreateDepartment($departmentName);
+        $codeVal = trim($code) !== '' ? Str::limit(trim($code), 100, '') : null;
+        $departmentId = $this->findOrCreateDepartment($departmentName, $departmentCode);
 
-        return $this->findOrCreateCategoryUnderParent($departmentId, $code, $categoryName);
+        return $this->findOrCreateCategoryUnderParent($departmentId, $codeVal, $categoryName);
     }
 
-    private function findOrCreateCategoryUnderParent(?int $parentId, string $code, string $name): int
+    private function findOrCreateCategoryUnderParent(?int $parentId, ?string $code, string $name): int
     {
         $name = Str::limit(trim($name), 255, '');
-        $codeVal = trim($code);
-        $codeVal = $codeVal !== '' ? Str::limit($codeVal, 100, '') : null;
-        $cacheKey = 'category:'.($parentId ?? 0).'|'.$name.'|'.($codeVal ?? '');
+        $cacheKey = 'category:'.($parentId ?? 0).'|'.$name;
 
-        return $this->remember($cacheKey, function () use ($parentId, $name, $codeVal): int {
-            $query = DB::table('tracking_category')->where('name', $name);
-            if ($parentId === null) {
-                $query->whereNull('parent_id');
-            } else {
-                $query->where('parent_id', $parentId);
-            }
-            if ($codeVal !== null) {
-                $query->where('code', $codeVal);
-            } else {
-                $query->whereNull('code');
-            }
+        return $this->remember($cacheKey, function () use ($parentId, $name, $code): int {
+            $existing = DB::table('tracking_category')
+                ->where('parent_id', $parentId)
+                ->where('name', $name)
+                ->first();
 
-            $existing = $query->first();
-            if ($existing) {
+            if ($existing !== null) {
+                if ($code !== null && (string) ($existing->code ?? '') !== $code) {
+                    DB::table('tracking_category')->where('id', $existing->id)->update([
+                        'code' => $code,
+                        'updated_at' => now(),
+                    ]);
+                }
+
                 return (int) $existing->id;
             }
 
             return $this->insertOrFetch('tracking_category', [
                 'parent_id' => $parentId,
-                'code' => $codeVal,
+                'code' => $code,
                 'name' => $name,
                 'created_at' => now(),
                 'updated_at' => now(),
             ], [
                 'parent_id' => $parentId,
                 'name' => $name,
-                'code' => $codeVal,
             ]);
         }) ?? throw new \RuntimeException('Failed to resolve category');
     }
@@ -965,21 +1017,31 @@ class TrackerDashboardSyncService
      */
     private function insertOrFetch(string $table, array $row, array $where): int
     {
-        $existingId = DB::table($table)->where($where)->value('id');
-        if ($existingId) {
-            return (int) $existingId;
+        $existingId = $this->lookupRowId($table, $where);
+        if ($existingId !== null) {
+            return $existingId;
         }
 
         try {
             return (int) DB::table($table)->insertGetId($row);
         } catch (QueryException $exception) {
-            $existingId = DB::table($table)->where($where)->value('id');
-            if ($existingId) {
-                return (int) $existingId;
+            $existingId = $this->lookupRowId($table, $where);
+            if ($existingId !== null) {
+                return $existingId;
             }
 
             throw $exception;
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $where
+     */
+    private function lookupRowId(string $table, array $where): ?int
+    {
+        $id = $this->lookupRowQuery($table, $where)->value('id');
+
+        return $id !== null ? (int) $id : null;
     }
 
     private function remember(string $key, Closure $resolve): ?int

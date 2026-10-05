@@ -14,7 +14,8 @@ return new class extends Migration
             $table->string('medium', 100);
             $table->timestamps();
 
-            $table->unique(['name', 'medium']);
+            $table->unique('name', 'uq_tracking_traffic_source_name');
+            $table->index('medium', 'tracking_traffic_source_medium_idx');
         });
     }
 

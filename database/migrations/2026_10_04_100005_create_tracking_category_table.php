@@ -14,6 +14,9 @@ return new class extends Migration
             $table->string('code', 100)->nullable();
             $table->string('name', 255);
             $table->timestamps();
+
+            $table->unique(['parent_id', 'name'], 'uq_tracking_category_parent_name');
+            $table->index('code', 'tracking_category_code_idx');
         });
     }
 

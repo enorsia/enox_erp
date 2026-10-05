@@ -10,8 +10,10 @@ return new class extends Migration
     {
         Schema::create('tracking_product', function (Blueprint $table) {
             $table->id();
-            $table->string('code', 100)->unique();
+            $table->string('code', 100);
             $table->string('sku', 100)->nullable();
+
+            $table->unique(['code', 'sku'], 'uq_tracking_product_code_sku');
             $table->string('title', 500)->nullable();
             $table->timestamps();
         });

@@ -10,8 +10,10 @@ return new class extends Migration
     {
         Schema::create('tracking_color', function (Blueprint $table) {
             $table->id();
-            $table->string('code', 100)->unique();
-            $table->string('name', 255)->nullable();
+            $table->string('code', 100)->nullable();
+            $table->string('name', 255);
+
+            $table->unique('name', 'uq_tracking_color_name');
             $table->timestamps();
         });
     }
