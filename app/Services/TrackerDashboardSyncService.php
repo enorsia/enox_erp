@@ -55,7 +55,7 @@ class TrackerDashboardSyncService
      *
      * @return list<list<int>>
      */
-    public function planChunks(int $chunkSize = 25, int $maxSessions = 5000): array
+    public function planChunks(int $chunkSize = 25): array
     {
         $query = DB::table('activity_ecom_user as u');
 
@@ -65,7 +65,6 @@ class TrackerDashboardSyncService
         $this->applyPendingOrRetryFilter($query, now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES), 'u');
 
         return $query->orderBy('u.id')
-            ->limit(max(1, $maxSessions))
             ->pluck('u.id')
             ->map(fn ($id) => (int) $id)
             ->chunk(max(1, $chunkSize))
@@ -343,21 +342,27 @@ class TrackerDashboardSyncService
                     $line['product_name'],
                 );
 
-                $categoryId = $this->resolveCategoryId(
-                    $line['category_code'],
-                    $line['category_name'],
-                    $line['department_name'],
-                );
-
-                if ($productId === null || $categoryId === null) {
+                if ($productId === null) {
                     continue;
                 }
 
-                $key = $trackingSessionId.'|'.$productId.'|'.$categoryId;
+                $categoryId = $this->resolveCategoryIdFromLine($line);
+                $colorId = $this->findOrCreateColor($line['color_code'], $line['color_name']);
+                $sizeId = $this->findOrCreateSize($line['size_code'], $line['size_name']);
+
+                $key = implode('|', [
+                    $trackingSessionId,
+                    $productId,
+                    $categoryId ?? 0,
+                    $colorId ?? 0,
+                    $sizeId ?? 0,
+                ]);
                 $pCatRows[$key] ??= [
                     'tracking_session_id' => $trackingSessionId,
                     'tracking_product_id' => $productId,
                     'tracking_category_id' => $categoryId,
+                    'tracking_color_id' => $colorId,
+                    'tracking_size_id' => $sizeId,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
@@ -365,12 +370,12 @@ class TrackerDashboardSyncService
         }
 
         if ($pCatRows !== []) {
-            DB::table('tracking_session_p_cat')->insertOrIgnore(array_values($pCatRows));
+            DB::table('tracking_session_p_cat')->insert(array_values($pCatRows));
         }
     }
 
     /**
-     * @return list<array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string}>
+     * @return list<array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string, color_code: string, color_name: string, size_code: string, size_name: string}>
      */
     private function actionCommerceLines(object $action): array
     {
@@ -446,7 +451,7 @@ class TrackerDashboardSyncService
     /**
      * @param  array<string, mixed>  $item
      * @param  array<string, mixed>  $json
-     * @return array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string}|null
+     * @return array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string, color_code: string, color_name: string, size_code: string, size_name: string}|null
      */
     private function commerceLineFromItem(object $action, array $item, array $json): ?array
     {
@@ -461,7 +466,11 @@ class TrackerDashboardSyncService
         $sku = trim((string) ($item['sku'] ?? ''));
         $department = trim((string) ($item['department_name'] ?? ''));
         $category = trim((string) ($item['category_name'] ?? ''));
-        $categoryCode = trim((string) ($item['category_code'] ?? ''));
+        $categoryCode = trim((string) ($item['category_code'] ?? $item['category_id'] ?? ''));
+        $colorCode = trim((string) ($item['color_id'] ?? $item['product_color_id'] ?? ''));
+        $colorName = trim((string) ($item['color_name'] ?? $item['general_color_name'] ?? ''));
+        $sizeCode = trim((string) ($item['size_id'] ?? ''));
+        $sizeName = trim((string) ($item['size_name'] ?? ''));
 
         return [
             'product_code' => $productCode,
@@ -470,12 +479,16 @@ class TrackerDashboardSyncService
             'category_code' => $categoryCode !== '' ? $categoryCode : $scalar['category_code'],
             'category_name' => $category !== '' ? $category : $scalar['category_name'],
             'department_name' => $department !== '' ? $department : $scalar['department_name'],
+            'color_code' => $colorCode !== '' ? $colorCode : $scalar['color_code'],
+            'color_name' => $colorName !== '' ? $colorName : $scalar['color_name'],
+            'size_code' => $sizeCode !== '' ? $sizeCode : $scalar['size_code'],
+            'size_name' => $sizeName !== '' ? $sizeName : $scalar['size_name'],
         ];
     }
 
     /**
      * @param  array<string, mixed>  $json
-     * @return array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string}
+     * @return array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string, color_code: string, color_name: string, size_code: string, size_name: string}
      */
     private function commerceLineFromScalars(object $action, array $json = []): array
     {
@@ -483,10 +496,33 @@ class TrackerDashboardSyncService
             'product_code' => trim((string) (($action->product_code ?? '') ?: ($json['product_code'] ?? ''))),
             'sku' => trim((string) (($action->sku ?? '') ?: ($json['sku'] ?? ''))),
             'product_name' => trim((string) (($action->product_name ?? '') ?: ($json['product_name'] ?? ''))),
-            'category_code' => trim((string) (($action->category_code ?? '') ?: ($json['category_code'] ?? ''))),
+            'category_code' => trim((string) (($action->category_code ?? '') ?: ($json['category_code'] ?? ($json['category_id'] ?? '')))),
             'category_name' => trim((string) (($action->category_name ?? '') ?: ($json['category_name'] ?? ''))),
             'department_name' => trim((string) (($action->department_name ?? '') ?: ($json['department_name'] ?? ''))),
+            'color_code' => trim((string) (($action->product_color_id ?? '') ?: ($json['color_id'] ?? ''))),
+            'color_name' => trim((string) (($action->general_color_name ?? '') ?: ($json['color_name'] ?? ''))),
+            'size_code' => '',
+            'size_name' => '',
         ];
+    }
+
+    /**
+     * @param  array{category_code: string, category_name: string, department_name: string}  $line
+     */
+    private function resolveCategoryIdFromLine(array $line): ?int
+    {
+        $categoryName = trim($line['category_name']);
+        $categoryCode = trim($line['category_code']);
+
+        if ($categoryName === '' && $categoryCode === '') {
+            return null;
+        }
+
+        if ($categoryName === '' && $categoryCode !== '') {
+            $categoryName = 'Category '.$categoryCode;
+        }
+
+        return $this->resolveCategoryId($categoryCode, $categoryName, $line['department_name']);
     }
 
     /**
@@ -757,6 +793,56 @@ class TrackerDashboardSyncService
                 'updated_at' => now(),
             ], ['code' => $code]);
         });
+    }
+
+    private function findOrCreateColor(string $code, string $name): ?int
+    {
+        $code = trim($code);
+        $name = trim($name);
+
+        if ($code === '' && $name === '') {
+            return null;
+        }
+
+        if ($code === '') {
+            $code = Str::slug($name) !== '' ? Str::slug($name) : 'unknown';
+        }
+
+        $code = Str::limit($code, 100, '');
+        $nameVal = $name !== '' ? Str::limit($name, 255, '') : null;
+        $cacheKey = 'color:'.$code;
+
+        return $this->remember($cacheKey, fn (): int => $this->insertOrFetch('tracking_color', [
+            'code' => $code,
+            'name' => $nameVal,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], ['code' => $code]));
+    }
+
+    private function findOrCreateSize(string $code, string $name): ?int
+    {
+        $code = trim($code);
+        $name = trim($name);
+
+        if ($code === '' && $name === '') {
+            return null;
+        }
+
+        if ($code === '') {
+            $code = Str::slug($name) !== '' ? Str::slug($name) : 'unknown';
+        }
+
+        $code = Str::limit($code, 100, '');
+        $nameVal = $name !== '' ? Str::limit($name, 255, '') : null;
+        $cacheKey = 'size:'.$code;
+
+        return $this->remember($cacheKey, fn (): int => $this->insertOrFetch('tracking_size', [
+            'code' => $code,
+            'name' => $nameVal,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], ['code' => $code]));
     }
 
     private function normalizeDepartmentName(string $departmentName): string

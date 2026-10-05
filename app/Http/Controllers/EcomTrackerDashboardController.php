@@ -29,8 +29,7 @@ class EcomTrackerDashboardController extends Controller
         Gate::authorize('ecom_tracker.dashboard.index');
 
         $chunkSize = max(1, (int) config('tracker.dashboard_sync_batch_size', 25));
-        $maxSessions = max(1, (int) config('tracker.dashboard_sync_max_per_run', 5000));
-        $chunks = $syncService->planChunks($chunkSize, $maxSessions);
+        $chunks = $syncService->planChunks($chunkSize);
 
         if ($chunks === []) {
             return response()->json([

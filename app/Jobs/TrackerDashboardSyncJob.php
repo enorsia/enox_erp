@@ -49,9 +49,8 @@ class TrackerDashboardSyncJob implements ShouldBeUnique, ShouldQueue
 
         try {
             $chunkSize = max(1, (int) config('tracker.dashboard_sync_batch_size', 25));
-            $maxSessions = max(1, (int) config('tracker.dashboard_sync_max_per_run', 5000));
 
-            $chunks = $syncService->planChunks($chunkSize, $maxSessions);
+            $chunks = $syncService->planChunks($chunkSize);
 
             if ($chunks === []) {
                 Log::info('tracker.dashboard.sync: planner found no eligible sessions');

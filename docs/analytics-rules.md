@@ -1,6 +1,6 @@
 # EnoxTracker analytics rules
 
-Dashboard sync: **`TrackerDashboardSyncJob`** (planner, unique) plans chunks via **`planChunks()`** and dispatches a **`Bus::batch`** of **`TrackerDashboardSyncChunkJob`** (25 ids each, `TRACKER_DASHBOARD_SYNC_BATCH_SIZE`). Max sessions per plan: **`TRACKER_DASHBOARD_SYNC_MAX_PER_RUN`** (default 5000). Chunk work: **`syncSessionIds()`**. Scheduler and Sync button both dispatch the planner. Queue: **database**; requires **`job_batches`** table.
+Dashboard sync: **`TrackerDashboardSyncJob`** (planner, unique) plans chunks via **`planChunks()`** for **all** eligible unsynced idle sessions and dispatches a **`Bus::batch`** of **`TrackerDashboardSyncChunkJob`** (`TRACKER_DASHBOARD_SYNC_BATCH_SIZE` ids each). Chunk work: **`syncSessionIds()`**. Scheduler and Sync button both dispatch the planner. Queue: **database**; requires **`job_batches`** table.
 
 ## Day boundary
 
