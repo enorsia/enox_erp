@@ -802,12 +802,12 @@ function initDashboardSyncButton(page) {
 
             const body = await response.json().catch(() => ({}));
 
-            if (!response.ok) {
+            if (!response.ok || body.ok === false) {
                 throw new Error(body.message || `Sync failed (${response.status})`);
             }
 
             if (label) {
-                label.textContent = 'Queued';
+                label.textContent = body.batches ? `Queued (${body.batches})` : 'Queued';
             }
             window.setTimeout(() => {
                 if (label) {
@@ -852,12 +852,6 @@ function bindDashboardPrintControls() {
     document.getElementById('etdDashboardPrintBtn')?.addEventListener('click', printEcomTrackerDashboard);
 }
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        bindDashboardPrintControls();
-        bootDashboardPage();
-    });
-} else {
-    bindDashboardPrintControls();
-    bootDashboardPage();
-}
+// Loaded via dynamic import() from app.js — DOM is already ready.
+bindDashboardPrintControls();
+bootDashboardPage();

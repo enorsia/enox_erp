@@ -10,6 +10,8 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * PLANNER job: runs every minute (scheduler) or from the Sync button.
@@ -40,31 +42,44 @@ class TrackerDashboardSyncJob implements ShouldBeUnique, ShouldQueue
     {
         // Previous plan is still running (its chunk jobs are queued or working): skip this minute.
         if (! Cache::add(self::RUNNING_LOCK, 1, now()->addMinutes(60))) {
+            Log::warning('tracker.dashboard.sync: planner skipped (sync already running)');
+
             return;
         }
 
-        $chunkSize = max(1, (int) config('tracker.dashboard_sync_batch_size', 25));
-        $maxSessions = max(1, (int) config('tracker.dashboard_sync_max_per_run', 5000));
+        try {
+            $chunkSize = max(1, (int) config('tracker.dashboard_sync_batch_size', 25));
+            $maxSessions = max(1, (int) config('tracker.dashboard_sync_max_per_run', 5000));
 
-        $chunks = $syncService->planChunks($chunkSize, $maxSessions);
+            $chunks = $syncService->planChunks($chunkSize, $maxSessions);
 
-        if ($chunks === []) {
+            if ($chunks === []) {
+                Log::info('tracker.dashboard.sync: planner found no eligible sessions');
+                Cache::forget(self::RUNNING_LOCK);
+
+                return;
+            }
+
+            $jobs = array_map(fn (array $ids) => new TrackerDashboardSyncChunkJob($ids), $chunks);
+
+            Bus::batch($jobs)
+                ->name('tracker-dashboard-sync')
+                ->onConnection((string) config('tracker.dashboard_sync_queue_connection', 'database'))
+                ->onQueue((string) config('tracker.dashboard_sync_queue_name', 'default'))
+                ->allowFailures()
+                ->finally(function () {
+                    Cache::forget(self::RUNNING_LOCK);
+                })
+                ->dispatch();
+
+            Log::info('tracker.dashboard.sync: planner queued chunk batch', [
+                'chunk_jobs' => count($chunks),
+                'batch_size' => $chunkSize,
+            ]);
+        } catch (Throwable $e) {
             Cache::forget(self::RUNNING_LOCK);
 
-            return;
+            throw $e;
         }
-
-        $jobs = array_map(fn (array $ids) => new TrackerDashboardSyncChunkJob($ids), $chunks);
-
-        Bus::batch($jobs)
-            ->name('tracker-dashboard-sync')
-            ->onConnection((string) config('tracker.dashboard_sync_queue_connection', 'database'))
-            ->onQueue((string) config('tracker.dashboard_sync_queue_name', 'default'))
-            ->allowFailures()
-            ->finally(function () {
-                // Runs after ALL chunk jobs ended: the next minute may plan again.
-                Cache::forget('tracker-dashboard-sync-running');
-            })
-            ->dispatch();
     }
 }
