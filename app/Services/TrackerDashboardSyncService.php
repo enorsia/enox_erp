@@ -51,6 +51,56 @@ class TrackerDashboardSyncService
     private array $cache = [];
 
     /**
+     * PLANNER: find pending sessions and split their ids into groups (one group = one chunk job).
+     *
+     * @return list<list<int>>
+     */
+    public function planChunks(int $chunkSize = 25, int $maxSessions = 5000): array
+    {
+        $query = DB::table('activity_ecom_user as u');
+
+        $this->applyIdleSessionFilter($query, 'u');
+
+        $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
+        $this->applyPendingOrRetryFilter($query, now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES), 'u');
+
+        return $query->orderBy('u.id')
+            ->limit(max(1, $maxSessions))
+            ->pluck('u.id')
+            ->map(fn ($id) => (int) $id)
+            ->chunk(max(1, $chunkSize))
+            ->map(fn ($ids) => $ids->values()->all())
+            ->values()
+            ->all();
+    }
+
+    /**
+     * CHUNK JOB: sync ONLY these session ids (same filters as the queue, so a retry is safe).
+     *
+     * @param  list<int>  $ids
+     */
+    public function syncSessionIds(array $ids): void
+    {
+        $this->cache = [];
+
+        if ($ids === []) {
+            return;
+        }
+
+        $sessions = $this->fetchPendingSessions(0, count($ids), $ids);
+
+        if ($sessions->isEmpty()) {
+            Log::debug('tracker.dashboard.sync: chunk empty (already synced?)', ['ids' => count($ids)]);
+
+            return;
+        }
+
+        $this->syncSessions($sessions);
+    }
+
+    /**
+     * Old loop style (tinker, tests, manual runs).
+     *
      * @return int|null Next activity_ecom_user id cursor, or null when no more work.
      */
     public function processBatch(?int $afterId = null, int $batchSize = 25): ?int
@@ -67,6 +117,16 @@ class TrackerDashboardSyncService
             return null;
         }
 
+        $this->syncSessions($sessions);
+
+        return $sessions->count() === $limit ? (int) $sessions->last()->id : null;
+    }
+
+    /**
+     * @param  Collection<int, object>  $sessions
+     */
+    private function syncSessions(Collection $sessions): void
+    {
         $sessionIds = $sessions->pluck('session_id')->filter()->values()->all();
         $actionsBySession = $this->loadUnsyncedActionsForSessions($sessionIds);
 
@@ -85,17 +145,13 @@ class TrackerDashboardSyncService
             }
         }
 
-        $lastId = (int) $sessions->last()->id;
-
         Log::info('tracker.dashboard.sync: batch done', [
-            'after_id' => $afterId,
-            'last_id' => $lastId,
+            'first_id' => (int) $sessions->first()->id,
+            'last_id' => (int) $sessions->last()->id,
             'ok' => $ok,
             'failed' => $failed,
             'count' => $sessions->count(),
         ]);
-
-        return $sessions->count() === $limit ? $lastId : null;
     }
 
     /**
@@ -164,13 +220,18 @@ class TrackerDashboardSyncService
 
     // ===== 1. Queue =====
 
-    private function fetchPendingSessions(int $afterId, int $limit): Collection
+    private function fetchPendingSessions(int $afterId, int $limit, ?array $onlyIds = null): Collection
     {
         $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
 
         $query = DB::table('activity_ecom_user as u')
             ->select('u.*')
             ->where('u.id', '>', $afterId);
+
+        // Fan-out: a chunk job passes its own ids, so it only works on those sessions.
+        if ($onlyIds !== null) {
+            $query->whereIn('u.id', $onlyIds);
+        }
 
         $this->applyIdleSessionFilter($query, 'u');
 

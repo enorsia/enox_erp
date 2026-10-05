@@ -31,7 +31,7 @@ class EcomTrackerDashboardController extends Controller
 
         return response()->json([
             'ok' => true,
-            'message' => 'Sync queued.',
+            'message' => 'Sync requested. Sessions idle for 30+ minutes are synced.',
         ]);
     }
 }

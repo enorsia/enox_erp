@@ -1,6 +1,6 @@
 # EnoxTracker analytics rules
 
-Dashboard sync: `POST admin/ecom-tracker/dashboard/sync` (or the scheduler) dispatches **`TrackerDashboardSyncJob`** on the **database** queue. Batch size: **`config('tracker.dashboard_sync_batch_size')`** (env `TRACKER_DASHBOARD_SYNC_BATCH_SIZE`). Each job runs **`processBatch()`** in a loop (~50s wall time, no self-dispatch chain). Job implements **`ShouldBeUnique`**.
+Dashboard sync: **`TrackerDashboardSyncJob`** (planner, unique) plans chunks via **`planChunks()`** and dispatches a **`Bus::batch`** of **`TrackerDashboardSyncChunkJob`** (25 ids each, `TRACKER_DASHBOARD_SYNC_BATCH_SIZE`). Max sessions per plan: **`TRACKER_DASHBOARD_SYNC_MAX_PER_RUN`** (default 5000). Chunk work: **`syncSessionIds()`**. Scheduler and Sync button both dispatch the planner. Queue: **database**; requires **`job_batches`** table.
 
 ## Day boundary
 

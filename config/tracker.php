@@ -86,6 +86,8 @@ return [
 
     'dashboard_sync_batch_size' => (int) env('TRACKER_DASHBOARD_SYNC_BATCH_SIZE', 25),
 
+    'dashboard_sync_max_per_run' => (int) env('TRACKER_DASHBOARD_SYNC_MAX_PER_RUN', 5000),
+
     'analytics_windows' => [
         'hours' => [1, 3, 6, 12, 24],
         'days' => [1, 7, 14, 30, 90],
