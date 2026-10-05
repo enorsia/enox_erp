@@ -17,8 +17,11 @@ return new class extends Migration
             $table->string('phone', 50)->nullable();
             $table->boolean('is_logged_in')->default(false);
             $table->unsignedInteger('duration_seconds')->default(0);
+            $table->unsignedInteger('actions_count')->default(0);
             $table->timestamp('last_active_at')->nullable();
-            $table->unsignedTinyInteger('latest_funnel_stage')->nullable();
+            $table->unsignedTinyInteger('latest_funnel_stage')
+                ->nullable()
+                ->comment('1=category_view, 2=product_view, 3=add_to_cart, 4=begin_checkout, 5=proceed_checkout, 6=payment_success');
             $table->boolean('has_order')->default(false);
             $table->timestamps();
         });

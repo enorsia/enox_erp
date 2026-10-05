@@ -16,6 +16,7 @@ class TrackingSession extends Model
         'phone',
         'is_logged_in',
         'duration_seconds',
+        'actions_count',
         'last_active_at',
         'latest_funnel_stage',
         'has_order',

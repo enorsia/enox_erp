@@ -319,7 +319,7 @@ class TrackerDashboardSyncService
         $visitDate = $this->visitDateForSession($sessionRow);
         $dailyVisitorRowId = $this->findOrCreateDailyVisitor($mainVisitorId, $visitorId, $visitDate);
 
-        $trackingSessionId = $this->upsertTrackingSession($sessionRow, $sessionId, $dailyVisitorRowId);
+        $trackingSessionId = $this->upsertTrackingSession($sessionRow, $sessionId, $dailyVisitorRowId, $actions);
         $this->upsertSessionDetails($trackingSessionId, $sessionRow, $actions, $deviceId, $browserId, $trafficId);
 
         $this->syncActionsForSession($trackingSessionId, $actions);
@@ -629,22 +629,24 @@ class TrackerDashboardSyncService
 
     /**
      * @param  array<string, mixed>  $sessionRow
+     * @param  Collection<int, object>  $actions  Unsynced actions included in this sync pass.
      */
-    private function upsertTrackingSession(array $sessionRow, string $sessionId, int $dailyVisitorId): int
+    private function upsertTrackingSession(array $sessionRow, string $sessionId, int $dailyVisitorId, Collection $actions): int
     {
-        $payload = [
+        $existing = DB::table('tracking_session')->where('session_id', $sessionId)->first();
+
+        $payload = array_merge([
             'tracking_daily_visitor_id' => $dailyVisitorId,
             'name' => $sessionRow['user_name'] ?? null,
             'email' => $sessionRow['user_email'] ?? null,
             'phone' => $sessionRow['user_phone'] ?? null,
             'is_logged_in' => (int) (bool) ($sessionRow['is_logged_in'] ?? false),
-            'duration_seconds' => (int) ($sessionRow['session_duration_seconds'] ?? 0),
             'last_active_at' => $sessionRow['last_active_at'] ?? null,
-            'latest_funnel_stage' => $this->funnelStageCode($sessionRow['latest_funnel_stage'] ?? null),
-            'has_order' => (int) (bool) ($sessionRow['has_payment_success'] ?? false),
-        ];
-
-        $existing = DB::table('tracking_session')->where('session_id', $sessionId)->first();
+            'has_order' => (int) (
+                (bool) ($sessionRow['has_payment_success'] ?? false)
+                || ($existing !== null && (bool) ($existing->has_order ?? false))
+            ),
+        ], $this->mergedSessionRollups($existing, $sessionRow, $actions));
 
         if ($existing) {
             $this->applyTableUpdates('tracking_session', $existing, $payload);
@@ -657,6 +659,50 @@ class TrackerDashboardSyncService
         $payload['updated_at'] = now();
 
         return $this->insertOrFetch('tracking_session', $payload, ['session_id' => $sessionId]);
+    }
+
+    /**
+     * Roll up metrics on each sync: actions sum, duration and funnel stage take the higher value.
+     *
+     * @param  array<string, mixed>  $sessionRow
+     * @param  Collection<int, object>  $actions
+     * @return array{duration_seconds: int, actions_count: int, latest_funnel_stage: ?int}
+     */
+    private function mergedSessionRollups(?object $existing, array $sessionRow, Collection $actions): array
+    {
+        $incomingDuration = (int) ($sessionRow['session_duration_seconds'] ?? 0);
+        $incomingFunnel = $this->funnelStageCode($sessionRow['latest_funnel_stage'] ?? null);
+        $batchActions = $actions->count();
+
+        if ($existing === null) {
+            return [
+                'duration_seconds' => $incomingDuration,
+                'actions_count' => $batchActions,
+                'latest_funnel_stage' => $incomingFunnel,
+            ];
+        }
+
+        return [
+            'duration_seconds' => max((int) ($existing->duration_seconds ?? 0), $incomingDuration),
+            'actions_count' => (int) ($existing->actions_count ?? 0) + $batchActions,
+            'latest_funnel_stage' => $this->maxFunnelStage($existing->latest_funnel_stage ?? null, $incomingFunnel),
+        ];
+    }
+
+    private function maxFunnelStage(mixed $current, mixed $incoming): ?int
+    {
+        $currentCode = $current === null || $current === '' ? null : (int) $current;
+        $incomingCode = $incoming === null ? null : (int) $incoming;
+
+        if ($currentCode === null) {
+            return $incomingCode;
+        }
+
+        if ($incomingCode === null) {
+            return $currentCode;
+        }
+
+        return max($currentCode, $incomingCode);
     }
 
     /**
