@@ -7,6 +7,7 @@ use App\Models\ActivityEcomUserAction;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Closure;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -14,11 +15,36 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
+/**
+ * Copies closed sessions from activity_ecom_user (+ actions) into tracking_* tables.
+ *
+ * Flow: main visitor (visitor_id) → daily visitor (calendar day) → session (session_id)
+ * → session details (ip, device, browser, …) → action dimensions → tracking_session_p_cat.
+ *
+ * activity_ecom_user.is_sync: 0 = pending, 1 = done, 2 = failed (retry until sync_try >= MAX).
+ * Action rows use the same flags; only ids loaded in the batch are marked done.
+ */
 class TrackerDashboardSyncService
 {
     private const MAX_SYNC_TRY = 5;
 
     private const FAILED_RETRY_COOLDOWN_MINUTES = 5;
+
+    private const SESSION_IDLE_MINUTES = 30;
+
+    private const NO_DEPARTMENT_LABEL = '(no department)';
+
+    /**
+     * activity_ecom_user_actions.action_type => JSON column name on the same row.
+     *
+     * @var array<string, string>
+     */
+    private const ACTION_JSON_COLUMNS = [
+        'add_to_cart' => 'add_to_cart',
+        'begin_checkout' => 'begin_checkout',
+        'proceed_checkout' => 'proceed_to_checkout',
+        'payment_success' => 'payment_success',
+    ];
 
     /** @var array<string, int|null> */
     private array $cache = [];
@@ -35,7 +61,7 @@ class TrackerDashboardSyncService
         $sessions = $this->fetchPendingSessions($afterId, $limit);
 
         if ($sessions->isEmpty()) {
-            Log::info('tracker.dashboard.sync: batch empty', ['after_id' => $afterId]);
+            Log::debug('tracker.dashboard.sync: batch empty', ['after_id' => $afterId]);
 
             return null;
         }
@@ -79,16 +105,37 @@ class TrackerDashboardSyncService
     {
         $sessionPk = (int) $sessionRow['id'];
         $rawSessionId = (string) ($sessionRow['session_id'] ?? '');
-        $actionIds = $actions->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $visitorId = trim((string) ($sessionRow['visitor_id'] ?? ''));
+        if ($visitorId === '') {
+            Log::warning('tracker.dashboard.sync: missing visitor_id', [
+                'activity_ecom_user_id' => $sessionPk,
+                'session_id' => $rawSessionId,
+            ]);
+
+            try {
+                $this->markSessionSkippedBadData($sessionPk);
+            } catch (Throwable $inner) {
+                Log::error('tracker.dashboard.sync: could not mark bad session', [
+                    'activity_ecom_user_id' => $sessionPk,
+                    'exception' => $inner,
+                ]);
+            }
+
+            return true;
+        }
+
         $cacheBefore = $this->cache;
         $sessionUpdatedAt = $sessionRow['updated_at'] ?? null;
 
         try {
-            DB::transaction(function () use ($sessionRow, $actions, $actionIds, $sessionPk, $cacheBefore, $sessionUpdatedAt): void {
+            DB::transaction(function () use ($sessionRow, $actions, $sessionPk, $cacheBefore, $sessionUpdatedAt): void {
+                // Restored on each attempt so rolled-back dimension ids are not reused after deadlock.
                 $this->cache = $cacheBefore;
                 $this->upsertTrackingFromSession($sessionRow, $actions);
-                $this->markSessionSynced($sessionPk, $sessionUpdatedAt);
-                $this->markActionsSyncedByIds($actionIds);
+                // If the session row changed while syncing, keep tracking data but leave pending (no throw).
+                if ($this->markSessionSynced($sessionPk, $sessionUpdatedAt)) {
+                    $this->markActionsSynced($actions);
+                }
             }, 3);
 
             return true;
@@ -114,40 +161,51 @@ class TrackerDashboardSyncService
         }
     }
 
+    // ===== 1. Queue =====
+
     private function fetchPendingSessions(int $afterId, int $limit): Collection
     {
         $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
 
-        return DB::table('activity_ecom_user as u')
+        $query = DB::table('activity_ecom_user as u')
             ->select('u.*')
-            ->where('u.id', '>', $afterId)
-            ->where('u.sync_try', '<', self::MAX_SYNC_TRY)
-            ->where(function ($query) use ($retryAfter): void {
-                $query->where('u.is_sync', ActivityEcomUser::SYNC_PENDING)
-                    ->orWhere(function ($q) use ($retryAfter): void {
-                        $q->where('u.is_sync', ActivityEcomUser::SYNC_FAILED)
-                            ->where(function ($cooldown) use ($retryAfter): void {
-                                $cooldown->whereNull('u.sync_at')
-                                    ->orWhere('u.sync_at', '<', $retryAfter);
-                            });
-                    })
-                    ->orWhere(function ($q): void {
-                        $q->where('u.is_sync', ActivityEcomUser::SYNC_DONE)
-                            ->whereColumn('u.updated_at', '>', 'u.sync_at');
-                    })
-                    ->orWhereExists(function ($q): void {
-                        $q->select(DB::raw('1'))
-                            ->from('activity_ecom_user_actions as a')
-                            ->whereColumn('a.session_id', 'u.session_id')
-                            ->whereIn('a.is_sync', [
-                                ActivityEcomUserAction::SYNC_PENDING,
-                                ActivityEcomUserAction::SYNC_FAILED,
-                            ]);
-                    });
-            })
-            ->orderBy('u.id')
-            ->limit($limit)
-            ->get();
+            ->where('u.id', '>', $afterId);
+
+        $this->applyIdleSessionFilter($query, 'u');
+
+        $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
+        $this->applyPendingOrRetryFilter($query, $retryAfter, 'u');
+
+        return $query->orderBy('u.id')->limit($limit)->get();
+    }
+
+    private function applyIdleSessionFilter(Builder $query, string $alias): void
+    {
+        $idleBefore = now()->subMinutes(self::SESSION_IDLE_MINUTES);
+
+        $query->where(function ($outer) use ($alias, $idleBefore): void {
+            $outer->where(function ($q) use ($alias, $idleBefore): void {
+                $q->whereNotNull("{$alias}.last_active_at")
+                    ->where("{$alias}.last_active_at", '<=', $idleBefore);
+            })->orWhere(function ($q) use ($alias, $idleBefore): void {
+                $q->whereNull("{$alias}.last_active_at")
+                    ->where("{$alias}.created_at", '<=', $idleBefore);
+            });
+        });
+    }
+
+    private function applyPendingOrRetryFilter(Builder $query, Carbon $retryAfter, string $alias): void
+    {
+        $query->where(function ($status) use ($retryAfter, $alias): void {
+            $status->where("{$alias}.is_sync", ActivityEcomUser::SYNC_PENDING)
+                ->orWhere(function ($q) use ($retryAfter, $alias): void {
+                    $q->where("{$alias}.is_sync", ActivityEcomUser::SYNC_FAILED)
+                        ->where(function ($cooldown) use ($retryAfter, $alias): void {
+                            $cooldown->whereNull("{$alias}.sync_at")
+                                ->orWhere("{$alias}.sync_at", '<', $retryAfter);
+                        });
+                });
+        });
     }
 
     /**
@@ -171,6 +229,8 @@ class TrackerDashboardSyncService
             ->groupBy('session_id');
     }
 
+    // ===== 2. Visitor / session =====
+
     /**
      * @param  array<string, mixed>  $sessionRow
      * @param  Collection<int, object>  $actions
@@ -182,10 +242,6 @@ class TrackerDashboardSyncService
 
         if ($sessionId === '') {
             throw new \InvalidArgumentException('Missing session_id');
-        }
-
-        if ($visitorId === '') {
-            $visitorId = $sessionId;
         }
 
         $deviceId = $this->remember('device:'.($sessionRow['device_type'] ?? ''), fn () => $this->findOrCreateDevice((string) ($sessionRow['device_type'] ?? '')));
@@ -203,10 +259,12 @@ class TrackerDashboardSyncService
         $dailyVisitorRowId = $this->findOrCreateDailyVisitor($mainVisitorId, $visitorId, $visitDate);
 
         $trackingSessionId = $this->upsertTrackingSession($sessionRow, $sessionId, $dailyVisitorRowId);
-        $this->upsertSessionDetails($trackingSessionId, $sessionRow, $deviceId, $browserId, $trafficId);
+        $this->upsertSessionDetails($trackingSessionId, $sessionRow, $actions, $deviceId, $browserId, $trafficId);
 
         $this->syncActionsForSession($trackingSessionId, $actions);
     }
+
+    // ===== 3. Actions → p_cat =====
 
     /**
      * @param  Collection<int, object>  $actions
@@ -216,38 +274,25 @@ class TrackerDashboardSyncService
         $pCatRows = [];
 
         foreach ($actions as $action) {
-            $productId = $this->findOrCreateProduct(
-                (string) ($action->product_code ?? ''),
-                (string) ($action->sku ?? ''),
-                (string) ($action->product_name ?? ''),
-            );
+            foreach ($this->actionCommerceLines($action) as $line) {
+                $productId = $this->findOrCreateProduct(
+                    $line['product_code'],
+                    $line['sku'],
+                    $line['product_name'],
+                );
 
-            $categoryId = $this->findOrCreateCategory(
-                (string) ($action->category_code ?? ''),
-                (string) ($action->category_name ?? ''),
-                (string) ($action->department_name ?? ''),
-            );
+                $categoryId = $this->resolveCategoryId(
+                    $line['category_code'],
+                    $line['category_name'],
+                    $line['department_name'],
+                );
 
-            $colorCode = (string) ($action->product_color_code ?? $action->product_color_id ?? '');
-            $colorName = (string) ($action->general_color_name ?? '');
-            if ($colorCode !== '' || $colorName !== '') {
-                $this->findOrCreateColor($colorCode, $colorName);
-            }
-
-            foreach (['add_to_cart', 'begin_checkout', 'proceed_to_checkout', 'payment_success'] as $jsonColumn) {
-                $payload = json_decode((string) ($action->{$jsonColumn} ?? ''), true);
-                if (! is_array($payload)) {
+                if ($productId === null || $categoryId === null) {
                     continue;
                 }
-                $size = (string) ($payload['size_name'] ?? $payload['size'] ?? '');
-                if ($size !== '') {
-                    $this->findOrCreateSize($size, $size);
-                }
-            }
 
-            if ($productId !== null && $categoryId !== null) {
                 $key = $trackingSessionId.'|'.$productId.'|'.$categoryId;
-                $pCatRows[$key] = [
+                $pCatRows[$key] ??= [
                     'tracking_session_id' => $trackingSessionId,
                     'tracking_product_id' => $productId,
                     'tracking_category_id' => $categoryId,
@@ -260,6 +305,129 @@ class TrackerDashboardSyncService
         if ($pCatRows !== []) {
             DB::table('tracking_session_p_cat')->insertOrIgnore(array_values($pCatRows));
         }
+    }
+
+    /**
+     * @return list<array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string}>
+     */
+    private function actionCommerceLines(object $action): array
+    {
+        $type = (string) ($action->action_type ?? '');
+        $json = $this->actionJsonPayload($action);
+
+        if (isset(self::ACTION_JSON_COLUMNS[$type])) {
+            $items = $this->cartItemsFromPayload($type, $json);
+            if ($items !== []) {
+                $lines = [];
+                foreach ($items as $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+                    $line = $this->commerceLineFromItem($action, $item, $json);
+                    if ($line !== null) {
+                        $lines[] = $line;
+                    }
+                }
+
+                if ($lines !== []) {
+                    return $lines;
+                }
+            }
+        }
+
+        return [$this->commerceLineFromScalars($action, $json)];
+    }
+
+    /**
+     * One action row normally has at most one commerce JSON column populated.
+     *
+     * @return array<string, mixed>
+     */
+    private function actionJsonPayload(object $action): array
+    {
+        $type = (string) ($action->action_type ?? '');
+        $column = self::ACTION_JSON_COLUMNS[$type] ?? null;
+        if ($column === null) {
+            return [];
+        }
+
+        $raw = $action->{$column} ?? null;
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+
+        $decoded = is_array($raw) ? $raw : json_decode((string) $raw, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $json
+     * @return list<mixed>
+     */
+    private function cartItemsFromPayload(string $actionType, array $json): array
+    {
+        if ($actionType === 'payment_success') {
+            $checkout = is_array($json['checkout_info'] ?? null) ? $json['checkout_info'] : [];
+            $items = $checkout['items'] ?? [];
+        } else {
+            $items = $json['items'] ?? $json['cart_items'] ?? [];
+        }
+
+        if (! is_array($items)) {
+            return [];
+        }
+
+        return array_values(array_filter($items, 'is_array'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  array<string, mixed>  $json
+     * @return array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string}
+     */
+    /**
+     * @return array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string}|null
+     */
+    private function commerceLineFromItem(object $action, array $item, array $json): ?array
+    {
+        $productCode = trim((string) ($item['product_code'] ?? $item['sku'] ?? ''));
+        if ($productCode === '') {
+            return null;
+        }
+
+        $scalar = $this->commerceLineFromScalars($action, $json);
+
+        $productName = trim((string) ($item['product_name'] ?? $item['name'] ?? ''));
+        $sku = trim((string) ($item['sku'] ?? ''));
+        $department = trim((string) ($item['department_name'] ?? ''));
+        $category = trim((string) ($item['category_name'] ?? ''));
+        $categoryCode = trim((string) ($item['category_code'] ?? ''));
+
+        return [
+            'product_code' => $productCode,
+            'sku' => $sku !== '' ? $sku : $scalar['sku'],
+            'product_name' => $productName !== '' ? $productName : $scalar['product_name'],
+            'category_code' => $categoryCode !== '' ? $categoryCode : $scalar['category_code'],
+            'category_name' => $category !== '' ? $category : $scalar['category_name'],
+            'department_name' => $department !== '' ? $department : $scalar['department_name'],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $json
+     * @return array{product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string}
+     */
+    private function commerceLineFromScalars(object $action, array $json = []): array
+    {
+        return [
+            'product_code' => trim((string) (($action->product_code ?? '') ?: ($json['product_code'] ?? ''))),
+            'sku' => trim((string) (($action->sku ?? '') ?: ($json['sku'] ?? ''))),
+            'product_name' => trim((string) (($action->product_name ?? '') ?: ($json['product_name'] ?? ''))),
+            'category_code' => trim((string) (($action->category_code ?? '') ?: ($json['category_code'] ?? ''))),
+            'category_name' => trim((string) (($action->category_name ?? '') ?: ($json['category_name'] ?? ''))),
+            'department_name' => trim((string) (($action->department_name ?? '') ?: ($json['department_name'] ?? ''))),
+        ];
     }
 
     /**
@@ -396,14 +564,18 @@ class TrackerDashboardSyncService
 
     /**
      * @param  array<string, mixed>  $sessionRow
+     * @param  Collection<int, object>  $actions
      */
     private function upsertSessionDetails(
         int $trackingSessionId,
         array $sessionRow,
+        Collection $actions,
         ?int $deviceId,
         ?int $browserId,
         ?int $trafficId,
     ): void {
+        $referer = $this->earliestRefererFromActions($actions);
+
         $payload = [
             'tracking_session_id' => $trackingSessionId,
             'ip' => $sessionRow['ip'] ?? null,
@@ -414,7 +586,6 @@ class TrackerDashboardSyncService
             'utm_medium' => $sessionRow['utm_medium'] ?? null,
             'utm_campaign' => $sessionRow['utm_campaign'] ?? null,
             'landing_page' => $sessionRow['landing_page'] ?? null,
-            'referer' => null,
             'user_agent' => $sessionRow['user_agent'] ?? null,
         ];
 
@@ -423,10 +594,16 @@ class TrackerDashboardSyncService
             ->first();
 
         if ($existing) {
+            if ($referer !== null && trim((string) ($existing->referer ?? '')) === '') {
+                $payload['referer'] = $referer;
+            }
+
             $this->applyTableUpdates('tracking_session_details', $existing, $payload);
 
             return;
         }
+
+        $payload['referer'] = $referer;
 
         $payload['created_at'] = now();
         $payload['updated_at'] = now();
@@ -437,6 +614,8 @@ class TrackerDashboardSyncService
             // Unique tracking_session_id — race with another worker.
         }
     }
+
+    // ===== 4. Lookup tables =====
 
     private function findOrCreateDevice(string $name): ?int
     {
@@ -521,23 +700,31 @@ class TrackerDashboardSyncService
         });
     }
 
-    private function findOrCreateCategory(string $code, string $name, string $departmentName): ?int
+    private function normalizeDepartmentName(string $departmentName): string
     {
-        $name = trim($name !== '' ? $name : $departmentName);
-        if ($name === '') {
-            return null;
+        $departmentName = trim($departmentName);
+
+        return $departmentName !== '' ? $departmentName : self::NO_DEPARTMENT_LABEL;
+    }
+
+    private function departmentCode(string $departmentName): string
+    {
+        $slug = Str::slug($departmentName);
+        if ($slug === '') {
+            $slug = 'unknown';
         }
 
-        $name = Str::limit($name, 255, '');
-        $codeVal = $code !== '' ? Str::limit($code, 100, '') : null;
-        $cacheKey = 'category:'.$name.'|'.($codeVal ?? '');
+        return Str::limit('dept:'.$slug, 100, '');
+    }
 
-        return $this->remember($cacheKey, function () use ($name, $codeVal): int {
-            $query = DB::table('tracking_category')->where('name', $name);
-            if ($codeVal !== null) {
-                $query->where('code', $codeVal);
-            }
-            $existing = $query->first();
+    private function findOrCreateDepartment(string $departmentName): int
+    {
+        $departmentName = Str::limit($this->normalizeDepartmentName($departmentName), 255, '');
+        $deptCode = $this->departmentCode($departmentName);
+        $cacheKey = 'department:'.$deptCode;
+
+        return $this->remember($cacheKey, function () use ($departmentName, $deptCode): int {
+            $existing = DB::table('tracking_category')->where('code', $deptCode)->first();
 
             if ($existing) {
                 return (int) $existing->id;
@@ -545,46 +732,87 @@ class TrackerDashboardSyncService
 
             return $this->insertOrFetch('tracking_category', [
                 'parent_id' => null,
+                'code' => $deptCode,
+                'name' => $departmentName,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ], ['code' => $deptCode]);
+        }) ?? throw new \RuntimeException('Failed to resolve department');
+    }
+
+    private function resolveCategoryId(string $code, string $categoryName, string $departmentName): ?int
+    {
+        $categoryName = trim($categoryName);
+        if ($categoryName === '') {
+            return null;
+        }
+
+        $departmentId = $this->findOrCreateDepartment($departmentName);
+
+        return $this->findOrCreateCategoryUnderParent($departmentId, $code, $categoryName);
+    }
+
+    private function findOrCreateCategoryUnderParent(?int $parentId, string $code, string $name): int
+    {
+        $name = Str::limit(trim($name), 255, '');
+        $codeVal = trim($code);
+        $codeVal = $codeVal !== '' ? Str::limit($codeVal, 100, '') : null;
+        $cacheKey = 'category:'.($parentId ?? 0).'|'.$name.'|'.($codeVal ?? '');
+
+        return $this->remember($cacheKey, function () use ($parentId, $name, $codeVal): int {
+            $query = DB::table('tracking_category')->where('name', $name);
+            if ($parentId === null) {
+                $query->whereNull('parent_id');
+            } else {
+                $query->where('parent_id', $parentId);
+            }
+            if ($codeVal !== null) {
+                $query->where('code', $codeVal);
+            } else {
+                $query->whereNull('code');
+            }
+
+            $existing = $query->first();
+            if ($existing) {
+                return (int) $existing->id;
+            }
+
+            return $this->insertOrFetch('tracking_category', [
+                'parent_id' => $parentId,
                 'code' => $codeVal,
                 'name' => $name,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ], ['name' => $name, 'code' => $codeVal]);
-        });
+            ], [
+                'parent_id' => $parentId,
+                'name' => $name,
+                'code' => $codeVal,
+            ]);
+        }) ?? throw new \RuntimeException('Failed to resolve category');
     }
 
-    private function findOrCreateColor(string $code, string $name): ?int
+    /**
+     * @param  Collection<int, object>  $actions
+     */
+    private function earliestRefererFromActions(Collection $actions): ?string
     {
-        $code = trim($code !== '' ? $code : $name);
-        if ($code === '') {
-            return null;
+        $referer = null;
+        $minId = PHP_INT_MAX;
+
+        foreach ($actions as $action) {
+            $candidate = trim((string) ($action->referer ?? ''));
+            if ($candidate === '') {
+                continue;
+            }
+
+            $id = (int) ($action->id ?? PHP_INT_MAX);
+            if ($id < $minId) {
+                $minId = $id;
+                $referer = Str::limit($candidate, 2048, '');
+            }
         }
 
-        $code = Str::limit($code, 100, '');
-
-        return $this->remember('color:'.$code, fn () => $this->insertOrFetch('tracking_color', [
-            'code' => $code,
-            'name' => $name !== '' ? Str::limit($name, 255, '') : null,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ], ['code' => $code]));
-    }
-
-    private function findOrCreateSize(string $code, string $name): ?int
-    {
-        $code = trim($code !== '' ? $code : $name);
-        if ($code === '') {
-            return null;
-        }
-
-        $code = Str::limit($code, 100, '');
-
-        return $this->remember('size:'.$code, fn () => $this->insertOrFetch('tracking_size', [
-            'code' => $code,
-            'name' => $name !== '' ? Str::limit($name, 255, '') : null,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ], ['code' => $code]));
+        return $referer;
     }
 
     /**
@@ -698,7 +926,9 @@ class TrackerDashboardSyncService
         };
     }
 
-    private function markSessionSynced(int $sessionPk, mixed $sessionUpdatedAt): void
+    // ===== 5. Status marks =====
+
+    private function markSessionSynced(int $sessionPk, mixed $sessionUpdatedAt): bool
     {
         $updated = DB::table('activity_ecom_user')
             ->where('id', $sessionPk)
@@ -710,8 +940,23 @@ class TrackerDashboardSyncService
             ]);
 
         if ($updated === 0) {
-            throw new \RuntimeException('Session row changed during sync');
+            Log::info('tracker.dashboard.sync: session changed during sync, stays pending', [
+                'activity_ecom_user_id' => $sessionPk,
+            ]);
+
+            return false;
         }
+
+        return true;
+    }
+
+    private function markSessionSkippedBadData(int $sessionPk): void
+    {
+        DB::table('activity_ecom_user')->where('id', $sessionPk)->update([
+            'is_sync' => ActivityEcomUser::SYNC_FAILED,
+            'sync_try' => self::MAX_SYNC_TRY,
+            'sync_at' => now(),
+        ]);
     }
 
     private function markSessionFailed(int $sessionPk): void
@@ -724,16 +969,18 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * @param  list<int>  $actionIds
+     * @param  Collection<int, object>  $actions
      */
-    private function markActionsSyncedByIds(array $actionIds): void
+    private function markActionsSynced(Collection $actions): void
     {
-        if ($actionIds === []) {
+        $ids = $actions->pluck('id')->map(fn ($id) => (int) $id)->filter()->all();
+
+        if ($ids === []) {
             return;
         }
 
         DB::table('activity_ecom_user_actions')
-            ->whereIn('id', $actionIds)
+            ->whereIn('id', $ids)
             ->update([
                 'is_sync' => ActivityEcomUserAction::SYNC_DONE,
                 'sync_at' => now(),

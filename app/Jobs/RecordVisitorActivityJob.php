@@ -9,6 +9,7 @@ use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use App\Support\VisitorSessionRedis;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -160,6 +161,10 @@ class RecordVisitorActivityJob implements ShouldQueue
             'session_duration_seconds' => $duration,
             'updated_at' => $formattedNow,
         ]);
+
+        DB::table('activity_ecom_user')
+            ->where('id', $session->id)
+            ->update(['is_sync' => ActivityEcomUser::SYNC_PENDING]); // sync_try unchanged
 
         EcomTrackerLogger::frontend()->debug('job.record_visitor.update', 'Old session time updated', [
             'visitor_id' => $this->visitorId,

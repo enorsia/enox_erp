@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class TrackIngestService
@@ -69,6 +70,11 @@ class TrackIngestService
                 ['event_id' => $eventId],
                 $this->mapEventToRow($eventSessionId, $event),
             );
+
+            // Only is_sync — leave sync_try so permanently failed sessions stay out of the queue.
+            DB::table('activity_ecom_user')
+                ->where('session_id', $eventSessionId)
+                ->update(['is_sync' => ActivityEcomUser::SYNC_PENDING]);
 
             $acceptedIds[] = $eventId;
         }

@@ -124,6 +124,12 @@ return new class extends Migration
         Schema::table($table, function (Blueprint $blueprint) use ($index) {
             $blueprint->index(['is_sync', 'id'], $index);
         });
+
+        if ($table === 'activity_ecom_user_actions' && ! Schema::hasIndex($table, 'aeua_session_sync_idx')) {
+            Schema::table($table, function (Blueprint $blueprint) {
+                $blueprint->index(['session_id', 'is_sync'], 'aeua_session_sync_idx');
+            });
+        }
     }
 
     private function removeSyncColumns(string $table): void
@@ -139,6 +145,10 @@ return new class extends Migration
         Schema::table($table, function (Blueprint $blueprint) use ($table, $index) {
             if (Schema::hasIndex($table, $index)) {
                 $blueprint->dropIndex($index);
+            }
+
+            if ($table === 'activity_ecom_user_actions' && Schema::hasIndex($table, 'aeua_session_sync_idx')) {
+                $blueprint->dropIndex('aeua_session_sync_idx');
             }
 
             $columns = array_values(array_filter(
