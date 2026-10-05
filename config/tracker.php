@@ -6,37 +6,19 @@ return [
     |--------------------------------------------------------------------------
     | Ecom Tracker (admin UI + permissions)
     |--------------------------------------------------------------------------
-    |
-    | When false, Ecom Tracker is hidden from the admin sidebar, role permission
-    | screens, and web routes. Set ECOM_TRACKER_ENABLED=true to re-enable.
-    |
     */
     'enabled' => (bool) env('ECOM_TRACKER_ENABLED', false),
-
-    /**
-     * When true and batch snapshot is unavailable, recoverable-sale panels show counts only (no session table).
-     */
-    'dashboard_fast_recovery_rows' => (bool) env('TRACKER_DASHBOARD_FAST_RECOVERY_ROWS', false),
-
-    /**
-     * Visitor quality (bot) strip on store dashboard — one extra SQL scan when true.
-     * Activity list / visitor analytics are unchanged.
-     */
-    'dashboard_visitor_quality' => filter_var(env('TRACKER_DASHBOARD_VISITOR_QUALITY', false), FILTER_VALIDATE_BOOL),
 
     'api_key_hash' => env('TRACKER_API_KEY_HASH'),
 
     /*
-    | Max events accepted in a single /api/track payload. The storefront
-    | tracker must chunk larger queues to this size (MAX_EVENTS_PER_FLUSH).
+    | Max events per /api/track payload (storefront must chunk to this size).
     */
     'ingest_max_events' => (int) env('TRACKER_INGEST_MAX_EVENTS', 50),
 
     'logging_enabled' => (bool) env('TRACKER_LOGGING', env('APP_DEBUG', false)),
 
     'log_channel' => env('TRACKER_LOG_CHANNEL', 'ecom_tracker'),
-
-    'log_days' => (int) env('TRACKER_LOG_DAYS', 30),
 
     'allowed_action_types' => [
         'category_view',
@@ -46,14 +28,6 @@ return [
         'begin_checkout',
         'proceed_checkout',
         'payment_success',
-    ],
-
-    'payment_success_allowed_keys' => [
-        'order_id',
-        'amount_paid',
-        'payment_method',
-        'currency',
-        'checkout_info',
     ],
 
     'scalar_field_limits' => [
@@ -72,33 +46,24 @@ return [
 
     'visitor_timezone' => env('TRACKER_VISITOR_TIMEZONE', 'Europe/London'),
 
-    'visitor_cookie_name' => 'enox_visitor_id',
-
     /*
     |--------------------------------------------------------------------------
-    | Tracker Redis
+    | Tracker Redis (see database.php redis.tracker)
     |--------------------------------------------------------------------------
-    |
-    | Visitor session state uses a dedicated Redis connection (database.php
-    | redis.tracker). This is separate from Laravel CACHE_STORE / app cache.
-    |
     */
-
     'redis_connection' => env('TRACKER_REDIS_CONNECTION', 'tracker'),
 
     'redis_use_memory_store' => (bool) env('TRACKER_REDIS_USE_MEMORY_STORE', false),
 
-    'redis_prefix' => env('TRACKER_REDIS_PREFIX', 'enox:tracker:'),
-
-        'redis_ttl_seconds' => (int) env('TRACKER_REDIS_TTL_SECONDS', 172800),
+    'redis_ttl_seconds' => (int) env('TRACKER_REDIS_TTL_SECONDS', 172800),
 
     'visitor_seen_ttl_seconds' => (int) env('TRACKER_VISITOR_SEEN_TTL_SECONDS', 31536000),
 
     'rollup_lock_seconds' => (int) env('TRACKER_ROLLUP_LOCK_SECONDS', 45),
 
-    /** Exclude bot sessions from dashboard traffic / product-view SQL aggregates. */
+    /** Exclude bot sessions from commerce funnel SQL when true. */
     'dashboard_exclude_bots' => filter_var(
-        env('TRACKER_DASHBOARD_EXCLUDE_BOTS', env('TRACKER_ROLLUPS_EXCLUDE_BOTS', true)),
+        env('TRACKER_DASHBOARD_EXCLUDE_BOTS', true),
         FILTER_VALIDATE_BOOL,
     ),
 
@@ -112,7 +77,12 @@ return [
 
     'analytics_cache_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_SECONDS', 300),
 
-    'analytics_cache_today_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_TODAY_SECONDS', 60),
+    /*
+    | Dashboard sync → MySQL `jobs` table (database queue).
+    */
+    'dashboard_sync_queue_connection' => env('TRACKER_DASHBOARD_SYNC_QUEUE_CONNECTION', 'database'),
+
+    'dashboard_sync_queue_name' => env('TRACKER_DASHBOARD_SYNC_QUEUE_NAME', env('DB_QUEUE', 'default')),
 
     'commerce_sync_batch_size' => (int) env('TRACKER_COMMERCE_SYNC_BATCH_SIZE', 100),
 
@@ -126,16 +96,13 @@ return [
         'years' => [1],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | UTM filter dropdowns (key => label)
-    |--------------------------------------------------------------------------
-    |
-    | Keys should match values stored on activity_ecom_user.utm_source / utm_medium.
-    | Use (direct) and none for empty traffic in analytics.
-    |
-    */
+    'conversion_window_days' => (int) env('TRACKER_CONVERSION_WINDOW_DAYS', 7),
 
+    'attribution_touch_log_retention_days' => (int) env('TRACKER_ATTRIBUTION_TOUCH_LOG_RETENTION_DAYS', 90),
+
+    /*
+    | UTM filters (activity_ecom_user.utm_source / utm_medium)
+    */
     'utm_sources' => [
         'google' => 'Google',
         'facebook' => 'Facebook',
@@ -171,13 +138,7 @@ return [
         '(direct)' => 'Direct',
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | UTM source aliases (stored as canonical keys above)
-    |--------------------------------------------------------------------------
-    */
     'utm_source_aliases' => [
-        // Social / paid (common short utm_source values in ad links)
         'fb' => 'facebook',
         'fbook' => 'facebook',
         'face' => 'facebook',
@@ -209,13 +170,11 @@ return [
         'gads' => 'google',
         'yahoo' => 'yahoo',
         'ycl' => 'yahoo',
-        // Affiliate
         'aw' => 'awin',
         'sas' => 'shareasale',
         'share-a-sale' => 'shareasale',
         'rak' => 'rakuten',
         'impactradius' => 'impact',
-        // Email / CRM / SMS
         'kv' => 'klaviyo',
         'kl' => 'klaviyo',
         'mc' => 'mailchimp',
@@ -231,11 +190,6 @@ return [
         'generic' => 'email',
         'newsletter' => 'email',
     ],
-
-    // Last-touch attribution window (days) for all platforms on conversion_* — paid, email, affiliate, etc.
-    'conversion_window_days' => (int) env('TRACKER_CONVERSION_WINDOW_DAYS', 7),
-
-    'attribution_touch_log_retention_days' => (int) env('TRACKER_ATTRIBUTION_TOUCH_LOG_RETENTION_DAYS', 90),
 
     'utm_mediums' => [
         'organic' => 'Organic',

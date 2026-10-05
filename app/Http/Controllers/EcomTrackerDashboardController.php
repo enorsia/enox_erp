@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\TrackerDashboardSyncService;
+use App\Jobs\TrackerDashboardSyncJob;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,10 +23,15 @@ class EcomTrackerDashboardController extends Controller
         return view('ecom_tracker.dashboard', compact('data'));
     }
 
-    public function sync(Request $request, TrackerDashboardSyncService $dashboardSyncService): JsonResponse
+    public function sync(Request $request): JsonResponse
     {
         Gate::authorize('ecom_tracker.dashboard.index');
 
-        return response()->json($dashboardSyncService->sync());
+        TrackerDashboardSyncJob::dispatch();
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Sync queued.',
+        ]);
     }
 }
