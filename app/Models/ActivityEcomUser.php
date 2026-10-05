@@ -12,6 +12,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ActivityEcomUser extends Model
 {
+    public const SYNC_PENDING = 0;
+
+    public const SYNC_DONE = 1;
+
+    public const SYNC_FAILED = 2;
+
     protected $table = 'activity_ecom_user';
 
     protected $fillable = [
@@ -51,6 +57,9 @@ class ActivityEcomUser extends Model
         'last_active_at',
         'session_duration_seconds',
         'actions_count',
+        'is_sync',
+        'sync_try',
+        'sync_at',
         'created_at',
         'updated_at',
     ];
@@ -70,6 +79,9 @@ class ActivityEcomUser extends Model
             'session_duration_seconds' => 'integer',
             'actions_count' => 'integer',
             'conversion_touch_captured_at' => 'datetime',
+            'is_sync' => 'integer',
+            'sync_try' => 'integer',
+            'sync_at' => 'datetime',
         ];
     }
 

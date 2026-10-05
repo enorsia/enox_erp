@@ -9,7 +9,7 @@ class ActivityEcomUserAction extends Model
 {
     public const SYNC_PENDING = 0;
 
-    public const SYNC_SYNCED = 1;
+    public const SYNC_DONE = 1;
 
     public const SYNC_FAILED = 2;
 
@@ -40,9 +40,9 @@ class ActivityEcomUserAction extends Model
         'start_time',
         'end_time',
         'created_at',
-        'sync_status',
-        'sync_attempts',
-        'sync_claimed_at',
+        'is_sync',
+        'sync_try',
+        'sync_at',
         'commerce_total',
         'commerce_subtotal',
         'commerce_shipping',
@@ -71,9 +71,9 @@ class ActivityEcomUserAction extends Model
             'start_time' => 'datetime',
             'end_time' => 'datetime',
             'created_at' => 'datetime',
-            'sync_status' => 'integer',
-            'sync_attempts' => 'integer',
-            'sync_claimed_at' => 'datetime',
+            'is_sync' => 'integer',
+            'sync_try' => 'integer',
+            'sync_at' => 'datetime',
         ];
     }
 

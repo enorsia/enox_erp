@@ -4,24 +4,18 @@ namespace App\Jobs;
 
 use App\Services\TrackerDashboardSyncService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
 
-class TrackerDashboardSyncJob implements ShouldQueue
+class TrackerDashboardSyncJob implements ShouldBeUnique, ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable;
 
-    public $tries = 1;
+    public int $timeout = 300;
 
-    public $maxExceptions = 1;
-
-    public $timeout = 1200;
-
-    public $failOnTimeout = true;
-
-    public $backoff = 10;
+    public int $uniqueFor = 3600;
 
     /** Rows per job run — change here. */
     public int $batchSize = 25;
@@ -31,6 +25,11 @@ class TrackerDashboardSyncJob implements ShouldQueue
     ) {
         $this->onConnection((string) config('tracker.dashboard_sync_queue_connection', 'database'));
         $this->onQueue((string) config('tracker.dashboard_sync_queue_name', 'default'));
+    }
+
+    public function uniqueId(): string
+    {
+        return 'tracker-dashboard-sync';
     }
 
     public function handle(TrackerDashboardSyncService $syncService): void
