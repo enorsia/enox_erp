@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class EcomActivityController extends Controller
@@ -18,7 +19,11 @@ class EcomActivityController extends Controller
             'dateTo' => (string) $request->input('date_to', ''),
         ];
 
-        return view('ecom_activity.index', compact('data'));
+        $sessions = DB::table('tracking_session')
+            ->orderByDesc('last_active_at')
+            ->paginate(25);
+
+        return view('ecom_activity.index', compact('data', 'sessions'));
     }
 
     public function show(Request $request, string $session): View

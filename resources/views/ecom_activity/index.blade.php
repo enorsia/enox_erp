@@ -107,15 +107,53 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr class="etd-activity-empty-row">
-                            <td colspan="8" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
-                        </tr>
+                        @forelse ($sessions as $row)
+                            <tr class="etd-activity-session-row">
+                                <td class="etd-col-session" data-label="Session">
+                                    <span class="etd-chip etd-chip--session font-mono text-[11px]" title="{{ $row->session_id }}">{{ \Illuminate\Support\Str::limit($row->session_id, 13, '…') }}</span>
+                                    <div class="etd-subtle mt-0.5">{{ \App\Support\TrackerTime::formatFromStorage($row->created_at) }}</div>
+                                </td>
+                                <td class="etd-col-user" data-label="User">
+                                    @if (filled($row->name) || filled($row->email))
+                                        <div class="text-[13px] text-slate-800 dark:text-slate-100">{{ $row->name ?: $row->email }}</div>
+                                        @if (filled($row->email) && filled($row->name))
+                                            <div class="etd-subtle">{{ $row->email }}</div>
+                                        @endif
+                                    @else
+                                        <span class="text-slate-500">Guest</span>
+                                    @endif
+                                    @if ($row->is_logged_in)
+                                        <span class="text-[10px] text-slate-400"> · logged in</span>
+                                    @endif
+                                </td>
+                                <td class="etd-col-trust" data-label="Visitor trust">—</td>
+                                <td class="etd-col-commerce" data-label="Commerce">—</td>
+                                <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($row->actions_count ?? 0)) }}</td>
+                                <td class="etd-col-duration etd-activity-col--optional" data-label="Duration">{{ format_duration((int) ($row->duration_seconds ?? 0)) }}</td>
+                                <td class="etd-col-last-active etd-activity-col--optional" data-label="Last active">
+                                    {{ \App\Support\TrackerTime::diffForHumansFromStorage($row->last_active_at) ?? '—' }}
+                                </td>
+                                <td class="etd-col-action" data-label="View">
+                                    @can('ecom_tracker.activity.show')
+                                        <a href="{{ route('admin.ecom-activity.show', ['session' => $row->session_id, 'back' => request()->fullUrl()]) }}" class="etd-link">View session</a>
+                                    @endcan
+                                </td>
+                            </tr>
+                        @empty
+                            <tr class="etd-activity-empty-row">
+                                <td colspan="8" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
+                            </tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
-    <div class="etd-activity-pagination"></div>
+    @if ($sessions->hasPages())
+        <div class="etd-activity-pagination mt-4">
+            {{ $sessions->links() }}
+        </div>
+    @endif
 </div>
 
 </div>
