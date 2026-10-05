@@ -765,6 +765,66 @@ function printEcomTrackerDashboard() {
     });
 }
 
+function initDashboardSyncButton(page) {
+    const syncBtn = document.getElementById('ecom-dashboard-sync');
+    const syncUrl = page?.dataset?.syncUrl ?? '';
+
+    if (!syncBtn || !syncUrl || syncBtn.dataset.etdSyncBound === '1') {
+        return;
+    }
+
+    syncBtn.dataset.etdSyncBound = '1';
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+
+    syncBtn.addEventListener('click', async () => {
+        if (syncBtn.disabled) {
+            return;
+        }
+
+        const label = syncBtn.querySelector('.etd-header-btn-text');
+        const prevText = label?.textContent ?? 'Sync';
+
+        syncBtn.disabled = true;
+        if (label) {
+            label.textContent = 'Syncing…';
+        }
+
+        try {
+            const response = await fetch(syncUrl, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            const body = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                throw new Error(body.message || `Sync failed (${response.status})`);
+            }
+
+            if (label) {
+                label.textContent = 'Queued';
+            }
+            window.setTimeout(() => {
+                if (label) {
+                    label.textContent = prevText;
+                }
+            }, 2000);
+        } catch (err) {
+            window.alert(err instanceof Error ? err.message : 'Could not queue sync.');
+            if (label) {
+                label.textContent = prevText;
+            }
+        } finally {
+            syncBtn.disabled = false;
+        }
+    });
+}
+
 function bootDashboardPage() {
     const page = getDashboardPage();
 
@@ -774,6 +834,7 @@ function bootDashboardPage() {
 
     initDashboardFilterDrawer(page);
     initDashboardPeriodControls(page);
+    initDashboardSyncButton(page);
     initDashboardTrendChart(D.trend);
     initDashboardNewReturningChart();
 }

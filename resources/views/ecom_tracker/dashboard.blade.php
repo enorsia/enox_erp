@@ -4,7 +4,9 @@
 
 @section('content')
 
-<div id="ecom-tracker-dashboard-content" class="etd-page">
+<div id="ecom-tracker-dashboard-content"
+     class="etd-page"
+     data-sync-url="{{ route('admin.ecom-tracker.dashboard.sync') }}">
 
 @include('ecom_tracker.filter-drawer')
 
