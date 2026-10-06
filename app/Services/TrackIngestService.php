@@ -92,6 +92,7 @@ class TrackIngestService
             }
 
             $this->validatePaymentSuccessPayload($event);
+            $this->validateGridSkuEvent($event);
 
             if (! $this->hasMeaningfulCheckoutPayload($event)) {
                 $acceptedIds[] = $eventId;
@@ -426,6 +427,18 @@ class TrackIngestService
 
             if ($departmentName !== '') {
                 $row['department_name'] = $departmentName;
+            }
+        }
+
+        if (in_array($actionType, ['grid_impression', 'grid_click'], true)) {
+            unset($row['product_code']);
+
+            if (($row['department_name'] ?? '') === '' && ! empty($row['category_name'])) {
+                $departmentName = TrackerCategoryIdentity::departmentNameFromPageUrl((string) ($event['page_url'] ?? ''));
+
+                if ($departmentName !== '') {
+                    $row['department_name'] = $departmentName;
+                }
             }
         }
 
@@ -960,6 +973,27 @@ class TrackIngestService
         }
 
         return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function validateGridSkuEvent(array $event): void
+    {
+        $actionType = (string) ($event['action_type'] ?? '');
+
+        if (! in_array($actionType, ['grid_impression', 'grid_click'], true)) {
+            return;
+        }
+
+        if (trim((string) ($event['sku'] ?? '')) === '') {
+            throw ValidationException::withMessages([
+                'events' => ["{$actionType} requires sku."],
+            ]);
+        }
     }
 
     /**
