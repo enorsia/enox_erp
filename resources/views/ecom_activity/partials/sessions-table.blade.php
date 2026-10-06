@@ -91,7 +91,7 @@
                 @php
                     $metrics = $rowMetrics[$session->session_id] ?? [];
                     $commerceEvents = $metrics['commerce_events'] ?? [];
-                    $expandableCommerceEvents = EcomActivityCommerceEvents::expandableEvents($commerceEvents);
+                    $expandableCommerceEvents = $metrics['expandable_commerce_events'] ?? $commerceEvents;
                     $formatMetric = function (string $key, mixed $default = '—') use ($metrics) {
                         $value = $metrics[$key] ?? $default;
 

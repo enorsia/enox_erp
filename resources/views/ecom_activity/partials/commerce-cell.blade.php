@@ -1,17 +1,16 @@
 @props([
     'metrics' => [],
     'events' => [],
+    'expandableEvents' => null,
     'sessionKey' => '',
 ])
 
 @php
-    use App\Support\EcomActivityCommerceEvents;
-
     $display = $metrics['commerce_display'] ?? '—';
     $meta = $metrics['commerce_meta'] ?? null;
     $tip = $metrics['commerce_tip'] ?? null;
     $hasOrder = (bool) ($metrics['commerce_has_order'] ?? false);
-    $expandableEvents = EcomActivityCommerceEvents::expandableEvents($events);
+    $expandableEvents = $expandableEvents ?? ($metrics['expandable_commerce_events'] ?? $events);
     $hasExpandableEvents = $expandableEvents !== [];
 @endphp
 

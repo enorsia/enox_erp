@@ -42,9 +42,8 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('roles', RoleController::class);
     Route::resource('platforms', PlatformController::class);
     Route::resource('activity-logs', ActivityLogController::class)->only(['index', 'show']);
-    Route::resource('ecom-activity', EcomActivityController::class)->only(['index', 'show'])->parameters([
-        'ecom-activity' => 'session',
-    ]);
+    Route::get('ecom-activity', [EcomActivityController::class, 'index'])->name('ecom-activity.index');
+    Route::get('ecom-activity/{session}', [EcomActivityController::class, 'show'])->name('ecom-activity.show');
     Route::prefix('exports')->name('exports.')->controller(UserExportController::class)->group(function () {
         Route::get('active', 'active')->name('active');
         Route::get('{export}/status', 'status')->name('status');
