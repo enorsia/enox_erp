@@ -223,7 +223,7 @@
                                             @endphp
                                             <div class="rounded-lg bg-slate-50 dark:bg-slate-900/50 px-3 py-2 text-[11px] text-slate-600 dark:text-slate-300">
                                                 <span class="font-medium">{{ $segmentSku }}</span>
-                                                @if ($segmentSeconds !== null)
+                                                @if ($segmentSeconds !== null && $segmentSeconds > 0)
                                                     <span class="text-slate-400">· {{ $segmentSeconds }}s</span>
                                                 @endif
                                                 <span class="text-slate-400">· {{ TrackerTime::formatFromStorage($segmentAction->created_at, 'h:i:s A') }}</span>

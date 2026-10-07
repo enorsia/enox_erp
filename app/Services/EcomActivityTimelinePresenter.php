@@ -267,13 +267,7 @@ class EcomActivityTimelinePresenter
         });
 
         $skuTimeline = $segments
-            ->map(function (array $segment) {
-                if ($segment['seconds'] === null) {
-                    return $segment['name'];
-                }
-
-                return sprintf('%s (%ds)', $segment['name'], $segment['seconds']);
-            })
+            ->pluck('name')
             ->join(' → ');
 
         $displaySegments = $segments->reverse()->values();
