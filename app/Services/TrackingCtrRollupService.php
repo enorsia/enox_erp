@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\ActivityEcomUserAction;
-use App\Support\TrackingCtrProductResolver;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -12,13 +11,9 @@ use Throwable;
 
 class TrackingCtrRollupService
 {
-    public function __construct(
-        private readonly TrackingCtrProductResolver $productResolver,
-    ) {}
-
     /**
      * @param  array<int, int>  $actionIds
-     * @return array{processed: int, skipped: int, touched_keys: array<int, array{department_id: int, category_id: int, product_id: int}>}
+     * @return array{processed: int, skipped: int, touched_keys: array<int, array{department_id: int, category_id: int, sku: string}>}
      */
     public function processActionIds(array $actionIds): array
     {
@@ -59,8 +54,8 @@ class TrackingCtrRollupService
                             'metric_date' => $dimension['metric_date'],
                             'department_id' => $dimension['department_id'],
                             'category_id' => $dimension['category_id'],
-                            'product_id' => $dimension['product_id'],
-                            'style_code' => $dimension['style_code'],
+                            'product_code' => $dimension['product_code'],
+                            'sku' => $dimension['sku'],
                             'impressions' => 0,
                             'clicks' => 0,
                         ];
@@ -74,12 +69,12 @@ class TrackingCtrRollupService
 
                     $processedIds[] = (int) $action->id;
 
-                    $summaryKey = $dimension['department_id'] . '|' . $dimension['category_id'] . '|' . $dimension['product_id'];
+                    $summaryKey = $dimension['department_id'] . '|' . $dimension['category_id'] . '|' . $dimension['product_code'] . '|' . $dimension['sku'];
                     $touchedKeys[$summaryKey] = [
                         'department_id' => $dimension['department_id'],
                         'category_id' => $dimension['category_id'],
-                        'product_id' => $dimension['product_id'],
-                        'style_code' => $dimension['style_code'],
+                        'product_code' => $dimension['product_code'],
+                        'sku' => $dimension['sku'],
                     ];
                 }
 
@@ -95,11 +90,11 @@ class TrackingCtrRollupService
                 }
 
                 foreach ($touchedKeys as $key) {
-                    $this->refreshSummaryForProduct(
+                    $this->refreshSummaryForSku(
                         $key['department_id'],
                         $key['category_id'],
-                        $key['product_id'],
-                        $key['style_code'],
+                        $key['product_code'],
+                        $key['sku'],
                     );
                 }
 
@@ -128,13 +123,14 @@ class TrackingCtrRollupService
     }
 
     /**
-     * @return array{metric_date: string, department_id: int, category_id: int, product_id: int, style_code: string}|null
+     * @return array{metric_date: string, department_id: int, category_id: int, sku: string}|null
      */
     private function dimensionForAction(ActivityEcomUserAction $action): ?array
     {
-        $product = $this->productResolver->resolveForAction($action);
+        $productCode = trim((string) ($action->product_code ?? ''));
+        $sku = trim((string) ($action->sku ?? ''));
 
-        if ($product === null) {
+        if ($productCode === '' || $sku === '') {
             return null;
         }
 
@@ -155,13 +151,13 @@ class TrackingCtrRollupService
             'metric_date' => $metricDate,
             'department_id' => $departmentId,
             'category_id' => $categoryId,
-            'product_id' => $product['product_id'],
-            'style_code' => $product['style_code'],
+            'product_code' => $productCode,
+            'sku' => $sku,
         ];
     }
 
     /**
-     * @param  array{metric_date: string, department_id: int, category_id: int, product_id: int, style_code: string, impressions: int, clicks: int}  $delta
+     * @param  array{metric_date: string, department_id: int, category_id: int, product_code: string, sku: string, impressions: int, clicks: int}  $delta
      */
     private function applyDailyDeltaAtomic(array $delta): void
     {
@@ -176,7 +172,8 @@ class TrackingCtrRollupService
             ->where('metric_date', $delta['metric_date'])
             ->where('department_id', $delta['department_id'])
             ->where('category_id', $delta['category_id'])
-            ->where('product_id', $delta['product_id']);
+            ->where('product_code', $delta['product_code'])
+            ->where('sku', $delta['sku']);
 
         $updated = (clone $query)->update([
             'total_impression' => DB::raw('total_impression + ' . $impressions),
@@ -204,7 +201,9 @@ class TrackingCtrRollupService
             'metric_date' => $delta['metric_date'],
             'department_id' => $delta['department_id'],
             'category_id' => $delta['category_id'],
-            'product_id' => $delta['product_id'],
+            'product_id' => null,
+            'product_code' => $delta['product_code'],
+            'sku' => $delta['sku'],
             'total_click' => $clicks,
             'total_impression' => $impressions,
             'ctr' => $ctr,
@@ -214,11 +213,11 @@ class TrackingCtrRollupService
         ]);
     }
 
-    private function refreshSummaryForProduct(
+    private function refreshSummaryForSku(
         int $departmentId,
         int $categoryId,
-        int $productId,
-        string $styleCode,
+        string $productCode,
+        string $sku,
     ): void {
         $rollupDays = max(1, (int) config('tracker.ctr_rollup_days', 90));
         $fromDate = Carbon::now(TrackerTime::timezone())
@@ -229,7 +228,8 @@ class TrackingCtrRollupService
         $aggregate = DB::table('tracking_ctr_daily_summaries')
             ->where('department_id', $departmentId)
             ->where('category_id', $categoryId)
-            ->where('product_id', $productId)
+            ->where('product_code', $productCode)
+            ->where('sku', $sku)
             ->where('metric_date', '>=', $fromDate)
             ->selectRaw('COALESCE(SUM(total_click), 0) as total_click')
             ->selectRaw('COALESCE(SUM(total_impression), 0) as total_impression')
@@ -245,8 +245,9 @@ class TrackingCtrRollupService
             [[
                 'department_id' => $departmentId,
                 'category_id' => $categoryId,
-                'product_id' => $productId,
-                'sku' => $styleCode,
+                'product_id' => null,
+                'product_code' => $productCode,
+                'sku' => $sku,
                 'total_click' => $totalClick,
                 'total_impression' => $totalImpression,
                 'ctr' => $ctr,
@@ -254,8 +255,8 @@ class TrackingCtrRollupService
                 'created_at' => now(),
                 'updated_at' => now(),
             ]],
-            ['department_id', 'category_id', 'product_id'],
-            ['sku', 'total_click', 'total_impression', 'ctr', 'ctr_average', 'updated_at'],
+            ['department_id', 'category_id', 'product_code', 'sku'],
+            ['product_id', 'total_click', 'total_impression', 'ctr', 'ctr_average', 'updated_at'],
         );
     }
 
@@ -269,7 +270,7 @@ class TrackingCtrRollupService
     }
 
     /**
-     * @param  array{metric_date: string, department_id: int, category_id: int, product_id: int}  $dimension
+     * @param  array{metric_date: string, department_id: int, category_id: int, sku: string}  $dimension
      */
     private function dailyDeltaKey(array $dimension): string
     {
@@ -277,7 +278,8 @@ class TrackingCtrRollupService
             $dimension['metric_date'],
             $dimension['department_id'],
             $dimension['category_id'],
-            $dimension['product_id'],
+            $dimension['product_code'],
+            $dimension['sku'],
         ]);
     }
 
