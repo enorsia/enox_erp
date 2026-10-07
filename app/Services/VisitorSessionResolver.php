@@ -53,7 +53,11 @@ class VisitorSessionResolver
         if ($record === null) {
             $latestSession = $hasVisitedBefore ? $this->latestSession($visitorId) : null;
 
-            if ($latestSession !== null && $this->minutesSince((string) $latestSession->getRawOriginal('last_active_at'), $now) <= $gapMinutes) {
+            if (
+                $latestSession !== null
+                && $this->minutesSince((string) $latestSession->getRawOriginal('last_active_at'), $now) <= $gapMinutes
+                && ! $this->sessionWallClockExpired($latestSession, $now, $gapMinutes)
+            ) {
                 $isNewSession = false;
                 $sessionId = $latestSession->session_id;
                 $resolveReason = 'resume_from_db';
@@ -71,9 +75,17 @@ class VisitorSessionResolver
             $sessionId = (string) Str::uuid();
             $resolveReason = 'gap_expired';
         } else {
-            $isNewSession = false;
             $sessionId = $record['session_id'] !== '' ? $record['session_id'] : (string) Str::uuid();
-            $resolveReason = 'continue_redis';
+            $existing = $this->findSessionById($sessionId);
+
+            if ($this->sessionWallClockExpired($existing, $now, $gapMinutes)) {
+                $isNewSession = true;
+                $sessionId = (string) Str::uuid();
+                $resolveReason = 'session_max_age';
+            } else {
+                $isNewSession = false;
+                $resolveReason = 'continue_redis';
+            }
         }
 
         if ($hasVisitedBefore) {
@@ -131,9 +143,13 @@ class VisitorSessionResolver
         $record = $this->redis->get($visitorId);
         $gapMinutes = (int) config('tracker.session_gap_minutes', 30);
 
+        $activeSessionId = $record !== null ? (string) ($record['session_id'] ?? '') : '';
+        $existing = $activeSessionId !== '' ? $this->findSessionById($activeSessionId) : null;
+
         $needsFullResolve = $record === null
             || $record['last_date'] !== $today
-            || $this->minutesSince($record['last_active_at'], $now) > $gapMinutes;
+            || $this->minutesSince($record['last_active_at'], $now) > $gapMinutes
+            || $this->sessionWallClockExpired($existing, $now, $gapMinutes);
 
         if ($needsFullResolve) {
             EcomTrackerLogger::frontend()->debug('session.resolve.ingest', 'Need new session for this visitor', [
@@ -183,6 +199,28 @@ class VisitorSessionResolver
             ->where('visitor_id', $visitorId)
             ->orderByDesc('last_active_at')
             ->first();
+    }
+
+    private function findSessionById(string $sessionId): ?ActivityEcomUser
+    {
+        return ActivityEcomUser::query()
+            ->where('session_id', $sessionId)
+            ->first();
+    }
+
+    private function sessionWallClockExpired(?ActivityEcomUser $session, Carbon $now, int $gapMinutes): bool
+    {
+        if ($session === null) {
+            return false;
+        }
+
+        $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
+
+        if ($createdAt === null) {
+            return false;
+        }
+
+        return $this->minutesSince(TrackerTime::formatUtc($createdAt) ?? '', $now) >= $gapMinutes;
     }
 
     /**

@@ -47,6 +47,9 @@ class VisitorSessionController extends Controller
             'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
         ]);
 
-        return response()->json($result);
+        return response()->json([
+            ...$result,
+            'session_gap_minutes' => (int) config('tracker.session_gap_minutes', 30),
+        ]);
     }
 }

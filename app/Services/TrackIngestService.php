@@ -786,7 +786,10 @@ class TrackIngestService
             return 0;
         }
 
-        return max(0, (int) $from->diffInSeconds($to, absolute: true));
+        $seconds = max(0, (int) $from->diffInSeconds($to, absolute: true));
+        $maxSeconds = max(0, (int) config('tracker.session_gap_minutes', 30)) * 60;
+
+        return min($seconds, $maxSeconds);
     }
 
     /**
