@@ -101,6 +101,9 @@ return [
 
     'commerce_sync_chunk_days' => (int) env('TRACKER_COMMERCE_SYNC_CHUNK_DAYS', 7),
 
+    // Rolling window when aggregating tracking_ctr_daily_summaries → tracking_ctr_summaries.
+    'ctr_rollup_days' => (int) env('TRACKER_CTR_ROLLUP_DAYS', 90),
+
     'analytics_windows' => [
         'hours' => [1, 3, 6, 12, 24],
         'days' => [1, 7, 14, 30, 90],

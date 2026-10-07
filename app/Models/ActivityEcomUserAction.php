@@ -23,6 +23,7 @@ class ActivityEcomUserAction extends Model
         'product_name',
         'product_code',
         'sku',
+        'ctr_tracking_status',
         'product_color_id',
         'product_color_code',
         'general_color_name',
