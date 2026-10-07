@@ -137,7 +137,7 @@
                             'sessionKey' => $session->session_id,
                         ])
                     </td>
-                    <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($session->actions_count ?? $metrics['actions_count'] ?? 0)) }}</td>
+                    <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($metrics['actions_count'] ?? $session->actions_count ?? 0)) }}</td>
                     @if ($showCatalogFilterColumn)
                         @php $catalogPath = trim((string) ($metrics['catalog_path'] ?? '')); @endphp
                         <td class="etd-col-catalog-filter" data-label="Category">

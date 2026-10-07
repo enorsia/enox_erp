@@ -102,8 +102,11 @@ class EcomActivityRowMetrics
             }
         }
 
+        $actionCounts = CommerceReadSupport::actionCountsForSessions($sessionIds);
+
         foreach ($sessions as $session) {
-            $metrics[$session->session_id]['actions_count'] = $session->actions_count ?? 0;
+            $metrics[$session->session_id]['actions_count'] = $actionCounts[$session->session_id]
+                ?? (int) ($session->actions_count ?? 0);
         }
 
         if ($focus === 'audience' || $focus === null) {

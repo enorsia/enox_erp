@@ -169,23 +169,21 @@ class TrackIngestService
             }
 
             $row = $this->mapEventToRow($sessionId, $event);
-            $actionAlreadyStored = ActivityEcomUserAction::query()
+            $existingAction = ActivityEcomUserAction::query()
                 ->where('event_id', $eventId)
-                ->exists();
+                ->first();
+            $actionAlreadyStored = $existingAction !== null;
+            $previousSessionId = $existingAction?->session_id;
 
             try {
                 if (CommerceIngestWriter::isSyncableActionType($event['action_type'] ?? '')) {
-                    DB::transaction(function () use ($eventId, $row, $event, $actionAlreadyStored, $sessionId) {
+                    DB::transaction(function () use ($eventId, $row, $event, $actionAlreadyStored, $previousSessionId, $sessionId) {
                         ActivityEcomUserAction::query()->updateOrInsert(
                             ['event_id' => $eventId],
                             $row
                         );
 
-                        if (! $actionAlreadyStored) {
-                            ActivityEcomUser::query()
-                                ->where('session_id', $sessionId)
-                                ->increment('actions_count');
-                        }
+                        $this->syncSessionActionCount($sessionId, $actionAlreadyStored, $previousSessionId);
 
                         $action = ActivityEcomUserAction::query()->where('event_id', $eventId)->first();
                         if ($action !== null) {
@@ -198,11 +196,7 @@ class TrackIngestService
                         $row
                     );
 
-                    if (! $actionAlreadyStored) {
-                        ActivityEcomUser::query()
-                            ->where('session_id', $sessionId)
-                            ->increment('actions_count');
-                    }
+                    $this->syncSessionActionCount($sessionId, $actionAlreadyStored, $previousSessionId);
                 }
             } catch (Throwable $e) {
                 EcomTrackerLogger::frontend()->error('commerce.ingest.failed', 'Commerce ingest failed', [
@@ -765,6 +759,33 @@ class TrackIngestService
     private function phoneFromCheckoutActions(string $sessionId): ?string
     {
         return $this->customerFieldsFromCheckoutActions($sessionId)['user_phone'] ?? null;
+    }
+
+    private function syncSessionActionCount(
+        string $sessionId,
+        bool $actionAlreadyStored,
+        ?string $previousSessionId,
+    ): void {
+        if (! $actionAlreadyStored) {
+            ActivityEcomUser::query()
+                ->where('session_id', $sessionId)
+                ->increment('actions_count');
+
+            return;
+        }
+
+        if ($previousSessionId === null || $previousSessionId === $sessionId) {
+            return;
+        }
+
+        ActivityEcomUser::query()
+            ->where('session_id', $previousSessionId)
+            ->where('actions_count', '>', 0)
+            ->decrement('actions_count');
+
+        ActivityEcomUser::query()
+            ->where('session_id', $sessionId)
+            ->increment('actions_count');
     }
 
     private function sessionDurationSeconds(ActivityEcomUser $session): int
