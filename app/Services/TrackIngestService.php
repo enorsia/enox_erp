@@ -480,7 +480,7 @@ class TrackIngestService
         }
 
         if ($this->isCatalogSkuActionType($actionType)) {
-            unset($row['product_code']);
+            $this->normalizeCatalogProductIdentity($row);
 
             if (($row['department_name'] ?? '') === '' && ! empty($row['category_name'])) {
                 $departmentName = TrackerCategoryIdentity::departmentNameFromPageUrl((string) ($event['page_url'] ?? ''));
@@ -1070,16 +1070,39 @@ class TrackIngestService
             return;
         }
 
-        if (trim((string) ($event['sku'] ?? '')) === '') {
-            $this->logWarning('grid.ingest.missing_sku', 'Grid event has no sku', [
+        $productCode = trim((string) ($event['product_code'] ?? ''));
+        $variantSku = trim((string) ($event['sku'] ?? ''));
+
+        if ($productCode === '' && $variantSku === '') {
+            $this->logWarning('grid.ingest.missing_catalog_identity', 'Grid event has no product_code or sku', [
                 'event_id' => $event['id'] ?? null,
                 'action_type' => $actionType,
                 'page_url' => $event['page_url'] ?? null,
             ]);
 
             throw ValidationException::withMessages([
-                'events' => ["{$actionType} requires sku."],
+                'events' => ["{$actionType} requires product_code or sku."],
             ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function normalizeCatalogProductIdentity(array &$row): void
+    {
+        $productCode = trim((string) ($row['product_code'] ?? ''));
+        $variantSku = trim((string) ($row['sku'] ?? ''));
+
+        if ($productCode === '' && $variantSku !== '') {
+            $row['product_code'] = $variantSku;
+            unset($row['sku']);
+
+            return;
+        }
+
+        if ($productCode !== '' && $variantSku !== '' && strcasecmp($productCode, $variantSku) === 0) {
+            unset($row['sku']);
         }
     }
 

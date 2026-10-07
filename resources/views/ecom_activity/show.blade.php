@@ -122,7 +122,7 @@
                                 @if ($item->product_code)
                                     <div><span class="text-slate-400">Product code:</span> {{ $item->product_code }}</div>
                                 @endif
-                                @if ($item->sku && ! in_array($item->action_type, ['grid_impression', 'grid_click'], true))
+                                @if ($item->sku)
                                     <div><span class="text-slate-400">SKU:</span> {{ $item->sku }}</div>
                                 @endif
                                 @if (in_array($item->action_type, ['product_view', 'product_view_popup'], true) && $item->color_timeline)

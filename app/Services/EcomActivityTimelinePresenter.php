@@ -314,9 +314,14 @@ class EcomActivityTimelinePresenter
 
     private function gridSkuLabel(ActivityEcomUserAction $action): string
     {
-        $sku = trim((string) ($action->sku ?? ''));
+        $productCode = trim((string) ($action->product_code ?? ''));
+        $variantSku = trim((string) ($action->sku ?? ''));
 
-        return $sku !== '' ? $sku : 'Unknown';
+        if ($productCode !== '' && $variantSku !== '') {
+            return $productCode . ' · ' . $variantSku;
+        }
+
+        return $productCode !== '' ? $productCode : ($variantSku !== '' ? $variantSku : 'Unknown');
     }
 
     private function gridPageKey(ActivityEcomUserAction $action): string
