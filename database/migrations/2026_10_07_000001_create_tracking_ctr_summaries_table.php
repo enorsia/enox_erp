@@ -13,6 +13,7 @@ return new class extends Migration
             $table->unsignedBigInteger('department_id')->comment('1=mens, 2=womens, 3=boys, 4=girls');
             $table->unsignedBigInteger('category_id');
             $table->unsignedBigInteger('product_id');
+            $table->string('sku', 100);
             $table->unsignedInteger('total_click')->default(0);
             $table->unsignedInteger('total_impression')->default(0);
             $table->decimal('ctr', 10, 6)->default(0);
@@ -31,6 +32,7 @@ return new class extends Migration
             $table->index('department_id', 'idx_tracking_ctr_summary_department');
             $table->index('category_id', 'idx_tracking_ctr_summary_category');
             $table->index('product_id', 'idx_tracking_ctr_summary_product');
+            $table->index('sku', 'idx_tracking_ctr_summary_sku');
             $table->index(['department_id', 'category_id'], 'idx_tracking_ctr_summary_dept_category');
             $table->index('new_in', 'idx_tracking_ctr_summary_new_in');
             $table->index('sold_out', 'idx_tracking_ctr_summary_sold_out');
