@@ -138,12 +138,8 @@ class TrackingCtrRollupService
             return null;
         }
 
-        $departmentId = (int) trim((string) ($action->department_id ?? ''));
-        $categoryId = (int) trim((string) ($action->category_id ?? ''));
-
-        if ($departmentId <= 0 || $categoryId <= 0) {
-            return null;
-        }
+        $departmentId = max(0, (int) trim((string) ($action->department_id ?? '')));
+        $categoryId = max(0, (int) trim((string) ($action->category_id ?? '')));
 
         $createdAt = TrackerTime::toUtc($action->created_at);
 

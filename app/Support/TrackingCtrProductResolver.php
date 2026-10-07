@@ -2,12 +2,11 @@
 
 namespace App\Support;
 
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
-
 class TrackingCtrProductResolver
 {
     /**
+     * Stable numeric id from style code only (no ecommerce DB lookup).
+     *
      * @return array{product_id: int, style_code: string}|null
      */
     public function resolveForAction(object $action): ?array
@@ -18,14 +17,8 @@ class TrackingCtrProductResolver
             return null;
         }
 
-        $productId = $this->productIdForStyleCode($styleCode);
-
-        if ($productId === null) {
-            return null;
-        }
-
         return [
-            'product_id' => $productId,
+            'product_id' => $this->productIdFromStyleCode($styleCode),
             'style_code' => $styleCode,
         ];
     }
@@ -46,26 +39,14 @@ class TrackingCtrProductResolver
         return '';
     }
 
-    public function productIdForStyleCode(string $styleCode): ?int
+    public function productIdFromStyleCode(string $styleCode): int
     {
-        $normalized = trim($styleCode);
+        $normalized = strtolower(trim($styleCode));
 
         if ($normalized === '') {
-            return null;
+            return 0;
         }
 
-        $cacheKey = 'tracker_ctr_product_id:' . strtolower($normalized);
-
-        return Cache::remember($cacheKey, now()->addHour(), function () use ($normalized) {
-            $id = DB::table('ecommerce_products')
-                ->where('sku', $normalized)
-                ->value('id');
-
-            if ($id === null) {
-                return null;
-            }
-
-            return (int) $id;
-        });
+        return (int) sprintf('%u', crc32($normalized));
     }
 }
