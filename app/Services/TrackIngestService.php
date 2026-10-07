@@ -68,11 +68,33 @@ class TrackIngestService
             $sessionData['session_id'] = $sessionId;
         }
 
+        $gridEventCount = collect($events)
+            ->filter(fn ($event) => in_array($event['action_type'] ?? '', ['grid_impression', 'grid_click'], true))
+            ->count();
+
         $this->logInfo('ingest.start', 'Saving user actions started', [
             'session_id' => $sessionId,
             'visitor_id' => $visitorId,
             'event_count' => count($events),
+            'grid_event_count' => $gridEventCount,
         ]);
+
+        if ($gridEventCount > 0) {
+            $this->logInfo('grid.ingest.batch', 'Grid events in track batch', [
+                'session_id' => $sessionId,
+                'grid_event_count' => $gridEventCount,
+                'grid_events' => collect($events)
+                    ->filter(fn ($event) => in_array($event['action_type'] ?? '', ['grid_impression', 'grid_click'], true))
+                    ->map(fn ($event) => [
+                        'event_id' => $event['id'] ?? null,
+                        'action_type' => $event['action_type'] ?? null,
+                        'sku' => $event['sku'] ?? null,
+                        'page_url' => $event['page_url'] ?? null,
+                    ])
+                    ->values()
+                    ->all(),
+            ]);
+        }
 
         $this->upsertSession($request, $sessionId, $sessionData, $clientContext);
 
@@ -92,7 +114,31 @@ class TrackIngestService
             }
 
             $this->validatePaymentSuccessPayload($event);
-            $this->validateGridSkuEvent($event);
+
+            try {
+                $this->validateGridSkuEvent($event);
+            } catch (ValidationException $e) {
+                if (in_array($event['action_type'] ?? '', ['grid_impression', 'grid_click'], true)) {
+                    $this->logWarning('grid.ingest.rejected', 'Grid event failed validation', [
+                        'session_id' => $sessionId,
+                        'event_id' => $eventId,
+                        'action_type' => $event['action_type'] ?? null,
+                        'sku' => $event['sku'] ?? null,
+                        'errors' => $e->errors(),
+                    ]);
+                }
+
+                throw $e;
+            }
+
+            if (in_array($event['action_type'] ?? '', ['grid_impression', 'grid_click'], true)) {
+                $this->logInfo('grid.ingest.validated', 'Grid event passed validation', [
+                    'session_id' => $sessionId,
+                    'event_id' => $eventId,
+                    'action_type' => $event['action_type'] ?? null,
+                    'sku' => $event['sku'] ?? null,
+                ]);
+            }
 
             if (! $this->hasMeaningfulCheckoutPayload($event)) {
                 $acceptedIds[] = $eventId;
@@ -185,14 +231,21 @@ class TrackIngestService
 
             $acceptedIds[] = $eventId;
 
-            $this->logInfo('ingest.event_stored', 'One action saved', [
+            $storedLog = [
                 'session_id' => $sessionId,
                 'event_id' => $eventId,
                 'action_type' => $event['action_type'] ?? null,
                 'page_url' => $event['page_url'] ?? null,
                 'category_name' => $event['category_name'] ?? null,
                 'department_name' => $event['department_name'] ?? null,
-            ]);
+            ];
+
+            if (in_array($event['action_type'] ?? '', ['grid_impression', 'grid_click'], true)) {
+                $storedLog['sku'] = $row['sku'] ?? $event['sku'] ?? null;
+                $this->logInfo('grid.ingest.stored', 'Grid action saved to database', $storedLog);
+            }
+
+            $this->logInfo('ingest.event_stored', 'One action saved', $storedLog);
         }
 
         $this->syncSessionLastActiveFromEvents($sessionId, $events);
@@ -990,6 +1043,12 @@ class TrackIngestService
         }
 
         if (trim((string) ($event['sku'] ?? '')) === '') {
+            $this->logWarning('grid.ingest.missing_sku', 'Grid event has no sku', [
+                'event_id' => $event['id'] ?? null,
+                'action_type' => $actionType,
+                'page_url' => $event['page_url'] ?? null,
+            ]);
+
             throw ValidationException::withMessages([
                 'events' => ["{$actionType} requires sku."],
             ]);

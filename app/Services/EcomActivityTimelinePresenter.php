@@ -36,36 +36,67 @@ class EcomActivityTimelinePresenter
             /** @var ActivityEcomUserAction $action */
             $action = $sorted[$index];
 
-            if (! in_array($action->action_type, ['product_view', 'product_view_popup'], true)) {
-                $timeline->push($this->wrapSingle($action));
+            if (in_array($action->action_type, ['product_view', 'product_view_popup'], true)) {
+                $group = collect([$action]);
+                $productKey = $this->productKey($action);
+                $index++;
+
+                while ($index < $sorted->count()) {
+                    /** @var ActivityEcomUserAction $next */
+                    $next = $sorted[$index];
+
+                    if (
+                        ! in_array($next->action_type, ['product_view', 'product_view_popup'], true)
+                        || $this->productKey($next) !== $productKey
+                        || $action->action_type !== $next->action_type
+                    ) {
+                        break;
+                    }
+
+                    $group->push($next);
+                    $index++;
+                }
+
+                $timeline->push($group->count() === 1
+                    ? $this->wrapSingle($group->first())
+                    : $this->wrapProductViewGroup($group));
+
+                continue;
+            }
+
+            if ($action->action_type === 'grid_impression') {
+                $group = collect([$action]);
+                $pageKey = $this->gridPageKey($action);
+                $index++;
+
+                while ($index < $sorted->count()) {
+                    /** @var ActivityEcomUserAction $next */
+                    $next = $sorted[$index];
+
+                    if ($next->action_type !== 'grid_impression' || $this->gridPageKey($next) !== $pageKey) {
+                        break;
+                    }
+
+                    $group->push($next);
+                    $index++;
+                }
+
+                $timeline->push($group->count() === 1
+                    ? $this->wrapSingleGridImpression($group->first())
+                    : $this->wrapGridImpressionGroup($group));
+
+                continue;
+            }
+
+            if ($action->action_type === 'grid_click') {
+                $timeline->push($this->wrapSingleGridClick($action));
                 $index++;
 
                 continue;
             }
 
-            $group = collect([$action]);
-            $productKey = $this->productKey($action);
+            $timeline->push($this->wrapSingle($action));
             $index++;
-
-            while ($index < $sorted->count()) {
-                /** @var ActivityEcomUserAction $next */
-                $next = $sorted[$index];
-
-                if (
-                    ! in_array($next->action_type, ['product_view', 'product_view_popup'], true)
-                    || $this->productKey($next) !== $productKey
-                    || $action->action_type !== $next->action_type
-                ) {
-                    break;
-                }
-
-                $group->push($next);
-                $index++;
-            }
-
-            $timeline->push($group->count() === 1
-                ? $this->wrapSingle($group->first())
-                : $this->wrapProductViewGroup($group));
         }
 
         return $timeline
@@ -84,6 +115,7 @@ class EcomActivityTimelinePresenter
         return (object) [
             'id' => $action->id,
             'is_grouped_product_view' => false,
+            'is_grouped_grid_impression' => false,
             'action_type' => $action->action_type,
             'action' => $action,
             'actions' => collect([$action]),
@@ -106,6 +138,8 @@ class EcomActivityTimelinePresenter
                 'name' => $colorName,
                 'seconds' => $dwellSeconds,
             ]],
+            'sku_timeline' => null,
+            'sku_segments' => [],
             'add_to_cart' => $action->add_to_cart,
             'begin_checkout' => $action->begin_checkout,
             'proceed_to_checkout' => $action->proceed_to_checkout,
@@ -148,6 +182,7 @@ class EcomActivityTimelinePresenter
         return (object) [
             'id' => $first->id,
             'is_grouped_product_view' => true,
+            'is_grouped_grid_impression' => false,
             'action_type' => $first->action_type,
             'action' => $first,
             'actions' => $group->sortByDesc(fn (ActivityEcomUserAction $action) => [
@@ -169,11 +204,141 @@ class EcomActivityTimelinePresenter
             'dwell_seconds' => $totalDwell > 0 ? $totalDwell : null,
             'color_timeline' => $colorTimeline,
             'color_segments' => $displaySegments->all(),
+            'sku_timeline' => null,
+            'sku_segments' => [],
             'add_to_cart' => null,
             'begin_checkout' => null,
             'proceed_to_checkout' => null,
             'payment_success' => null,
         ];
+    }
+
+    private function wrapSingleGridImpression(ActivityEcomUserAction $action): object
+    {
+        $sku = $this->gridSkuLabel($action);
+
+        return (object) array_merge((array) $this->wrapSingle($action), [
+            'action_type' => 'grid_impression',
+            'is_grouped_grid_impression' => false,
+            'sku_timeline' => $sku,
+            'sku_segments' => [[
+                'name' => $sku,
+                'seconds' => null,
+            ]],
+        ]);
+    }
+
+    private function wrapSingleGridClick(ActivityEcomUserAction $action): object
+    {
+        $sku = $this->gridSkuLabel($action);
+
+        return (object) array_merge((array) $this->wrapSingle($action), [
+            'action_type' => 'grid_click',
+            'is_grouped_grid_impression' => false,
+            'sku_timeline' => $sku,
+            'sku_segments' => [[
+                'name' => $sku,
+                'seconds' => null,
+            ]],
+        ]);
+    }
+
+    /**
+     * @param  Collection<int, ActivityEcomUserAction>  $group
+     */
+    private function wrapGridImpressionGroup(Collection $group): object
+    {
+        $ordered = $group
+            ->sortBy(fn (ActivityEcomUserAction $action) => [
+                $action->created_at?->timestamp ?? 0,
+                $action->id,
+            ])
+            ->values();
+
+        $segments = $ordered->map(function (ActivityEcomUserAction $action, int $index) use ($ordered) {
+            $next = $ordered->get($index + 1);
+
+            return [
+                'name' => $this->gridSkuLabel($action),
+                'seconds' => $next
+                    ? $this->gridImpressionGapSeconds($action, $next)
+                    : null,
+            ];
+        });
+
+        $skuTimeline = $segments
+            ->map(function (array $segment) {
+                if ($segment['seconds'] === null) {
+                    return $segment['name'];
+                }
+
+                return sprintf('%s (%ds)', $segment['name'], $segment['seconds']);
+            })
+            ->join(' → ');
+
+        $displaySegments = $segments->reverse()->values();
+        $totalGap = $segments
+            ->pluck('seconds')
+            ->filter(fn ($seconds) => $seconds !== null)
+            ->sum();
+
+        $first = $ordered->first();
+        $last = $ordered->last();
+
+        return (object) [
+            'id' => $first->id,
+            'is_grouped_product_view' => false,
+            'is_grouped_grid_impression' => true,
+            'action_type' => 'grid_impression',
+            'action' => $first,
+            'actions' => $ordered->sortByDesc(fn (ActivityEcomUserAction $action) => [
+                $action->created_at?->timestamp ?? 0,
+                $action->id,
+            ])->values(),
+            'category_name' => $first->category_name,
+            'category_code' => $first->category_code,
+            'product_name' => null,
+            'product_code' => null,
+            'sku' => null,
+            'product_price' => null,
+            'referer' => $first->referer,
+            'page_url' => $last->page_url,
+            'start_time' => null,
+            'end_time' => null,
+            'created_at' => $first->created_at,
+            'dwell_seconds' => $totalGap > 0 ? $totalGap : null,
+            'color_timeline' => null,
+            'color_segments' => [],
+            'sku_timeline' => $skuTimeline,
+            'sku_segments' => $displaySegments->all(),
+            'add_to_cart' => null,
+            'begin_checkout' => null,
+            'proceed_to_checkout' => null,
+            'payment_success' => null,
+        ];
+    }
+
+    private function gridSkuLabel(ActivityEcomUserAction $action): string
+    {
+        $sku = trim((string) ($action->sku ?? ''));
+
+        return $sku !== '' ? $sku : 'Unknown';
+    }
+
+    private function gridPageKey(ActivityEcomUserAction $action): string
+    {
+        $category = trim((string) ($action->category_code ?? $action->category_name ?? ''));
+
+        return $this->productPathKey($action->page_url) . '|' . $category;
+    }
+
+    private function gridImpressionGapSeconds(ActivityEcomUserAction $action, ActivityEcomUserAction $next): int
+    {
+        if (! $action->created_at || ! $next->created_at) {
+            return 0;
+        }
+
+        return max(0, (int) $action->created_at->diffInSeconds($next->created_at));
     }
 
     private function productKey(ActivityEcomUserAction $action): string
