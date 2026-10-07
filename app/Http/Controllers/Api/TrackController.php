@@ -29,7 +29,7 @@ class TrackController extends Controller
             'event_count' => count($events),
             'action_types' => collect($events)->pluck('action_type')->filter()->values()->all(),
             'grid_event_count' => collect($events)
-                ->whereIn('action_type', ['grid_impression', 'grid_click'])
+                ->whereIn('action_type', ['grid_impression', 'product_click'])
                 ->count(),
         ]);
 

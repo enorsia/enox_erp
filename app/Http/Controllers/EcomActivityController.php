@@ -259,7 +259,11 @@ class EcomActivityController extends EcomTrackerAdminController
             ->orderByDesc('id')
             ->get();
 
-        $fullTimeline = $timelinePresenter->present($actions);
+        $timelineActions = $actions->filter(
+            fn (ActivityEcomUserAction $action) => $action->action_type !== 'product_click',
+        );
+
+        $fullTimeline = $timelinePresenter->present($timelineActions);
         $latestActionAt = $actions
             ->map(fn (ActivityEcomUserAction $action) => TrackerTime::toUtc($action->created_at))
             ->filter()

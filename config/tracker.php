@@ -36,7 +36,7 @@ return [
         'proceed_checkout',
         'payment_success',
         'grid_impression',
-        'grid_click',
+        'product_click',
     ],
 
     'payment_success_allowed_keys' => [

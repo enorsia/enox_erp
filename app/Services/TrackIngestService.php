@@ -69,7 +69,7 @@ class TrackIngestService
         }
 
         $gridEventCount = collect($events)
-            ->filter(fn ($event) => in_array($event['action_type'] ?? '', ['grid_impression', 'grid_click'], true))
+            ->filter(fn ($event) => $this->isCatalogSkuActionType((string) ($event['action_type'] ?? '')))
             ->count();
 
         $this->logInfo('ingest.start', 'Saving user actions started', [
@@ -84,7 +84,7 @@ class TrackIngestService
                 'session_id' => $sessionId,
                 'grid_event_count' => $gridEventCount,
                 'grid_events' => collect($events)
-                    ->filter(fn ($event) => in_array($event['action_type'] ?? '', ['grid_impression', 'grid_click'], true))
+                    ->filter(fn ($event) => $this->isCatalogSkuActionType((string) ($event['action_type'] ?? '')))
                     ->map(fn ($event) => [
                         'event_id' => $event['id'] ?? null,
                         'action_type' => $event['action_type'] ?? null,
@@ -118,7 +118,7 @@ class TrackIngestService
             try {
                 $this->validateGridSkuEvent($event);
             } catch (ValidationException $e) {
-                if (in_array($event['action_type'] ?? '', ['grid_impression', 'grid_click'], true)) {
+                if ($this->isCatalogSkuActionType((string) ($event['action_type'] ?? ''))) {
                     $this->logWarning('grid.ingest.rejected', 'Grid event failed validation', [
                         'session_id' => $sessionId,
                         'event_id' => $eventId,
@@ -131,7 +131,7 @@ class TrackIngestService
                 throw $e;
             }
 
-            if (in_array($event['action_type'] ?? '', ['grid_impression', 'grid_click'], true)) {
+            if ($this->isCatalogSkuActionType((string) ($event['action_type'] ?? ''))) {
                 $this->logInfo('grid.ingest.validated', 'Grid event passed validation', [
                     'session_id' => $sessionId,
                     'event_id' => $eventId,
@@ -234,7 +234,7 @@ class TrackIngestService
                 'department_name' => $event['department_name'] ?? null,
             ];
 
-            if (in_array($event['action_type'] ?? '', ['grid_impression', 'grid_click'], true)) {
+            if ($this->isCatalogSkuActionType((string) ($event['action_type'] ?? ''))) {
                 $storedLog['sku'] = $row['sku'] ?? $event['sku'] ?? null;
                 $this->logInfo('grid.ingest.stored', 'Grid action saved to database', $storedLog);
             }
@@ -418,7 +418,9 @@ class TrackIngestService
         $scalarFields = [
             'category_name',
             'category_code',
+            'category_id',
             'department_name',
+            'department_id',
             'product_name',
             'product_code',
             'sku',
@@ -477,7 +479,7 @@ class TrackIngestService
             }
         }
 
-        if (in_array($actionType, ['grid_impression', 'grid_click'], true)) {
+        if ($this->isCatalogSkuActionType($actionType)) {
             unset($row['product_code']);
 
             if (($row['department_name'] ?? '') === '' && ! empty($row['category_name'])) {
@@ -1052,9 +1054,11 @@ class TrackIngestService
         return false;
     }
 
-    /**
-     * @param  array<string, mixed>  $event
-     */
+    private function isCatalogSkuActionType(string $actionType): bool
+    {
+        return in_array($actionType, ['grid_impression', 'product_click'], true);
+    }
+
     /**
      * @param  array<string, mixed>  $event
      */
@@ -1062,7 +1066,7 @@ class TrackIngestService
     {
         $actionType = (string) ($event['action_type'] ?? '');
 
-        if (! in_array($actionType, ['grid_impression', 'grid_click'], true)) {
+        if (! $this->isCatalogSkuActionType($actionType)) {
             return;
         }
 
