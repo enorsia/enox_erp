@@ -21,8 +21,8 @@ class ProcessTrackingCtrBatchJob implements ShouldQueue
     public function __construct(
         public readonly array $actionIds,
     ) {
-        $this->onConnection((string) config('tracker.queue_connection', 'tracker'));
-        $this->onQueue((string) config('tracker.queue_name', 'tracker'));
+        $this->onConnection((string) config('tracker.ctr_queue_connection', 'database'));
+        $this->onQueue((string) config('tracker.ctr_queue_name', 'default'));
     }
 
     public function handle(TrackingCtrRollupService $rollupService): void
