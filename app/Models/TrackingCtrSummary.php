@@ -17,10 +17,6 @@ class TrackingCtrSummary extends Model
         'total_impression',
         'ctr',
         'ctr_average',
-        'new_in',
-        'total_sold',
-        'total_sold_rolling',
-        'sold_out',
     ];
 
     protected function casts(): array
@@ -30,14 +26,10 @@ class TrackingCtrSummary extends Model
             'category_id' => 'integer',
             'product_id' => 'integer',
             'sku' => 'string',
-            'new_in' => 'boolean',
             'total_click' => 'integer',
             'total_impression' => 'integer',
             'ctr' => 'decimal:6',
             'ctr_average' => 'decimal:6',
-            'total_sold' => 'integer',
-            'total_sold_rolling' => 'integer',
-            'sold_out' => 'boolean',
         ];
     }
 }

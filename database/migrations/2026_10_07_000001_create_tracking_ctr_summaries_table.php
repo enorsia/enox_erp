@@ -18,11 +18,6 @@ return new class extends Migration
             $table->unsignedInteger('total_impression')->default(0);
             $table->decimal('ctr', 10, 6)->default(0);
             $table->decimal('ctr_average', 10, 6)->default(0);
-            $table->boolean('new_in')->default(false);
-            $table->unsignedInteger('total_sold')->default(0);
-            $table->unsignedInteger('total_sold_rolling')->default(0)
-                ->comment('Sold in rolling N-day window (N configurable, default 30 days)');
-            $table->boolean('sold_out')->default(false);
             $table->timestamps();
 
             $table->unique(
@@ -34,8 +29,6 @@ return new class extends Migration
             $table->index('product_id', 'idx_tracking_ctr_summary_product');
             $table->index('sku', 'idx_tracking_ctr_summary_sku');
             $table->index(['department_id', 'category_id'], 'idx_tracking_ctr_summary_dept_category');
-            $table->index('new_in', 'idx_tracking_ctr_summary_new_in');
-            $table->index('sold_out', 'idx_tracking_ctr_summary_sold_out');
         });
     }
 
