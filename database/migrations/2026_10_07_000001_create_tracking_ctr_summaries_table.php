@@ -22,7 +22,7 @@ return new class extends Migration
             $table->unsignedInteger('total_sold')->default(0);
             $table->unsignedInteger('total_sold_rolling')->default(0)
                 ->comment('Sold in rolling N-day window (N configurable, default 30 days)');
-            $table->boolean('sold_out')->default(false);
+            $table->boolean('stock_out')->default(false);
             $table->timestamps();
 
             $table->unique(
