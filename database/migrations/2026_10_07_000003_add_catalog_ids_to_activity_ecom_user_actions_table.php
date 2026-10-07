@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::table('activity_ecom_user_actions', function (Blueprint $table) {
             $table->string('category_id', 50)->nullable()->after('category_code');
             $table->string('department_id', 50)->nullable()->after('department_name');
-            $table->string('ctr_tracking_status', 3)->default('no')->after('sku');
+            $table->boolean('ctr_tracking_status')->nullable()->default(null)->before('created_at');
             $table->index(
                 ['ctr_tracking_status', 'action_type', 'id'],
                 'idx_activity_ecom_actions_ctr_pending',

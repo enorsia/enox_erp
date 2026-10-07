@@ -32,7 +32,7 @@ class TrackingCtrRollupService
             return DB::transaction(function () use ($ids) {
                 $actions = ActivityEcomUserAction::query()
                     ->whereIn('id', $ids)
-                    ->where('ctr_tracking_status', 'no')
+                    ->whereNull('ctr_tracking_status')
                     ->whereIn('action_type', $this->ctrActionTypes())
                     ->orderBy('id')
                     ->lockForUpdate()
@@ -90,8 +90,8 @@ class TrackingCtrRollupService
                 if ($processedIds !== []) {
                     ActivityEcomUserAction::query()
                         ->whereIn('id', $processedIds)
-                        ->where('ctr_tracking_status', 'no')
-                        ->update(['ctr_tracking_status' => 'yes']);
+                        ->whereNull('ctr_tracking_status')
+                        ->update(['ctr_tracking_status' => true]);
                 }
 
                 foreach ($touchedKeys as $key) {

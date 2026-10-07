@@ -52,6 +52,7 @@ class ActivityEcomUserAction extends Model
     protected function casts(): array
     {
         return [
+            'ctr_tracking_status' => 'boolean',
             'add_to_cart' => 'array',
             'begin_checkout' => 'array',
             'proceed_to_checkout' => 'array',

@@ -25,7 +25,7 @@ class TrackingCtrBatchDispatcher
         $maxActions = $batchSize * $maxBatches;
 
         $pendingIds = ActivityEcomUserAction::query()
-            ->where('ctr_tracking_status', 'no')
+            ->whereNull('ctr_tracking_status')
             ->whereIn('action_type', $this->rollupService->ctrActionTypes())
             ->orderBy('id')
             ->limit($maxActions)
