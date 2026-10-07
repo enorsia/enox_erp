@@ -18,7 +18,7 @@ class TrackingCtrBatchDispatcher
     /**
      * @return array{queued_jobs: int, action_count: int}
      */
-    public function dispatchPendingBatches(bool $sync = false): array
+    public function dispatchPendingBatches(): array
     {
         $batchSize = self::BATCH_SIZE;
         $maxBatches = self::MAX_BATCHES_PER_RUN;
@@ -41,12 +41,7 @@ class TrackingCtrBatchDispatcher
         $queuedJobs = 0;
 
         foreach ($chunks as $actionIds) {
-            if ($sync) {
-                (new ProcessTrackingCtrBatchJob($actionIds))->handle($this->rollupService);
-            } else {
-                ProcessTrackingCtrBatchJob::dispatch($actionIds);
-            }
-
+            ProcessTrackingCtrBatchJob::dispatch($actionIds);
             $queuedJobs++;
         }
 
