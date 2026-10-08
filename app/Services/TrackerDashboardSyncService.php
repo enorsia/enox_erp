@@ -30,8 +30,6 @@ class TrackerDashboardSyncService
 
     private const FAILED_RETRY_COOLDOWN_MINUTES = 5;
 
-    private const SESSION_IDLE_MINUTES = 30;
-
     private const NO_DEPARTMENT_LABEL = '(no department)';
 
     /**
@@ -58,8 +56,6 @@ class TrackerDashboardSyncService
     public function planChunks(int $chunkSize = 25): array
     {
         $query = DB::table('activity_ecom_user as u');
-
-        $this->applyIdleSessionFilter($query, 'u');
 
         $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
         $this->applyPendingOrRetryFilter($query, now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES), 'u');
@@ -232,27 +228,10 @@ class TrackerDashboardSyncService
             $query->whereIn('u.id', $onlyIds);
         }
 
-        $this->applyIdleSessionFilter($query, 'u');
-
         $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
         $this->applyPendingOrRetryFilter($query, $retryAfter, 'u');
 
         return $query->orderBy('u.id')->limit($limit)->get();
-    }
-
-    private function applyIdleSessionFilter(Builder $query, string $alias): void
-    {
-        $idleBefore = now()->subMinutes(self::SESSION_IDLE_MINUTES);
-
-        $query->where(function ($outer) use ($alias, $idleBefore): void {
-            $outer->where(function ($q) use ($alias, $idleBefore): void {
-                $q->whereNotNull("{$alias}.last_active_at")
-                    ->where("{$alias}.last_active_at", '<=', $idleBefore);
-            })->orWhere(function ($q) use ($alias, $idleBefore): void {
-                $q->whereNull("{$alias}.last_active_at")
-                    ->where("{$alias}.created_at", '<=', $idleBefore);
-            });
-        });
     }
 
     private function applyPendingOrRetryFilter(Builder $query, Carbon $retryAfter, string $alias): void

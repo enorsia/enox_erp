@@ -765,6 +765,61 @@ function printEcomTrackerDashboard() {
     });
 }
 
+const SYNC_TOAST_ICONS = {
+    success: '<path stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 11v5M12 7.5h.01"/>',
+    warning: '<path stroke-linejoin="round" d="M12 3.5l9.5 16.5h-19L12 3.5z"/><path stroke-linecap="round" d="M12 10v4.5M12 17.5h.01"/>',
+    error: '<path stroke-linecap="round" d="M7 7l10 10M17 7L7 17"/>',
+};
+
+function escapeToastText(value) {
+    const div = document.createElement('div');
+    div.textContent = String(value ?? '');
+
+    return div.innerHTML;
+}
+
+/** Custom markup: the admin theme's vendor.min.css ships old swal2 rules that break the built-in icons. */
+function showSyncToast(type, title, text) {
+    if (!window.Swal) {
+        window.alert(text ? `${title}\n${text}` : title);
+
+        return;
+    }
+
+    const icon = SYNC_TOAST_ICONS[type] ?? SYNC_TOAST_ICONS.info;
+
+    window.Swal.fire({
+        toast: true,
+        position: 'top-end',
+        html: `
+            <div class="etd-sync-toast__body">
+                <span class="etd-sync-toast__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">${icon}</svg>
+                </span>
+                <div class="etd-sync-toast__content">
+                    <div class="etd-sync-toast__title">${escapeToastText(title)}</div>
+                    ${text ? `<div class="etd-sync-toast__text">${escapeToastText(text)}</div>` : ''}
+                </div>
+            </div>`,
+        showConfirmButton: false,
+        showCloseButton: true,
+        timer: type === 'error' ? 6000 : 4000,
+        timerProgressBar: true,
+        customClass: {
+            container: 'etd-sync-toast-container',
+            popup: `etd-sync-toast etd-sync-toast--${type}`,
+            htmlContainer: 'etd-sync-toast__html',
+            closeButton: 'etd-sync-toast__close',
+            timerProgressBar: 'etd-sync-toast__progress',
+        },
+        didOpen: (toast) => {
+            toast.addEventListener('mouseenter', window.Swal.stopTimer);
+            toast.addEventListener('mouseleave', window.Swal.resumeTimer);
+        },
+    });
+}
+
 function initDashboardSyncButton(page) {
     const syncBtn = document.getElementById('ecom-dashboard-sync');
     const syncUrl = page?.dataset?.syncUrl ?? '';
@@ -802,24 +857,28 @@ function initDashboardSyncButton(page) {
 
             const body = await response.json().catch(() => ({}));
 
-            if (!response.ok || body.ok === false) {
-                throw new Error(body.message || `Sync failed (${response.status})`);
-            }
+            if (response.status === 409) {
+                showSyncToast('warning', 'Sync already running', body.message || 'Please wait until it finishes.');
+            } else if (response.status === 422) {
+                showSyncToast('info', 'All up to date', body.message || 'No more data to sync.');
+            } else if (!response.ok || body.ok === false) {
+                showSyncToast('error', 'Sync failed', body.message || `Server responded with ${response.status}.`);
+            } else {
+                const sessions = Number(body.sessions || 0);
+                const batches = Number(body.batches || 0);
 
-            if (label) {
-                label.textContent = body.batches ? `Queued (${body.batches})` : 'Queued';
+                showSyncToast(
+                    'success',
+                    'Sync started',
+                    `${sessions} session${sessions === 1 ? '' : 's'} queued in ${batches} batch${batches === 1 ? '' : 'es'}.`,
+                );
             }
-            window.setTimeout(() => {
-                if (label) {
-                    label.textContent = prevText;
-                }
-            }, 2000);
-        } catch (err) {
-            window.alert(err instanceof Error ? err.message : 'Could not queue sync.');
+        } catch {
+            showSyncToast('error', 'Sync failed', 'Could not reach the server. Please try again.');
+        } finally {
             if (label) {
                 label.textContent = prevText;
             }
-        } finally {
             syncBtn.disabled = false;
         }
     });

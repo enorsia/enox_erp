@@ -28,27 +28,27 @@ class EcomTrackerDashboardController extends Controller
     {
         Gate::authorize('ecom_tracker.dashboard.index');
 
-        $chunkSize = max(1, (int) config('tracker.dashboard_sync_batch_size', 25));
-        $chunks = $syncService->planChunks($chunkSize);
+        $result = TrackerDashboardSyncJob::start($syncService);
 
-        if ($chunks === []) {
+        if ($result['status'] === TrackerDashboardSyncJob::ALREADY_RUNNING) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Nothing to sync. Only pending sessions idle for 30+ minutes are included.',
+                'message' => 'Sync is already running. Please wait until it finishes.',
+            ], 409);
+        }
+
+        if ($result['status'] === TrackerDashboardSyncJob::NOTHING_TO_SYNC) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No more data to sync.',
             ], 422);
         }
 
-        $batchCount = count($chunks);
-        $sessionCount = array_sum(array_map('count', $chunks));
-
-        // Run planner after the JSON response (no separate queue worker needed for this step).
-        TrackerDashboardSyncJob::dispatch()->afterResponse();
-
         return response()->json([
             'ok' => true,
-            'message' => "Sync started: {$batchCount} batch(es), up to {$sessionCount} session(s). Ensure a queue worker is running.",
-            'batches' => $batchCount,
-            'sessions' => $sessionCount,
+            'message' => "Sync started: {$result['batches']} batch(es), {$result['sessions']} session(s). Ensure a queue worker is running.",
+            'batches' => $result['batches'],
+            'sessions' => $result['sessions'],
         ]);
     }
 }

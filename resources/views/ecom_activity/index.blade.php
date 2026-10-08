@@ -114,10 +114,13 @@
                                     <div class="etd-subtle mt-0.5">{{ \App\Support\TrackerTime::formatFromStorage($row->created_at) }}</div>
                                 </td>
                                 <td class="etd-col-user" data-label="User">
-                                    @if (filled($row->name) || filled($row->email))
-                                        <div class="text-[13px] text-slate-800 dark:text-slate-100">{{ $row->name ?: $row->email }}</div>
+                                    @if (filled($row->name) || filled($row->email) || filled($row->phone))
+                                        <div class="text-[13px] text-slate-800 dark:text-slate-100">{{ $row->name ?: ($row->email ?: $row->phone) }}</div>
                                         @if (filled($row->email) && filled($row->name))
                                             <div class="etd-subtle">{{ $row->email }}</div>
+                                        @endif
+                                        @if (filled($row->phone) && (filled($row->name) || filled($row->email)))
+                                            <div class="etd-subtle">{{ $row->phone }}</div>
                                         @endif
                                     @else
                                         <span class="text-slate-500">Guest</span>
