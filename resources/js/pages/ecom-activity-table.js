@@ -522,6 +522,66 @@ function onPaginationClick(event) {
     fetchActivityTable(event.currentTarget.href);
 }
 
+function setActivityCategoryOptions(select, categories, placeholder) {
+    const disabled = categories.length === 0;
+
+    if (select.tomselect) {
+        const ts = select.tomselect;
+        ts.clear(true);
+        ts.clearOptions();
+        ts.addOptions(categories.map((category) => ({ value: String(category.id), text: category.name })));
+        ts.settings.placeholder = placeholder;
+        ts.control_input?.setAttribute('placeholder', placeholder);
+        ts.refreshOptions(false);
+        disabled ? ts.disable() : ts.enable();
+
+        return;
+    }
+
+    select.innerHTML = '';
+    categories.forEach((category) => select.add(new Option(category.name, category.id)));
+    select.disabled = disabled;
+}
+
+function initActivityDepartmentCategories(page) {
+    const department = page.querySelector('[data-etd-activity-department]');
+    const category = page.querySelector('[data-etd-activity-category]');
+
+    if (!department || !category || department._etdCategoriesBound) {
+        return;
+    }
+
+    department._etdCategoriesBound = true;
+    let controller = null;
+
+    department.addEventListener('change', async () => {
+        controller?.abort();
+
+        if (!department.value) {
+            setActivityCategoryOptions(category, [], 'Select a department first');
+
+            return;
+        }
+
+        controller = new AbortController();
+        const url = new URL(department.dataset.categoriesUrl, window.location.origin);
+        url.searchParams.set('department', department.value);
+
+        try {
+            const response = await fetch(url, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                signal: controller.signal,
+            });
+            const categories = response.ok ? await response.json() : [];
+            setActivityCategoryOptions(category, categories, categories.length ? 'All' : 'No categories');
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                setActivityCategoryOptions(category, [], 'Could not load categories');
+            }
+        }
+    });
+}
+
 function bootActivityTableNavigation() {
     const page = getActivityPage();
 
@@ -539,6 +599,7 @@ function bootActivityTableNavigation() {
     restoreActivityListRestoreState();
     initActivityFilterDrawer(page);
     initActivityPeriodControls(page);
+    initActivityDepartmentCategories(page);
 }
 
 if (document.readyState === 'loading') {

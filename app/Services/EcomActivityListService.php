@@ -2,6 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\TrackingCategory;
+use App\Models\TrackingDevice;
+use App\Models\TrackingSession;
+use App\Models\TrackingTrafficSource;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
@@ -44,6 +48,37 @@ class EcomActivityListService
     public const PERIODS = ['24h', 'yesterday', '7d', '30d', 'custom'];
 
     public const DEFAULT_PERIOD = '24h';
+
+    /**
+     * Option lists for the filter drawer (small lookup tables only).
+     *
+     * @return array{funnelStages: array<int, string>, durationBuckets: array<string, string>, devices: array<int, string>, utmSources: array<int, string>, utmMediums: list<string>, departments: array<int, string>}
+     */
+    public function filterOptions(): array
+    {
+        $trafficSources = TrackingTrafficSource::query()->orderBy('name')->get(['id', 'name', 'medium']);
+
+        return [
+            'funnelStages' => TrackingSession::FUNNEL_STAGES,
+            'durationBuckets' => array_map(fn (array $bucket) => $bucket['label'], TrackingSession::DURATION_BUCKETS),
+            'devices' => TrackingDevice::query()->orderBy('name')->pluck('name', 'id')->all(),
+            'utmSources' => $trafficSources->pluck('name', 'id')->all(),
+            'utmMediums' => $trafficSources->pluck('medium')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values()->all(),
+            'departments' => TrackingCategory::query()->whereNull('parent_id')->orderBy('name')->pluck('name', 'id')->all(),
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function departmentCategories(int $departmentId): array
+    {
+        return TrackingCategory::query()
+            ->where('parent_id', $departmentId)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
 
     public static function normalizeSort(mixed $sortBy): string
     {

@@ -10,6 +10,7 @@ use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -68,7 +69,21 @@ class EcomActivityController extends Controller
         $sortOptions = EcomActivityListService::SORT_OPTIONS;
         $sessions = $activityList->paginate($range, $sortBy, 25);
 
-        return view('ecom_activity.index', compact('data', 'sessions', 'sortBy', 'sortOptions'));
+        $filterOptions = $activityList->filterOptions();
+        $filterOptions['categories'] = $request->integer('department') > 0
+            ? $activityList->departmentCategories($request->integer('department'))
+            : [];
+
+        return view('ecom_activity.index', compact('data', 'sessions', 'sortBy', 'sortOptions', 'filterOptions'));
+    }
+
+    public function categories(Request $request, EcomActivityListService $activityList): JsonResponse
+    {
+        Gate::authorize('ecom_tracker.activity.index');
+
+        $categories = $activityList->departmentCategories($request->integer('department'));
+
+        return response()->json(collect($categories)->map(fn (string $name, int $id) => ['id' => $id, 'name' => $name])->values());
     }
 
     public function show(Request $request, string $session): View

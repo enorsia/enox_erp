@@ -81,10 +81,9 @@
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">Funnel stage</span>
                             <select name="funnel[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All">
-                                <option value="cart_abandonment">Cart abandoned</option>
-                                <option value="begin_checkout_abandonment">Begin checkout abandoned</option>
-                                <option value="proceed_checkout_abandonment">Proceed checkout abandoned</option>
-                                <option value="payment_success">Payment success</option>
+                                @foreach ($filterOptions['funnelStages'] as $code => $label)
+                                    <option value="{{ $code }}" @selected(in_array((string) $code, (array) request('funnel', []), true))>{{ $label }}</option>
+                                @endforeach
                             </select>
                         </label>
                         <label class="etd-filter-compact-field">
@@ -102,7 +101,11 @@
                     <div class="etd-activity-filter-grid">
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">Device</span>
-                            <select name="device_type[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All"></select>
+                            <select name="device_type[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All">
+                                @foreach ($filterOptions['devices'] as $id => $name)
+                                    <option value="{{ $id }}" @selected(in_array((string) $id, (array) request('device_type', []), true))>{{ ucfirst($name) }}</option>
+                                @endforeach
+                            </select>
                         </label>
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">Logged in</span>
@@ -115,11 +118,9 @@
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">Duration</span>
                             <select name="duration_bucket[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All">
-                                <option value="under_1m">Under 1 min</option>
-                                <option value="1_5m">1–5 min</option>
-                                <option value="5_15m">5–15 min</option>
-                                <option value="15_60m">15–60 min</option>
-                                <option value="over_60m">Over 60 min</option>
+                                @foreach ($filterOptions['durationBuckets'] as $key => $label)
+                                    <option value="{{ $key }}" @selected(in_array($key, (array) request('duration_bucket', []), true))>{{ $label }}</option>
+                                @endforeach
                             </select>
                         </label>
                     </div>
@@ -130,24 +131,44 @@
                     <div class="etd-activity-filter-grid">
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">UTM source</span>
-                            <select name="utm_source[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All"></select>
+                            <select name="utm_source[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All">
+                                @foreach ($filterOptions['utmSources'] as $id => $name)
+                                    <option value="{{ $id }}" @selected(in_array((string) $id, (array) request('utm_source', []), true))>{{ $name }}</option>
+                                @endforeach
+                            </select>
                         </label>
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">UTM medium</span>
-                            <select name="utm_medium[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All"></select>
+                            <select name="utm_medium[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All">
+                                @foreach ($filterOptions['utmMediums'] as $medium)
+                                    <option value="{{ $medium }}" @selected(in_array($medium, (array) request('utm_medium', []), true))>{{ $medium }}</option>
+                                @endforeach
+                            </select>
                         </label>
                     </div>
                 </section>
                 <section class="etd-activity-filter-section">
                     <p class="etd-kpi-section-label mb-2">Product / category</p>
-                    <div class="etd-product-filters-compact etd-activity-filter-grid" data-etd-department-category data-etd-category-catalog="{}">
+                    <div class="etd-product-filters-compact etd-activity-filter-grid">
                         <label class="etd-filter-compact-field" for="catalog-filter-department">
                             <span class="etd-filter-compact-label">Department</span>
-                            <select id="catalog-filter-department" name="department" class="tom-select etd-tom-select w-full" data-placeholder="All"><option value="">All</option></select>
+                            <select id="catalog-filter-department" name="department" class="tom-select etd-tom-select w-full" data-placeholder="All"
+                                    data-etd-activity-department data-categories-url="{{ route('admin.ecom-activity.categories') }}">
+                                <option value="">All</option>
+                                @foreach ($filterOptions['departments'] as $id => $name)
+                                    <option value="{{ $id }}" @selected((string) request('department') === (string) $id)>{{ $name }}</option>
+                                @endforeach
+                            </select>
                         </label>
                         <label class="etd-filter-compact-field" for="catalog-filter-category">
                             <span class="etd-filter-compact-label">Category</span>
-                            <select id="catalog-filter-category" name="category[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All"></select>
+                            <select id="catalog-filter-category" name="category[]" multiple class="tom-select etd-tom-select w-full"
+                                    data-placeholder="{{ $filterOptions['categories'] === [] ? 'Select a department first' : 'All' }}"
+                                    data-etd-activity-category @disabled($filterOptions['categories'] === [])>
+                                @foreach ($filterOptions['categories'] as $id => $name)
+                                    <option value="{{ $id }}" @selected(in_array((string) $id, (array) request('category', []), true))>{{ $name }}</option>
+                                @endforeach
+                            </select>
                         </label>
                     </div>
                 </section>
