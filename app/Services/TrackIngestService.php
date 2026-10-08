@@ -25,7 +25,6 @@ class TrackIngestService
         private TrackerClientContextResolver $clientContextResolver,
         private BotContextPersister $botContextPersister,
         private TrackerPaymentCheckoutEnricher $paymentCheckoutEnricher,
-        private CommerceIngestWriter $commerceIngestWriter,
     ) {}
 
     /**
@@ -178,39 +177,12 @@ class TrackIngestService
             $actionAlreadyStored = $existingAction !== null;
             $previousSessionId = $existingAction?->session_id;
 
-            try {
-                if (CommerceIngestWriter::isSyncableActionType($event['action_type'] ?? '')) {
-                    DB::transaction(function () use ($eventId, $row, $event, $actionAlreadyStored, $previousSessionId, $sessionId) {
-                        ActivityEcomUserAction::query()->updateOrInsert(
-                            ['event_id' => $eventId],
-                            $row
-                        );
+            ActivityEcomUserAction::query()->updateOrInsert(
+                ['event_id' => $eventId],
+                $row
+            );
 
-                        $this->syncSessionActionCount($sessionId, $actionAlreadyStored, $previousSessionId);
-
-                        $action = ActivityEcomUserAction::query()->where('event_id', $eventId)->first();
-                        if ($action !== null) {
-                            $this->commerceIngestWriter->syncFromAction($action);
-                        }
-                    });
-                } else {
-                    ActivityEcomUserAction::query()->updateOrInsert(
-                        ['event_id' => $eventId],
-                        $row
-                    );
-
-                    $this->syncSessionActionCount($sessionId, $actionAlreadyStored, $previousSessionId);
-                }
-            } catch (Throwable $e) {
-                EcomTrackerLogger::frontend()->error('commerce.ingest.failed', 'Commerce ingest failed', [
-                    'session_id' => $sessionId,
-                    'event_id' => $eventId,
-                    'action_type' => $event['action_type'] ?? null,
-                    'message' => $e->getMessage(),
-                ]);
-
-                throw $e;
-            }
+            $this->syncSessionActionCount($sessionId, $actionAlreadyStored, $previousSessionId);
 
             $this->backfillSessionAttribution(
                 $sessionId,
@@ -946,33 +918,7 @@ class TrackIngestService
      */
     private function ensureCanonicalCommerceOrder(array $event): void
     {
-        $orderId = $this->paymentSuccessOrderId($event);
-
-        if ($orderId === '' || DB::table('activity_ecom_orders')->where('order_id', $orderId)->exists()) {
-            return;
-        }
-
-        $canonicalId = $this->findCanonicalPaymentSuccessActionId($orderId);
-
-        if ($canonicalId === null) {
-            return;
-        }
-
-        $canonical = ActivityEcomUserAction::query()->find($canonicalId);
-
-        if ($canonical === null) {
-            return;
-        }
-
-        try {
-            $this->commerceIngestWriter->syncFromAction($canonical);
-        } catch (Throwable $e) {
-            $this->logWarning('commerce.ingest.canonical_backfill_failed', 'Failed to backfill canonical order row', [
-                'order_id' => $orderId,
-                'event_id' => $canonical->event_id,
-                'message' => $e->getMessage(),
-            ]);
-        }
+        // Legacy activity_ecom_orders rollups were removed on so-trackerjs-v3; actions stay on activity_ecom_user_actions.
     }
 
     /**
@@ -995,10 +941,6 @@ class TrackIngestService
 
     private function paymentSuccessExistsForOrder(string $orderId): bool
     {
-        if (DB::table('activity_ecom_orders')->where('order_id', $orderId)->exists()) {
-            return true;
-        }
-
         return DB::table('activity_ecom_user_actions')
             ->where('action_type', 'payment_success')
             ->where('order_id', $orderId)
