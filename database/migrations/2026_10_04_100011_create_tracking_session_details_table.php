@@ -24,6 +24,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index('ip', 'tsd_search_ip_idx');
+            $table->index(['tracking_session_id', 'tracking_device_id', 'tracking_traffic_source_id'], 'tsd_filter_idx');
         });
     }
 

@@ -26,7 +26,10 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['latest_funnel_stage', 'last_active_at', 'id'], 'ts_sort_funnel_idx');
-            $table->index(['last_active_at', 'id', 'has_order'], 'ts_sort_last_active_idx');
+            $table->index(
+                ['last_active_at', 'id', 'has_order', 'is_logged_in', 'latest_funnel_stage', 'duration_seconds'],
+                'ts_sort_last_active_idx',
+            );
             $table->index(['created_at', 'id'], 'ts_sort_created_idx');
             $table->index(['actions_count', 'id'], 'ts_sort_actions_idx');
             $table->index(['duration_seconds', 'id'], 'ts_sort_duration_idx');
