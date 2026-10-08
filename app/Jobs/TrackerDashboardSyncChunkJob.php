@@ -18,6 +18,9 @@ class TrackerDashboardSyncChunkJob implements ShouldQueue
 
     public int $tries = 2;
 
+    /** 0 = no time limit; overrides plain `queue:work` default of 60s. */
+    public int $timeout = 0;
+
     /**
      * @param  list<int>  $sessionIds
      */
