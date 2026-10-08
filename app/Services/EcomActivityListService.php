@@ -281,7 +281,7 @@ class EcomActivityListService
      * Stored ingest verdict (Cloudflare score, then UA rules), re-checked against the current
      * crawler list so sessions saved before a pattern was added are not shown as real visitors.
      *
-     * @return array{classification: string, label: string, badge_class: string, help: string, country_code: ?string, country_label: ?string, ips: list<string>}
+     * @return array{classification: string, label: string, badge_class: string, help: string, country_code: ?string, country_label: ?string, ips: list<list<string>>}
      */
     private function trustCell(object $row): array
     {
@@ -315,9 +315,33 @@ class EcomActivityListService
                 ->map(fn (string $ip) => trim($ip))
                 ->filter()
                 ->unique()
+                ->map(fn (string $ip) => $this->ipLines($ip))
                 ->values()
                 ->all(),
         ];
+    }
+
+    /**
+     * Long IPv6 addresses are split at the colon nearest the middle so both lines are similar in length.
+     *
+     * @return list<string>
+     */
+    private function ipLines(string $ip): array
+    {
+        if (strlen($ip) <= 28 || ! str_contains($ip, ':')) {
+            return [$ip];
+        }
+
+        $middle = intdiv(strlen($ip), 2);
+        $splitAt = null;
+
+        for ($position = 0, $length = strlen($ip); $position < $length; $position++) {
+            if ($ip[$position] === ':' && ($splitAt === null || abs($position - $middle) < abs($splitAt - $middle))) {
+                $splitAt = $position;
+            }
+        }
+
+        return [substr($ip, 0, $splitAt + 1), substr($ip, $splitAt + 1)];
     }
 
     private function isKnownCrawler(string $userAgent): bool

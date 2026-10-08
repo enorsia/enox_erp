@@ -10,8 +10,8 @@
     </div>
     @if ($trust['ips'] !== [])
         <span class="etd-visitor-ip" title="{{ count($trust['ips']) > 1 ? 'Visitor IPs' : 'Visitor IP' }}">
-            @foreach ($trust['ips'] as $ip)
-                {{ $ip }}@unless ($loop->last),<br>@endunless
+            @foreach ($trust['ips'] as $ipLines)
+                <span class="etd-visitor-ip__item" title="{{ implode('', $ipLines) }}">{!! collect($ipLines)->map(fn ($line) => e($line))->implode('<br>') !!}@unless ($loop->last),@endunless</span>
             @endforeach
         </span>
     @endif

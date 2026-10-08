@@ -6706,15 +6706,20 @@ a.etd-pager__btn:hover {
     white-space: nowrap;
 }
 
+/* One IP per line, never split inside an address; the column grows to the longest IP. */
 .etd-table-scroll--activity .etd-table--activity td.etd-col-trust .etd-visitor-ip {
     display: block;
-    max-width: 100%;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-all;
+    max-width: none;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+    letter-spacing: -0.01em;
 }
 
-/* Tablet / laptop / desktop: cap trust column so long IPv6 wraps instead of stretching the table */
+.etd-table-scroll--activity .etd-table--activity td.etd-col-trust .etd-visitor-ip__item {
+    display: block;
+}
+
 @media (min-width: 768px) {
     #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity th.etd-col-session,
     #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td.etd-col-session {
@@ -6725,15 +6730,9 @@ a.etd-pager__btn:hover {
 
     .etd-table-scroll--activity .etd-table--activity th.etd-col-trust,
     .etd-table-scroll--activity .etd-table--activity td.etd-col-trust {
-        width: 10.5rem;
+        width: 1%;
         min-width: 10.5rem;
-        max-width: 11rem;
-        overflow-wrap: anywhere;
-        word-break: break-all;
-    }
-
-    .etd-table-scroll--activity .etd-table--activity td.etd-col-trust .etd-visitor-ip {
-        max-width: 10.5rem;
+        max-width: none;
     }
 }
 
