@@ -8,16 +8,16 @@ class TrackingDailyDuration extends Model
 {
     /** bucket code => duration range in seconds; max is inclusive, null = no upper limit */
     public const BUCKETS = [
-        1 => ['label' => '0–1 min', 'min' => 0, 'max' => 59],
-        2 => ['label' => '1–3 min', 'min' => 60, 'max' => 179],
-        3 => ['label' => '3–5 min', 'min' => 180, 'max' => 299],
-        4 => ['label' => '5–7 min', 'min' => 300, 'max' => 419],
-        5 => ['label' => '7–9 min', 'min' => 420, 'max' => 539],
-        6 => ['label' => '9–11 min', 'min' => 540, 'max' => 659],
-        7 => ['label' => '11–13 min', 'min' => 660, 'max' => 779],
-        8 => ['label' => '13–15 min', 'min' => 780, 'max' => 899],
-        9 => ['label' => '15–30 min', 'min' => 900, 'max' => 1799],
-        10 => ['label' => '30+ min', 'min' => 1800, 'max' => null],
+        1 => ['label' => '0–1 min', 'min' => 0, 'max' => 60],
+        2 => ['label' => '1–3 min', 'min' => 61, 'max' => 180],
+        3 => ['label' => '3–5 min', 'min' => 181, 'max' => 300],
+        4 => ['label' => '5–7 min', 'min' => 301, 'max' => 420],
+        5 => ['label' => '7–9 min', 'min' => 421, 'max' => 540],
+        6 => ['label' => '9–11 min', 'min' => 541, 'max' => 660],
+        7 => ['label' => '11–13 min', 'min' => 661, 'max' => 780],
+        8 => ['label' => '13–15 min', 'min' => 781, 'max' => 900],
+        9 => ['label' => '15–30 min', 'min' => 901, 'max' => 1800],
+        10 => ['label' => '30+ min', 'min' => 1801, 'max' => null],
     ];
 
     protected $fillable = [

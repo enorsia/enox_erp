@@ -22,6 +22,9 @@ return new class extends Migration
             $table->unsignedTinyInteger('latest_funnel_stage')
                 ->nullable()
                 ->comment('1=category_view, 2=product_view, 3=add_to_cart, 4=begin_checkout, 5=proceed_checkout, 6=payment_success');
+            $table->boolean('has_add_to_cart')->default(false);
+            $table->boolean('has_begin_checkout')->default(false);
+            $table->boolean('has_proceed_checkout')->default(false);
             $table->boolean('has_order')->default(false);
             $table->timestamps();
 

@@ -41,6 +41,9 @@ class TrackingSession extends Model
         'actions_count',
         'last_active_at',
         'latest_funnel_stage',
+        'has_add_to_cart',
+        'has_begin_checkout',
+        'has_proceed_checkout',
         'has_order',
     ];
 }
