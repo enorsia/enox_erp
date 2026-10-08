@@ -70,10 +70,7 @@ class EcomActivityController extends Controller
         $sortOptions = EcomActivityListService::SORT_OPTIONS;
         $filters = EcomActivityListService::filtersFromRequest($request);
 
-        $filterOptions = $activityList->filterOptions();
-        $filterOptions['categories'] = $filters['department']
-            ? $activityList->departmentCategories($filters['department'])
-            : [];
+        $filterOptions = $activityList->filterOptions($filters['department']);
 
         if ($filters['department'] && $filters['categories'] === []) {
             $filters['categories'] = [$filters['department'], ...array_keys($filterOptions['categories'])];

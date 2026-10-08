@@ -3,9 +3,7 @@
 namespace App\Services;
 
 use App\Models\TrackingCategory;
-use App\Models\TrackingDevice;
 use App\Models\TrackingSession;
-use App\Models\TrackingTrafficSource;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
@@ -51,21 +49,32 @@ class EcomActivityListService
     public const DEFAULT_PERIOD = '24h';
 
     /**
-     * Option lists for the filter drawer (small lookup tables only).
+     * Option lists for the filter drawer: devices, traffic sources, departments and the selected
+     * department's categories, read from the small lookup tables in one UNION ALL query.
      *
-     * @return array{funnelStages: array<int, string>, durationBuckets: array<string, string>, devices: array<int, string>, utmSources: array<int, string>, utmMediums: list<string>, departments: array<int, string>}
+     * @return array{funnelStages: array<int, string>, durationBuckets: array<string, string>, devices: array<int, string>, utmSources: array<int, string>, utmMediums: list<string>, departments: array<int, string>, categories: array<int, string>}
      */
-    public function filterOptions(): array
+    public function filterOptions(?int $departmentId = null): array
     {
-        $trafficSources = TrackingTrafficSource::query()->orderBy('name')->get(['id', 'name', 'medium']);
+        $lookups = DB::table('tracking_device')->selectRaw("'device' as type, id, name, NULL as medium, NULL as parent_id")
+            ->unionAll(DB::table('tracking_traffic_source')->selectRaw("'source', id, name, medium, NULL"))
+            ->unionAll(DB::table('tracking_category')->selectRaw("'category', id, name, NULL, parent_id")
+                ->whereNull('parent_id')
+                ->when($departmentId, fn (Builder $query) => $query->orWhere('parent_id', $departmentId)))
+            ->get()
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->groupBy('type');
+        $categories = $lookups->get('category', collect());
+        $sources = $lookups->get('source', collect());
 
         return [
-            'funnelStages' => TrackingSession::FUNNEL_STAGES,
+            'funnelStages' => array_intersect_key(TrackingSession::FUNNEL_STAGES, array_flip(TrackingSession::FILTER_FUNNEL_STAGES)),
             'durationBuckets' => array_map(fn (array $bucket) => $bucket['label'], TrackingSession::DURATION_BUCKETS),
-            'devices' => TrackingDevice::query()->orderBy('name')->pluck('name', 'id')->all(),
-            'utmSources' => $trafficSources->pluck('name', 'id')->all(),
-            'utmMediums' => $trafficSources->pluck('medium')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values()->all(),
-            'departments' => TrackingCategory::query()->whereNull('parent_id')->orderBy('name')->pluck('name', 'id')->all(),
+            'devices' => $lookups->get('device', collect())->pluck('name', 'id')->all(),
+            'utmSources' => $sources->pluck('name', 'id')->all(),
+            'utmMediums' => $sources->pluck('medium')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values()->all(),
+            'departments' => $categories->whereNull('parent_id')->pluck('name', 'id')->all(),
+            'categories' => $departmentId ? $categories->where('parent_id', $departmentId)->pluck('name', 'id')->all() : [],
         ];
     }
 
@@ -167,7 +176,7 @@ class EcomActivityListService
 
         return [
             'search' => mb_substr(trim((string) $request->input('search', '')), 0, 100),
-            'funnel' => array_values(array_intersect($ints('funnel'), array_keys(TrackingSession::FUNNEL_STAGES))),
+            'funnel' => array_values(array_intersect($ints('funnel'), TrackingSession::FILTER_FUNNEL_STAGES)),
             'has_order' => $bool('has_order'),
             'devices' => $ints('device_type'),
             'logged_in' => $bool('logged_in'),
@@ -200,21 +209,7 @@ class EcomActivityListService
         $page = min($page, max(1, (int) ceil($total / $perPage)));
 
         $sortBy = self::normalizeSort($sortBy);
-        $pageIds = $sortBy === 'order_value'
-            ? $this->orderValuePageIds($scope, (int) $counts->orders, ($page - 1) * $perPage, $perPage)
-            : DB::table('tracking_session as ts')
-                ->tap($scope)
-                ->tap(fn (Builder $query) => $this->applySort($query, $sortBy))
-                ->forPage($page, $perPage)
-                ->pluck('ts.id')
-                ->all();
-
-        // Join commerce and trust data only for this page's rows; the sort/offset above stays index-only.
-        $rows = $this->withCommerceAction(DB::table('tracking_session as ts')->whereIn('ts.id', $pageIds))
-            ->tap(fn (Builder $query) => $this->withVisitorTrust($query))
-            ->get()
-            ->sortBy(fn (object $row) => array_search($row->id, $pageIds))
-            ->values()
+        $rows = $total === 0 ? collect() : $this->pageRows($scope, $sortBy, (int) $counts->orders, $page, $perPage)
             ->map(function (object $row) {
                 $row->commerce = $this->commerceCell($row);
                 $row->trust = $this->trustCell($row);
@@ -226,6 +221,37 @@ class EcomActivityListService
             'path' => Paginator::resolveCurrentPath(),
             'query' => request()->query(),
         ]);
+    }
+
+    /**
+     * Deferred join: the inner query sorts + offsets on indexes and returns only this page's ids;
+     * commerce and trust data are joined for those ids alone, in the same round trip.
+     *
+     * @return \Illuminate\Support\Collection<int, object>
+     */
+    private function pageRows(\Closure $scope, string $sortBy, int $orderCount, int $page, int $perPage): \Illuminate\Support\Collection
+    {
+        $rows = $this->withCommerceAction(DB::table('tracking_session as ts'))
+            ->tap(fn (Builder $query) => $this->withVisitorTrust($query));
+
+        if ($sortBy !== 'order_value') {
+            $pageIds = DB::table('tracking_session as ts')
+                ->select('ts.id')
+                ->tap($scope)
+                ->tap(fn (Builder $query) => $this->applySort($query, $sortBy))
+                ->forPage($page, $perPage);
+
+            return $rows->joinSub($pageIds, 'page_ids', 'page_ids.id', '=', 'ts.id')
+                ->tap(fn (Builder $query) => $this->applySort($query, $sortBy))
+                ->get();
+        }
+
+        $pageIds = $this->orderValuePageIds($scope, $orderCount, ($page - 1) * $perPage, $perPage);
+
+        return $rows->whereIn('ts.id', $pageIds)
+            ->get()
+            ->sortBy(fn (object $row) => array_search($row->id, $pageIds))
+            ->values();
     }
 
     /**

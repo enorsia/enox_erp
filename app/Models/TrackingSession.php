@@ -18,6 +18,9 @@ class TrackingSession extends Model
         6 => 'Payment success',
     ];
 
+    /** Stages offered in the activity filter (commerce stages only, no view stages) */
+    public const FILTER_FUNNEL_STAGES = [3, 4, 5, 6];
+
     /** duration_seconds buckets; max is inclusive, null = no upper limit */
     public const DURATION_BUCKETS = [
         'under_1m' => ['label' => 'Under 1 min', 'min' => 0, 'max' => 59],
