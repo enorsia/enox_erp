@@ -133,6 +133,7 @@ class EcomActivityListService
             ->selectRaw('COUNT(*) as total, COALESCE(SUM(has_order), 0) as orders')
             ->first();
         $total = (int) $counts->total;
+        $page = min($page, max(1, (int) ceil($total / $perPage)));
 
         $sortBy = self::normalizeSort($sortBy);
         $pageIds = $sortBy === 'order_value'

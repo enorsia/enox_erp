@@ -188,9 +188,9 @@
             </div>
         </div>
     </div>
-    @if ($sessions->hasPages())
-        <div class="etd-activity-pagination mt-4">
-            {{ $sessions->links() }}
+    @if ($sessions->total() > 0)
+        <div class="etd-activity-pagination">
+            @include('ecom_activity.partials.pagination', ['paginator' => $sessions])
         </div>
     @endif
 </div>
