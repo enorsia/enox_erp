@@ -233,38 +233,8 @@ function initDashboardPeriodControls(page) {
     syncDashboardCustomFlatpickr(customPanel, drawerCustom, from, to);
 }
 
-/** Sample trend series for UI preview (no API). */
-const DEMO_DASHBOARD_TREND = {
-    labels: ['28 Sep', '29 Sep', '30 Sep', '1 Oct', '2 Oct', '3 Oct', '4 Oct'],
-    use_log_scale: true,
-    series: [
-        { key: 'unique_visitors', label: 'Unique visitors', chart_type: 'line', data: [418, 392, 508, 476, 612, 568, 704] },
-        { key: 'sessions', label: 'Sessions', chart_type: 'line', data: [502, 468, 598, 562, 718, 672, 847] },
-        { key: 'product_views', label: 'Product views', chart_type: 'line', data: [820, 760, 980, 910, 1180, 1090, 1324] },
-        { key: 'add_to_cart', label: 'Add to cart', chart_type: 'bar', data: [42, 38, 52, 48, 64, 58, 72] },
-        { key: 'begin_checkout', label: 'Begin checkout', chart_type: 'bar', data: [22, 18, 28, 24, 34, 30, 38] },
-        { key: 'purchases', label: 'Purchases', chart_type: 'bar', data: [8, 6, 10, 9, 12, 11, 14] },
-        {
-            key: 'conversion_rate',
-            label: 'Conversion rate',
-            chart_type: 'line',
-            y_axis_id: 'y1',
-            data: [1.6, 1.3, 1.7, 1.6, 1.7, 1.6, 1.9],
-        },
-    ],
-};
-
-const DEMO_NEW_RETURNING = {
-    labels: ['Unique', 'Returning'],
-    values: [704, 143],
-};
-
-window.ecomTrackerDashboardData = window.ecomTrackerDashboardData || {
-    trend: DEMO_DASHBOARD_TREND,
-    new_returning: DEMO_NEW_RETURNING,
-};
-
-const D = window.ecomTrackerDashboardData;
+/** Chart data printed by dashboard.blade.php (EcomTrackerDashboardService::dashboard()['charts']). */
+const D = window.ecomTrackerDashboardData || { trend: null, new_returning: null };
 const dashboardRoot = document.getElementById('ecom-tracker-dashboard-content');
 
 const TREND_SERIES_COLORS = {

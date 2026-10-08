@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TrackingDailyProduct extends Model
 {
     protected $fillable = [
         'metric_date',
-        'tracking_product_id',
+        'product_code',
         'product_views',
         'add_to_carts',
         'proceed_checkouts',
@@ -21,7 +21,6 @@ class TrackingDailyProduct extends Model
     {
         return [
             'metric_date' => 'date',
-            'tracking_product_id' => 'integer',
             'product_views' => 'integer',
             'add_to_carts' => 'integer',
             'proceed_checkouts' => 'integer',
@@ -30,8 +29,9 @@ class TrackingDailyProduct extends Model
         ];
     }
 
-    public function product(): BelongsTo
+    /** Every sku row of this product code. */
+    public function products(): HasMany
     {
-        return $this->belongsTo(TrackingProduct::class, 'tracking_product_id');
+        return $this->hasMany(TrackingProduct::class, 'code', 'product_code');
     }
 }

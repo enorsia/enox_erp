@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('tracking_daily_products', function (Blueprint $table) {
             $table->id();
             $table->date('metric_date');
-            $table->foreignId('tracking_product_id')->constrained('tracking_product')->cascadeOnDelete();
+            $table->string('product_code', 100)->comment('tracking_product.code; all skus of a product share one row');
             $table->unsignedInteger('product_views')->default(0);
             $table->unsignedInteger('add_to_carts')->default(0);
             $table->unsignedInteger('proceed_checkouts')->default(0);
@@ -22,8 +22,7 @@ return new class extends Migration
             $table->decimal('sale_amount', 12, 2)->default(0);
             $table->timestamps();
 
-            $table->unique(['metric_date', 'tracking_product_id'], 'uq_tdp_date_product');
-            $table->index(['tracking_product_id', 'metric_date'], 'tdp_product_date_idx');
+            $table->unique(['metric_date', 'product_code'], 'uq_tdp_date_product');
         });
     }
 

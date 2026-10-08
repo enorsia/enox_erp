@@ -66,7 +66,7 @@ class TrackerDashboardSyncService
             'counters' => ['category_views', 'product_views', 'add_to_carts', 'proceed_checkouts'],
         ],
         'tracking_daily_products' => [
-            'unique' => ['metric_date', 'tracking_product_id'],
+            'unique' => ['metric_date', 'product_code'],
             'counters' => ['product_views', 'add_to_carts', 'proceed_checkouts'],
         ],
         'tracking_daily_audiences' => [
@@ -412,7 +412,7 @@ class TrackerDashboardSyncService
                 $categoryId = $this->resolveCategoryIdFromLine($line);
 
                 if ($counted) {
-                    $this->countLine($counters, $type, $visitDate, $productId, $categoryId);
+                    $this->countLine($counters, $type, $visitDate, $productId !== null ? $this->productCode($line['product_code']) : null, $categoryId);
                 }
 
                 if ($productId === null) {
@@ -965,14 +965,19 @@ class TrackerDashboardSyncService
         ], ['name' => $source]);
     }
 
+    /** Code as stored in tracking_product.code (also the tracking_daily_products key). */
+    private function productCode(string $code): string
+    {
+        return Str::limit(trim($code), 100, '');
+    }
+
     private function findOrCreateProduct(string $code, string $sku, string $title): ?int
     {
-        $code = trim($code);
+        $code = $this->productCode($code);
         if ($code === '') {
             return null;
         }
 
-        $code = Str::limit($code, 100, '');
         $skuVal = $sku !== '' ? Str::limit($sku, 100, '') : null;
         $titleVal = $title !== '' ? Str::limit($title, 500, '') : null;
         $where = $this->productIdentityWhere($code, $skuVal);
@@ -1396,7 +1401,7 @@ class TrackerDashboardSyncService
      *
      * @param  array<string, array<string, array<string, mixed>>>  $counters
      */
-    private function countLine(array &$counters, string $type, string $date, ?int $productId, ?int $categoryId): void
+    private function countLine(array &$counters, string $type, string $date, ?string $productCode, ?int $categoryId): void
     {
         $column = match ($type) {
             'category_view' => 'category_views',
@@ -1418,8 +1423,8 @@ class TrackerDashboardSyncService
             }
         }
 
-        if ($productId !== null && $column !== 'category_views') {
-            $this->bump($counters, 'tracking_daily_products', ['metric_date' => $date, 'tracking_product_id' => $productId], $column);
+        if ($productCode !== null && $column !== 'category_views') {
+            $this->bump($counters, 'tracking_daily_products', ['metric_date' => $date, 'product_code' => $productCode], $column);
         }
     }
 
@@ -1803,8 +1808,8 @@ class TrackerDashboardSyncService
             );
         }
 
-        $this->refreshSoldTotals($date, 'tracking_daily_categories', 'tracking_category_id', true, $now);
-        $this->refreshSoldTotals($date, 'tracking_daily_products', 'tracking_product_id', false, $now);
+        $this->refreshSoldTotals($date, 'tracking_daily_categories', 'tracking_category_id', 'od.tracking_category_id', true, $now);
+        $this->refreshSoldTotals($date, 'tracking_daily_products', 'product_code', 'p.code', false, $now);
     }
 
     /**
@@ -1848,8 +1853,9 @@ class TrackerDashboardSyncService
     /**
      * Sold qty / sale amount (and order count for categories) per category or product
      * from that day's orders of sessions that started that day (master rule).
+     * $source is the order line column the table row is keyed by (products: p.code, all skus of a code together).
      */
-    private function refreshSoldTotals(string $date, string $table, string $column, bool $withOrders, Carbon $now): void
+    private function refreshSoldTotals(string $date, string $table, string $column, string $source, bool $withOrders, Carbon $now): void
     {
         $soldColumns = $withOrders ? ['sold_qty', 'orders', 'sale_amount'] : ['sold_qty', 'sale_amount'];
 
@@ -1859,11 +1865,12 @@ class TrackerDashboardSyncService
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->when(str_starts_with($source, 'p.'), fn (Builder $query) => $query->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id'))
             ->where('o.metric_date', $date)
             ->where('dv.visit_date', $date)
-            ->whereNotNull("od.{$column}")
-            ->groupBy("od.{$column}")
-            ->selectRaw("od.{$column} as dimension_id, SUM(od.qty) as sold_qty, COUNT(DISTINCT od.tracking_order_id) as orders, SUM(od.line_total) as sale_amount")
+            ->whereNotNull($source)
+            ->groupBy($source)
+            ->selectRaw("{$source} as dimension_id, SUM(od.qty) as sold_qty, COUNT(DISTINCT od.tracking_order_id) as orders, SUM(od.line_total) as sale_amount")
             ->get();
 
         if ($sold->isEmpty()) {
@@ -1873,7 +1880,7 @@ class TrackerDashboardSyncService
         $rows = $sold->map(function (object $row) use ($date, $column, $withOrders, $now): array {
             $values = [
                 'metric_date' => $date,
-                $column => (int) $row->dimension_id,
+                $column => $column === 'product_code' ? (string) $row->dimension_id : (int) $row->dimension_id,
                 'sold_qty' => (int) $row->sold_qty,
                 'sale_amount' => round((float) $row->sale_amount, 2),
             ];

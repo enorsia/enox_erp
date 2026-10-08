@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\TrackingCategory;
+use App\Models\TrackingDailyDuration;
 use App\Models\TrackingSession;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
@@ -11,6 +12,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -166,7 +168,7 @@ class EcomActivityListService
     }
 
     /**
-     * @return array{search: string, funnel: list<int>, has_order: ?bool, devices: list<int>, logged_in: ?bool, durations: list<string>, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>}
+     * @return array{search: string, funnel: list<int>, has_order: ?bool, devices: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>}
      */
     public static function filtersFromRequest(Request $request): array
     {
@@ -181,6 +183,7 @@ class EcomActivityListService
             'devices' => $ints('device_type'),
             'logged_in' => $bool('logged_in'),
             'durations' => array_values(array_intersect($strings('duration_bucket'), array_keys(TrackingSession::DURATION_BUCKETS))),
+            'duration' => isset(TrackingDailyDuration::BUCKETS[$request->integer('duration')]) ? $request->integer('duration') : null,
             'utm_sources' => $ints('utm_source'),
             'utm_mediums' => $strings('utm_medium'),
             'department' => $request->integer('department') ?: null,
@@ -227,9 +230,9 @@ class EcomActivityListService
      * Deferred join: the inner query sorts + offsets on indexes and returns only this page's ids;
      * commerce and trust data are joined for those ids alone, in the same round trip.
      *
-     * @return \Illuminate\Support\Collection<int, object>
+     * @return Collection<int, object>
      */
-    private function pageRows(\Closure $scope, string $sortBy, int $orderCount, int $page, int $perPage): \Illuminate\Support\Collection
+    private function pageRows(\Closure $scope, string $sortBy, int $orderCount, int $page, int $perPage): Collection
     {
         $rows = $this->withCommerceAction(DB::table('tracking_session as ts'))
             ->tap(fn (Builder $query) => $this->withVisitorTrust($query));
@@ -285,6 +288,12 @@ class EcomActivityListService
                         ->when($bucket['max'] !== null, fn (Builder $q) => $q->where('ts.duration_seconds', '<=', $bucket['max'])));
                 }
             });
+        }
+
+        if (($filters['duration'] ?? null) !== null) {
+            $bucket = TrackingDailyDuration::BUCKETS[$filters['duration']];
+            $query->where('ts.duration_seconds', '>=', $bucket['min'])
+                ->when($bucket['max'] !== null, fn (Builder $q) => $q->where('ts.duration_seconds', '<=', $bucket['max']));
         }
 
         if (! empty($filters['devices']) || ! empty($filters['utm_sources']) || ! empty($filters['utm_mediums'])) {

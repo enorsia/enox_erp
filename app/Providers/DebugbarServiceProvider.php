@@ -15,7 +15,9 @@ class DebugbarServiceProvider extends ServiceProvider
                 return;
             }
 
-            if (! LaravelDebugbar::canBeEnabled()) {
+            // Debugbar is always off in the console, but these listeners would still keep every
+            // transaction event, so a long-running queue worker grows until it hits its memory limit.
+            if (! LaravelDebugbar::canBeEnabled() || $this->app->runningInConsole()) {
                 return;
             }
 

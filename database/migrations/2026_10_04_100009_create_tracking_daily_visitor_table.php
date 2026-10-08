@@ -16,7 +16,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['tracking_main_visitor_id', 'visit_date'], 'uq_main_visitor_visit_date');
-            $table->index('visit_date', 'tdv_visit_date_idx');
+            $table->index(['visit_date', 'tracking_main_visitor_id'], 'tdv_visit_date_idx');
         });
     }
 
