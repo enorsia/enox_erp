@@ -114,8 +114,16 @@
                                     <div class="etd-subtle mt-0.5">{{ \App\Support\TrackerTime::formatFromStorage($row->created_at) }}</div>
                                 </td>
                                 <td class="etd-col-user" data-label="User">
+                                    @php
+                                        $identityBadge = $row->is_logged_in
+                                            ? '<span class="etd-badge etd-badge--user">User</span>'
+                                            : '<span class="etd-badge etd-badge--guest">Guest</span>';
+                                    @endphp
                                     @if (filled($row->name) || filled($row->email) || filled($row->phone))
-                                        <div class="text-[13px] text-slate-800 dark:text-slate-100">{{ $row->name ?: ($row->email ?: $row->phone) }}</div>
+                                        <div class="flex flex-wrap items-center gap-1.5">
+                                            <span class="text-[13px] text-slate-800 dark:text-slate-100">{{ $row->name ?: ($row->email ?: $row->phone) }}</span>
+                                            {!! $identityBadge !!}
+                                        </div>
                                         @if (filled($row->email) && filled($row->name))
                                             <div class="etd-subtle">{{ $row->email }}</div>
                                         @endif
@@ -123,10 +131,7 @@
                                             <div class="etd-subtle">{{ $row->phone }}</div>
                                         @endif
                                     @else
-                                        <span class="text-slate-500">Guest</span>
-                                    @endif
-                                    @if ($row->is_logged_in)
-                                        <span class="text-[10px] text-slate-400"> · logged in</span>
+                                        {!! $identityBadge !!}
                                     @endif
                                 </td>
                                 <td class="etd-col-trust" data-label="Visitor trust">—</td>

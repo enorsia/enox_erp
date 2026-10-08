@@ -4598,6 +4598,10 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 .etd-badge.high { background: rgba(16, 185, 129, 0.15); color: var(--etd-green); }
 .etd-badge.mid { background: var(--etd-gold-soft); color: var(--etd-gold); }
 .etd-badge.low { background: rgba(244, 63, 94, 0.15); color: var(--etd-red); }
+.etd-badge.etd-badge--user { background: rgba(16, 185, 129, 0.2); color: #0f172a; font-weight: 500; }
+.etd-badge.etd-badge--guest { background: rgba(244, 63, 94, 0.12); color: #0f172a; font-weight: 500; }
+.dark .etd-badge.etd-badge--user,
+.dark .etd-badge.etd-badge--guest { color: #f1f5f9; }
 
 .etd-th-with-tip {
     display: inline-flex;
