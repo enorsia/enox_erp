@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\TrackerTime;
+use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -145,13 +146,15 @@ class EcomActivityListService
                 ->pluck('ts.id')
                 ->all();
 
-        // Join commerce data only for this page's rows; the sort/offset above stays index-only.
+        // Join commerce and trust data only for this page's rows; the sort/offset above stays index-only.
         $rows = $this->withCommerceAction(DB::table('tracking_session as ts')->whereIn('ts.id', $pageIds))
+            ->tap(fn (Builder $query) => $this->withVisitorTrust($query))
             ->get()
             ->sortBy(fn (object $row) => array_search($row->id, $pageIds))
             ->values()
             ->map(function (object $row) {
                 $row->commerce = $this->commerceCell($row);
+                $row->trust = $this->trustCell($row);
 
                 return $row;
             });
@@ -254,6 +257,86 @@ class EcomActivityListService
                 'ca.payment_success as commerce_payment_success',
                 'ca.created_at as commerce_at',
             ]);
+    }
+
+    private function withVisitorTrust(Builder $query): void
+    {
+        $query
+            ->leftJoin('tracking_session_details as sd', 'sd.tracking_session_id', '=', 'ts.id')
+            ->leftJoin('activity_ecom_user_bot_context as bc', 'bc.session_id', '=', 'ts.session_id')
+            ->addSelect([
+                'sd.ip as visitor_ip',
+                'sd.user_agent as visitor_user_agent',
+                'bc.id as bot_context_id',
+                'bc.client_ip as bot_client_ip',
+                'bc.user_agent as bot_user_agent',
+                'bc.ip_country as bot_ip_country',
+                'bc.cf_bot_score as bot_cf_score',
+                'bc.is_bot as bot_is_bot',
+                'bc.bot_reason',
+            ]);
+    }
+
+    /**
+     * Stored ingest verdict (Cloudflare score, then UA rules), re-checked against the current
+     * crawler list so sessions saved before a pattern was added are not shown as real visitors.
+     *
+     * @return array{classification: string, label: string, badge_class: string, help: string, country_code: ?string, country_label: ?string, ips: list<string>}
+     */
+    private function trustCell(object $row): array
+    {
+        $userAgent = (string) ($row->visitor_user_agent ?: $row->bot_user_agent);
+        $isBot = (bool) $row->bot_is_bot;
+        $reason = $row->bot_reason;
+
+        if (! $isBot && $this->isKnownCrawler($userAgent)) {
+            [$isBot, $reason] = [true, 'known crawler/script UA'];
+        }
+
+        $classification = $row->bot_context_id === null && ! $isBot ? 'unclassified' : ($isBot ? 'bot' : 'human');
+        $countryCode = filled($row->bot_ip_country) ? strtoupper($row->bot_ip_country) : null;
+        $help = $classification === 'unclassified'
+            ? VisitorClassificationLabels::unclassifiedHelp()
+            : VisitorClassificationLabels::reason($reason, $isBot)['help'];
+
+        if ($row->bot_cf_score !== null) {
+            $help .= ' · '.VisitorClassificationLabels::trustScoreLabel((int) $row->bot_cf_score);
+        }
+
+        return [
+            'classification' => $classification,
+            'label' => VisitorClassificationLabels::typeLabel($classification),
+            'badge_class' => VisitorClassificationLabels::typeBadgeClass($classification),
+            'help' => $help,
+            'country_code' => $countryCode,
+            'country_label' => VisitorClassificationLabels::countryLabel($countryCode),
+            'ips' => collect([$row->visitor_ip, $row->bot_client_ip])
+                ->flatMap(fn ($ip) => explode(',', (string) $ip))
+                ->map(fn (string $ip) => trim($ip))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
+        ];
+    }
+
+    private function isKnownCrawler(string $userAgent): bool
+    {
+        if (trim($userAgent) === '') {
+            return false;
+        }
+
+        static $patterns = null;
+        $patterns ??= array_filter(array_map('strtolower', config('bot-detection.known_bot_user_agents', [])));
+        $userAgent = strtolower($userAgent);
+
+        foreach ($patterns as $pattern) {
+            if (str_contains($userAgent, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

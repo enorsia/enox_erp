@@ -133,21 +133,26 @@
                                             : '<span class="etd-badge etd-badge--guest">Guest</span>';
                                     @endphp
                                     @if (filled($row->name) || filled($row->email) || filled($row->phone))
-                                        <div class="flex flex-wrap items-center gap-1.5">
-                                            <span class="text-[13px] text-slate-800 dark:text-slate-100">{{ $row->name ?: ($row->email ?: $row->phone) }}</span>
-                                            {!! $identityBadge !!}
+                                        @php $displayName = $row->name ?: ($row->email ?: $row->phone); @endphp
+                                        <div class="etd-user-cell">
+                                            <div class="etd-user-cell__head">
+                                                <span class="etd-user-cell__name" title="{{ $displayName }}">{{ $displayName }}</span>
+                                                {!! $identityBadge !!}
+                                            </div>
+                                            @if (filled($row->email) && filled($row->name))
+                                                <div class="etd-subtle etd-user-cell__line" title="{{ $row->email }}">{{ $row->email }}</div>
+                                            @endif
+                                            @if (filled($row->phone) && (filled($row->name) || filled($row->email)))
+                                                <div class="etd-subtle etd-user-cell__line" title="{{ $row->phone }}">{{ $row->phone }}</div>
+                                            @endif
                                         </div>
-                                        @if (filled($row->email) && filled($row->name))
-                                            <div class="etd-subtle">{{ $row->email }}</div>
-                                        @endif
-                                        @if (filled($row->phone) && (filled($row->name) || filled($row->email)))
-                                            <div class="etd-subtle">{{ $row->phone }}</div>
-                                        @endif
                                     @else
                                         {!! $identityBadge !!}
                                     @endif
                                 </td>
-                                <td class="etd-col-trust" data-label="Visitor trust">—</td>
+                                <td class="etd-col-trust" data-label="Visitor trust">
+                                    @include('ecom_activity.partials.trust-cell', ['trust' => $row->trust])
+                                </td>
                                 <td class="etd-col-commerce" data-label="Commerce">
                                     @include('ecom_activity.partials.commerce-cell', [
                                         'metrics' => $row->commerce,

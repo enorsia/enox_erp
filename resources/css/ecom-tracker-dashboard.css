@@ -6615,9 +6615,56 @@ a.etd-pager__btn:hover {
 
 .etd-table-scroll--activity .etd-table--activity th.etd-col-user,
 .etd-table-scroll--activity .etd-table--activity td.etd-col-user {
-    min-width: 7rem;
-    overflow: visible;
+    width: 15rem;
+    min-width: 9rem;
+    max-width: 15rem;
+    overflow: hidden;
     vertical-align: top;
+}
+
+#ecom-activity-page-content .etd-user-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+    max-width: 15rem;
+}
+
+#ecom-activity-page-content .etd-user-cell__head {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-width: 0;
+}
+
+#ecom-activity-page-content .etd-user-cell__head .etd-badge {
+    flex-shrink: 0;
+}
+
+#ecom-activity-page-content .etd-user-cell__name,
+#ecom-activity-page-content .etd-table--activity td.etd-col-user .etd-user-cell__line {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow-wrap: normal;
+}
+
+#ecom-activity-page-content .etd-user-cell__name {
+    font-size: 13px;
+    color: #1e293b;
+}
+
+.dark #ecom-activity-page-content .etd-user-cell__name {
+    color: #f1f5f9;
+}
+
+@media (min-width: 1536px) {
+    .etd-table-scroll--activity .etd-table--activity th.etd-col-user,
+    .etd-table-scroll--activity .etd-table--activity td.etd-col-user,
+    #ecom-activity-page-content .etd-user-cell {
+        max-width: 16rem;
+    }
 }
 
 #ecom-activity-page-content .etd-table-scroll--activity .etd-chip--session {
@@ -6640,7 +6687,7 @@ a.etd-pager__btn:hover {
 
 .etd-table-scroll--activity .etd-table--activity th.etd-col-trust,
 .etd-table-scroll--activity .etd-table--activity td.etd-col-trust {
-    min-width: 6.75rem;
+    min-width: 9rem;
     overflow: visible;
     overflow-wrap: normal;
     word-break: normal;
@@ -6678,14 +6725,15 @@ a.etd-pager__btn:hover {
 
     .etd-table-scroll--activity .etd-table--activity th.etd-col-trust,
     .etd-table-scroll--activity .etd-table--activity td.etd-col-trust {
-        width: 1%;
-        max-width: 7rem;
+        width: 10.5rem;
+        min-width: 10.5rem;
+        max-width: 11rem;
         overflow-wrap: anywhere;
         word-break: break-all;
     }
 
     .etd-table-scroll--activity .etd-table--activity td.etd-col-trust .etd-visitor-ip {
-        max-width: 7rem;
+        max-width: 10.5rem;
     }
 }
 
@@ -6713,8 +6761,9 @@ a.etd-pager__btn:hover {
 }
 
 .etd-table-scroll--activity .etd-table--activity th.etd-col-actions,
-.etd-table-scroll--activity .etd-table--activity td.etd-col-actions {
+.etd-table-scroll--activity .etd-table--activity tbody td.etd-col-actions {
     min-width: 3rem;
+    text-align: center;
 }
 
 .etd-table-scroll--activity .etd-table--activity th.etd-col-duration,
