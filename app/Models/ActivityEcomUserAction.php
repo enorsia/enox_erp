@@ -23,10 +23,13 @@ class ActivityEcomUserAction extends Model
         'action_type',
         'category_name',
         'category_code',
+        'category_id',
         'department_name',
+        'department_id',
         'product_name',
         'product_code',
         'sku',
+        'ctr_tracking_status',
         'product_color_id',
         'product_color_code',
         'general_color_name',
@@ -58,6 +61,7 @@ class ActivityEcomUserAction extends Model
     protected function casts(): array
     {
         return [
+            'ctr_tracking_status' => 'boolean',
             'add_to_cart' => 'array',
             'begin_checkout' => 'array',
             'proceed_to_checkout' => 'array',

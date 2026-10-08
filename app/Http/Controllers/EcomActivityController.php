@@ -32,6 +32,8 @@ class EcomActivityController extends Controller
         'category_view' => 'badge-blue',
         'product_view' => 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
         'product_view_popup' => 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+        'grid_impression' => 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200',
+        'product_click' => 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-200',
         'add_to_cart' => 'badge-amber',
         'begin_checkout' => 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
         'proceed_checkout' => 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
@@ -71,7 +73,11 @@ class EcomActivityController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        $fullTimeline = $this->buildTimeline($actions);
+        $fullTimeline = $this->buildTimeline(
+            $actions->filter(
+                fn (ActivityEcomUserAction $action) => $action->action_type !== 'product_click',
+            ),
+        );
         $latestActionAt = $actions
             ->map(fn (ActivityEcomUserAction $action) => TrackerTime::toUtc($action->created_at))
             ->filter()

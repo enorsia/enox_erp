@@ -22,12 +22,17 @@ class TrackController extends Controller
     {
         $startedAt = microtime(true);
 
+        $events = $request->input('events', []);
+
         EcomTrackerLogger::frontend()->info('api.track.request', 'Website sent user actions', [
             'ip' => $request->ip(),
             'session_id' => $request->input('session.session_id'),
             'visitor_id' => $request->input('session.visitor_id'),
-            'event_count' => count($request->input('events', [])),
-            'action_types' => collect($request->input('events', []))->pluck('action_type')->filter()->values()->all(),
+            'event_count' => count($events),
+            'action_types' => collect($events)->pluck('action_type')->filter()->values()->all(),
+            'grid_event_count' => collect($events)
+                ->whereIn('action_type', ['grid_impression', 'product_click'])
+                ->count(),
         ]);
 
         try {
@@ -87,7 +92,7 @@ class TrackController extends Controller
                 ]);
             }
 
-            $acceptedIds = $this->ingestService->ingest($validated);
+            $acceptedIds = $this->ingestService->ingest($request, $validated);
 
             EcomTrackerLogger::frontend()->info('api.track.success', 'User actions saved OK', [
                 'session_id' => $validated['session']['session_id'] ?? ($validated['events'][0]['session_id'] ?? null),

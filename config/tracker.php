@@ -28,6 +28,8 @@ return [
         'begin_checkout',
         'proceed_checkout',
         'payment_success',
+        'grid_impression',
+        'product_click',
     ],
 
     'scalar_field_limits' => [
@@ -85,6 +87,13 @@ return [
     'dashboard_sync_queue_name' => env('TRACKER_DASHBOARD_SYNC_QUEUE_NAME', env('DB_QUEUE', 'default')),
 
     'dashboard_sync_batch_size' => (int) env('TRACKER_DASHBOARD_SYNC_BATCH_SIZE', 25),
+
+    // Rolling window when aggregating tracking_ctr_daily_summaries → tracking_ctr_summaries.
+    'ctr_rollup_days' => (int) env('TRACKER_CTR_ROLLUP_DAYS', 90),
+
+    // CTR batch jobs use MySQL `jobs` (other tracker jobs keep Redis via queue_connection).
+    'ctr_queue_connection' => env('TRACKER_CTR_QUEUE_CONNECTION', 'database'),
+    'ctr_queue_name' => env('TRACKER_CTR_QUEUE_NAME', 'default'),
 
     'analytics_windows' => [
         'hours' => [1, 3, 6, 12, 24],

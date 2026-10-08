@@ -69,7 +69,7 @@
                                 @if ($item->dwell_seconds !== null)
                                     <span class="text-[11px] text-slate-500">
                                         Dwell: {{ $item->dwell_seconds }}s
-                                        @if ($item->is_grouped_product_view)
+                                        @if ($item->is_grouped_product_view || ($item->is_grouped_grid_impression ?? false))
                                             <span class="text-slate-400">(combined)</span>
                                         @endif
                                     </span>
@@ -113,6 +113,18 @@
                                     <div class="sm:col-span-2">
                                         <span class="text-slate-400">Colors:</span>
                                         <span class="text-slate-700 dark:text-slate-200">{{ $item->color_timeline }}</span>
+                                    </div>
+                                @endif
+                                @if ($item->action_type === 'grid_impression' && ($item->sku_timeline ?? null))
+                                    <div class="sm:col-span-2">
+                                        <span class="text-slate-400">Grid view:</span>
+                                        <span class="text-slate-700 dark:text-slate-200">{{ $item->sku_timeline }}</span>
+                                    </div>
+                                @endif
+                                @if ($item->action_type === 'grid_click' && ($item->sku_timeline ?? null))
+                                    <div class="sm:col-span-2">
+                                        <span class="text-slate-400">Grid click:</span>
+                                        <span class="text-slate-700 dark:text-slate-200">{{ $item->sku_timeline }}</span>
                                     </div>
                                 @endif
                                 @if ($item->product_price)
@@ -168,6 +180,30 @@
                                                     <span class="text-slate-400">· {{ $segmentSeconds }}s</span>
                                                 @endif
                                                 <span class="text-slate-400">· {{ \App\Support\TrackerTime::formatFromStorage($segmentAction->created_at ?? $segmentAction->start_time, 'h:i:s A') }}</span>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </details>
+                            @endif
+
+                            @if ($item->is_grouped_grid_impression ?? false)
+                                <details class="mt-3">
+                                    <summary class="text-[12px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
+                                        View {{ $item->actions->count() }} grid SKUs
+                                    </summary>
+                                    <div class="mt-2 space-y-2">
+                                        @php
+                                            $gridActionsChrono = $item->actions
+                                                ->sortBy(fn ($action) => [$action->created_at?->timestamp ?? 0, $action->id])
+                                                ->values();
+                                        @endphp
+                                        @foreach ($gridActionsChrono as $segmentAction)
+                                            @php
+                                                $segmentSku = trim((string) ($segmentAction->sku ?? '')) ?: 'Unknown';
+                                            @endphp
+                                            <div class="rounded-lg bg-slate-50 dark:bg-slate-900/50 px-3 py-2 text-[11px] text-slate-600 dark:text-slate-300">
+                                                <span class="font-medium">{{ $segmentSku }}</span>
+                                                <span class="text-slate-400">· {{ TrackerTime::formatFromStorage($segmentAction->created_at, 'h:i:s A') }}</span>
                                             </div>
                                         @endforeach
                                     </div>

@@ -103,6 +103,24 @@ test('resolve for ingest reuses session within manager gap without new job write
     expect(ActivityEcomUser::where('visitor_id', $visitorId)->count())->toBe(1);
 });
 
+test('continuous activity rotates session after 30 minutes wall clock', function () {
+    $visitorId = (string) Str::uuid();
+    $resolver = app(VisitorSessionResolver::class);
+
+    $first = $resolver->resolve($visitorId);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-16 10:20:00', 'Europe/London'));
+    $mid = $resolver->resolveForIngest($visitorId, $first['session_id']);
+    expect($mid['session_id'])->toBe($first['session_id']);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-16 10:31:00', 'Europe/London'));
+    $after = $resolver->resolveForIngest($visitorId, $first['session_id']);
+
+    expect($after['is_new_session'])->toBeTrue();
+    expect($after['session_id'])->not->toBe($first['session_id']);
+    expect(ActivityEcomUser::where('visitor_id', $visitorId)->count())->toBe(2);
+});
+
 test('resolve for ingest creates new session after manager gap', function () {
     $visitorId = (string) Str::uuid();
     $resolver = app(VisitorSessionResolver::class);
