@@ -32,9 +32,10 @@ class EcomTrackerDashboardService
 
     /**
      * @param  array{from: Carbon, to: Carbon}  $range  local calendar days
+     * @param  string  $backUrl  dashboard URL the session pages return to
      * @return array<string, mixed>
      */
-    public function dashboard(array $range, string $period): array
+    public function dashboard(array $range, string $period, string $backUrl): array
     {
         $from = $range['from']->toDateString();
         $to = $range['to']->toDateString();
@@ -63,7 +64,7 @@ class EcomTrackerDashboardService
             'kpiGroups' => $this->kpiGroups($current, $previous, $this->comparisonLabel($period, $prevFrom, $prevTo)),
             'categories' => $this->categories($from, $to),
             'products' => $this->products($from, $to),
-            'recoverable' => $this->recoverable($from, $to),
+            'recoverable' => $this->recoverable($from, $to, $backUrl),
             'devices' => [
                 'by_device' => $audiences[TrackingDailyAudience::TYPE_DEVICE] ?? [],
                 'by_browser' => $audiences[TrackingDailyAudience::TYPE_BROWSER] ?? [],
@@ -339,7 +340,7 @@ class EcomTrackerDashboardService
      *
      * @return list<array<string, mixed>>
      */
-    private function recoverable(string $from, string $to): array
+    private function recoverable(string $from, string $to, string $backUrl): array
     {
         $ranked = DB::table('tracking_recoverable_sales as rs')
             ->join('tracking_session as ts', 'ts.id', '=', 'rs.tracking_session_id')
@@ -370,7 +371,7 @@ class EcomTrackerDashboardService
                     'qty' => (int) $row->qty,
                     'value' => (float) $row->sale_value,
                     'occurred_ago' => TrackerTime::diffForHumansFromStorage($row->occurred_at) ?? '—',
-                    'activity_url' => route('admin.ecom-activity.show', ['session' => $row->session_id]),
+                    'activity_url' => route('admin.ecom-activity.show', ['session' => $row->session_id, 'back' => $backUrl]),
                 ])->all(),
             ];
         }

@@ -28,9 +28,11 @@
                     <span class="etd-filter-period__nav-btn is-disabled" aria-disabled="true"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg></span>
                 </div>
                 <input type="hidden" name="period" id="ecom-activity-filter-period" value="{{ $data['period'] }}">
-                @if (filled(request('sort_by')))
-                    <input type="hidden" name="sort_by" value="{{ request('sort_by') }}">
-                @endif
+                @foreach (['sort_by', 'back'] as $keepKey)
+                    @if (filled(request($keepKey)))
+                        <input type="hidden" name="{{ $keepKey }}" value="{{ request($keepKey) }}">
+                    @endif
+                @endforeach
                 <div class="etd-filter-period__presets" role="group" aria-label="Date presets">
                     @foreach (['24h' => 'Today', 'yesterday' => 'Yesterday', '7d' => '7 days', '30d' => '30 days'] as $periodKey => $periodLabel)
                         <a href="{{ route('admin.ecom-activity.index', ['period' => $periodKey] + $data['keepQuery']) }}" class="etd-filter-period__preset no-underline {{ $data['period'] === $periodKey ? 'is-active' : '' }}">{{ $periodLabel }}</a>
@@ -177,7 +179,7 @@
             </div>
         </div>
         <div class="etd-filter-panel__footer">
-            <a href="{{ route('admin.ecom-activity.index') }}" class="etd-filter-panel__reset">Reset</a>
+            <a href="{{ $data['resetUrl'] }}" class="etd-filter-panel__reset">Reset</a>
             <button type="submit" class="etd-filter-panel__apply">Apply filters</button>
         </div>
     </form>

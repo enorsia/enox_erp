@@ -30,6 +30,7 @@ class EcomTrackerDashboardController extends Controller
             'period' => $period,
             'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
             'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
+            'back' => $request->fullUrl(),
         ]);
 
         $data = [
@@ -42,7 +43,7 @@ class EcomTrackerDashboardController extends Controller
             'activityLink' => fn (array $filters = []) => route('admin.ecom-activity.index', $periodQuery + array_filter($filters, fn ($value) => $value !== null)),
         ];
 
-        $dashboard = $dashboardService->dashboard($range, $period);
+        $dashboard = $dashboardService->dashboard($range, $period, $request->fullUrl());
 
         return view('ecom_tracker.dashboard', compact('data', 'dashboard'));
     }

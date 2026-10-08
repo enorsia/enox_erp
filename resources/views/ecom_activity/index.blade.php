@@ -28,7 +28,7 @@
         </div>
         <div class="etd-page-header-toolbar">
             <div class="etd-header-toolbar-row">
-                <a href="/admin/ecom-tracker/dashboard" class="etd-header-btn etd-header-btn--icon no-underline">
+                <a href="{{ $data['backUrl'] }}" class="etd-header-btn etd-header-btn--icon no-underline">
                     <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
                     <span class="etd-header-btn-text">Tracking</span>
                 </a>
@@ -64,7 +64,7 @@
                         <span class="etd-segmented-btn etd-date-nav-btn is-disabled" aria-disabled="true" aria-label="Next period"><svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg></span>
                     @endif
                 </div>
-                <a href="{{ route('admin.ecom-activity.index') }}" class="etd-header-btn etd-header-btn--icon-only no-underline" aria-label="Reset filters" title="Reset all filters">
+                <a href="{{ $data['resetUrl'] }}" class="etd-header-btn etd-header-btn--icon-only no-underline" aria-label="Reset filters" title="Reset all filters">
                     <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                 </a>
                 <button type="button" id="ecom-activity-filter-open" class="etd-header-btn etd-header-btn--icon-only js-ecom-activity-filter-open" aria-label="Filters" aria-expanded="false">

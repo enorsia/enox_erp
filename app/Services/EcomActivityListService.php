@@ -158,6 +158,16 @@ class EcomActivityListService
         return ['period' => 'custom', 'date_from' => $from->toDateString(), 'date_to' => $to->toDateString()];
     }
 
+    /**
+     * The exact previous page (with its filters) carried in `back`; only this site's URLs, else the fallback.
+     */
+    public static function backUrl(Request $request, string $fallback): string
+    {
+        $back = $request->query('back');
+
+        return is_string($back) && str_starts_with($back, url('/').'/') ? $back : $fallback;
+    }
+
     private static function parseLocalDate(string $value): ?Carbon
     {
         try {

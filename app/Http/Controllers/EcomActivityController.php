@@ -65,6 +65,8 @@ class EcomActivityController extends Controller
         $nextQuery = EcomActivityListService::shiftedPeriodQuery($range, 1);
         $data['prevUrl'] = $prevQuery ? route('admin.ecom-activity.index', $prevQuery + $sortQuery) : null;
         $data['nextUrl'] = $nextQuery ? route('admin.ecom-activity.index', $nextQuery + $sortQuery) : null;
+        $data['backUrl'] = EcomActivityListService::backUrl($request, route('admin.ecom-tracker.dashboard'));
+        $data['resetUrl'] = route('admin.ecom-activity.index', array_filter(['back' => $request->query('back')]));
 
         $sortBy = EcomActivityListService::normalizeSort($request->query('sort_by'));
         $sortOptions = EcomActivityListService::SORT_OPTIONS;
@@ -142,7 +144,7 @@ class EcomActivityController extends Controller
 
         $timeline->appends($request->except('timeline_page'));
 
-        $backUrl = $this->resolveBackUrl($request);
+        $backUrl = EcomActivityListService::backUrl($request, route('admin.ecom-activity.index'));
 
         EcomTrackerLogger::backend()->info('analytics.activity.show', 'Admin opened one user session', [
             'session_id' => $session,
@@ -190,17 +192,6 @@ class EcomActivityController extends Controller
         }
 
         return $params;
-    }
-
-    private function resolveBackUrl(Request $request): string
-    {
-        $back = $request->input('back');
-
-        if (is_string($back) && $back !== '' && str_starts_with($back, url('/'))) {
-            return $back;
-        }
-
-        return route('admin.ecom-activity.index');
     }
 
     /**
