@@ -1,15 +1,27 @@
 <!-- ═══════ SIDEBAR ═══════ -->
 <aside id="sidebar"
-    class="w-[230px] min-w-[230px] bg-[#0c1521] flex flex-col overflow-y-auto sidebar-scroll z-50 lg:relative lg:translate-x-0">
+    class="w-[230px] min-w-[230px] bg-[#0c1521] flex flex-col overflow-y-auto sidebar-scroll z-50 lg:relative lg:translate-x-0 transition-all duration-300">
 
-    <!-- Logo -->
-    <div class="px-[18px] py-5 border-b border-[rgba(255,255,255,0.07)] flex-shrink-0">
-        <a href="{{ route('admin.dashboard') }}" class="block">
+    <!-- Logo + desktop collapse toggle -->
+    <div
+        class="sidebar-header px-[18px] py-5 border-b border-[rgba(255,255,255,0.07)] flex items-center justify-between flex-shrink-0">
+        <a href="{{ route('admin.dashboard') }}" class="logo-text-group block min-w-0">
             <div class="text-white font-semibold tracking-[2.5px] text-[15px]">{{ config('app.name') }}</div>
             <div class="text-[10px] tracking-[1.2px] text-white/30 mt-0.5">
                 Know Your Sales
             </div>
         </a>
+        <button type="button" id="sidebarToggle"
+            class="hidden lg:inline-flex text-white/40 hover:text-white/90 transition-colors duration-200 shrink-0"
+            aria-label="Toggle sidebar width">
+            <svg id="menuIcon" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <svg id="closeIcon" class="w-6 h-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
     </div>
 
     <!-- Nav -->
@@ -18,7 +30,7 @@
         {{-- Access --}}
         @canany(Cache::get('permissions.available', [])['prefix']['authentication_'] ?? [])
             <div class="pt-4 pb-1">
-                <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Access</p>
+                <p class="menu-title text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Access</p>
 
                 @can('authentication.users.index')
                     <a href="{{ route('admin.users.index') }}"
@@ -60,7 +72,7 @@
         {{-- General --}}
         @canany(Cache::get('permissions.available', [])['prefix']['general_'] ?? [])
             <div class="pt-4">
-                <p class="text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Main</p>
+                <p class="menu-title text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Main</p>
 
                 @can('general.dashboard.index')
                     <a href="{{ route('admin.dashboard') }}"
@@ -95,7 +107,7 @@
                                     d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 11h6M9 15h4" />
                             </svg>
                             <span class="flex-1 text-left">Selling Chart</span>
-                            <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
+                            <svg class="sidebar-chevron w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
                                 :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
                                 viewBox="0 0 24 24">
                                 <path stroke-linecap="round" d="M19 9l-7 7-7-7" />
@@ -103,7 +115,7 @@
                         </button>
 
                         <!-- Sub-menu -->
-                        <div x-show="open" x-collapse>
+                        <div class="sidebar-submenu" x-show="open" x-collapse>
                             <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
                                 @can('general.chart.index')
                                     <a href="{{ route('admin.selling_chart.index') }}"
@@ -169,7 +181,7 @@
                                 d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <span class="flex-1 text-left">Sales & Spends</span>
-                        <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
+                        <svg class="sidebar-chevron w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
                             :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
                             viewBox="0 0 24 24">
                             <path stroke-linecap="round" d="M19 9l-7 7-7-7" />
@@ -177,7 +189,7 @@
                     </button>
 
                     <!-- Sub-menu -->
-                    <div x-show="open" x-collapse>
+                    <div class="sidebar-submenu" x-show="open" x-collapse>
                         <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
                             @can('general.dashboard.index')
                                 <a href="{{ route('admin.sales.analytics') }}"
@@ -248,14 +260,14 @@
                                     d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25h9.75M5.106 5.106l-.383-1.437A1.125 1.125 0 003.636 3H2.25m0 0v16.5A2.25 2.25 0 004.5 21h15a2.25 2.25 0 002.25-2.25V3M9 10.5h6M9 14.25h3" />
                             </svg>
                             <span class="flex-1 text-left">Ecommerce</span>
-                            <svg class="w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
+                            <svg class="sidebar-chevron w-3 h-3 ml-auto opacity-40 transition-transform duration-200"
                                 :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2"
                                 viewBox="0 0 24 24">
                                 <path stroke-linecap="round" d="M19 9l-7 7-7-7" />
                             </svg>
                         </button>
 
-                        <div x-show="open" x-collapse>
+                        <div class="sidebar-submenu" x-show="open" x-collapse>
                             <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
                                 @can('ecommerce.wh_stock_in_out.index')
                                     <a href="{{ route('admin.style.stock.index') }}"

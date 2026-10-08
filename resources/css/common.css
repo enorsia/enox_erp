@@ -1,6 +1,90 @@
 html {
     overflow: hidden;
 }
+
+/* ── Sidebar collapse / hover expand (desktop) ── */
+#sidebar {
+    white-space: nowrap;
+}
+@media (min-width: 1024px) {
+    #sidebar.small-sidebar .menu-title {
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    #sidebar.small-sidebar {
+        width: 53px !important;
+        min-width: 53px !important;
+    }
+    #sidebar.small-sidebar a,
+    #sidebar.small-sidebar button,
+    #sidebar.small-sidebar p,
+    #sidebar.small-sidebar {
+        text-indent: -99rem !important;
+    }
+    #sidebar.small-sidebar svg {
+        text-indent: 0 !important;
+    }
+    #sidebar.expanded-hover {
+        width: 230px !important;
+        min-width: 230px !important;
+    }
+    #sidebar.expanded-hover a,
+    #sidebar.expanded-hover button,
+    #sidebar.expanded-hover p,
+    #sidebar.expanded-hover {
+        text-indent: 0 !important;
+    }
+    #sidebar.expanded-hover .menu-title {
+        border-top: none;
+    }
+    #sidebar.small-sidebar:not(.expanded-hover) .sidebar-chevron {
+        display: none;
+    }
+    #sidebar.small-sidebar:not(.expanded-hover) .sidebar-submenu {
+        display: none !important;
+    }
+}
+
+@media (min-width: 1024px) {
+    .sidebar-small-layout #sidebar:not(.expanded-hover) {
+        width: 53px !important;
+        min-width: 53px !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) a,
+    .sidebar-small-layout #sidebar:not(.expanded-hover) button,
+    .sidebar-small-layout #sidebar:not(.expanded-hover) p,
+    .sidebar-small-layout #sidebar:not(.expanded-hover) {
+        text-indent: -99rem !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) svg {
+        text-indent: 0 !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) #menuIcon {
+        display: none !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) #closeIcon {
+        display: inline-block !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) .sidebar-submenu {
+        display: none !important;
+    }
+    .sidebar-small-layout #sidebar:not(.expanded-hover) .menu-title {
+        border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+    #sidebar.small-sidebar:not(.expanded-hover) .sidebar-header,
+    .sidebar-small-layout #sidebar:not(.expanded-hover) .sidebar-header {
+        justify-content: center !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    #sidebar.small-sidebar:not(.expanded-hover) .logo-text-group,
+    .sidebar-small-layout #sidebar:not(.expanded-hover) .logo-text-group {
+        display: none !important;
+    }
+}
+
+.sidebar-header {
+    height: 70px !important;
+}
 /* ── Custom scrollbar ── */
 .sidebar-scroll::-webkit-scrollbar {
     width: 3px;
@@ -2104,6 +2188,272 @@ body > .ts-dropdown .ts-dropdown-content {
     color: #94a3b8;
     text-align: center;
     padding: 1rem 0;
+}
+
+/* ── Dashboard home (page layout & badges) ── */
+.page-content {
+    padding: 1.5rem 1.75rem;
+}
+@media (max-width: 640px) {
+    .page-content {
+        padding: 1rem 1rem;
+    }
+}
+
+.card-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.dark .card-title {
+    color: #f1f5f9;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.badge-success {
+    background: #e1f5ee;
+    color: #0f6e56;
+}
+.dark .badge-success {
+    background: rgba(29, 158, 117, 0.18);
+    color: #5dcaa5;
+}
+.badge-danger {
+    background: #fcebeb;
+    color: #a32d2d;
+}
+.dark .badge-danger {
+    background: rgba(220, 38, 38, 0.15);
+    color: #f87171;
+}
+
+@keyframes pulse-dot {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+.status-dot-active {
+    animation: pulse-dot 2.4s ease infinite;
+}
+
+/* ── London Clock (Dashboard) ── */
+.london-clock-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    border-radius: 1rem;
+    background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    min-width: 220px;
+}
+
+.dark .london-clock-card {
+    background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+    border-color: #334155;
+}
+
+.london-clock {
+    position: relative;
+    width: 168px;
+    height: 168px;
+    border-radius: 50%;
+    background: #fff;
+    border: 3px solid #e2e8f0;
+    box-shadow:
+        0 8px 32px rgba(15, 23, 42, 0.08),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+    overflow: visible;
+}
+
+.dark .london-clock {
+    background: #0f172a;
+    border-color: #334155;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.35),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.london-clock__ring {
+    position: absolute;
+    inset: 8px;
+    border-radius: 50%;
+    border: 1px solid #e2e8f0;
+    pointer-events: none;
+}
+
+.dark .london-clock__ring {
+    border-color: #334155;
+}
+
+.london-clock__marker {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 2px;
+    height: 6px;
+    margin-left: -1px;
+    margin-top: -72px;
+    background: #94a3b8;
+    border-radius: 1px;
+    transform-origin: 1px 72px;
+    transform: rotate(calc(var(--i) * 30deg));
+}
+
+.london-clock__marker--major {
+    height: 11px;
+    margin-top: -77px;
+    transform-origin: 1px 77px;
+    background: #64748b;
+    width: 2.5px;
+    margin-left: -1.25px;
+}
+
+.dark .london-clock__marker {
+    background: #475569;
+}
+
+.dark .london-clock__marker--major {
+    background: #94a3b8;
+}
+
+.london-clock__number {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    transform: rotate(calc(var(--i) * 30deg)) translateY(-58px) rotate(calc(var(--i) * -30deg));
+    pointer-events: none;
+    z-index: 1;
+}
+
+.dark .london-clock__number {
+    color: #cbd5e1;
+}
+
+.london-clock__hand {
+    position: absolute;
+    bottom: 50%;
+    left: 50%;
+    transform-origin: 50% 100%;
+    transform: translateX(-50%) rotate(0deg);
+    border-radius: 4px;
+    will-change: transform;
+}
+
+.london-clock__hand--hour {
+    width: 4px;
+    height: 42px;
+    background: #334155;
+    z-index: 2;
+}
+
+.dark .london-clock__hand--hour {
+    background: #e2e8f0;
+}
+
+.london-clock__hand--minute {
+    width: 3px;
+    height: 56px;
+    background: #475569;
+    z-index: 3;
+}
+
+.dark .london-clock__hand--minute {
+    background: #cbd5e1;
+}
+
+.london-clock__hand--second {
+    width: 2px;
+    height: 62px;
+    background: var(--color-accent-400);
+    z-index: 4;
+}
+
+.london-clock__center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 10px;
+    height: 10px;
+    margin: -5px 0 0 -5px;
+    border-radius: 50%;
+    background: var(--color-accent-400);
+    border: 2px solid #fff;
+    z-index: 5;
+    box-shadow: 0 0 0 1px #e2e8f0;
+}
+
+.dark .london-clock__center {
+    border-color: #0f172a;
+    box-shadow: 0 0 0 1px #334155;
+}
+
+.london-clock__digital {
+    margin: 1rem 0 0.25rem;
+    font-size: 1.375rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.05em;
+    color: #1e293b;
+    font-family: "DM Sans", sans-serif;
+}
+
+.dark .london-clock__digital {
+    color: #f1f5f9;
+}
+
+.london-clock__date {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #64748b;
+    text-align: center;
+}
+
+.dark .london-clock__date {
+    color: #94a3b8;
+}
+
+.london-clock__zone {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0.5rem 0 0;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.dark .london-clock__zone {
+    color: #64748b;
 }
 
 
