@@ -123,7 +123,9 @@
                         @forelse ($sessions as $row)
                             <tr class="etd-activity-session-row">
                                 <td class="etd-col-session" data-label="Session">
-                                    <span class="etd-chip etd-chip--session font-mono text-[11px]" title="{{ $row->session_id }}">{{ \Illuminate\Support\Str::limit($row->session_id, 13, '…') }}</span>
+                                    <button type="button" class="etd-chip etd-chip--session etd-session-copy font-mono text-[11px]" data-etd-copy="{{ $row->session_id }}" title="{{ $row->session_id }} — click to copy">
+                                        <span class="etd-session-copy__text">{{ $row->session_id }}</span>
+                                    </button>
                                     <div class="etd-subtle mt-0.5">{{ \App\Support\TrackerTime::formatFromStorage($row->created_at) }}</div>
                                 </td>
                                 <td class="etd-col-user" data-label="User">

@@ -6675,6 +6675,61 @@ a.etd-pager__btn:hover {
     vertical-align: top;
 }
 
+#ecom-activity-page-content .etd-session-copy {
+    position: relative;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    text-align: left;
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'%3E%3Crect x='8' y='8' width='13' height='13' rx='2' fill='%23ffffff' stroke='%230f172a' stroke-width='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' fill='none' stroke='%230f172a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 10 10, pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+#ecom-activity-page-content .etd-session-copy:hover {
+    border-color: #94a3b8;
+}
+
+#ecom-activity-page-content .etd-session-copy__text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#ecom-activity-page-content .etd-session-copy::after {
+    content: attr(data-copied-label);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 6px);
+    z-index: 30;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    background: #0f172a;
+    color: #fff;
+    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, 4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+#ecom-activity-page-content .etd-session-copy.is-copied::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+#ecom-activity-page-content .etd-session-copy.is-copied {
+    border-color: #10b981;
+}
+
+.dark #ecom-activity-page-content .etd-session-copy::after {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
 #ecom-activity-page-content .etd-table-scroll--activity .etd-chip--session__text {
     display: block;
     max-width: 100%;

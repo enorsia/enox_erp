@@ -582,6 +582,53 @@ function initActivityDepartmentCategories(page) {
     });
 }
 
+async function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+
+        return;
+    }
+
+    const helper = document.createElement('textarea');
+    helper.value = text;
+    helper.setAttribute('readonly', '');
+    helper.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(helper);
+    helper.select();
+    document.execCommand('copy');
+    helper.remove();
+}
+
+function initActivityCopyButtons(page) {
+    if (page._etdCopyBound) {
+        return;
+    }
+
+    page._etdCopyBound = true;
+
+    page.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-etd-copy]');
+
+        if (!button) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        try {
+            await copyText(button.dataset.etdCopy);
+            button.dataset.copiedLabel = 'Copied to clipboard';
+        } catch {
+            button.dataset.copiedLabel = 'Copy failed';
+        }
+
+        button.classList.add('is-copied');
+        window.clearTimeout(button._etdCopyTimer);
+        button._etdCopyTimer = window.setTimeout(() => button.classList.remove('is-copied'), 1500);
+    });
+}
+
 function bootActivityTableNavigation() {
     const page = getActivityPage();
 
@@ -600,6 +647,7 @@ function bootActivityTableNavigation() {
     initActivityFilterDrawer(page);
     initActivityPeriodControls(page);
     initActivityDepartmentCategories(page);
+    initActivityCopyButtons(page);
 }
 
 if (document.readyState === 'loading') {
