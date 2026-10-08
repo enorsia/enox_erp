@@ -15,7 +15,7 @@
                 <div class="flex items-center flex-wrap gap-x-2 gap-y-1">
                     <h1 class="etd-page-title">User activity</h1>
                     <span class="etd-header-sep" aria-hidden="true">·</span>
-                    <span class="etd-page-range">{{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => 'Custom', default => 'Today' } }}</span>
+                    <span class="etd-page-range">{{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => 'Custom', default => 'Today' } }} ({{ $data['rangeLabel'] }})</span>
                     <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
                     <div class="etd-page-meta">
                         <span class="etd-meta-item">
@@ -33,12 +33,15 @@
                     <span class="etd-header-btn-text">Tracking</span>
                 </a>
                 <div class="etd-header-period-nav etd-print-hide">
-                    <span class="etd-segmented-btn etd-date-nav-btn is-disabled" aria-disabled="true" aria-label="Previous day"><svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 19l-7-7 7-7"/></svg></span>
+                    @if ($data['prevUrl'])
+                        <a href="{{ $data['prevUrl'] }}" class="etd-segmented-btn etd-date-nav-btn no-underline" aria-label="Previous period" title="Previous period"><svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 19l-7-7 7-7"/></svg></a>
+                    @else
+                        <span class="etd-segmented-btn etd-date-nav-btn is-disabled" aria-disabled="true" aria-label="Previous period"><svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 19l-7-7 7-7"/></svg></span>
+                    @endif
                     <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
-                        <a href="{{ route('admin.ecom-activity.index', ['period' => '24h']) }}" class="etd-segmented-btn {{ $data['period'] === '24h' ? 'active' : '' }} no-underline">Today</a>
-                        <a href="{{ route('admin.ecom-activity.index', ['period' => 'yesterday']) }}" class="etd-segmented-btn {{ $data['period'] === 'yesterday' ? 'active' : '' }} no-underline">Yesterday</a>
-                        <a href="{{ route('admin.ecom-activity.index', ['period' => '7d']) }}" class="etd-segmented-btn {{ $data['period'] === '7d' ? 'active' : '' }} no-underline">7d</a>
-                        <a href="{{ route('admin.ecom-activity.index', ['period' => '30d']) }}" class="etd-segmented-btn {{ $data['period'] === '30d' ? 'active' : '' }} no-underline">30d</a>
+                        @foreach (['24h' => 'Today', 'yesterday' => 'Yesterday', '7d' => '7d', '30d' => '30d'] as $periodKey => $periodLabel)
+                            <a href="{{ route('admin.ecom-activity.index', array_filter(['period' => $periodKey, 'sort_by' => request('sort_by')])) }}" class="etd-segmented-btn {{ $data['period'] === $periodKey ? 'active' : '' }} no-underline">{{ $periodLabel }}</a>
+                        @endforeach
                         <button type="button" class="etd-segmented-btn js-ecom-activity-period-custom-toggle {{ $data['period'] === 'custom' ? 'active' : '' }}" aria-label="Custom date range">Custom</button>
                     </div>
                     <div id="ecom-activity-header-custom-dates"
@@ -55,7 +58,11 @@
                         <input type="hidden" data-range="to" id="ecom-activity-header-date-to" value="{{ $data['dateTo'] }}">
                         <button type="button" class="etd-header-btn etd-header-btn--primary etd-pill-apply js-ecom-activity-header-custom-apply">Apply</button>
                     </div>
-                    <span class="etd-segmented-btn etd-date-nav-btn is-disabled" aria-disabled="true" aria-label="Next day"><svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg></span>
+                    @if ($data['nextUrl'])
+                        <a href="{{ $data['nextUrl'] }}" class="etd-segmented-btn etd-date-nav-btn no-underline" aria-label="Next period" title="Next period"><svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg></a>
+                    @else
+                        <span class="etd-segmented-btn etd-date-nav-btn is-disabled" aria-disabled="true" aria-label="Next period"><svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg></span>
+                    @endif
                 </div>
                 <a href="{{ route('admin.ecom-activity.index') }}" class="etd-header-btn etd-header-btn--icon-only no-underline" aria-label="Reset filters" title="Reset all filters">
                     <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>

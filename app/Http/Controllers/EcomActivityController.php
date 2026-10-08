@@ -44,15 +44,29 @@ class EcomActivityController extends Controller
     {
         Gate::authorize('ecom_tracker.activity.index');
 
+        $period = EcomActivityListService::normalizePeriod($request->query('period'));
+        $range = EcomActivityListService::periodRange(
+            $period,
+            (string) $request->query('date_from', ''),
+            (string) $request->query('date_to', ''),
+        );
+
         $data = [
-            'period' => $request->input('period', '24h'),
-            'dateFrom' => (string) $request->input('date_from', ''),
-            'dateTo' => (string) $request->input('date_to', ''),
+            'period' => $period,
+            'dateFrom' => $range['from']->toDateString(),
+            'dateTo' => $range['to']->toDateString(),
+            'rangeLabel' => TrackerTime::formatLocalDateRangeLabel($range['from'], $range['to']),
         ];
+
+        $sortQuery = array_filter(['sort_by' => $request->query('sort_by')]);
+        $prevQuery = EcomActivityListService::shiftedPeriodQuery($range, -1);
+        $nextQuery = EcomActivityListService::shiftedPeriodQuery($range, 1);
+        $data['prevUrl'] = $prevQuery ? route('admin.ecom-activity.index', $prevQuery + $sortQuery) : null;
+        $data['nextUrl'] = $nextQuery ? route('admin.ecom-activity.index', $nextQuery + $sortQuery) : null;
 
         $sortBy = EcomActivityListService::normalizeSort($request->query('sort_by'));
         $sortOptions = EcomActivityListService::SORT_OPTIONS;
-        $sessions = $activityList->paginate($sortBy, 25);
+        $sessions = $activityList->paginate($range, $sortBy, 25);
 
         return view('ecom_activity.index', compact('data', 'sessions', 'sortBy', 'sortOptions'));
     }

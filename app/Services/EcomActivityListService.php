@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\TrackerTime;
+use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
@@ -39,20 +40,105 @@ class EcomActivityListService
 
     public const DEFAULT_SORT = 'funnel_stage';
 
+    public const PERIODS = ['24h', 'yesterday', '7d', '30d', 'custom'];
+
+    public const DEFAULT_PERIOD = '24h';
+
     public static function normalizeSort(mixed $sortBy): string
     {
         return is_string($sortBy) && isset(self::SORT_OPTIONS[$sortBy]) ? $sortBy : self::DEFAULT_SORT;
     }
 
-    public function paginate(string $sortBy = self::DEFAULT_SORT, int $perPage = 25): LengthAwarePaginator
+    public static function normalizePeriod(mixed $period): string
+    {
+        return is_string($period) && in_array($period, self::PERIODS, true) ? $period : self::DEFAULT_PERIOD;
+    }
+
+    /**
+     * Calendar days in the store timezone, from start of the first day to end of the last day.
+     *
+     * @return array{from: Carbon, to: Carbon}
+     */
+    public static function periodRange(string $period, string $dateFrom = '', string $dateTo = ''): array
+    {
+        $today = TrackerTime::localNow()->startOfDay();
+
+        [$from, $to] = match (self::normalizePeriod($period)) {
+            'yesterday' => [$today->copy()->subDay(), $today->copy()->subDay()],
+            '7d' => [$today->copy()->subDays(6), $today->copy()],
+            '30d' => [$today->copy()->subDays(29), $today->copy()],
+            'custom' => [self::parseLocalDate($dateFrom) ?? $today->copy(), self::parseLocalDate($dateTo) ?? self::parseLocalDate($dateFrom) ?? $today->copy()],
+            default => [$today->copy(), $today->copy()],
+        };
+
+        if ($from->greaterThan($to)) {
+            [$from, $to] = [$to, $from];
+        }
+
+        return ['from' => $from->startOfDay(), 'to' => $to->endOfDay()];
+    }
+
+    /**
+     * Query params for the same-length range before (-1) or after (+1); null when it would start after today.
+     *
+     * @param  array{from: Carbon, to: Carbon}  $range
+     * @return array{period: string, date_from?: string, date_to?: string}|null
+     */
+    public static function shiftedPeriodQuery(array $range, int $direction): ?array
+    {
+        $days = (int) $range['from']->copy()->startOfDay()->diffInDays($range['to']->copy()->startOfDay()) + 1;
+        $from = $range['from']->copy()->addDays($days * $direction)->startOfDay();
+        $to = $range['to']->copy()->addDays($days * $direction)->startOfDay();
+        $today = TrackerTime::localNow()->startOfDay();
+
+        if ($from->greaterThan($today)) {
+            return null;
+        }
+
+        if ($to->greaterThan($today)) {
+            $to = $today->copy();
+        }
+
+        if ($from->equalTo($to) && $to->equalTo($today)) {
+            return ['period' => '24h'];
+        }
+
+        if ($from->equalTo($to) && $to->equalTo($today->copy()->subDay())) {
+            return ['period' => 'yesterday'];
+        }
+
+        return ['period' => 'custom', 'date_from' => $from->toDateString(), 'date_to' => $to->toDateString()];
+    }
+
+    private static function parseLocalDate(string $value): ?Carbon
+    {
+        try {
+            return $value !== '' ? Carbon::createFromFormat('Y-m-d', $value, TrackerTime::timezone())->startOfDay() : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * @param  array{from: Carbon, to: Carbon}  $range
+     */
+    public function paginate(array $range, string $sortBy = self::DEFAULT_SORT, int $perPage = 25): LengthAwarePaginator
     {
         $page = Paginator::resolveCurrentPage();
-        $total = DB::table('tracking_session')->count();
+        $bounds = TrackerTime::storageRange($range['from'], $range['to']);
+        $inPeriod = fn (Builder $query) => $query->whereBetween('last_active_at', $bounds);
+
+        $counts = DB::table('tracking_session')
+            ->tap($inPeriod)
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(has_order), 0) as orders')
+            ->first();
+        $total = (int) $counts->total;
 
         $sortBy = self::normalizeSort($sortBy);
         $pageIds = $sortBy === 'order_value'
-            ? $this->orderValuePageIds(($page - 1) * $perPage, $perPage)
+            ? $this->orderValuePageIds($inPeriod, (int) $counts->orders, ($page - 1) * $perPage, $perPage)
             : DB::table('tracking_session as ts')
+                ->tap($inPeriod)
                 ->tap(fn (Builder $query) => $this->applySort($query, $sortBy))
                 ->forPage($page, $perPage)
                 ->pluck('ts.id')
@@ -97,28 +183,30 @@ class EcomActivityListService
      *
      * @return list<int>
      */
-    private function orderValuePageIds(int $offset, int $limit): array
+    private function orderValuePageIds(\Closure $inPeriod, int $orderCount, int $offset, int $limit): array
     {
-        $orderIds = DB::table('tracking_session as ts')
-            ->where('ts.has_order', 1)
-            ->orderByRaw("(
-                SELECT MAX(COALESCE(o.amount_paid, o.commerce_total)) FROM activity_ecom_user_actions o
-                WHERE o.session_id = ts.session_id AND o.action_type = 'payment_success'
-            ) DESC")
-            ->orderByDesc('ts.last_active_at')
-            ->orderByDesc('ts.id')
-            ->offset($offset)
-            ->limit($limit)
-            ->pluck('ts.id')
-            ->all();
+        $orderIds = $offset < $orderCount
+            ? DB::table('tracking_session as ts')
+                ->tap($inPeriod)
+                ->where('ts.has_order', 1)
+                ->orderByRaw("(
+                    SELECT MAX(COALESCE(o.amount_paid, o.commerce_total)) FROM activity_ecom_user_actions o
+                    WHERE o.session_id = ts.session_id AND o.action_type = 'payment_success'
+                ) DESC")
+                ->orderByDesc('ts.last_active_at')
+                ->orderByDesc('ts.id')
+                ->offset($offset)
+                ->limit($limit)
+                ->pluck('ts.id')
+                ->all()
+            : [];
 
         if (count($orderIds) === $limit) {
             return $orderIds;
         }
 
-        $orderCount = DB::table('tracking_session')->where('has_order', 1)->count();
-
         $otherIds = DB::table('tracking_session')
+            ->tap($inPeriod)
             ->where('has_order', 0)
             ->orderByDesc('last_active_at')
             ->orderByDesc('id')
