@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Services\EcomActivityListService;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
@@ -12,7 +13,6 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class EcomActivityController extends Controller
@@ -40,7 +40,7 @@ class EcomActivityController extends Controller
         'payment_success' => 'badge-green',
     ];
 
-    public function index(Request $request): View
+    public function index(Request $request, EcomActivityListService $activityList): View
     {
         Gate::authorize('ecom_tracker.activity.index');
 
@@ -50,9 +50,7 @@ class EcomActivityController extends Controller
             'dateTo' => (string) $request->input('date_to', ''),
         ];
 
-        $sessions = DB::table('tracking_session')
-            ->orderByDesc('last_active_at')
-            ->paginate(25);
+        $sessions = $activityList->paginate(25);
 
         return view('ecom_activity.index', compact('data', 'sessions'));
     }

@@ -92,7 +92,14 @@
             </label>
         </div>
         <div class="etd-activity-table-shell" data-etd-activity-table-shell>
-            <div class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity" style="--etd-activity-focus-cols: 0" data-etd-activity-table-viewport>
+            <div
+                class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity"
+                style="--etd-activity-focus-cols: 0"
+                data-etd-activity-table-viewport
+                x-data="{ openEvent: null }"
+                @keydown.escape.window="openEvent = null"
+                @click.window="if (openEvent && ! $event.target.closest('.etd-commerce-event-detail') && ! $event.target.closest('.etd-commerce-event-trigger')) openEvent = null"
+            >
                 <table class="etd-table etd-table--activity w-full">
                     <thead>
                         <tr>
@@ -135,7 +142,13 @@
                                     @endif
                                 </td>
                                 <td class="etd-col-trust" data-label="Visitor trust">—</td>
-                                <td class="etd-col-commerce" data-label="Commerce">—</td>
+                                <td class="etd-col-commerce" data-label="Commerce">
+                                    @include('ecom_activity.partials.commerce-cell', [
+                                        'metrics' => $row->commerce,
+                                        'events' => $row->commerce['expandable_commerce_events'],
+                                        'sessionKey' => $row->session_id,
+                                    ])
+                                </td>
                                 <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($row->actions_count ?? 0)) }}</td>
                                 <td class="etd-col-duration etd-activity-col--optional" data-label="Duration">{{ format_duration((int) ($row->duration_seconds ?? 0)) }}</td>
                                 <td class="etd-col-last-active etd-activity-col--optional" data-label="Last active">
@@ -147,6 +160,18 @@
                                     @endcan
                                 </td>
                             </tr>
+                            @foreach ($row->commerce['expandable_commerce_events'] as $event)
+                                @php $eventKey = $row->session_id.':'.($event['id'] ?? $loop->index); @endphp
+                                <tr
+                                    class="etd-commerce-event-row"
+                                    :class="{ 'is-open': openEvent === @js($eventKey) }"
+                                    x-cloak
+                                >
+                                    <td colspan="8" class="etd-commerce-event-row__cell">
+                                        @include('ecom_activity.partials.commerce-event-detail', ['event' => $event])
+                                    </td>
+                                </tr>
+                            @endforeach
                         @empty
                             <tr class="etd-activity-empty-row">
                                 <td colspan="8" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
