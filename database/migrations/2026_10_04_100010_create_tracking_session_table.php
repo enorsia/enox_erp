@@ -31,6 +31,9 @@ return new class extends Migration
             $table->index(['actions_count', 'id'], 'ts_sort_actions_idx');
             $table->index(['duration_seconds', 'id'], 'ts_sort_duration_idx');
             $table->index(['has_order', 'last_active_at', 'id'], 'ts_sort_has_order_idx');
+            $table->index('email', 'ts_search_email_idx');
+            $table->index('phone', 'ts_search_phone_idx');
+            $table->index('name', 'ts_search_name_idx');
         });
     }
 

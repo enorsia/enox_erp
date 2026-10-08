@@ -59,7 +59,8 @@ class EcomActivityController extends Controller
             'rangeLabel' => TrackerTime::formatLocalDateRangeLabel($range['from'], $range['to']),
         ];
 
-        $sortQuery = array_filter(['sort_by' => $request->query('sort_by')]);
+        $sortQuery = $request->except(['period', 'date_from', 'date_to', 'page']);
+        $data['keepQuery'] = $sortQuery;
         $prevQuery = EcomActivityListService::shiftedPeriodQuery($range, -1);
         $nextQuery = EcomActivityListService::shiftedPeriodQuery($range, 1);
         $data['prevUrl'] = $prevQuery ? route('admin.ecom-activity.index', $prevQuery + $sortQuery) : null;
@@ -67,12 +68,18 @@ class EcomActivityController extends Controller
 
         $sortBy = EcomActivityListService::normalizeSort($request->query('sort_by'));
         $sortOptions = EcomActivityListService::SORT_OPTIONS;
-        $sessions = $activityList->paginate($range, $sortBy, 25);
+        $filters = EcomActivityListService::filtersFromRequest($request);
 
         $filterOptions = $activityList->filterOptions();
-        $filterOptions['categories'] = $request->integer('department') > 0
-            ? $activityList->departmentCategories($request->integer('department'))
+        $filterOptions['categories'] = $filters['department']
+            ? $activityList->departmentCategories($filters['department'])
             : [];
+
+        if ($filters['department'] && $filters['categories'] === []) {
+            $filters['categories'] = [$filters['department'], ...array_keys($filterOptions['categories'])];
+        }
+
+        $sessions = $activityList->paginate($range, $filters, $sortBy, 25);
 
         return view('ecom_activity.index', compact('data', 'sessions', 'sortBy', 'sortOptions', 'filterOptions'));
     }

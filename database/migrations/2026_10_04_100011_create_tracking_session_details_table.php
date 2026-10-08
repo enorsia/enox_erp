@@ -22,6 +22,8 @@ return new class extends Migration
             $table->text('referer')->nullable();
             $table->text('user_agent')->nullable();
             $table->timestamps();
+
+            $table->index('ip', 'tsd_search_ip_idx');
         });
     }
 

@@ -22,6 +22,8 @@ return new class extends Migration
                 ['tracking_session_id', 'tracking_product_id', 'tracking_category_id'],
                 'tracking_session_p_cat_session_product_category_idx',
             );
+            $table->index(['tracking_category_id', 'tracking_session_id'], 'tracking_session_p_cat_category_session_idx');
+            $table->index(['tracking_product_id', 'tracking_session_id'], 'tracking_session_p_cat_product_session_idx');
         });
     }
 

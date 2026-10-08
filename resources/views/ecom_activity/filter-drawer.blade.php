@@ -28,11 +28,13 @@
                     <span class="etd-filter-period__nav-btn is-disabled" aria-disabled="true"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg></span>
                 </div>
                 <input type="hidden" name="period" id="ecom-activity-filter-period" value="{{ $data['period'] }}">
+                @if (filled(request('sort_by')))
+                    <input type="hidden" name="sort_by" value="{{ request('sort_by') }}">
+                @endif
                 <div class="etd-filter-period__presets" role="group" aria-label="Date presets">
-                    <a href="{{ route('admin.ecom-activity.index', ['period' => '24h']) }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '24h' ? 'is-active' : '' }}">Today</a>
-                    <a href="{{ route('admin.ecom-activity.index', ['period' => 'yesterday']) }}" class="etd-filter-period__preset no-underline {{ $data['period'] === 'yesterday' ? 'is-active' : '' }}">Yesterday</a>
-                    <a href="{{ route('admin.ecom-activity.index', ['period' => '7d']) }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '7d' ? 'is-active' : '' }}">7 days</a>
-                    <a href="{{ route('admin.ecom-activity.index', ['period' => '30d']) }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '30d' ? 'is-active' : '' }}">30 days</a>
+                    @foreach (['24h' => 'Today', 'yesterday' => 'Yesterday', '7d' => '7 days', '30d' => '30 days'] as $periodKey => $periodLabel)
+                        <a href="{{ route('admin.ecom-activity.index', ['period' => $periodKey] + $data['keepQuery']) }}" class="etd-filter-period__preset no-underline {{ $data['period'] === $periodKey ? 'is-active' : '' }}">{{ $periodLabel }}</a>
+                    @endforeach
                     <button type="button" class="etd-filter-period__preset js-ecom-activity-drawer-custom-preset {{ $data['period'] === 'custom' ? 'is-active' : '' }}">Custom range</button>
                 </div>
                 <div id="ecom-activity-drawer-custom-dates"
@@ -72,7 +74,7 @@
                     <p class="etd-activity-filter-section-title">Search</p>
                     <label class="etd-filter-compact-field">
                         <span class="etd-filter-compact-label">Keyword</span>
-                        <input type="text" name="search" value="" placeholder="Session, visitor, email, phone, IP, product, SKU, category, department…" class="etd-filter-input etd-filter-input--sm w-full">
+                        <input type="search" name="search" value="{{ request('search') }}" maxlength="100" placeholder="Name, email, phone, IP, session ID, product code, SKU or product name" class="etd-filter-input etd-filter-input--sm w-full">
                     </label>
                 </section>
                 <section class="etd-activity-filter-section">

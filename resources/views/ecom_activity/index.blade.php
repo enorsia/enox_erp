@@ -40,7 +40,7 @@
                     @endif
                     <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
                         @foreach (['24h' => 'Today', 'yesterday' => 'Yesterday', '7d' => '7d', '30d' => '30d'] as $periodKey => $periodLabel)
-                            <a href="{{ route('admin.ecom-activity.index', array_filter(['period' => $periodKey, 'sort_by' => request('sort_by')])) }}" class="etd-segmented-btn {{ $data['period'] === $periodKey ? 'active' : '' }} no-underline">{{ $periodLabel }}</a>
+                            <a href="{{ route('admin.ecom-activity.index', ['period' => $periodKey] + $data['keepQuery']) }}" class="etd-segmented-btn {{ $data['period'] === $periodKey ? 'active' : '' }} no-underline">{{ $periodLabel }}</a>
                         @endforeach
                         <button type="button" class="etd-segmented-btn js-ecom-activity-period-custom-toggle {{ $data['period'] === 'custom' ? 'active' : '' }}" aria-label="Custom date range">Custom</button>
                     </div>

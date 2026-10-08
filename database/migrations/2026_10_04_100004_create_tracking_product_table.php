@@ -16,6 +16,9 @@ return new class extends Migration
             $table->unique(['code', 'sku'], 'uq_tracking_product_code_sku');
             $table->string('title', 500)->nullable();
             $table->timestamps();
+
+            $table->index('sku', 'tracking_product_sku_idx');
+            $table->fullText('title', 'tracking_product_title_ft');
         });
     }
 

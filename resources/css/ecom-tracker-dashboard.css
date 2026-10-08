@@ -6775,6 +6775,14 @@ a.etd-pager__btn:hover {
     display: block;
 }
 
+/* Long IPv6: wraps only at the <wbr> after the middle colon; copied text has no added characters. */
+.etd-table-scroll--activity .etd-table--activity td.etd-col-trust .etd-visitor-ip__item--split {
+    max-width: 21ch;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
 @media (min-width: 768px) {
     #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity th.etd-col-session,
     #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td.etd-col-session {

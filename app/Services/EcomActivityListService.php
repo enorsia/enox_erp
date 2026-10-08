@@ -10,6 +10,7 @@ use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\DB;
@@ -156,26 +157,53 @@ class EcomActivityListService
     }
 
     /**
-     * @param  array{from: Carbon, to: Carbon}  $range
+     * @return array{search: string, funnel: list<int>, has_order: ?bool, devices: list<int>, logged_in: ?bool, durations: list<string>, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>}
      */
-    public function paginate(array $range, string $sortBy = self::DEFAULT_SORT, int $perPage = 25): LengthAwarePaginator
+    public static function filtersFromRequest(Request $request): array
+    {
+        $ints = fn (string $key) => array_values(array_filter(array_map('intval', (array) $request->input($key, [])), fn (int $id) => $id > 0));
+        $strings = fn (string $key) => array_values(array_filter(array_map('strval', (array) $request->input($key, [])), 'filled'));
+        $bool = fn (string $key) => in_array($request->input($key), ['0', '1'], true) ? $request->input($key) === '1' : null;
+
+        return [
+            'search' => mb_substr(trim((string) $request->input('search', '')), 0, 100),
+            'funnel' => array_values(array_intersect($ints('funnel'), array_keys(TrackingSession::FUNNEL_STAGES))),
+            'has_order' => $bool('has_order'),
+            'devices' => $ints('device_type'),
+            'logged_in' => $bool('logged_in'),
+            'durations' => array_values(array_intersect($strings('duration_bucket'), array_keys(TrackingSession::DURATION_BUCKETS))),
+            'utm_sources' => $ints('utm_source'),
+            'utm_mediums' => $strings('utm_medium'),
+            'department' => $request->integer('department') ?: null,
+            'categories' => $ints('category'),
+        ];
+    }
+
+    /**
+     * @param  array{from: Carbon, to: Carbon}  $range
+     * @param  array<string, mixed>  $filters  from filtersFromRequest()
+     */
+    public function paginate(array $range, array $filters = [], string $sortBy = self::DEFAULT_SORT, int $perPage = 25): LengthAwarePaginator
     {
         $page = Paginator::resolveCurrentPage();
         $bounds = TrackerTime::storageRange($range['from'], $range['to']);
-        $inPeriod = fn (Builder $query) => $query->whereBetween('last_active_at', $bounds);
+        $scope = function (Builder $query) use ($bounds, $filters) {
+            $query->whereBetween('ts.last_active_at', $bounds);
+            $this->applyFilters($query, $filters);
+        };
 
-        $counts = DB::table('tracking_session')
-            ->tap($inPeriod)
-            ->selectRaw('COUNT(*) as total, COALESCE(SUM(has_order), 0) as orders')
+        $counts = DB::table('tracking_session as ts')
+            ->tap($scope)
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(ts.has_order), 0) as orders')
             ->first();
         $total = (int) $counts->total;
         $page = min($page, max(1, (int) ceil($total / $perPage)));
 
         $sortBy = self::normalizeSort($sortBy);
         $pageIds = $sortBy === 'order_value'
-            ? $this->orderValuePageIds($inPeriod, (int) $counts->orders, ($page - 1) * $perPage, $perPage)
+            ? $this->orderValuePageIds($scope, (int) $counts->orders, ($page - 1) * $perPage, $perPage)
             : DB::table('tracking_session as ts')
-                ->tap($inPeriod)
+                ->tap($scope)
                 ->tap(fn (Builder $query) => $this->applySort($query, $sortBy))
                 ->forPage($page, $perPage)
                 ->pluck('ts.id')
@@ -201,6 +229,106 @@ class EcomActivityListService
     }
 
     /**
+     * Every filter is a condition on the same query (no extra round trips); detail / category
+     * filters use unique or composite indexes keyed by the session id.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function applyFilters(Builder $query, array $filters): void
+    {
+        $this->applySearch($query, (string) ($filters['search'] ?? ''));
+
+        if (! empty($filters['funnel'])) {
+            $query->whereIn('ts.latest_funnel_stage', $filters['funnel']);
+        }
+
+        if (($filters['has_order'] ?? null) !== null) {
+            $query->where('ts.has_order', $filters['has_order']);
+        }
+
+        if (($filters['logged_in'] ?? null) !== null) {
+            $query->where('ts.is_logged_in', $filters['logged_in']);
+        }
+
+        if (! empty($filters['durations'])) {
+            $query->where(function (Builder $durations) use ($filters) {
+                foreach ($filters['durations'] as $key) {
+                    $bucket = TrackingSession::DURATION_BUCKETS[$key];
+                    $durations->orWhere(fn (Builder $range) => $range
+                        ->where('ts.duration_seconds', '>=', $bucket['min'])
+                        ->when($bucket['max'] !== null, fn (Builder $q) => $q->where('ts.duration_seconds', '<=', $bucket['max'])));
+                }
+            });
+        }
+
+        if (! empty($filters['devices']) || ! empty($filters['utm_sources']) || ! empty($filters['utm_mediums'])) {
+            // One details row per session, so a join cannot duplicate rows and lets MySQL stop at the page limit.
+            $query->join(DB::raw('tracking_session_details as fd USE INDEX (tsd_filter_idx)'), 'fd.tracking_session_id', '=', 'ts.id')
+                ->when(! empty($filters['devices']), fn (Builder $q) => $q->whereIn('fd.tracking_device_id', $filters['devices']))
+                ->when(! empty($filters['utm_sources']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', $filters['utm_sources']))
+                ->when(! empty($filters['utm_mediums']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', fn (Builder $sources) => $sources
+                    ->select('id')
+                    ->from('tracking_traffic_source')
+                    ->whereIn('medium', $filters['utm_mediums'])));
+        }
+
+        if (! empty($filters['categories'])) {
+            $query->whereExists(fn (Builder $catalog) => $catalog
+                ->selectRaw('1')
+                ->from('tracking_session_p_cat as fc')
+                ->whereColumn('fc.tracking_session_id', 'ts.id')
+                ->whereIn('fc.tracking_category_id', $filters['categories']));
+        }
+    }
+
+    /**
+     * Prefix match on indexed columns, picked by what the keyword looks like:
+     * IP → tracking_session_details.ip, email → email, digits → phone / session id,
+     * session-id-like hex → session_id or product, anything else → name, email or product.
+     * Product = code / SKU prefix or title contains (tracking_product is a small lookup table),
+     * linked to sessions through tracking_session_p_cat.
+     */
+    private function applySearch(Builder $query, string $search): void
+    {
+        if ($search === '') {
+            return;
+        }
+
+        $prefix = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $search).'%';
+        // Each UNION branch uses its own index (OR across columns cannot); UNION also de-duplicates.
+        $union = fn (Builder ...$branches) => array_reduce(array_slice($branches, 1), fn (Builder $all, Builder $branch) => $all->union($branch), $branches[0]);
+        $sessionsWhere = fn (string $column) => DB::table('tracking_session')->select('id')->where($column, 'like', $prefix);
+        $productsWhere = fn (string $column) => DB::table('tracking_product')->select('id')->where($column, 'like', $prefix);
+
+        $productBranches = [$productsWhere('code'), $productsWhere('sku')];
+        $titleWords = array_filter(preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($search)), fn (string $word) => mb_strlen($word) >= 3);
+
+        if ($titleWords !== []) {
+            $productBranches[] = DB::table('tracking_product')->select('id')->whereFullText('title', implode(' ', array_map(fn (string $word) => '+'.$word.'*', $titleWords)), ['mode' => 'boolean']);
+        }
+
+        $productSessions = DB::query()
+            ->fromSub($union(...$productBranches), 'search_product')
+            ->join('tracking_session_p_cat as search_pc', 'search_pc.tracking_product_id', '=', 'search_product.id')
+            ->select('search_pc.tracking_session_id as id');
+        $matching = fn (Builder ...$branches) => $query->joinSub($union(...$branches), 'search_match', 'search_match.id', '=', 'ts.id');
+
+        match (true) {
+            (bool) preg_match('/^\d{1,3}\.\d{0,3}(\.\d{0,3}){0,2}$/', $search),
+            str_contains($search, ':') => $query->whereIn('ts.id', fn (Builder $details) => $details
+                ->select('tracking_session_id')
+                ->from('tracking_session_details')
+                ->where('ip', 'like', $prefix)),
+            str_contains($search, '@') => $query->where('ts.email', 'like', $prefix),
+            (bool) preg_match('/^\+?[\d\s()-]+$/', $search) => $query->where(fn (Builder $q) => $q
+                ->where('ts.phone', 'like', str_replace([' ', '(', ')'], '', $prefix))
+                ->orWhere('ts.session_id', 'like', $prefix)),
+            (bool) preg_match('/^(?=.*\d)[0-9a-f-]{4,}$/i', $search) => $matching($sessionsWhere('session_id'), $productSessions),
+            default => $matching($sessionsWhere('name'), $sessionsWhere('email'), $productSessions),
+        };
+    }
+
+    /**
      * Funnel stage DESC = Order (6), Proceed (5), Checkout (4), Cart (3), then views / no stage (NULL sorts last).
      */
     private function applySort(Builder $query, string $sortBy): void
@@ -222,11 +350,11 @@ class EcomActivityListService
      *
      * @return list<int>
      */
-    private function orderValuePageIds(\Closure $inPeriod, int $orderCount, int $offset, int $limit): array
+    private function orderValuePageIds(\Closure $scope, int $orderCount, int $offset, int $limit): array
     {
         $orderIds = $offset < $orderCount
             ? DB::table('tracking_session as ts')
-                ->tap($inPeriod)
+                ->tap($scope)
                 ->where('ts.has_order', 1)
                 ->orderByRaw("(
                     SELECT MAX(COALESCE(o.amount_paid, o.commerce_total)) FROM activity_ecom_user_actions o
@@ -244,14 +372,14 @@ class EcomActivityListService
             return $orderIds;
         }
 
-        $otherIds = DB::table('tracking_session')
-            ->tap($inPeriod)
-            ->where('has_order', 0)
-            ->orderByDesc('last_active_at')
-            ->orderByDesc('id')
+        $otherIds = DB::table('tracking_session as ts')
+            ->tap($scope)
+            ->where('ts.has_order', 0)
+            ->orderByDesc('ts.last_active_at')
+            ->orderByDesc('ts.id')
             ->offset(max(0, $offset - $orderCount))
             ->limit($limit - count($orderIds))
-            ->pluck('id')
+            ->pluck('ts.id')
             ->all();
 
         return array_merge($orderIds, $otherIds);
