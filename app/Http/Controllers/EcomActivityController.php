@@ -50,9 +50,11 @@ class EcomActivityController extends Controller
             'dateTo' => (string) $request->input('date_to', ''),
         ];
 
-        $sessions = $activityList->paginate(25);
+        $sortBy = EcomActivityListService::normalizeSort($request->query('sort_by'));
+        $sortOptions = EcomActivityListService::SORT_OPTIONS;
+        $sessions = $activityList->paginate($sortBy, 25);
 
-        return view('ecom_activity.index', compact('data', 'sessions'));
+        return view('ecom_activity.index', compact('data', 'sessions', 'sortBy', 'sortOptions'));
     }
 
     public function show(Request $request, string $session): View

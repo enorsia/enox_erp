@@ -84,10 +84,9 @@
             <label class="etd-activity-sort-field">
                 <span class="etd-activity-sort-label">Sort by</span>
                 <select data-etd-activity-sort-select class="etd-activity-sort-select tom-select etd-tom-select">
-                    <option value="last_active" selected>Last active</option>
-                    <option value="session_start">Session start</option>
-                    <option value="duration">Duration</option>
-                    <option value="actions">Actions</option>
+                    @foreach ($sortOptions as $value => $label)
+                        <option value="{{ $value }}" @selected($sortBy === $value)>{{ $label }}</option>
+                    @endforeach
                 </select>
             </label>
         </div>

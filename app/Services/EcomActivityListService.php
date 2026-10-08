@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Support\TrackerTime;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,7 +28,109 @@ class EcomActivityListService
         'payment_success' => 'Order',
     ];
 
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public const SORT_OPTIONS = [
+        'funnel_stage' => 'Funnel stage (sold first)',
+        'latest_activity' => 'Latest activity',
+        'order_value' => 'Order value',
+        'actions' => 'Actions',
+        'duration' => 'Duration',
+        'last_active' => 'Last active',
+    ];
+
+    public const DEFAULT_SORT = 'funnel_stage';
+
+    public static function normalizeSort(mixed $sortBy): string
+    {
+        return is_string($sortBy) && isset(self::SORT_OPTIONS[$sortBy]) ? $sortBy : self::DEFAULT_SORT;
+    }
+
+    public function paginate(string $sortBy = self::DEFAULT_SORT, int $perPage = 25): LengthAwarePaginator
+    {
+        $page = Paginator::resolveCurrentPage();
+        $total = DB::table('tracking_session')->count();
+
+        $sortBy = self::normalizeSort($sortBy);
+        $pageIds = $sortBy === 'order_value'
+            ? $this->orderValuePageIds(($page - 1) * $perPage, $perPage)
+            : DB::table('tracking_session as ts')
+                ->tap(fn (Builder $query) => $this->applySort($query, $sortBy))
+                ->forPage($page, $perPage)
+                ->pluck('ts.id')
+                ->all();
+
+        // Join commerce data only for this page's rows; the sort/offset above stays index-only.
+        $rows = $this->withCommerceAction(DB::table('tracking_session as ts')->whereIn('ts.id', $pageIds))
+            ->get()
+            ->sortBy(fn (object $row) => array_search($row->id, $pageIds))
+            ->values()
+            ->map(function (object $row) {
+                $row->commerce = $this->commerceCell($row);
+
+                return $row;
+            });
+
+        return new LengthAwarePaginator($rows, $total, $perPage, $page, [
+            'path' => Paginator::resolveCurrentPath(),
+            'query' => request()->query(),
+        ]);
+    }
+
+    /**
+     * Funnel stage DESC = Order (6), Proceed (5), Checkout (4), Cart (3), then views / no stage (NULL sorts last).
+     */
+    private function applySort(Builder $query, string $sortBy): void
+    {
+        match ($sortBy) {
+            'funnel_stage' => $query->orderByDesc('ts.latest_funnel_stage')->orderByDesc('ts.last_active_at'),
+            'latest_activity' => $query->orderByDesc('ts.created_at'),
+            'actions' => $query->orderByDesc('ts.actions_count'),
+            'duration' => $query->orderByDesc('ts.duration_seconds'),
+            default => $query->orderByDesc('ts.last_active_at'),
+        };
+
+        $query->orderByDesc('ts.id');
+    }
+
+    /**
+     * Ordered sessions by paid amount (only a few hundred rows), then everything else by last active.
+     * Two small indexed queries instead of sorting every session by a computed value.
+     *
+     * @return list<int>
+     */
+    private function orderValuePageIds(int $offset, int $limit): array
+    {
+        $orderIds = DB::table('tracking_session as ts')
+            ->where('ts.has_order', 1)
+            ->orderByRaw("(
+                SELECT MAX(COALESCE(o.amount_paid, o.commerce_total)) FROM activity_ecom_user_actions o
+                WHERE o.session_id = ts.session_id AND o.action_type = 'payment_success'
+            ) DESC")
+            ->orderByDesc('ts.last_active_at')
+            ->orderByDesc('ts.id')
+            ->offset($offset)
+            ->limit($limit)
+            ->pluck('ts.id')
+            ->all();
+
+        if (count($orderIds) === $limit) {
+            return $orderIds;
+        }
+
+        $orderCount = DB::table('tracking_session')->where('has_order', 1)->count();
+
+        $otherIds = DB::table('tracking_session')
+            ->where('has_order', 0)
+            ->orderByDesc('last_active_at')
+            ->orderByDesc('id')
+            ->offset(max(0, $offset - $orderCount))
+            ->limit($limit - count($orderIds))
+            ->pluck('id')
+            ->all();
+
+        return array_merge($orderIds, $otherIds);
+    }
+
+    private function withCommerceAction(Builder $query): Builder
     {
         $stageActionType = "CASE ts.latest_funnel_stage
             WHEN 6 THEN 'payment_success'
@@ -35,7 +139,7 @@ class EcomActivityListService
             WHEN 3 THEN 'add_to_cart'
         END";
 
-        return DB::table('tracking_session as ts')
+        return $query
             ->leftJoin('activity_ecom_user_actions as ca', function ($join) use ($stageActionType) {
                 $join->on('ca.session_id', '=', 'ts.session_id')
                     ->whereRaw("ca.id = (
@@ -60,14 +164,7 @@ class EcomActivityListService
                 'ca.proceed_to_checkout as commerce_proceed_to_checkout',
                 'ca.payment_success as commerce_payment_success',
                 'ca.created_at as commerce_at',
-            ])
-            ->orderByDesc('ts.last_active_at')
-            ->paginate($perPage)
-            ->through(function (object $row) {
-                $row->commerce = $this->commerceCell($row);
-
-                return $row;
-            });
+            ]);
     }
 
     /**
