@@ -32,6 +32,16 @@ final class CommercePricingExtractor
         $grandTotal = CheckoutPayloadTotals::grandTotal($payload);
         $commerceTotal = $grandTotal ?? self::money($payload['cart_total'] ?? null);
 
+        if ($subtotal <= 0) {
+            $inferred = CheckoutPayloadTotals::itemsSubtotal($payload);
+
+            if ($inferred !== null) {
+                $subtotal = $inferred;
+            } elseif ($commerceTotal !== null && $commerceTotal > 0 && $discountAmount <= 0 && $shipping <= 0) {
+                $subtotal = $commerceTotal;
+            }
+        }
+
         $checkoutInfo = is_array($payload['checkout_info'] ?? null) ? $payload['checkout_info'] : [];
         $couponCode = trim((string) ($payload['coupon_code'] ?? $checkoutInfo['coupon_code'] ?? ''));
 

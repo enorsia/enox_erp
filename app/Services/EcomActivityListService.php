@@ -677,6 +677,11 @@ class EcomActivityListService
                 $exists->selectRaw('1')
                     ->from('tracking_session_details as fd')
                     ->whereColumn('fd.tracking_session_id', 'ts.id')
+                    ->whereRaw('fd.touch_sequence = (
+                        SELECT MAX(fd_last.touch_sequence)
+                        FROM tracking_session_details as fd_last
+                        WHERE fd_last.tracking_session_id = ts.id
+                    )')
                     ->when(! empty($filters['devices']), fn (Builder $q) => $q->whereIn('fd.tracking_device_id', $filters['devices']))
                     ->when(! empty($filters['utm_sources']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', $filters['utm_sources']))
                     ->when(! empty($filters['utm_mediums']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', fn (Builder $sources) => $sources
@@ -1203,7 +1208,7 @@ class EcomActivityListService
 
         $rows = [];
 
-        if ($subtotal !== null && ($hasAdjustments || ($grandTotal !== null && abs($subtotal - $grandTotal) > 0.009))) {
+        if ($subtotal !== null && $subtotal > 0 && ($hasAdjustments || ($grandTotal !== null && abs($subtotal - $grandTotal) > 0.009))) {
             $rows[] = ['label' => 'Subtotal', 'value' => $this->money($subtotal)];
         }
 

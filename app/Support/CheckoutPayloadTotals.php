@@ -74,4 +74,45 @@ final class CheckoutPayloadTotals
     {
         return self::grandTotal($payload);
     }
+
+    /**
+     * Line-item subtotal when checkout totals block is missing (common on add_to_cart).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public static function itemsSubtotal(array $payload): ?float
+    {
+        $items = $payload['items'] ?? $payload['cart_items'] ?? null;
+
+        if (! is_array($items) || $items === []) {
+            $checkout = $payload['checkout_info'] ?? [];
+            $items = is_array($checkout) ? ($checkout['items'] ?? []) : [];
+        }
+
+        $sum = 0.0;
+
+        if (is_array($items) && $items !== []) {
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+
+                $price = $item['price'] ?? $item['unit_price'] ?? null;
+
+                if (! is_numeric($price)) {
+                    continue;
+                }
+
+                $qty = max(1, (int) ($item['qty'] ?? 1));
+                $sum += (float) $price * $qty;
+            }
+        } elseif (is_numeric($payload['unit_price'] ?? null)) {
+            $qty = max(1, (int) ($payload['qty'] ?? 1));
+            $sum = (float) $payload['unit_price'] * $qty;
+        }
+
+        $sum = round($sum, 2);
+
+        return $sum > 0 ? $sum : null;
+    }
 }
