@@ -13,10 +13,6 @@ import {
     LineController,
     DoughnutController,
 } from 'chart.js';
-import {
-    bindTrendTooltipDismiss,
-    createTrendTooltipHandler,
-} from '../lib/ecom-tracker-trend-tooltip';
 import './ecom-tracker-filters';
 
 Chart.register(
@@ -428,7 +424,7 @@ function initDashboardTrendChart(trend) {
         };
     });
 
-    const chart = new Chart(chartCtx, {
+    const trendChart = new Chart(chartCtx, {
         type: 'bar',
         data: { labels, datasets },
         options: {
@@ -452,9 +448,22 @@ function initDashboardTrendChart(trend) {
                     },
                 },
                 tooltip: {
-                    enabled: false,
-                    external: createTrendTooltipHandler(orderedSeries, trendSeriesColor),
+                    ...tipStyle(),
+                    titleFont: { size: isNarrow() ? 13 : 14, weight: '600' },
+                    bodyFont: { size: isNarrow() ? 12 : 13 },
+                    padding: isNarrow() ? 10 : 12,
                     itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+                    callbacks: {
+                        label(context) {
+                            const value = context.parsed.y ?? 0;
+
+                            if (context.dataset.yAxisID === 'y1') {
+                                return `${context.dataset.label}: ${value}%`;
+                            }
+
+                            return `${context.dataset.label}: ${value}`;
+                        },
+                    },
                 },
             },
             scales: {
@@ -474,6 +483,12 @@ function initDashboardTrendChart(trend) {
                     grid: { color: gridClr() },
                     beginAtZero: !useLogScale,
                     min: useLogScale ? 1 : 0,
+                    title: {
+                        display: useLogScale,
+                        text: 'Log scale',
+                        color: isDark() ? '#94a3b8' : '#64748b',
+                        font: { size: 10 },
+                    },
                     ticks: {
                         precision: 0,
                         font: { size: isNarrow() ? 9 : 11 },
@@ -492,14 +507,25 @@ function initDashboardTrendChart(trend) {
         },
     });
 
-    window.addEventListener('resize', () => {
-        applyTrendChartLayout(labels.length);
-        renderTrendLegend(orderedSeries);
-        chart.options.plugins.legend.display = !isCompactChart();
-        chart.resize();
-    });
+    let resizeFrame = null;
 
-    bindTrendTooltipDismiss(document.getElementById('etdTrendChartScroll'));
+    window.addEventListener('resize', () => {
+        if (resizeFrame) {
+            cancelAnimationFrame(resizeFrame);
+        }
+
+        resizeFrame = requestAnimationFrame(() => {
+            applyTrendChartLayout(labels.length);
+            renderTrendLegend(orderedSeries);
+            trendChart.options.plugins.legend.display = !isCompactChart();
+            trendChart.options.scales.x.ticks.autoSkip = !trendUsesHorizontalScroll(labels.length) && labels.length > 24;
+            trendChart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(
+                labels.length,
+                trendUsesHorizontalScroll(labels.length),
+            );
+            trendChart.resize();
+        });
+    });
 }
 
 function initDashboardNewReturningChart() {

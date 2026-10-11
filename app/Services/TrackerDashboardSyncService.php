@@ -61,10 +61,6 @@ class TrackerDashboardSyncService
             'unique' => ['metric_date'],
             'counters' => ['category_views', 'product_views'],
         ],
-        'tracking_hourly_summaries' => [
-            'unique' => ['metric_date', 'metric_hour'],
-            'counters' => ['category_views', 'product_views'],
-        ],
         'tracking_daily_categories' => [
             'unique' => ['metric_date', 'tracking_category_id'],
             'counters' => ['category_views', 'product_views', 'add_to_carts', 'proceed_checkouts'],
@@ -773,14 +769,25 @@ class TrackerDashboardSyncService
             'has_order' => $this->stickyFlag($sessionRow, 'has_payment_success', $existing, 'has_order'),
         ], $this->mergedSessionRollups($existing, $sessionRow, $actions));
 
+        $sessionStartedAt = TrackerTime::formatUtc($sessionRow['created_at'] ?? null) ?? now()->toDateTimeString();
+
         if ($existing) {
+            if (filled($sessionRow['created_at'] ?? null)) {
+                $activityStart = Carbon::parse($sessionRow['created_at']);
+                $trackingStart = Carbon::parse($existing->created_at);
+
+                if ($activityStart->lessThan($trackingStart)) {
+                    $payload['created_at'] = $sessionStartedAt;
+                }
+            }
+
             $this->applyTableUpdates('tracking_session', $existing, $payload);
 
             return (int) $existing->id;
         }
 
         $payload['session_id'] = $sessionId;
-        $payload['created_at'] = now();
+        $payload['created_at'] = $sessionStartedAt;
         $payload['updated_at'] = now();
 
         return $this->insertOrFetch('tracking_session', $payload, ['session_id' => $sessionId]);
@@ -1443,7 +1450,6 @@ class TrackerDashboardSyncService
 
             if ($column === 'category_views' || $column === 'product_views') {
                 $this->bump($counters, 'tracking_daily_summaries', ['metric_date' => $date], $column);
-                $this->bump($counters, 'tracking_hourly_summaries', ['metric_date' => $date, 'metric_hour' => $metricHour], $column);
             }
         }
 
@@ -1836,27 +1842,34 @@ class TrackerDashboardSyncService
         $this->refreshSoldTotals($date, 'tracking_daily_categories', 'tracking_category_id', 'od.tracking_category_id', true, $now);
         $this->refreshSoldTotals($date, 'tracking_daily_products', 'product_code', 'p.code', false, $now);
 
+        $this->backfillTrackingSessionStartedAt($date);
+
         $this->refreshHourlySummaries($date, $now);
     }
 
+    /** Align tracking_session.created_at with the real session start from activity (not sync time). */
+    private function backfillTrackingSessionStartedAt(string $visitDate): void
+    {
+        DB::table('tracking_session as ts')
+            ->join('activity_ecom_user as u', 'u.session_id', '=', 'ts.session_id')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $visitDate)
+            ->whereColumn('u.created_at', '<', 'ts.created_at')
+            ->update(['ts.created_at' => DB::raw('u.created_at')]);
+    }
+
     /**
-     * Session and order totals per store-local hour (view counts stay from action bumps).
+     * Rebuild hourly dashboard trend rows (action/event counts + session + order totals).
      */
     private function refreshHourlySummaries(string $date, Carbon $now): void
     {
-        $viewCounts = DB::table('tracking_hourly_summaries')
-            ->where('metric_date', $date)
-            ->get(['metric_hour', 'category_views', 'product_views'])
-            ->keyBy(fn (object $row) => (int) $row->metric_hour);
-
         $hours = [];
         for ($h = 0; $h < 24; $h++) {
-            $existing = $viewCounts->get($h);
             $hours[$h] = [
                 'metric_date' => $date,
                 'metric_hour' => $h,
-                'category_views' => (int) ($existing->category_views ?? 0),
-                'product_views' => (int) ($existing->product_views ?? 0),
+                'category_views' => 0,
+                'product_views' => 0,
                 'unique_visitors' => 0,
                 'sessions' => 0,
                 'stay_seconds' => 0,
@@ -1869,28 +1882,25 @@ class TrackerDashboardSyncService
             ];
         }
 
+        $this->applyHourlyTrendActionCounts($date, $hours);
+
         $visitorsByHour = array_fill(0, 24, []);
 
         $sessions = DB::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->join('activity_ecom_user as u', 'u.session_id', '=', 'ts.session_id')
             ->where('dv.visit_date', $date)
             ->get([
-                'ts.tracking_daily_visitor_id', 'ts.duration_seconds', 'ts.created_at',
-                'ts.has_add_to_cart', 'ts.has_begin_checkout', 'ts.has_proceed_checkout', 'ts.has_order',
+                'ts.tracking_daily_visitor_id', 'ts.duration_seconds', 'u.created_at as session_started_at',
             ]);
 
         foreach ($sessions as $session) {
-            $hour = $this->localHour($session->created_at);
-            $row = &$hours[$hour];
+            $hour = $this->localHour($session->session_started_at);
             $visitorId = (int) $session->tracking_daily_visitor_id;
             $visitorsByHour[$hour][$visitorId] = true;
 
-            $row['sessions']++;
-            $row['stay_seconds'] += (int) $session->duration_seconds;
-            $row['cart_sessions'] += (int) (bool) $session->has_add_to_cart;
-            $row['checkout_sessions'] += (int) (bool) $session->has_begin_checkout;
-            $row['proceed_sessions'] += (int) (bool) $session->has_proceed_checkout;
-            $row['payments'] += (int) (bool) $session->has_order;
+            $hours[$hour]['sessions']++;
+            $hours[$hour]['stay_seconds'] += (int) $session->duration_seconds;
         }
 
         foreach ($visitorsByHour as $hour => $visitorIds) {
@@ -1899,10 +1909,11 @@ class TrackerDashboardSyncService
 
         $orders = DB::table('tracking_orders')
             ->where('metric_date', $date)
-            ->get(['items_qty', 'amount_paid', 'ordered_at']);
+            ->get(['tracking_session_id', 'items_qty', 'amount_paid', 'ordered_at']);
 
         foreach ($orders as $order) {
             $hour = $this->localHour($order->ordered_at);
+            $hours[$hour]['payments']++;
             $hours[$hour]['items_sold'] += (int) $order->items_qty;
             $hours[$hour]['sale_amount'] += (float) $order->amount_paid;
         }
@@ -1952,6 +1963,71 @@ class TrackerDashboardSyncService
         }
 
         return (float) ($row['sale_amount'] ?? 0) === 0.0;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $hours
+     */
+    private function applyHourlyTrendActionCounts(string $visitDate, array &$hours): void
+    {
+        $sessionIds = DB::table('tracking_session as ts')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $visitDate)
+            ->pluck('ts.session_id');
+
+        if ($sessionIds->isEmpty()) {
+            return;
+        }
+
+        $actions = DB::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($actions as $action) {
+            if ($this->localDate($action->created_at ?? null) !== $visitDate) {
+                continue;
+            }
+
+            $hour = $this->localHour($action->created_at ?? null);
+            $type = $this->metricActionType($action);
+            $lines = $this->actionCommerceLines($action);
+
+            if ($lines === []) {
+                $this->bumpHourlyTrendMetric($hours, $hour, $type);
+
+                continue;
+            }
+
+            foreach ($lines as $line) {
+                if ($this->resolveCategoryIdFromLine($line) === null) {
+                    continue;
+                }
+
+                $this->bumpHourlyTrendMetric($hours, $hour, $type);
+            }
+        }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $hours
+     */
+    private function bumpHourlyTrendMetric(array &$hours, int $hour, string $type): void
+    {
+        $column = match ($type) {
+            'category_view' => 'category_views',
+            'product_view' => 'product_views',
+            'add_to_cart' => 'cart_sessions',
+            'begin_checkout' => 'checkout_sessions',
+            'proceed_checkout' => 'proceed_sessions',
+            default => null,
+        };
+
+        if ($column === null) {
+            return;
+        }
+
+        $hours[$hour][$column]++;
     }
 
     /**

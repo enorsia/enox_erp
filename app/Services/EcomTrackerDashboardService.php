@@ -6,7 +6,6 @@ use App\Models\TrackingDailyAudience;
 use App\Models\TrackingDailyDuration;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
-use Carbon\CarbonPeriod;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -21,6 +20,10 @@ class EcomTrackerDashboardService
     private const RECOVERABLE_ROW_LIMIT = 20;
 
     private const TREND_LOG_SCALE_DAYS = 31;
+
+    private const TREND_WEEKLY_THRESHOLD_DAYS = 32;
+
+    private const TREND_MONTHLY_THRESHOLD_DAYS = 91;
 
     /** latest_funnel_stage => panel; the stage is also the activity page funnel filter */
     private const RECOVERABLE_PANELS = [
@@ -73,9 +76,7 @@ class EcomTrackerDashboardService
             'durations' => $this->durations($from, $to),
             'newReturning' => ['unique' => $current['unique_visitors'], 'returning' => $returning],
             'charts' => [
-                'trend' => $days === 1
-                    ? $this->hourlyTrend($from)
-                    : $this->trend($summaries, $range, $days),
+                'trend' => $this->buildTrend($summaries, $range, $days, $period),
                 'new_returning' => [
                     'labels' => ['Unique', 'Returning'],
                     'values' => [$current['unique_visitors'], $returning],
@@ -191,99 +192,283 @@ class EcomTrackerDashboardService
     }
 
     /**
-     * One point per local day of the range (days without data show 0).
-     *
      * @param  Collection<string, object>  $summaries
      * @param  array{from: Carbon, to: Carbon}  $range
      * @return array<string, mixed>
      */
-    private function trend(Collection $summaries, array $range, int $days): array
+    private function buildTrend(Collection $summaries, array $range, int $days, string $period): array
     {
-        $columns = [
-            'unique_visitors' => ['unique_visitors', 'Unique visitors', 'bar'],
-            'sessions' => ['sessions', 'Sessions', 'bar'],
-            'category_views' => ['category_views', 'Category view', 'line'],
-            'product_views' => ['product_views', 'Product view', 'line'],
-            'cart_sessions' => ['add_to_cart', 'Add to cart', 'line'],
-            'checkout_sessions' => ['begin_checkout', 'Begin checkout', 'line'],
-            'proceed_sessions' => ['proceed_checkout', 'Proceed checkout', 'line'],
-            'payments' => ['purchases', 'Purchase', 'line'],
-            'items_sold' => ['items_sold_qty', 'Items sold qty', 'line'],
-        ];
+        $fromLocal = TrackerTime::toLocal($range['from'])?->copy()->startOfDay()
+            ?? $range['from']->copy()->startOfDay();
+        $toLocalDay = TrackerTime::toLocal($range['to'])?->copy()->startOfDay()
+            ?? $range['to']->copy()->startOfDay();
+
+        if ($days === 1) {
+            return $this->hourlyTrendFromTable($fromLocal->toDateString(), $period, $fromLocal);
+        }
+
+        $toLocal = TrackerTime::toLocal($range['to'])?->copy()->endOfDay() ?? $range['to']->copy()->endOfDay();
+        $bucket = match (true) {
+            $days >= self::TREND_MONTHLY_THRESHOLD_DAYS => 'month',
+            $days >= self::TREND_WEEKLY_THRESHOLD_DAYS => 'week',
+            default => 'day',
+        };
+        $periodBuckets = $this->trendPeriods($fromLocal, $toLocal, $bucket);
+        $rangeSummaries = $summaries->filter(
+            fn (object $row, string $date) => $date >= $fromLocal->toDateString() && $date <= $toLocalDay->toDateString(),
+        );
 
         $labels = [];
-        $data = array_fill_keys([...array_keys($columns), 'conversion_rate'], []);
+        $data = $this->emptyTrendBucketData();
 
-        foreach (CarbonPeriod::create($range['from']->copy()->startOfDay(), $range['to']->copy()->startOfDay()) as $day) {
-            $row = $summaries->get($day->toDateString());
-            $labels[] = $day->format('j M');
-
-            foreach (array_keys($columns) as $column) {
-                $data[$column][] = (int) ($row->{$column} ?? 0);
-            }
-
-            $sessions = (int) ($row->sessions ?? 0);
-            $data['conversion_rate'][] = $sessions > 0 ? round((int) $row->payments / $sessions * 100, 1) : 0;
+        foreach ($periodBuckets as [$periodStart, $periodEnd, $label]) {
+            $labels[] = $label;
+            $bucketMetrics = $this->aggregateDailyTrendBucket(
+                $rangeSummaries,
+                $periodStart->toDateString(),
+                $periodEnd->toDateString(),
+            );
+            $this->pushTrendBucket($data, $bucketMetrics);
         }
 
-        $series = [];
-        foreach ($columns as $column => [$key, $label, $type]) {
-            $series[] = ['key' => $key, 'label' => $label, 'data' => $data[$column], 'chart_type' => $type, 'y_axis_id' => 'y'];
-        }
-        $series[] = ['key' => 'conversion_rate', 'label' => 'Conv. rate %', 'data' => $data['conversion_rate'], 'chart_type' => 'line', 'y_axis_id' => 'y1'];
-
-        return ['labels' => $labels, 'use_log_scale' => $days > self::TREND_LOG_SCALE_DAYS, 'granularity' => 'day', 'series' => $series];
+        return $this->formatTrendResponse(
+            $labels,
+            $data,
+            $bucket,
+            $days,
+            $days > self::TREND_LOG_SCALE_DAYS,
+            $this->trendRangeLabel($days, $bucket, $period, null),
+        );
     }
 
     /**
-     * One point per store-local hour when the dashboard range is a single day.
+     * @return array<string, mixed>
      */
-    private function hourlyTrend(string $date): array
+    private function hourlyTrendFromTable(string $date, string $period, Carbon $dayLocal): array
     {
         $rows = DB::table('tracking_hourly_summaries')
             ->where('metric_date', $date)
             ->get()
             ->keyBy(fn (object $row) => (int) $row->metric_hour);
 
-        $columns = [
-            'unique_visitors' => ['unique_visitors', 'Unique visitors', 'bar'],
-            'sessions' => ['sessions', 'Sessions', 'bar'],
-            'category_views' => ['category_views', 'Category view', 'line'],
-            'product_views' => ['product_views', 'Product view', 'line'],
-            'cart_sessions' => ['add_to_cart', 'Add to cart', 'line'],
-            'checkout_sessions' => ['begin_checkout', 'Begin checkout', 'line'],
-            'proceed_sessions' => ['proceed_checkout', 'Proceed checkout', 'line'],
-            'payments' => ['purchases', 'Purchase', 'line'],
-            'items_sold' => ['items_sold_qty', 'Items sold qty', 'line'],
-        ];
+        $purchaseSessionsByHour = DB::table('tracking_orders')
+            ->where('metric_date', $date)
+            ->get(['tracking_session_id', 'ordered_at'])
+            ->groupBy(fn (object $order) => (int) Carbon::parse($order->ordered_at)->timezone(TrackerTime::timezone())->format('G'))
+            ->map(fn (Collection $orders) => $orders->pluck('tracking_session_id')->unique()->count());
 
         $labels = [];
-        $data = array_fill_keys([...array_keys($columns), 'conversion_rate'], []);
+        $data = $this->emptyTrendBucketData();
 
         for ($hour = 0; $hour < 24; $hour++) {
             $row = $rows->get($hour);
-            $labels[] = $this->hourLabel($hour);
-
-            foreach (array_keys($columns) as $column) {
-                $data[$column][] = (int) ($row?->{$column} ?? 0);
-            }
-
-            $sessions = (int) ($row?->sessions ?? 0);
-            $data['conversion_rate'][] = $sessions > 0 ? round((int) ($row?->payments ?? 0) / $sessions * 100, 1) : 0;
+            $labels[] = sprintf('%02d:00', $hour);
+            $this->pushTrendBucket($data, [
+                'unique_visitors' => (int) ($row?->unique_visitors ?? 0),
+                'sessions' => (int) ($row?->sessions ?? 0),
+                'category_views' => (int) ($row?->category_views ?? 0),
+                'product_views' => (int) ($row?->product_views ?? 0),
+                'cart_sessions' => (int) ($row?->cart_sessions ?? 0),
+                'checkout_sessions' => (int) ($row?->checkout_sessions ?? 0),
+                'proceed_sessions' => (int) ($row?->proceed_sessions ?? 0),
+                'payments' => (int) ($row?->payments ?? 0),
+                'items_sold' => (int) ($row?->items_sold ?? 0),
+                'purchase_sessions' => (int) ($purchaseSessionsByHour->get($hour) ?? 0),
+            ]);
         }
 
-        $series = [];
-        foreach ($columns as $column => [$key, $label, $type]) {
-            $series[] = ['key' => $key, 'label' => $label, 'data' => $data[$column], 'chart_type' => $type, 'y_axis_id' => 'y'];
-        }
-        $series[] = ['key' => 'conversion_rate', 'label' => 'Conv. rate %', 'data' => $data['conversion_rate'], 'chart_type' => 'line', 'y_axis_id' => 'y1'];
-
-        return ['labels' => $labels, 'use_log_scale' => false, 'granularity' => 'hour', 'series' => $series];
+        return $this->formatTrendResponse(
+            $labels,
+            $data,
+            'hour',
+            1,
+            false,
+            $this->trendRangeLabel(1, 'hour', $period, $dayLocal),
+        );
     }
 
-    private function hourLabel(int $hour): string
+    /**
+     * @return array<string, list<int|float>>
+     */
+    private function emptyTrendBucketData(): array
     {
-        return Carbon::createFromTime($hour, 0, 0, TrackerTime::timezone())->format('ga');
+        return [
+            'unique_visitors' => [],
+            'sessions' => [],
+            'category_views' => [],
+            'product_views' => [],
+            'cart_sessions' => [],
+            'checkout_sessions' => [],
+            'proceed_sessions' => [],
+            'payments' => [],
+            'items_sold' => [],
+            'conversion_rate' => [],
+        ];
+    }
+
+    /**
+     * @param  array<string, list<int|float>>  $data
+     * @param  array<string, int>  $metrics
+     */
+    private function pushTrendBucket(array &$data, array $metrics): void
+    {
+        foreach ([
+            'unique_visitors', 'sessions', 'category_views', 'product_views',
+            'cart_sessions', 'checkout_sessions', 'proceed_sessions', 'payments', 'items_sold',
+        ] as $column) {
+            $data[$column][] = (int) ($metrics[$column] ?? 0);
+        }
+
+        $sessions = (int) ($metrics['sessions'] ?? 0);
+        $purchaseSessions = (int) ($metrics['purchase_sessions'] ?? $metrics['payments'] ?? 0);
+        $data['conversion_rate'][] = $sessions > 0
+            ? round($purchaseSessions / $sessions * 100, 1)
+            : 0;
+    }
+
+    /**
+     * @param  Collection<string, object>  $summaries
+     * @return array<string, int>
+     */
+    private function aggregateDailyTrendBucket(Collection $summaries, string $fromDate, string $toDate): array
+    {
+        $hourly = DB::table('tracking_hourly_summaries')
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->selectRaw('
+                COALESCE(SUM(category_views), 0) as category_views,
+                COALESCE(SUM(product_views), 0) as product_views,
+                COALESCE(SUM(cart_sessions), 0) as cart_sessions,
+                COALESCE(SUM(checkout_sessions), 0) as checkout_sessions,
+                COALESCE(SUM(proceed_sessions), 0) as proceed_sessions,
+                COALESCE(SUM(payments), 0) as payments,
+                COALESCE(SUM(items_sold), 0) as items_sold
+            ')
+            ->first();
+
+        $sessions = 0;
+
+        foreach ($summaries as $date => $row) {
+            if ($date < $fromDate || $date > $toDate) {
+                continue;
+            }
+
+            $sessions += (int) ($row->sessions ?? 0);
+        }
+
+        return [
+            'unique_visitors' => $this->distinctVisitorsBetween($fromDate, $toDate),
+            'sessions' => $sessions,
+            'category_views' => (int) ($hourly->category_views ?? 0),
+            'product_views' => (int) ($hourly->product_views ?? 0),
+            'cart_sessions' => (int) ($hourly->cart_sessions ?? 0),
+            'checkout_sessions' => (int) ($hourly->checkout_sessions ?? 0),
+            'proceed_sessions' => (int) ($hourly->proceed_sessions ?? 0),
+            'payments' => (int) ($hourly->payments ?? 0),
+            'items_sold' => (int) ($hourly->items_sold ?? 0),
+            'purchase_sessions' => (int) DB::table('tracking_orders')
+                ->whereBetween('metric_date', [$fromDate, $toDate])
+                ->distinct()
+                ->count('tracking_session_id'),
+        ];
+    }
+
+    private function distinctVisitorsBetween(string $fromDate, string $toDate): int
+    {
+        return (int) DB::table('tracking_daily_visitor')
+            ->whereBetween('visit_date', [$fromDate, $toDate])
+            ->distinct()
+            ->count('tracking_main_visitor_id');
+    }
+
+    /**
+     * @param  array<string, list<int|float>>  $data
+     * @return array<string, mixed>
+     */
+    private function formatTrendResponse(
+        array $labels,
+        array $data,
+        string $bucket,
+        int $totalDays,
+        bool $useLogScale,
+        string $rangeLabel,
+    ): array {
+        $series = [
+            ['key' => 'unique_visitors', 'label' => 'Unique visitors', 'data' => $data['unique_visitors'], 'chart_type' => 'bar', 'y_axis_id' => 'y'],
+            ['key' => 'sessions', 'label' => 'Sessions', 'data' => $data['sessions'], 'chart_type' => 'bar', 'y_axis_id' => 'y'],
+            ['key' => 'category_views', 'label' => 'Category view', 'data' => $data['category_views'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'product_views', 'label' => 'Product view', 'data' => $data['product_views'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'add_to_cart', 'label' => 'Add to cart', 'data' => $data['cart_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'begin_checkout', 'label' => 'Begin checkout', 'data' => $data['checkout_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'proceed_checkout', 'label' => 'Proceed checkout', 'data' => $data['proceed_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'purchases', 'label' => 'Purchase', 'data' => $data['payments'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'items_sold_qty', 'label' => 'Items sold qty', 'data' => $data['items_sold'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'conversion_rate', 'label' => 'Conv. rate %', 'data' => $data['conversion_rate'], 'chart_type' => 'line', 'y_axis_id' => 'y1'],
+        ];
+
+        return [
+            'labels' => $labels,
+            'series' => $series,
+            'unique_visitors' => $data['unique_visitors'],
+            'sessions' => $data['sessions'],
+            'items_sold_qty' => $data['items_sold'],
+            'conversion_rates' => $data['conversion_rate'],
+            'bucket' => $bucket,
+            'total_days' => $totalDays,
+            'use_log_scale' => $useLogScale,
+            'range_label' => $rangeLabel,
+        ];
+    }
+
+    /**
+     * @return array<int, array{0: Carbon, 1: Carbon, 2: string}>
+     */
+    private function trendPeriods(Carbon $from, Carbon $to, string $bucket): array
+    {
+        $periods = [];
+        $cursor = $from->copy();
+
+        while ($cursor <= $to) {
+            if ($bucket === 'month') {
+                $periodStart = $cursor->copy();
+                $periodEnd = $cursor->copy()->endOfMonth()->endOfDay();
+                if ($periodEnd > $to) {
+                    $periodEnd = $to->copy();
+                }
+                $label = $periodStart->format('M Y');
+                $cursor = $periodEnd->copy()->addSecond()->startOfDay();
+            } elseif ($bucket === 'week') {
+                $periodStart = $cursor->copy();
+                $periodEnd = $cursor->copy()->addDays(6)->endOfDay();
+                if ($periodEnd > $to) {
+                    $periodEnd = $to->copy();
+                }
+                $label = $periodStart->format('d M').' – '.$periodEnd->format('d M');
+                $cursor = $periodEnd->copy()->addSecond()->startOfDay();
+            } else {
+                $periodStart = $cursor->copy()->startOfDay();
+                $periodEnd = $cursor->copy()->endOfDay();
+                $label = $cursor->format('d M');
+                $cursor->addDay();
+            }
+
+            $periods[] = [$periodStart, $periodEnd, $label];
+        }
+
+        return $periods;
+    }
+
+    private function trendRangeLabel(int $totalDays, string $bucket, ?string $period = null, ?Carbon $dayLocal = null): string
+    {
+        return match ($bucket) {
+            'hour' => match ($period) {
+                'yesterday' => TrackerTime::yesterdayPresetLabel().' · hourly',
+                '24h' => TrackerTime::todayPresetLabel().' · hourly',
+                default => ($dayLocal?->format('d M Y') ?? '1 day').' · hourly',
+            },
+            'week' => "{$totalDays} days · weekly buckets",
+            'month' => "{$totalDays} days · monthly buckets",
+            default => "{$totalDays} days · daily",
+        };
     }
 
     /**
