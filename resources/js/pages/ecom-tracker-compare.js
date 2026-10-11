@@ -68,12 +68,13 @@ const DEMO_COMPARE_NEW_RETURNING_RIGHT = {
     values: [612, 156],
 };
 
-window.ecomTrackerCompareData = window.ecomTrackerCompareData || {
-    left: { trend: DEMO_COMPARE_TREND, new_returning: DEMO_COMPARE_NEW_RETURNING_LEFT },
-    right: { trend: DEMO_COMPARE_TREND_RIGHT, new_returning: DEMO_COMPARE_NEW_RETURNING_RIGHT },
-};
+function getCompareData() {
+    return window.ecomTrackerCompareData || {
+        left: { trend: DEMO_COMPARE_TREND, new_returning: DEMO_COMPARE_NEW_RETURNING_LEFT },
+        right: { trend: DEMO_COMPARE_TREND_RIGHT, new_returning: DEMO_COMPARE_NEW_RETURNING_RIGHT },
+    };
+}
 
-const compareData = window.ecomTrackerCompareData;
 const compareRoot = document.getElementById('ecom-tracker-compare-content');
 const compareSyncQuery = window.matchMedia('(min-width: 1200px)');
 let comparePrintSyncPaused = false;
@@ -131,7 +132,7 @@ function clearCompareMatchedHeights() {
         return;
     }
 
-    root.querySelectorAll('[data-compare-sync], [data-compare-sync] .etd-kpi--compact, [data-compare-sync] .etd-kpi-group, [data-compare-sync] .etd-compare-recoverable-card').forEach((element) => {
+    root.querySelectorAll('[data-compare-sync], [data-compare-sync] .etd-kpi--compact, [data-compare-sync] .etd-kpi-group, [data-compare-sync] .etd-compare-recoverable-card, [data-compare-sync="traffic"] .etd-table-scroll--traffic').forEach((element) => {
         element.style.minHeight = '';
     });
 }
@@ -148,6 +149,14 @@ function syncCompareRecoverableHeights(root) {
         .forEach((cards) => {
             syncElementHeights(cards);
         });
+}
+
+function syncCompareTrafficScrollHeights(root) {
+    const scrollAreas = Array.from(root.querySelectorAll('[data-compare-sync="traffic"] .etd-table-scroll--traffic'));
+
+    if (scrollAreas.length >= 2) {
+        syncElementHeights(scrollAreas);
+    }
 }
 
 function syncCompareSectionHeights() {
@@ -168,6 +177,7 @@ function syncCompareSectionHeights() {
     clearCompareMatchedHeights();
     syncCompareKpiHeights(root);
     syncCompareRecoverableHeights(root);
+    syncCompareTrafficScrollHeights(root);
 
     const groups = new Map();
 
@@ -243,7 +253,7 @@ function initCompareSectionSync() {
         root.querySelectorAll('[data-compare-sync]').forEach((element) => {
             compareSyncObserver.observe(element);
         });
-        root.querySelectorAll('[data-compare-sync] .etd-kpi--compact, [data-compare-sync] .etd-kpi-group, [data-compare-sync] .etd-compare-recoverable-card').forEach((element) => {
+        root.querySelectorAll('[data-compare-sync] .etd-kpi--compact, [data-compare-sync] .etd-kpi-group, [data-compare-sync] .etd-compare-recoverable-card, [data-compare-sync="traffic"] .etd-table-scroll--traffic').forEach((element) => {
             compareSyncObserver.observe(element);
         });
     }
@@ -252,8 +262,6 @@ function initCompareSectionSync() {
         document.fonts.ready.then(scheduleCompareSectionSync).catch(() => {});
     }
 }
-
-initCompareSectionSync();
 
 Chart.defaults.font.family = "'DM Sans', ui-sans-serif, system-ui, sans-serif";
 Chart.defaults.font.size = 11;
@@ -523,24 +531,6 @@ function initCompareTrendChart({
     bindTrendTooltipDismiss(document.getElementById(scrollId));
 }
 
-initCompareTrendChart({
-    canvasId: 'etdTrendChartLeft',
-    wrapId: 'etdTrendChartWrapLeft',
-    scrollId: 'etdTrendChartScrollLeft',
-    legendId: 'etdTrendLegendLeft',
-    hintId: 'etdTrendChartScrollHintLeft',
-    trend: compareData.left?.trend,
-});
-
-initCompareTrendChart({
-    canvasId: 'etdTrendChartRight',
-    wrapId: 'etdTrendChartWrapRight',
-    scrollId: 'etdTrendChartScrollRight',
-    legendId: 'etdTrendLegendRight',
-    hintId: 'etdTrendChartScrollHintRight',
-    trend: compareData.right?.trend,
-});
-
 function accent() {
     return getComputedStyle(document.documentElement).getPropertyValue('--color-accent-500').trim() || '#7c3aed';
 }
@@ -590,27 +580,45 @@ function initCompareNewReturningChart(canvasId, newReturning) {
     });
 }
 
-initCompareNewReturningChart('etdNewReturningChartLeft', compareData.left?.new_returning);
-initCompareNewReturningChart('etdNewReturningChartRight', compareData.right?.new_returning);
-
-scheduleCompareSectionSync();
-
 const compareTrendChartConfigs = [
     {
         canvasId: 'etdTrendChartLeft',
         wrapId: 'etdTrendChartWrapLeft',
         legendId: 'etdTrendLegendLeft',
         hintId: 'etdTrendChartScrollHintLeft',
-        trend: compareData.left?.trend,
     },
     {
         canvasId: 'etdTrendChartRight',
         wrapId: 'etdTrendChartWrapRight',
         legendId: 'etdTrendLegendRight',
         hintId: 'etdTrendChartScrollHintRight',
-        trend: compareData.right?.trend,
     },
 ];
+
+function initCompareCharts() {
+    const compareData = getCompareData();
+
+    initCompareTrendChart({
+        canvasId: 'etdTrendChartLeft',
+        wrapId: 'etdTrendChartWrapLeft',
+        scrollId: 'etdTrendChartScrollLeft',
+        legendId: 'etdTrendLegendLeft',
+        hintId: 'etdTrendChartScrollHintLeft',
+        trend: compareData.left?.trend,
+    });
+
+    initCompareTrendChart({
+        canvasId: 'etdTrendChartRight',
+        wrapId: 'etdTrendChartWrapRight',
+        scrollId: 'etdTrendChartScrollRight',
+        legendId: 'etdTrendLegendRight',
+        hintId: 'etdTrendChartScrollHintRight',
+        trend: compareData.right?.trend,
+    });
+
+    initCompareNewReturningChart('etdNewReturningChartLeft', compareData.left?.new_returning);
+    initCompareNewReturningChart('etdNewReturningChartRight', compareData.right?.new_returning);
+}
 
 let comparePrintSession = null;
 
@@ -853,6 +861,8 @@ function bindComparePrintControls() {
 }
 
 function bootComparePage() {
+    initCompareCharts();
+    initCompareSectionSync();
     bindComparePrintControls();
     scheduleCompareSectionSync();
 }

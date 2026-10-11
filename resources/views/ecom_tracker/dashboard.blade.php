@@ -162,57 +162,12 @@
                 </div>
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
-            <table class="etd-table etd-table--product-catalog etd-table--performance-metrics">
-                <thead>
-                    <tr>
-                        <th class="etd-col-product">Product</th>
-                        <th class="etd-num etd-col-metric">Views</th>
-                        <th class="etd-num etd-col-metric">
-                            @include('ecom_tracker.partials.column-header-with-tip', [
-                                'label' => 'Adds',
-                                'tip' => 'Add to cart',
-                                'align' => 'center',
-                            ])
-                        </th>
-                        <th class="etd-num etd-col-metric">
-                            @include('ecom_tracker.partials.column-header-with-tip', [
-                                'label' => 'Proceed',
-                                'tip' => 'Proceed to checkout',
-                                'align' => 'center',
-                            ])
-                        </th>
-                        <th class="etd-num etd-col-metric">
-                            @include('ecom_tracker.partials.column-header-with-tip', [
-                                'label' => 'Sold',
-                                'tip' => 'Sale item',
-                                'align' => 'center',
-                            ])
-                        </th>
-                        <th class="etd-num etd-col-metric">Sale</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($products as $product)
-                        <tr>
-                            <td class="etd-col-product">
-                                <a href="{{ $activityLink(['search' => $product['code']]) }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
-                                    {{ $product['name'] }}
-                                </a>
-                            </td>
-                            <td class="etd-num etd-col-metric">{{ number_format($product['views']) }}</td>
-                            <td class="etd-num etd-col-metric">{{ number_format($product['adds']) }}</td>
-                            <td class="etd-num etd-col-metric">{{ number_format($product['proceed_checkouts']) }}</td>
-                            <td class="etd-num etd-col-metric">{{ number_format($product['qty']) }}</td>
-                            <td class="etd-num etd-col-metric">
-                                £{{ number_format($product['revenue'], 2) }}
-                                <div class="etd-mini-bar"><div style="width: {{ $product['revenue_bar_percent'] }}%"></div></div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="6" class="text-slate-400">No product activity in this period.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
+                @include('ecom_tracker.partials.product-performance-table', [
+                    'products' => $products,
+                    'productActivityLink' => fn (array $query) => $activityLink([
+                        'search' => (string) ($query['product_code'] ?? ''),
+                    ]),
+                ])
             </div>
         </div>
     </div>

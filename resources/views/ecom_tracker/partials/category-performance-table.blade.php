@@ -94,9 +94,11 @@
                     @foreach ($department['categories'] as $category)
                         @php
                             $categorySaleBar = (int) round(((float) ($category['sale_amount'] ?? 0) / $maxSaleAmount) * 100);
-                            $categoryLink = is_callable($categoryActivityLink)
-                                ? $categoryActivityLink(array_merge($category, ['department_name' => $category['department_name'] ?? $department['name'] ?? '']))
-                                : null;
+                            $categoryLink = filled($category['activity_url'] ?? null)
+                                ? (string) $category['activity_url']
+                                : (is_callable($categoryActivityLink)
+                                    ? $categoryActivityLink(array_merge($category, ['department_name' => $category['department_name'] ?? $department['name'] ?? '']))
+                                    : null);
                         @endphp
                         <tr class="etd-category-child-row"
                             x-show="expanded === @js($departmentKey)"

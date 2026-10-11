@@ -8482,6 +8482,16 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     margin-bottom: 1rem;
     padding: 0;
     overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.65rem;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.dark .etd-compare-exec {
+    border-color: #334155;
+    background: rgba(15, 23, 42, 0.35);
+    box-shadow: none;
 }
 
 .etd-compare-exec__toggle {
@@ -8526,12 +8536,30 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     flex-shrink: 0;
     width: 1.75rem;
     height: 1.75rem;
+    margin-left: auto;
     border-radius: 0.45rem;
     color: #64748b;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
 }
 
 .dark .etd-compare-exec__chevron {
-    color: #94a3b8;
+    border-color: #334155;
+    background: rgba(15, 23, 42, 0.5);
+}
+
+.etd-compare-exec__toggle:hover .etd-compare-exec__chevron,
+.etd-compare-exec__toggle:focus-visible .etd-compare-exec__chevron {
+    color: #0f172a;
+    border-color: #cbd5e1;
+    background: #f1f5f9;
+}
+
+.dark .etd-compare-exec__toggle:hover .etd-compare-exec__chevron,
+.dark .etd-compare-exec__toggle:focus-visible .etd-compare-exec__chevron {
+    color: #f1f5f9;
+    border-color: #475569;
+    background: rgba(30, 41, 59, 0.8);
 }
 
 .etd-compare-exec__chevron-icon {
@@ -8542,6 +8570,11 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 
 .etd-compare-exec__chevron.is-open .etd-compare-exec__chevron-icon {
     transform: rotate(90deg);
+}
+
+.etd-compare-exec__toggle:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--etd-accent, #0f766e) 55%, transparent);
+    outline-offset: 2px;
 }
 
 .etd-compare-exec__body {
@@ -8557,6 +8590,14 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 
 .etd-compare-exec__header-group {
     margin-bottom: 0.65rem;
+}
+
+.etd-compare-exec:not(.etd-print-exec-expanded) .etd-compare-exec__header-group {
+    display: none;
+}
+
+.etd-compare-exec:not(.etd-print-exec-expanded) .etd-compare-exec__periods-banner {
+    display: none;
 }
 
 .etd-compare-exec__periods-banner {
@@ -9496,10 +9537,14 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 
     .etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed,
     .etd-compare-page [data-compare-sync='products'] .etd-table-scroll--fixed,
-    .etd-compare-page [data-compare-sync='devices'] .etd-table-scroll--fixed,
-    .etd-compare-page [data-compare-sync='traffic'] .etd-table-scroll--fixed {
+    .etd-compare-page [data-compare-sync='devices'] .etd-table-scroll--fixed {
         flex: 1 1 auto;
         min-height: clamp(12rem, 22vh, 16rem);
+    }
+
+    .etd-compare-page [data-compare-sync='traffic'] .etd-table-scroll--fixed {
+        flex: 1 1 auto;
+        min-height: clamp(18rem, 30vh, 26rem);
     }
 }
 
@@ -9508,9 +9553,16 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 }
 
 .etd-compare-page [data-compare-sync='categories'] .etd-table-scroll--fixed,
-.etd-compare-page [data-compare-sync='products'] .etd-table-scroll--fixed,
-.etd-compare-page [data-compare-sync='traffic'] .etd-table-scroll--fixed {
+.etd-compare-page [data-compare-sync='products'] .etd-table-scroll--fixed {
     min-height: clamp(12rem, 22vh, 16rem);
+}
+
+.etd-compare-page [data-compare-sync='traffic'] .etd-table-scroll--traffic.etd-table-scroll--fixed {
+    --etd-table-scroll-height: clamp(20rem, 38vh, 32rem);
+    min-height: clamp(18rem, 30vh, 26rem);
+    max-height: none;
+    overflow-y: visible;
+    height: auto;
 }
 
 .etd-compare-page [data-compare-sync='categories'],
@@ -9809,8 +9861,22 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     width: 100%;
     max-width: 100%;
     overflow-x: auto;
-    overflow-y: auto;
+    overflow-y: visible;
     -webkit-overflow-scrolling: touch;
+}
+
+.etd-compare-page [data-compare-sync='traffic'].etd-compare-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.etd-compare-page [data-compare-sync='traffic'] .etd-panel-head {
+    flex: 0 0 auto;
+}
+
+.etd-compare-page [data-compare-sync='traffic'] .etd-table-scroll--traffic.etd-table-scroll--fixed {
+    flex: 1 1 auto;
 }
 
 .etd-compare-page [data-compare-sync='traffic'] .etd-table--traffic {
@@ -10096,7 +10162,30 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     padding: 0.65rem 0.75rem;
     border-radius: 0.65rem;
     border: 1px solid #e2e8f0;
+    border-top-width: 3px;
+    border-top-style: solid;
     background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.etd-compare-recoverable-card--cart {
+    border-top-color: #eab308;
+    background: linear-gradient(180deg, #fefce8 0%, #fff 38%);
+}
+
+.etd-compare-recoverable-card--begin {
+    border-top-color: #f59e0b;
+    background: linear-gradient(180deg, #fffbeb 0%, #fff 38%);
+}
+
+.etd-compare-recoverable-card--proceed {
+    border-top-color: #ef4444;
+    background: linear-gradient(180deg, #fef2f2 0%, #fff 38%);
+}
+
+.etd-compare-recoverable-card--success {
+    border-top-color: #10b981;
+    background: linear-gradient(180deg, #ecfdf5 0%, #fff 38%);
 }
 
 .etd-compare-recoverable-card__link {
@@ -10109,6 +10198,40 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     border-color: #334155;
 }
 
+.dark .etd-compare-recoverable-card--cart {
+    background: linear-gradient(180deg, rgba(234, 179, 8, 0.12) 0%, rgba(15, 23, 42, 0.35) 38%);
+}
+
+.dark .etd-compare-recoverable-card--begin {
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.12) 0%, rgba(15, 23, 42, 0.35) 38%);
+}
+
+.dark .etd-compare-recoverable-card--proceed {
+    background: linear-gradient(180deg, rgba(239, 68, 68, 0.1) 0%, rgba(15, 23, 42, 0.35) 38%);
+}
+
+.dark .etd-compare-recoverable-card--success {
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.12) 0%, rgba(15, 23, 42, 0.35) 38%);
+}
+
+.etd-compare-recoverable-card__heading {
+    margin: 0 0 0.35rem;
+    min-width: 0;
+}
+
+.etd-compare-recoverable-card__summary {
+    margin: 0;
+}
+
+.etd-compare-recoverable-card--success .etd-compare-recoverable-card__summary {
+    color: #64748b;
+}
+
+.dark .etd-compare-recoverable-card--success .etd-compare-recoverable-card__summary {
+    color: #94a3b8;
+}
+
+/* Legacy card slots (demo / inline-delta layouts) */
 .etd-compare-recoverable-card__title {
     display: flex;
     align-items: center;
@@ -10136,6 +10259,8 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 
 @media (max-width: 639px) {
     .etd-compare-recoverable-card,
+    .etd-compare-recoverable-card__heading,
+    .etd-compare-recoverable-card__summary,
     .etd-compare-recoverable-card__title,
     .etd-compare-recoverable-card__value,
     .etd-compare-recoverable-card__stake {
@@ -10145,23 +10270,160 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 
 .etd-compare-recoverable-card__value {
     margin: 0;
-    font-size: 14px;
-    font-weight: 700;
-    color: #0f172a;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: #64748b;
+    line-height: 1.35;
 }
 
 .dark .etd-compare-recoverable-card__value {
-    color: #f1f5f9;
+    color: #94a3b8;
 }
 
 .etd-compare-recoverable-card__stake {
-    margin: 0.15rem 0 0;
-    font-size: 12px;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
     color: #64748b;
+    line-height: 1.35;
 }
 
 .etd-compare-recoverable-card--success .etd-compare-recoverable-card__value {
-    color: #0F6E56;
+    color: #0f6e56;
+}
+
+.dark .etd-compare-recoverable-card--success .etd-compare-recoverable-card__value {
+    color: #34d399;
+}
+
+.etd-compare-page .etd-grid-2--compare-acquisition {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+    margin-top: 0;
+    margin-bottom: 0;
+    width: 100%;
+    min-width: 0;
+}
+
+.etd-compare-page .etd-grid-2--compare-acquisition > .etd-panel {
+    min-width: 0;
+}
+
+.etd-compare-page .etd-grid-2--compare-acquisition .etd-panel--new-returning .etd-chart-wrap.xs {
+    min-height: clamp(120px, 18vh, 180px);
+    height: auto;
+}
+
+/* Compact acquisition on compare: duration on top, unique/returning stacked below */
+.etd-compare-page .etd-acquisition-insights--compare-compact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.4rem;
+    align-items: stretch;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact > .etd-panel--duration-distribution {
+    order: 1;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    padding-bottom: 0.35rem;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact > .etd-panel--duration-distribution .etd-panel-body {
+    padding-bottom: 0;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact > .etd-panel--new-returning--under-duration {
+    order: 2;
+    margin-top: 0;
+    padding: 0.4rem 0.65rem 0.5rem;
+    border-top: 1px solid #e2e8f0;
+    border-radius: 0 0 0.65rem 0.65rem;
+    box-shadow: none;
+    background: transparent;
+}
+
+.dark .etd-compare-page .etd-acquisition-insights--compare-compact > .etd-panel--new-returning--under-duration {
+    border-top-color: #334155;
+    background: transparent;
+}
+
+.etd-acquisition-subsection-title {
+    margin: 0;
+    font-size: clamp(0.8125rem, 1.8vw, 0.875rem);
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+    color: #0f172a;
+    line-height: 1.3;
+}
+
+.dark .etd-acquisition-subsection-title {
+    color: #f1f5f9;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-panel-head {
+    margin-bottom: 0.35rem;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-panel-title,
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-acquisition-subsection-title {
+    font-size: clamp(0.8125rem, 1.8vw, 0.875rem);
+    line-height: 1.3;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-panel-body {
+    padding-top: 0;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-duration-summary {
+    font-size: 0.875rem;
+    line-height: 1.4;
+    color: var(--etd-muted, #64748b);
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-new-returning-summary {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--etd-muted, #64748b);
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-duration-buckets {
+    max-height: none;
+    overflow: visible;
+    gap: 0.5rem;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-duration-bucket__head {
+    margin-bottom: 0.35rem;
+    font-size: 0.8125rem;
+    gap: 0.75rem;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-duration-bucket__bar {
+    height: 0.375rem;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact a.etd-duration-bucket--link {
+    padding: 0.15rem 0;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-panel--new-returning .etd-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.etd-compare-page .etd-acquisition-insights--compare-compact .etd-panel--new-returning .etd-chart-wrap.xs {
+    min-height: clamp(120px, 16vh, 160px);
+    max-height: none;
+    height: clamp(120px, 16vh, 160px);
+    width: 100%;
+    max-width: 14rem;
+    margin-inline: auto;
 }
 
 .etd-compare-audience-note {
@@ -10916,12 +11178,23 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
         page-break-inside: avoid !important;
     }
 
+    #ecom-tracker-compare-content .etd-compare-recoverable-card__heading,
+    #ecom-tracker-compare-content .etd-compare-recoverable-card__summary,
     #ecom-tracker-compare-content .etd-compare-recoverable-card__title,
     #ecom-tracker-compare-content .etd-compare-recoverable-card__value,
     #ecom-tracker-compare-content .etd-compare-recoverable-card__stake {
         white-space: normal !important;
-        font-size: 7pt !important;
         overflow-wrap: anywhere !important;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-recoverable-card__heading {
+        font-size: 9pt !important;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-recoverable-card__summary,
+    #ecom-tracker-compare-content .etd-compare-recoverable-card__value,
+    #ecom-tracker-compare-content .etd-compare-recoverable-card__stake {
+        font-size: 7pt !important;
     }
 
     #ecom-tracker-compare-content .etd-mini-bar {

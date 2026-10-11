@@ -2,10 +2,11 @@
 
 namespace App\Services;
 
+use App\Exceptions\CommerceParseException;
+use App\Models\ActivityEcomUser;
 use App\Models\TrackingCategory;
 use App\Models\TrackingDailyDuration;
 use App\Models\TrackingSession;
-use App\Exceptions\CommerceParseException;
 use App\Support\CommercePricingExtractor;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
@@ -376,11 +377,68 @@ class EcomActivityListService
         if (($filters['has_order'] ?? null) !== null
             || ($filters['logged_in'] ?? null) !== null
             || ($filters['duration'] ?? null) !== null
-            || ($filters['department'] ?? null) !== null) {
+            || ($filters['department'] ?? null) !== null
+            || in_array($filters['visitor_type'] ?? null, ['human', 'bot', 'unclassified'], true)) {
             return true;
         }
 
         return false;
+    }
+
+    /**
+     * Session-level totals in the same shape as {@see EcomTrackerDashboardService::totals()} for KPI groups.
+     *
+     * @param  array{from: Carbon, to: Carbon}  $range
+     * @param  array<string, mixed>  $filters
+     * @return array<string, float|int>
+     */
+    public function dashboardTotals(array $range, array $filters): array
+    {
+        $bounds = TrackerTime::storageRange($range['from'], $range['to']);
+        $scope = function (Builder $query) use ($bounds, $filters): void {
+            $query->whereBetween('ts.last_active_at', $bounds);
+            $this->applyFilters($query, $filters);
+        };
+
+        $row = DB::table('tracking_session as ts')
+            ->tap($scope)
+            ->selectRaw('COUNT(*) as sessions')
+            ->selectRaw('COUNT(DISTINCT ts.tracking_daily_visitor_id) as unique_visitors')
+            ->selectRaw('COALESCE(SUM(ts.duration_seconds), 0) as stay_seconds')
+            ->selectRaw('SUM(CASE WHEN ts.has_add_to_cart = 1 THEN 1 ELSE 0 END) as cart_sessions')
+            ->selectRaw('SUM(CASE WHEN ts.has_begin_checkout = 1 THEN 1 ELSE 0 END) as checkout_sessions')
+            ->selectRaw('SUM(CASE WHEN ts.has_proceed_checkout = 1 THEN 1 ELSE 0 END) as proceed_sessions')
+            ->selectRaw('SUM(CASE WHEN ts.latest_funnel_stage = 3 THEN 1 ELSE 0 END) as cart_drops')
+            ->selectRaw('SUM(CASE WHEN ts.latest_funnel_stage = 4 THEN 1 ELSE 0 END) as checkout_drops')
+            ->selectRaw('SUM(CASE WHEN ts.latest_funnel_stage = 5 THEN 1 ELSE 0 END) as proceed_drops')
+            ->selectRaw('COALESCE(SUM(ts.has_order), 0) as payments')
+            ->first();
+
+        $sales = DB::table('tracking_orders as o')
+            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
+            ->tap($scope)
+            ->selectRaw('COALESCE(SUM(o.items_qty), 0) as sold_qty')
+            ->selectRaw('COALESCE(SUM(o.amount_paid), 0) as sale_amount')
+            ->first();
+
+        $sessions = (int) ($row->sessions ?? 0);
+        $staySeconds = (int) ($row->stay_seconds ?? 0);
+
+        return [
+            'unique_visitors' => (int) ($row->unique_visitors ?? 0),
+            'sessions' => $sessions,
+            'stay_seconds' => $staySeconds,
+            'cart_sessions' => (int) ($row->cart_sessions ?? 0),
+            'checkout_sessions' => (int) ($row->checkout_sessions ?? 0),
+            'proceed_sessions' => (int) ($row->proceed_sessions ?? 0),
+            'cart_drops' => (int) ($row->cart_drops ?? 0),
+            'checkout_drops' => (int) ($row->checkout_drops ?? 0),
+            'proceed_drops' => (int) ($row->proceed_drops ?? 0),
+            'payments' => (int) ($row->payments ?? 0),
+            'items_sold' => (int) ($sales->sold_qty ?? 0),
+            'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),
+            'avg_stay_seconds' => $sessions > 0 ? (int) round($staySeconds / $sessions) : 0,
+        ];
     }
 
     /**
@@ -818,7 +876,7 @@ class EcomActivityListService
     }
 
     /**
-     * Same rules as {@see \App\Models\ActivityEcomUser::visitorClassification()} on master:
+     * Same rules as {@see ActivityEcomUser::visitorClassification()} on master:
      * stored ingest verdict in activity_ecom_user_bot_context only (no live UA re-classification).
      *
      * @return array{classification: string, label: string, badge_class: string, help: string, country_code: ?string, country_label: ?string, ips: list<list<string>>}
