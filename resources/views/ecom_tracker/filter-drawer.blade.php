@@ -55,48 +55,65 @@
                     <div class="etd-activity-filter-grid">
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">Device</span>
-                            <select name="device_type" class="tom-select etd-tom-select w-full" data-placeholder="All">
-                                <option value="">All</option>
-                                <option value="desktop">Desktop</option>
-                                <option value="mobile">Mobile</option>
-                                <option value="tablet">Tablet</option>
+                            <select name="device_type[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All">
+                                @foreach (($filterOptions ?? [])['devices'] ?? [] as $id => $name)
+                                    <option value="{{ $id }}" @selected(in_array((string) $id, (array) request('device_type', []), true))>{{ ucfirst($name) }}</option>
+                                @endforeach
                             </select>
                         </label>
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">Logged in</span>
                             <select name="logged_in" class="tom-select etd-tom-select w-full" data-placeholder="All">
-                                <option value="">All</option>
-                                <option value="1">Logged in</option>
-                                <option value="0">Guest</option>
+                                <option value="" @selected(request('logged_in', '') === '')>All</option>
+                                <option value="1" @selected(request('logged_in') === '1')>Logged in</option>
+                                <option value="0" @selected(request('logged_in') === '0')>Guest</option>
                             </select>
                         </label>
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">Has order</span>
                             <select name="has_order" class="tom-select etd-tom-select w-full" data-placeholder="All">
-                                <option value="">All</option>
-                                <option value="1">With order</option>
-                                <option value="0">No order</option>
+                                <option value="" @selected(request('has_order', '') === '')>All</option>
+                                <option value="1" @selected(request('has_order') === '1')>With order</option>
+                                <option value="0" @selected(request('has_order') === '0')>No order</option>
+                            </select>
+                        </label>
+                        <label class="etd-filter-compact-field">
+                            <span class="etd-filter-compact-label">Visitor type</span>
+                            <select name="visitor_type" class="tom-select etd-tom-select w-full" data-placeholder="All">
+                                <option value="" @selected(request('visitor_type', '') === '')>All</option>
+                                <option value="human" @selected(request('visitor_type') === 'human')>Real visitors</option>
+                                <option value="bot" @selected(request('visitor_type') === 'bot')>Automated traffic</option>
+                                <option value="unclassified" @selected(request('visitor_type') === 'unclassified')>Not classified</option>
                             </select>
                         </label>
                     </div>
                 </section>
                 <section class="etd-activity-filter-section">
                     <p class="etd-activity-filter-section-title">Traffic source</p>
+                    <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Sessions by last marketing touch in that session.</p>
                     <div class="etd-activity-filter-grid">
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">UTM source</span>
-                            <select name="utm_source[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All"></select>
+                            <select name="utm_source[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All">
+                                @foreach (($filterOptions ?? [])['utmSources'] ?? [] as $id => $name)
+                                    <option value="{{ $id }}" @selected(in_array((string) $id, (array) request('utm_source', []), true))>{{ $name }}</option>
+                                @endforeach
+                            </select>
                         </label>
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">UTM medium</span>
-                            <select name="utm_medium[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All"></select>
+                            <select name="utm_medium[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All">
+                                @foreach (($filterOptions ?? [])['utmMediums'] ?? [] as $medium)
+                                    <option value="{{ $medium }}" @selected(in_array($medium, (array) request('utm_medium', []), true))>{{ $medium }}</option>
+                                @endforeach
+                            </select>
                         </label>
                     </div>
                 </section>
             </div>
         </div>
         <div class="etd-filter-panel__footer">
-            <a href="{{ route('admin.ecom-tracker.dashboard') }}" class="etd-filter-panel__reset">Reset</a>
+            <a href="{{ $data['resetUrl'] ?? route('admin.ecom-tracker.dashboard') }}" class="etd-filter-panel__reset">Reset</a>
             <button type="submit" class="etd-filter-panel__apply">Apply filters</button>
         </div>
     </form>

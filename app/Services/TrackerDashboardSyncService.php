@@ -396,14 +396,11 @@ class TrackerDashboardSyncService
 
         foreach ($actions as $action) {
             $type = $this->metricActionType($action);
-            $counted = $this->localDate($action->created_at ?? null) === $visitDate;
+            $actionDate = $this->localDate($action->created_at ?? null);
+            $metricHour = $this->localHour($action->created_at ?? null);
             $orderLines = [];
 
-            $metricHour = $counted ? $this->localHour($action->created_at ?? null) : null;
-
-            if ($counted) {
-                $this->countAction($counters, $type, $visitDate, $audienceKeys);
-            }
+            $this->countAction($counters, $type, $actionDate, $audienceKeys);
 
             foreach ($this->actionCommerceLines($action) as $line) {
                 $productId = $this->findOrCreateProduct(
@@ -413,9 +410,7 @@ class TrackerDashboardSyncService
                 );
                 $categoryId = $this->resolveCategoryIdFromLine($line);
 
-                if ($counted && $metricHour !== null) {
-                    $this->countLine($counters, $type, $visitDate, $metricHour, $productId !== null ? $this->productCode($line['product_code']) : null, $categoryId);
-                }
+                $this->countLine($counters, $type, $actionDate, $metricHour, $productId !== null ? $this->productCode($line['product_code']) : null, $categoryId);
 
                 if ($productId === null) {
                     continue;

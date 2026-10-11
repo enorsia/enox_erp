@@ -223,9 +223,33 @@ class EcomActivityListService
     }
 
     /**
-     * @param  array{from: Carbon, to: Carbon}  $range
-     * @param  array<string, mixed>  $filters  from filtersFromRequest()
+     * @return array<string, mixed>
      */
+    public static function filterQueryParams(Request $request): array
+    {
+        $params = [];
+
+        if (trim((string) $request->query('search', '')) !== '') {
+            $params['search'] = $request->query('search');
+        }
+
+        foreach (['device_type', 'utm_source', 'utm_medium', 'funnel', 'category', 'duration_bucket'] as $key) {
+            $values = array_values(array_filter((array) $request->query($key, []), fn ($value) => $value !== null && $value !== ''));
+            if ($values !== []) {
+                $params[$key] = $values;
+            }
+        }
+
+        foreach (['logged_in', 'has_order', 'visitor_type', 'department', 'duration'] as $key) {
+            $value = $request->query($key);
+            if (in_array($value, ['0', '1'], true) || (is_string($value) && $value !== '')) {
+                $params[$key] = $value;
+            }
+        }
+
+        return $params;
+    }
+
     /**
      * @param  array<string, mixed>  $filters
      * @return array{

@@ -37,6 +37,7 @@ class EcomTrackerCompareFilteredDashboardService
 
     public function __construct(
         private EcomActivityListService $activityList,
+        private EcomTrackerDashboardService $dashboardService,
     ) {}
 
     /**
@@ -65,8 +66,8 @@ class EcomTrackerCompareFilteredDashboardService
             'values' => [$current['unique_visitors'], $returning],
         ];
         $dashboard['charts']['trend'] = $this->trend($range, $period, $days, $sessionFilters);
-        $dashboard['categories'] = $this->categories($range, $sessionFilters);
-        $dashboard['products'] = $this->products($range, $sessionFilters);
+        $dashboard['categories'] = $this->dashboardService->categories($range['from'], $range['to'], $period, $sessionFilters);
+        $dashboard['products'] = $this->dashboardService->products($range['from'], $range['to'], $period, $sessionFilters);
         $dashboard['recoverable'] = $this->recoverable($from, $to, $sessionFilters, $backUrl);
         $audiences = $this->audiences($range, $sessionFilters);
         $dashboard['devices'] = [
@@ -108,7 +109,7 @@ class EcomTrackerCompareFilteredDashboardService
         foreach ($periodBuckets as [$periodStart, $periodEnd, $label]) {
             $labels[] = $label;
             $subRange = ['from' => $periodStart, 'to' => $periodEnd];
-            $this->pushTrendBucket($data, $this->trendMetrics($subRange, $filters));
+            $this->pushTrendBucket($data, $this->trendMetrics($subRange, $filters, $period));
         }
 
         return $this->formatTrendResponse(
@@ -126,18 +127,14 @@ class EcomTrackerCompareFilteredDashboardService
      * @param  array<string, mixed>  $filters
      * @return array<string, int>
      */
-    private function trendMetrics(array $range, array $filters): array
+    private function trendMetrics(array $range, array $filters, string $period): array
     {
-        $totals = $this->activityList->dashboardTotals($range, $filters);
-        $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $range, $filters);
+        $rangeWithPeriod = $range + ['period' => $period];
+        $totals = $this->activityList->dashboardTotals($rangeWithPeriod, $filters);
+        $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $rangeWithPeriod, $filters);
         $orderBounds = TrackerTime::storageRange($range['from'], $range['to']);
 
-        $views = DB::table('tracking_session as ts')
-            ->join('activity_ecom_user_actions as a', 'a.session_id', '=', 'ts.session_id')
-            ->tap($scope)
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'category_view' THEN 1 ELSE 0 END) as category_views")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'product_view' THEN 1 ELSE 0 END) as product_views")
-            ->first();
+        $views = $this->dashboardService->summaryViewTotals($range['from'], $range['to'], $period, $filters);
 
         $purchaseSessions = (int) DB::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
@@ -149,8 +146,8 @@ class EcomTrackerCompareFilteredDashboardService
         return [
             'unique_visitors' => (int) $totals['unique_visitors'],
             'sessions' => (int) $totals['sessions'],
-            'category_views' => (int) ($views->category_views ?? 0),
-            'product_views' => (int) ($views->product_views ?? 0),
+            'category_views' => (int) ($views['category_views'] ?? 0),
+            'product_views' => (int) ($views['product_views'] ?? 0),
             'cart_sessions' => (int) $totals['cart_sessions'],
             'checkout_sessions' => (int) $totals['checkout_sessions'],
             'proceed_sessions' => (int) $totals['proceed_sessions'],
@@ -184,15 +181,17 @@ class EcomTrackerCompareFilteredDashboardService
             ->get()
             ->keyBy(fn (object $row) => (int) $row->hour);
 
-        $viewRows = DB::table('tracking_session as ts')
-            ->join('activity_ecom_user_actions as a', 'a.session_id', '=', 'ts.session_id')
+        $hourlyRows = DB::table('tracking_hourly_summaries')
+            ->where('metric_date', $dayLocal->toDateString())
+            ->get()
+            ->keyBy(fn (object $row) => (int) $row->metric_hour);
+
+        $filteredByHour = DB::table('tracking_session as ts')
             ->tap($scope)
             ->selectRaw("{$hourExpr} as hour")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'category_view' THEN 1 ELSE 0 END) as category_views")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'product_view' THEN 1 ELSE 0 END) as product_views")
+            ->selectRaw('COUNT(*) as sessions')
             ->groupBy('hour')
-            ->get()
-            ->keyBy(fn (object $row) => (int) $row->hour);
+            ->pluck('sessions', 'hour');
 
         $orderHourExpr = "HOUR(CONVERT_TZ(o.ordered_at, '+00:00', '".str_replace("'", "''", $tz)."'))";
 
@@ -212,14 +211,17 @@ class EcomTrackerCompareFilteredDashboardService
 
         for ($hour = 0; $hour < 24; $hour++) {
             $session = $sessionRows->get($hour);
-            $views = $viewRows->get($hour);
+            $hourly = $hourlyRows->get($hour);
             $items = $itemRows->get($hour);
+            $totalHourSessions = (int) ($hourly->sessions ?? 0);
+            $filteredHourSessions = (int) ($filteredByHour[$hour] ?? 0);
+            $viewRatio = $totalHourSessions > 0 ? min(1.0, $filteredHourSessions / $totalHourSessions) : 0.0;
             $labels[] = sprintf('%02d:00', $hour);
             $this->pushTrendBucket($data, [
                 'unique_visitors' => (int) ($session->unique_visitors ?? 0),
                 'sessions' => (int) ($session->sessions ?? 0),
-                'category_views' => (int) ($views->category_views ?? 0),
-                'product_views' => (int) ($views->product_views ?? 0),
+                'category_views' => (int) round((int) ($hourly->category_views ?? 0) * $viewRatio),
+                'product_views' => (int) round((int) ($hourly->product_views ?? 0) * $viewRatio),
                 'cart_sessions' => (int) ($session->cart_sessions ?? 0),
                 'checkout_sessions' => (int) ($session->checkout_sessions ?? 0),
                 'proceed_sessions' => (int) ($session->proceed_sessions ?? 0),
@@ -237,132 +239,6 @@ class EcomTrackerCompareFilteredDashboardService
             false,
             $this->trendRangeLabel(1, 'hour', $period, $dayLocal),
         );
-    }
-
-    /**
-     * @param  array{from: Carbon, to: Carbon}  $range
-     * @param  array<string, mixed>  $filters
-     * @return array{departments: list<array<string, mixed>>, totals: array{category_views: int, product_views: int, category_count: int}}
-     */
-    private function categories(array $range, array $filters): array
-    {
-        $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $range, $filters);
-
-        $rows = DB::table('tracking_session as ts')
-            ->join('activity_ecom_user_actions as a', 'a.session_id', '=', 'ts.session_id')
-            ->join('tracking_category as c', DB::raw('CAST(a.category_id AS UNSIGNED)'), '=', 'c.id')
-            ->leftJoin('tracking_category as d', 'd.id', '=', 'c.parent_id')
-            ->tap($scope)
-            ->whereNotNull('a.category_id')
-            ->where('a.category_id', '!=', '')
-            ->groupBy('c.id', 'c.name', 'd.id', 'd.name')
-            ->selectRaw('c.id, c.name, d.id as department_id, d.name as department_name')
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'category_view' THEN 1 ELSE 0 END) as category_views")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'product_view' THEN 1 ELSE 0 END) as product_views")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'add_to_cart' THEN 1 ELSE 0 END) as adds")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'proceed_checkout' THEN 1 ELSE 0 END) as proceed_checkouts")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'payment_success' THEN COALESCE(a.item_qty, 0) ELSE 0 END) as sale_items")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'payment_success' THEN COALESCE(a.amount_paid, 0) ELSE 0 END) as sale_amount")
-            ->get();
-
-        $metrics = ['category_views', 'product_views', 'adds', 'proceed_checkouts', 'sale_items', 'sale_amount'];
-        $sort = fn (array $a, array $b) => [$b['sale_amount'], $b['product_views']] <=> [$a['sale_amount'], $a['product_views']];
-
-        $departments = [];
-        foreach ($rows as $row) {
-            $departmentId = (int) ($row->department_id ?? 0);
-            $category = [
-                'category_id' => (int) $row->id,
-                'category_name' => (string) $row->name,
-                'department_id' => $departmentId ?: null,
-            ];
-            foreach ($metrics as $metric) {
-                $category[$metric] = $metric === 'sale_amount' ? (float) $row->{$metric} : (int) $row->{$metric};
-            }
-
-            $departments[$departmentId] ??= ['key' => 'department-'.$departmentId, 'name' => (string) ($row->department_name ?? 'Other'), 'categories' => []] + array_fill_keys($metrics, 0);
-            $departments[$departmentId]['categories'][] = $category;
-            foreach ($metrics as $metric) {
-                $departments[$departmentId][$metric] += $category[$metric];
-            }
-        }
-
-        foreach ($departments as &$department) {
-            usort($department['categories'], $sort);
-            $department['category_count'] = count($department['categories']);
-        }
-        unset($department);
-        usort($departments, $sort);
-
-        return [
-            'departments' => array_values($departments),
-            'totals' => [
-                'category_views' => (int) $rows->sum('category_views'),
-                'product_views' => (int) $rows->sum('product_views'),
-                'category_count' => $rows->count(),
-            ],
-        ];
-    }
-
-    /**
-     * @param  array{from: Carbon, to: Carbon}  $range
-     * @param  array<string, mixed>  $filters
-     * @return array{rows: list<array<string, mixed>>, totals: array{views: int, product_count: int}}
-     */
-    private function products(array $range, array $filters): array
-    {
-        $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $range, $filters);
-
-        $top = DB::table('tracking_session as ts')
-            ->join('activity_ecom_user_actions as a', 'a.session_id', '=', 'ts.session_id')
-            ->tap($scope)
-            ->whereNotNull('a.product_code')
-            ->where('a.product_code', '!=', '')
-            ->groupBy('a.product_code')
-            ->selectRaw('a.product_code as code')
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'product_view' THEN 1 ELSE 0 END) as views")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'add_to_cart' THEN 1 ELSE 0 END) as adds")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'proceed_checkout' THEN 1 ELSE 0 END) as proceed_checkouts")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'payment_success' THEN COALESCE(a.item_qty, 0) ELSE 0 END) as qty")
-            ->selectRaw("SUM(CASE WHEN a.action_type = 'payment_success' THEN COALESCE(a.amount_paid, 0) ELSE 0 END) as revenue")
-            ->selectRaw('COUNT(*) OVER () as product_count')
-            ->selectRaw('SUM(SUM(CASE WHEN a.action_type = \'product_view\' THEN 1 ELSE 0 END)) OVER () as total_views')
-            ->orderByDesc('qty')
-            ->orderByDesc('proceed_checkouts')
-            ->orderByDesc('adds')
-            ->orderByDesc('views')
-            ->orderByDesc('revenue')
-            ->limit(self::PRODUCT_LIMIT);
-
-        $rows = DB::query()
-            ->fromSub($top, 'top')
-            ->select('top.*')
-            ->selectSub(fn ($title) => $title->from('tracking_product')->whereColumn('code', 'top.code')->selectRaw('MIN(title)'), 'title')
-            ->orderByDesc('qty')
-            ->orderByDesc('proceed_checkouts')
-            ->orderByDesc('adds')
-            ->orderByDesc('views')
-            ->orderByDesc('revenue')
-            ->get();
-
-        $maxRevenue = (float) $rows->max('revenue');
-
-        return [
-            'rows' => $rows->map(fn (object $row) => [
-                'code' => (string) $row->code,
-                'name' => $row->title ?: $row->code,
-                'views' => (int) $row->views,
-                'adds' => (int) $row->adds,
-                'proceed_checkouts' => (int) $row->proceed_checkouts,
-                'qty' => (int) $row->qty,
-                'revenue' => (float) $row->revenue,
-                'revenue_bar_percent' => $maxRevenue > 0 ? (int) round((float) $row->revenue / $maxRevenue * 100) : 0,
-            ])->all(),
-            'totals' => [
-                'views' => (int) ($rows->first()->total_views ?? 0),
-                'product_count' => (int) ($rows->first()->product_count ?? 0),
-            ],
-        ];
     }
 
     /**
