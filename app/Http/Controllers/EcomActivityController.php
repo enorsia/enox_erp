@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Services\EcomActivityListService;
+use App\Support\EcomActivityTableFocus;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
@@ -78,7 +79,17 @@ class EcomActivityController extends Controller
             $filters['categories'] = [$filters['department'], ...array_keys($filterOptions['categories'])];
         }
 
-        $sessions = $activityList->paginate($range, $filters, $sortBy, 25);
+        $focusColumns = EcomActivityTableFocus::columnsForRequest($request);
+        $showCatalogFilterColumn = EcomActivityTableFocus::showCatalogFilterColumn($request);
+
+        $sessions = $activityList->paginate(
+            $range,
+            $filters,
+            $sortBy,
+            25,
+            $focusColumns,
+            $showCatalogFilterColumn,
+        );
         $summary = $activityList->filteredSummary($range, $filters);
         $visitorQuality = $activityList->visitorQualitySummary($range, $filters);
         $drillDownUi = $activityList->drillDownUi($request, $filters, $summary, $data['resetUrl'], $filterOptions);
@@ -94,6 +105,8 @@ class EcomActivityController extends Controller
             'visitorQuality',
             'drillDownUi',
             'activityExport',
+            'focusColumns',
+            'showCatalogFilterColumn',
         ));
     }
 

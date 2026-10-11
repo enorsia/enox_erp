@@ -104,10 +104,20 @@
                 </select>
             </label>
         </div>
+        @php
+            $focusColumns = $focusColumns ?? [];
+            $showCatalogFilterColumn = $showCatalogFilterColumn ?? false;
+            $focusColspan = count($focusColumns);
+            $activityTableColspan = 8 + $focusColspan + ($showCatalogFilterColumn ? 1 : 0);
+            $activityTableWide = $focusColspan > 0 || $showCatalogFilterColumn;
+        @endphp
         <div class="etd-activity-table-shell" data-etd-activity-table-shell>
             <div
-                class="etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity"
-                style="--etd-activity-focus-cols: 0"
+                @class([
+                    'etd-table-scroll etd-table-scroll--fixed etd-table-scroll--activity',
+                    'etd-table-scroll--activity-wide' => $activityTableWide,
+                ])
+                style="--etd-activity-focus-cols: {{ $focusColspan }}"
                 data-etd-activity-table-viewport
                 x-data="{ openEvent: null }"
                 @keydown.escape.window="openEvent = null"
@@ -121,6 +131,27 @@
                             <th class="etd-col-trust">Visitor trust</th>
                             <th class="etd-col-commerce"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Commerce</span></a></th>
                             <th class="etd-col-actions etd-num"><a href="#" data-etd-activity-sort class="etd-sort-th-link etd-sort-th-link--center"><span class="etd-sort-th-label">Actions</span></a></th>
+                            @if ($showCatalogFilterColumn)
+                                <th class="etd-col-catalog-filter">
+                                    @include('ecom_tracker.partials.column-header-with-tip', [
+                                        'label' => 'Category',
+                                        'tip' => 'Department and category matched by the active filter',
+                                    ])
+                                </th>
+                            @endif
+                            @foreach ($focusColumns as $column)
+                                <th @class([$column['class'] ?? null])>
+                                    @if (! empty($column['tip']))
+                                        @include('ecom_tracker.partials.column-header-with-tip', [
+                                            'label' => $column['label'],
+                                            'tip' => $column['tip'],
+                                            'align' => str_contains($column['class'] ?? '', 'etd-num') ? 'center' : null,
+                                        ])
+                                    @else
+                                        {{ $column['label'] }}
+                                    @endif
+                                </th>
+                            @endforeach
                             <th class="etd-col-duration etd-activity-col--optional"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Duration</span></a></th>
                             <th class="etd-col-last-active etd-activity-col--optional"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Last active</span></a></th>
                             <th class="etd-col-action">View</th>
@@ -170,6 +201,17 @@
                                     ])
                                 </td>
                                 <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($row->actions_count ?? 0)) }}</td>
+                                @if ($showCatalogFilterColumn)
+                                    <td class="etd-col-catalog-filter" data-label="Category">
+                                        @php $catalogPath = trim((string) ($row->catalog_path ?? '')); @endphp
+                                        {{ ($catalogPath !== '' && $catalogPath !== '—') ? $catalogPath : '—' }}
+                                    </td>
+                                @endif
+                                @foreach ($focusColumns as $column)
+                                    <td @class([$column['class'] ?? null]) data-label="{{ $column['label'] }}">
+                                        {{ $row->focus[$column['key']] ?? '—' }}
+                                    </td>
+                                @endforeach
                                 <td class="etd-col-duration etd-activity-col--optional" data-label="Duration">{{ format_duration((int) ($row->duration_seconds ?? 0)) }}</td>
                                 <td class="etd-col-last-active etd-activity-col--optional" data-label="Last active">
                                     {{ \App\Support\TrackerTime::diffForHumansFromStorage($row->last_active_at) ?? '—' }}
@@ -187,14 +229,14 @@
                                     :class="{ 'is-open': openEvent === @js($eventKey) }"
                                     x-cloak
                                 >
-                                    <td colspan="8" class="etd-commerce-event-row__cell">
+                                    <td colspan="{{ $activityTableColspan }}" class="etd-commerce-event-row__cell">
                                         @include('ecom_activity.partials.commerce-event-detail', ['event' => $event])
                                     </td>
                                 </tr>
                             @endforeach
                         @empty
                             <tr class="etd-activity-empty-row">
-                                <td colspan="8" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
+                                <td colspan="{{ $activityTableColspan }}" class="text-center text-slate-500 py-10">No visitor sessions found.</td>
                             </tr>
                         @endforelse
                     </tbody>

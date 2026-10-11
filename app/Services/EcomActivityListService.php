@@ -486,8 +486,17 @@ class EcomActivityListService
         return $chips;
     }
 
-    public function paginate(array $range, array $filters = [], string $sortBy = self::DEFAULT_SORT, int $perPage = 25): LengthAwarePaginator
-    {
+    /**
+     * @param  list<array{key: string, label: string, class?: string, tip?: string}>  $focusColumns
+     */
+    public function paginate(
+        array $range,
+        array $filters = [],
+        string $sortBy = self::DEFAULT_SORT,
+        int $perPage = 25,
+        array $focusColumns = [],
+        bool $attachCatalogPaths = false,
+    ): LengthAwarePaginator {
         $page = Paginator::resolveCurrentPage();
         $bounds = TrackerTime::storageRange($range['from'], $range['to']);
         $scope = function (Builder $query) use ($bounds, $filters) {
@@ -502,14 +511,21 @@ class EcomActivityListService
         $total = (int) $counts->total;
         $page = min($page, max(1, (int) ceil($total / $perPage)));
 
+        $focusKeys = array_column($focusColumns, 'key');
         $sortBy = self::normalizeSort($sortBy);
-        $rows = $total === 0 ? collect() : $this->pageRows($scope, $sortBy, (int) $counts->orders, $page, $perPage)
-            ->map(function (object $row) {
-                $row->commerce = $this->commerceCell($row);
-                $row->trust = $this->trustCell($row);
+        $rows = $total === 0 ? collect() : $this->pageRows($scope, $sortBy, (int) $counts->orders, $page, $perPage);
 
-                return $row;
-            });
+        if ($attachCatalogPaths && $rows->isNotEmpty()) {
+            $this->attachCatalogPaths($rows);
+        }
+
+        $rows = $rows->map(function (object $row) use ($focusKeys) {
+            $row->commerce = $this->commerceCell($row);
+            $row->trust = $this->trustCell($row);
+            $row->focus = $this->focusMetrics($row, $focusKeys);
+
+            return $row;
+        });
 
         return new LengthAwarePaginator($rows, $total, $perPage, $page, [
             'path' => Paginator::resolveCurrentPath(),
@@ -775,11 +791,21 @@ class EcomActivityListService
     {
         SessionTrafficAttribution::joinLatestSessionDetails($query);
         $query
+            ->leftJoin('tracking_device as td', 'td.id', '=', 'sd.tracking_device_id')
+            ->leftJoin('tracking_browser as tb', 'tb.id', '=', 'sd.tracking_browser_id')
+            ->leftJoin('tracking_traffic_source as tts', 'tts.id', '=', 'sd.tracking_traffic_source_id')
             ->leftJoin('activity_ecom_user as aeu', 'aeu.session_id', '=', 'ts.session_id')
             ->leftJoin('activity_ecom_user_bot_context as bc', 'bc.session_id', '=', 'ts.session_id')
             ->addSelect([
                 'sd.ip as visitor_ip',
                 'sd.user_agent as visitor_user_agent',
+                'td.name as device_name',
+                'tb.name as browser_name',
+                'aeu.os as activity_os',
+                'sd.utm_source as session_touch_utm_source',
+                'sd.utm_medium as session_touch_utm_medium',
+                'tts.name as traffic_source_name',
+                'tts.medium as traffic_source_medium',
                 'aeu.country as activity_country',
                 'bc.id as bot_context_id',
                 'bc.client_ip as bot_client_ip',
@@ -857,6 +883,62 @@ class EcomActivityListService
         }
 
         return [substr($ip, 0, $splitAt + 1), substr($ip, $splitAt + 1)];
+    }
+
+    /**
+     * @param  list<string>  $keys
+     * @return array<string, string>
+     */
+    private function focusMetrics(object $row, array $keys): array
+    {
+        if ($keys === []) {
+            return [];
+        }
+
+        $metrics = [];
+
+        foreach ($keys as $key) {
+            $metrics[$key] = match ($key) {
+                'device' => ucfirst((string) ($row->device_name ?? '—')),
+                'device_detail' => collect([
+                    ucfirst((string) ($row->device_name ?? '—')),
+                    (string) ($row->browser_name ?? '—'),
+                    (string) ($row->activity_os ?? '—'),
+                ])->filter(fn (string $part) => $part !== '' && $part !== '—')->implode(' · ') ?: '—',
+                'traffic_source' => filled($row->session_touch_utm_source)
+                    ? (string) $row->session_touch_utm_source
+                    : (filled($row->traffic_source_name) ? (string) $row->traffic_source_name : 'Direct'),
+                'traffic_medium' => filled($row->session_touch_utm_medium)
+                    ? (string) $row->session_touch_utm_medium
+                    : (filled($row->traffic_source_medium) ? (string) $row->traffic_source_medium : '—'),
+                'classification_reason' => $row->bot_context_id === null
+                    ? 'Not classified'
+                    : VisitorClassificationLabels::reason($row->bot_reason, (bool) $row->bot_is_bot)['headline'],
+                default => '—',
+            };
+        }
+
+        return $metrics;
+    }
+
+    /**
+     * @param  Collection<int, object>  $rows
+     */
+    private function attachCatalogPaths(Collection $rows): void
+    {
+        $sessionIds = $rows->pluck('id')->all();
+
+        $paths = DB::table('tracking_session_p_cat as sp')
+            ->join('tracking_category as cat', 'cat.id', '=', 'sp.tracking_category_id')
+            ->leftJoin('tracking_category as dept', 'dept.id', '=', 'cat.parent_id')
+            ->whereIn('sp.tracking_session_id', $sessionIds)
+            ->groupBy('sp.tracking_session_id')
+            ->selectRaw("sp.tracking_session_id as tracking_session_id, MIN(CASE WHEN dept.id IS NOT NULL THEN CONCAT(dept.name, ' › ', cat.name) ELSE cat.name END) as catalog_path")
+            ->pluck('catalog_path', 'tracking_session_id');
+
+        foreach ($rows as $row) {
+            $row->catalog_path = $paths[$row->id] ?? '—';
+        }
     }
 
     /**
