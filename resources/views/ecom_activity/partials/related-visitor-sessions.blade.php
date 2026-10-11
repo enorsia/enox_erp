@@ -2,13 +2,12 @@
     use App\Support\TrackerTime;
 
     $related = $relatedVisitorSessions ?? collect();
-    $visitorId = trim((string) ($activityUser->visitor_id ?? ''));
     $currentSessionId = (string) ($activityUser->session_id ?? '');
 @endphp
 
-@if ($visitorId !== '' && $related->count() > 1)
-    <div class="section-card">
-        <div class="section-title">Other sessions (same visitor)</div>
+@if ($related->count() > 1)
+    <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60">
+        <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-2">Other sessions (same visitor)</div>
         <ul class="space-y-2">
             @foreach ($related as $relatedSession)
                 @php

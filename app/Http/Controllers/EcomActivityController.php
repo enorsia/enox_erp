@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class EcomActivityController extends Controller
@@ -544,14 +545,14 @@ class EcomActivityController extends Controller
      */
     private function relatedVisitorSessions(ActivityEcomUser $session, int $limit = 20): Collection
     {
-        $visitorId = trim((string) ($session->visitor_id ?? ''));
+        $sessionIds = $this->relatedVisitorSessionIds($session);
 
-        if ($visitorId === '') {
+        if ($sessionIds->isEmpty()) {
             return collect();
         }
 
         return ActivityEcomUser::query()
-            ->where('visitor_id', $visitorId)
+            ->whereIn('session_id', $sessionIds)
             ->orderByDesc('last_active_at')
             ->orderByDesc('id')
             ->limit(max(1, $limit))
@@ -560,5 +561,52 @@ class EcomActivityController extends Controller
                 'created_at',
                 'last_active_at',
             ]);
+    }
+
+    /**
+     * Session ids for the same person: cookie visitor, tracking main visitor, and logged-in account.
+     *
+     * @return Collection<int, string>
+     */
+    private function relatedVisitorSessionIds(ActivityEcomUser $session): Collection
+    {
+        $sessionIds = collect([(string) $session->session_id]);
+
+        $visitorId = trim((string) ($session->visitor_id ?? ''));
+        if ($visitorId !== '') {
+            $sessionIds = $sessionIds->merge(
+                ActivityEcomUser::query()
+                    ->where('visitor_id', $visitorId)
+                    ->pluck('session_id'),
+            );
+        }
+
+        $mainVisitorId = DB::table('tracking_session as ts')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('ts.session_id', $session->session_id)
+            ->value('dv.tracking_main_visitor_id');
+
+        if ($mainVisitorId !== null && (int) $mainVisitorId > 0) {
+            $sessionIds = $sessionIds->merge(
+                DB::table('tracking_session as ts')
+                    ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+                    ->where('dv.tracking_main_visitor_id', (int) $mainVisitorId)
+                    ->pluck('ts.session_id'),
+            );
+        }
+
+        if ($session->isRegisteredUser() && filled($session->user_id)) {
+            $sessionIds = $sessionIds->merge(
+                ActivityEcomUser::query()
+                    ->where('user_id', $session->user_id)
+                    ->pluck('session_id'),
+            );
+        }
+
+        return $sessionIds
+            ->map(fn ($id) => trim((string) $id))
+            ->filter(fn (string $id) => $id !== '')
+            ->unique()
+            ->values();
     }
 }

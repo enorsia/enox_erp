@@ -305,12 +305,12 @@
                             </span>
                         @endforeach
                     </div>
-                </div>
 
-                @include('ecom_activity.partials.related-visitor-sessions', [
-                    'activityUser' => $activityUser,
-                    'relatedVisitorSessions' => $relatedVisitorSessions ?? collect(),
-                ])
+                    @include('ecom_activity.partials.related-visitor-sessions', [
+                        'activityUser' => $activityUser,
+                        'relatedVisitorSessions' => $relatedVisitorSessions ?? collect(),
+                    ])
+                </div>
             </div>
         </div>
     </div>
