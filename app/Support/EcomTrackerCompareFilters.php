@@ -9,6 +9,35 @@ use App\Services\EcomActivityListService;
  */
 final class EcomTrackerCompareFilters
 {
+    /** @var list<string> */
+    public const FILTER_KEYS = [
+        'device_type', 'logged_in', 'has_order', 'visitor_type', 'utm_source', 'utm_medium',
+    ];
+
+    /**
+     * @param  array<string, mixed>  $side  period, date_*, device_type, utm_*, etc.
+     */
+    public static function activeCount(array $side): int
+    {
+        $count = 0;
+        foreach (self::FILTER_KEYS as $key) {
+            if (filled($side[$key] ?? null)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * @param  array<string, mixed>  $side
+     * @return array<string, mixed>
+     */
+    public static function withoutSessionFilters(array $side): array
+    {
+        return collect($side)->except(self::FILTER_KEYS)->all();
+    }
+
     /**
      * @param  array<string, mixed>  $side  period, date_*, device_type, utm_*, etc.
      * @return array<string, mixed>

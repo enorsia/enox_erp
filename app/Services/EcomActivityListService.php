@@ -386,6 +386,17 @@ class EcomActivityListService
     }
 
     /**
+     * @param  array{from: Carbon, to: Carbon}  $range
+     * @param  array<string, mixed>  $filters
+     */
+    public function constrainSessionsInRange(Builder $query, array $range, array $filters): void
+    {
+        $bounds = TrackerTime::storageRange($range['from'], $range['to']);
+        $query->whereBetween('ts.last_active_at', $bounds);
+        $this->applyFilters($query, $filters);
+    }
+
+    /**
      * Session-level totals in the same shape as {@see EcomTrackerDashboardService::totals()} for KPI groups.
      *
      * @param  array{from: Carbon, to: Carbon}  $range

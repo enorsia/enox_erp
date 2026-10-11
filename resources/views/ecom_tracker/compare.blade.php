@@ -31,6 +31,10 @@
                     <a href="{{ $compare['backUrl'] }}" class="etd-header-btn etd-header-btn--icon no-underline">
                         <span class="etd-header-btn-text">Back</span>
                     </a>
+                    @include('ecom_tracker.partials.header-reset-button', [
+                        'url' => $compare['reset']['url'],
+                        'count' => $compare['reset']['activeCount'],
+                    ])
                     <button type="button" id="{{ $compare['printButtonId'] }}" class="etd-header-btn etd-header-btn--icon">
                         <span class="etd-header-btn-text">Print</span>
                     </button>
@@ -133,11 +137,31 @@
                                 </div>
                             </div>
                             <div class="etd-compare-column__filter-wrap">
-                                <div class="etd-compare-column__filter-toggle">
-                                    <span class="etd-compare-column__filter-label">Filters</span>
-                                    <button type="button" class="toggle-track" :class="{ 'on': filtersOpen }" @click.stop="toggleFilters()" aria-label="Toggle filters">
-                                        <span class="toggle-thumb"></span>
-                                    </button>
+                                <div class="etd-compare-column__filter-controls">
+                                    @php $columnFilterCount = (int) ($column['filter']['activeCount'] ?? 0); @endphp
+                                    @if ($columnFilterCount > 0)
+                                        <a href="{{ $column['filter']['resetUrl'] }}"
+                                           class="etd-compare-column__filter-reset etd-compare-column__filter-reset--active no-underline"
+                                           aria-label="Reset {{ $columnFilterCount }} {{ $column['badge'] }} filters"
+                                           title="Reset {{ $columnFilterCount }} filters">
+                                            <svg class="etd-compare-column__filter-reset-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                            </svg>
+                                            <span class="etd-compare-column__filter-reset-badge">{{ $columnFilterCount }}</span>
+                                        </a>
+                                    @else
+                                        <span class="etd-compare-column__filter-reset" aria-hidden="true">
+                                            <svg class="etd-compare-column__filter-reset-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                            </svg>
+                                        </span>
+                                    @endif
+                                    <div class="etd-compare-column__filter-toggle">
+                                        <span class="etd-compare-column__filter-label">Filters</span>
+                                        <button type="button" class="toggle-track" :class="{ 'on': filtersOpen }" @click.stop="toggleFilters()" aria-label="Toggle filters">
+                                            <span class="toggle-thumb"></span>
+                                        </button>
+                                    </div>
                                 </div>
                                 <form method="GET"
                                       action="{{ $column['filter']['action'] }}"

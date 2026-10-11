@@ -1602,12 +1602,18 @@ body.etd-filter-panel-open {
     position: absolute;
     top: 0;
     right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
     min-width: 1.125rem;
-    height: 1.0625rem;
+    height: 1.125rem;
     padding: 0 0.2rem;
     border: 1.5px solid #fff;
-    font-size: 0.5rem;
+    font-size: 0.5625rem;
+    font-weight: 700;
     line-height: 1;
+    font-variant-numeric: tabular-nums;
     transform: translate(35%, -35%);
     pointer-events: none;
     z-index: 1;
@@ -9263,6 +9269,87 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
     flex-shrink: 0;
     margin-left: 0.25rem;
     z-index: 60;
+}
+
+.etd-compare-column__filter-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.etd-compare-column__filter-reset {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.45rem;
+    background: #fff;
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.etd-compare-column__filter-reset--active {
+    color: var(--etd-accent);
+    border-color: color-mix(in srgb, var(--etd-accent) 35%, #e2e8f0);
+    background: var(--etd-accent-soft);
+}
+
+.etd-compare-column__filter-reset--active:hover {
+    border-color: color-mix(in srgb, var(--etd-accent) 50%, #e2e8f0);
+}
+
+.etd-compare-column__filter-reset-icon {
+    width: 0.95rem;
+    height: 0.95rem;
+}
+
+.etd-compare-column__filter-reset-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 1rem;
+    height: 1rem;
+    padding: 0 0.2rem;
+    border-radius: 999px;
+    border: 1.5px solid #fff;
+    background: var(--etd-accent);
+    color: #fff;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    transform: translate(35%, -35%);
+    pointer-events: none;
+}
+
+.dark .etd-compare-column__filter-reset {
+    background: #0f172a;
+    border-color: #334155;
+    color: #64748b;
+}
+
+.dark .etd-compare-column__filter-reset--active {
+    color: var(--etd-accent);
+    background: color-mix(in srgb, var(--etd-accent) 12%, #0f172a);
+    border-color: color-mix(in srgb, var(--etd-accent) 40%, #334155);
+}
+
+.dark .etd-compare-column__filter-reset-badge {
+    border-color: #1e293b;
+}
+
+.etd-compare-column__filter-count {
+    margin-left: 0.15rem;
+    font-weight: 700;
+    color: var(--etd-accent);
 }
 
 .etd-compare-column__filter-toggle {

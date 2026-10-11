@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Support\EcomTrackerCompareFilters;
-use App\Support\EcomTrackerCompareKpiGroups;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -12,14 +11,10 @@ use Illuminate\Http\Request;
 
 class EcomTrackerCompareService
 {
-    /** @var list<string> */
-    private const FILTER_KEYS = [
-        'device_type', 'logged_in', 'has_order', 'visitor_type', 'utm_source', 'utm_medium',
-    ];
-
     public function __construct(
         private EcomTrackerDashboardService $dashboardService,
         private EcomActivityListService $activityList,
+        private EcomTrackerCompareFilteredDashboardService $filteredDashboard,
     ) {}
 
     public function handle(Request $request): View|RedirectResponse
@@ -47,10 +42,18 @@ class EcomTrackerCompareService
         $leftColumn = $this->buildColumn('left', 'Period A', 'etd-compare-column--a', $leftFilters, $rightFilters, $leftDashboard, $request, $backUrl, $compareSelf);
         $rightColumn = $this->buildColumn('right', 'Period B', 'etd-compare-column--b', $rightFilters, $leftFilters, $rightDashboard, $request, $backUrl, $compareSelf);
 
+        $clearedLeft = EcomTrackerCompareFilters::withoutSessionFilters($leftFilters);
+        $clearedRight = EcomTrackerCompareFilters::withoutSessionFilters($rightFilters);
+
         return view('ecom_tracker.compare', [
             'compare' => [
                 'backUrl' => $backUrl,
                 'printButtonId' => 'etdComparePrintBtn',
+                'reset' => [
+                    'url' => $this->compareUrl($request, $clearedLeft, $clearedRight),
+                    'activeCount' => EcomTrackerCompareFilters::activeCount($leftFilters)
+                        + EcomTrackerCompareFilters::activeCount($rightFilters),
+                ],
                 'header' => [
                     'pageTitle' => 'Store performance',
                     'modeLabel' => 'Compare',
@@ -336,13 +339,12 @@ class EcomTrackerCompareService
         $byDevice = [];
         foreach ($dashboard['devices']['by_device'] ?? [] as $row) {
             $deviceType = $row['id'] ?? null;
+            $deviceQuery = $baseQuery;
+            if ($deviceType !== null && $deviceType !== '') {
+                $deviceQuery['device_type'] = [(int) $deviceType];
+            }
             $byDevice[] = array_merge($row, [
-                'activity_url' => route(
-                    'admin.ecom-activity.index',
-                    array_merge($baseQuery, array_filter([
-                        'device_type' => $deviceType,
-                    ], fn ($value) => $value !== null && $value !== '')),
-                ),
+                'activity_url' => route('admin.ecom-activity.index', $deviceQuery),
             ]);
         }
 
@@ -361,7 +363,7 @@ class EcomTrackerCompareService
                     ? null
                     : route(
                         'admin.ecom-activity.index',
-                        array_merge($baseQuery, ['utm_source' => $sourceId]),
+                        array_merge($baseQuery, ['utm_source' => [(int) $sourceId]]),
                     ),
             ]);
         }
@@ -414,23 +416,7 @@ class EcomTrackerCompareService
             return $dashboard;
         }
 
-        $days = (int) $range['from']->copy()->startOfDay()->diffInDays($range['to']->copy()->startOfDay()) + 1;
-        $prevFrom = $range['from']->copy()->subDays($days);
-        $prevTo = $range['from']->copy()->subDay();
-        $prevRange = ['from' => $prevFrom->copy()->startOfDay(), 'to' => $prevTo->copy()->endOfDay()];
-
-        $current = $this->activityList->dashboardTotals($range, $sessionFilters);
-        $previous = $this->activityList->dashboardTotals($prevRange, $sessionFilters);
-        $returning = max(0, $current['sessions'] - $current['unique_visitors']);
-
-        $dashboard['kpiGroups'] = EcomTrackerCompareKpiGroups::build($current, $previous, $period, $prevFrom, $prevTo);
-        $dashboard['newReturning'] = ['unique' => $current['unique_visitors'], 'returning' => $returning];
-        $dashboard['charts']['new_returning'] = [
-            'labels' => ['Unique', 'Returning'],
-            'values' => [$current['unique_visitors'], $returning],
-        ];
-
-        return $dashboard;
+        return $this->filteredDashboard->apply($dashboard, $range, $period, $sessionFilters, $backUrl);
     }
 
     /**
@@ -549,6 +535,16 @@ class EcomTrackerCompareService
             'visitorTypeOptions' => $this->selectOptions($filters['visitor_type'] ?? '', [
                 '' => 'All', 'human' => 'Real visitors', 'bot' => 'Automated traffic', 'unclassified' => 'Not classified',
             ]),
+            'activeCount' => EcomTrackerCompareFilters::activeCount($filters),
+            'resetUrl' => $this->compareUrl(
+                $request,
+                $side === 'left'
+                    ? EcomTrackerCompareFilters::withoutSessionFilters($filters)
+                    : $otherFilters,
+                $side === 'right'
+                    ? EcomTrackerCompareFilters::withoutSessionFilters($filters)
+                    : $otherFilters,
+            ),
         ];
     }
 
@@ -608,7 +604,7 @@ class EcomTrackerCompareService
             }
         }
 
-        foreach (self::FILTER_KEYS as $key) {
+        foreach (EcomTrackerCompareFilters::FILTER_KEYS as $key) {
             if (filled($filters[$key] ?? null)) {
                 $query["{$prefix}{$key}"] = (string) $filters[$key];
             }
@@ -631,7 +627,7 @@ class EcomTrackerCompareService
             'date_to' => $request->input("{$prefix}date_to"),
         ];
 
-        foreach (self::FILTER_KEYS as $key) {
+        foreach (EcomTrackerCompareFilters::FILTER_KEYS as $key) {
             $filters[$key] = $request->input("{$prefix}{$key}");
         }
 
