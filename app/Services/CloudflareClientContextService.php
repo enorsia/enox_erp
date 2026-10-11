@@ -51,14 +51,29 @@ class CloudflareClientContextService
 
         $userAgent = $context['user_agent'] ?? $request?->userAgent();
 
+        $ipCountry = $this->normalizeCountry($context['ip_country'] ?? null);
+        if ($ipCountry === null && $request !== null) {
+            $ipCountry = $this->normalizeCountry($request->header('CF-IPCountry'));
+        }
+
+        $cfBotScore = array_key_exists('cf_bot_score', $context)
+            ? $this->normalizeBotScore($context['cf_bot_score'])
+            : null;
+        if ($cfBotScore === null && $request !== null) {
+            $cfBotScore = $this->parseBotScore($request->header('CF-Bot-Score'));
+        }
+
+        $cfRay = $context['cf_ray'] ?? null;
+        if (($cfRay === null || $cfRay === '') && $request !== null) {
+            $cfRay = $request->header('CF-Ray');
+        }
+
         return [
             'client_ip' => $clientIp,
             'user_agent' => $userAgent,
-            'ip_country' => $this->normalizeCountry($context['ip_country'] ?? null),
-            'cf_ray' => $context['cf_ray'] ?? null,
-            'cf_bot_score' => array_key_exists('cf_bot_score', $context)
-                ? $this->normalizeBotScore($context['cf_bot_score'])
-                : null,
+            'ip_country' => $ipCountry,
+            'cf_ray' => $cfRay,
+            'cf_bot_score' => $cfBotScore,
         ];
     }
 

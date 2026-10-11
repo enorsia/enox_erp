@@ -190,13 +190,15 @@ class EcomActivityListService
     }
 
     /**
-     * @return array{search: string, funnel: list<int>, has_order: ?bool, devices: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>}
+     * @return array{search: string, funnel: list<int>, has_order: ?bool, devices: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
      */
     public static function filtersFromRequest(Request $request): array
     {
         $ints = fn (string $key) => array_values(array_filter(array_map('intval', (array) $request->input($key, [])), fn (int $id) => $id > 0));
         $strings = fn (string $key) => array_values(array_filter(array_map('strval', (array) $request->input($key, [])), 'filled'));
         $bool = fn (string $key) => in_array($request->input($key), ['0', '1'], true) ? $request->input($key) === '1' : null;
+        $visitorType = $request->input('visitor_type');
+        $visitorType = in_array($visitorType, ['human', 'bot', 'unclassified'], true) ? $visitorType : null;
 
         return [
             'search' => mb_substr(trim((string) $request->input('search', '')), 0, 100),
@@ -210,6 +212,7 @@ class EcomActivityListService
             'utm_mediums' => $strings('utm_medium'),
             'department' => $request->integer('department') ?: null,
             'categories' => $ints('category'),
+            'visitor_type' => $visitorType,
         ];
     }
 
@@ -605,6 +608,26 @@ class EcomActivityListService
                 ->whereColumn('fc.tracking_session_id', 'ts.id')
                 ->whereIn('fc.tracking_category_id', $filters['categories']));
         }
+
+        $visitorType = $filters['visitor_type'] ?? null;
+        if ($visitorType === 'bot') {
+            $query->whereExists(fn (Builder $exists) => $exists
+                ->selectRaw('1')
+                ->from('activity_ecom_user_bot_context as bc_filter')
+                ->whereColumn('bc_filter.session_id', 'ts.session_id')
+                ->where('bc_filter.is_bot', true));
+        } elseif ($visitorType === 'human') {
+            $query->whereExists(fn (Builder $exists) => $exists
+                ->selectRaw('1')
+                ->from('activity_ecom_user_bot_context as bc_filter')
+                ->whereColumn('bc_filter.session_id', 'ts.session_id')
+                ->where('bc_filter.is_bot', false));
+        } elseif ($visitorType === 'unclassified') {
+            $query->whereNotExists(fn (Builder $exists) => $exists
+                ->selectRaw('1')
+                ->from('activity_ecom_user_bot_context as bc_filter')
+                ->whereColumn('bc_filter.session_id', 'ts.session_id'));
+        }
     }
 
     /**
@@ -752,10 +775,12 @@ class EcomActivityListService
     {
         SessionTrafficAttribution::joinLatestSessionDetails($query);
         $query
+            ->leftJoin('activity_ecom_user as aeu', 'aeu.session_id', '=', 'ts.session_id')
             ->leftJoin('activity_ecom_user_bot_context as bc', 'bc.session_id', '=', 'ts.session_id')
             ->addSelect([
                 'sd.ip as visitor_ip',
                 'sd.user_agent as visitor_user_agent',
+                'aeu.country as activity_country',
                 'bc.id as bot_context_id',
                 'bc.client_ip as bot_client_ip',
                 'bc.user_agent as bot_user_agent',
@@ -767,23 +792,24 @@ class EcomActivityListService
     }
 
     /**
-     * Stored ingest verdict (Cloudflare score, then UA rules), re-checked against the current
-     * crawler list so sessions saved before a pattern was added are not shown as real visitors.
+     * Same rules as {@see \App\Models\ActivityEcomUser::visitorClassification()} on master:
+     * stored ingest verdict in activity_ecom_user_bot_context only (no live UA re-classification).
      *
      * @return array{classification: string, label: string, badge_class: string, help: string, country_code: ?string, country_label: ?string, ips: list<list<string>>}
      */
     private function trustCell(object $row): array
     {
-        $userAgent = (string) ($row->visitor_user_agent ?: $row->bot_user_agent);
-        $isBot = (bool) $row->bot_is_bot;
-        $reason = $row->bot_reason;
-
-        if (! $isBot && $this->isKnownCrawler($userAgent)) {
-            [$isBot, $reason] = [true, 'known crawler/script UA'];
+        if ($row->bot_context_id === null) {
+            $classification = 'unclassified';
+            $isBot = false;
+            $reason = null;
+        } else {
+            $isBot = (bool) $row->bot_is_bot;
+            $classification = $isBot ? 'bot' : 'human';
+            $reason = $row->bot_reason;
         }
-
-        $classification = $row->bot_context_id === null && ! $isBot ? 'unclassified' : ($isBot ? 'bot' : 'human');
-        $countryCode = filled($row->bot_ip_country) ? strtoupper($row->bot_ip_country) : null;
+        $countryRaw = $row->bot_ip_country ?? $row->activity_country ?? null;
+        $countryCode = filled($countryRaw) ? strtoupper((string) $countryRaw) : null;
         $help = $classification === 'unclassified'
             ? VisitorClassificationLabels::unclassifiedHelp()
             : VisitorClassificationLabels::reason($reason, $isBot)['help'];
@@ -831,25 +857,6 @@ class EcomActivityListService
         }
 
         return [substr($ip, 0, $splitAt + 1), substr($ip, $splitAt + 1)];
-    }
-
-    private function isKnownCrawler(string $userAgent): bool
-    {
-        if (trim($userAgent) === '') {
-            return false;
-        }
-
-        static $patterns = null;
-        $patterns ??= array_filter(array_map('strtolower', config('bot-detection.known_bot_user_agents', [])));
-        $userAgent = strtolower($userAgent);
-
-        foreach ($patterns as $pattern) {
-            if (str_contains($userAgent, $pattern)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
