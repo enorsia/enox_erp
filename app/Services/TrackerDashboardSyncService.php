@@ -61,6 +61,10 @@ class TrackerDashboardSyncService
             'unique' => ['metric_date'],
             'counters' => ['category_views', 'product_views'],
         ],
+        'tracking_hourly_summaries' => [
+            'unique' => ['metric_date', 'metric_hour'],
+            'counters' => ['category_views', 'product_views'],
+        ],
         'tracking_daily_categories' => [
             'unique' => ['metric_date', 'tracking_category_id'],
             'counters' => ['category_views', 'product_views', 'add_to_carts', 'proceed_checkouts'],
@@ -399,6 +403,8 @@ class TrackerDashboardSyncService
             $counted = $this->localDate($action->created_at ?? null) === $visitDate;
             $orderLines = [];
 
+            $metricHour = $counted ? $this->localHour($action->created_at ?? null) : null;
+
             if ($counted) {
                 $this->countAction($counters, $type, $visitDate, $audienceKeys);
             }
@@ -411,8 +417,8 @@ class TrackerDashboardSyncService
                 );
                 $categoryId = $this->resolveCategoryIdFromLine($line);
 
-                if ($counted) {
-                    $this->countLine($counters, $type, $visitDate, $productId !== null ? $this->productCode($line['product_code']) : null, $categoryId);
+                if ($counted && $metricHour !== null) {
+                    $this->countLine($counters, $type, $visitDate, $metricHour, $productId !== null ? $this->productCode($line['product_code']) : null, $categoryId);
                 }
 
                 if ($productId === null) {
@@ -710,6 +716,11 @@ class TrackerDashboardSyncService
     private function localDate(mixed $at): string
     {
         return Carbon::parse($at ?? now())->timezone(TrackerTime::timezone())->toDateString();
+    }
+
+    private function localHour(mixed $at): int
+    {
+        return (int) Carbon::parse($at ?? now())->timezone(TrackerTime::timezone())->format('G');
     }
 
     private function findOrCreateDailyVisitor(int $mainVisitorId, string $visitorId, string $visitDate): int
@@ -1413,7 +1424,7 @@ class TrackerDashboardSyncService
      *
      * @param  array<string, array<string, array<string, mixed>>>  $counters
      */
-    private function countLine(array &$counters, string $type, string $date, ?string $productCode, ?int $categoryId): void
+    private function countLine(array &$counters, string $type, string $date, int $metricHour, ?string $productCode, ?int $categoryId): void
     {
         $column = match ($type) {
             'category_view' => 'category_views',
@@ -1432,6 +1443,7 @@ class TrackerDashboardSyncService
 
             if ($column === 'category_views' || $column === 'product_views') {
                 $this->bump($counters, 'tracking_daily_summaries', ['metric_date' => $date], $column);
+                $this->bump($counters, 'tracking_hourly_summaries', ['metric_date' => $date, 'metric_hour' => $metricHour], $column);
             }
         }
 
@@ -1823,6 +1835,123 @@ class TrackerDashboardSyncService
 
         $this->refreshSoldTotals($date, 'tracking_daily_categories', 'tracking_category_id', 'od.tracking_category_id', true, $now);
         $this->refreshSoldTotals($date, 'tracking_daily_products', 'product_code', 'p.code', false, $now);
+
+        $this->refreshHourlySummaries($date, $now);
+    }
+
+    /**
+     * Session and order totals per store-local hour (view counts stay from action bumps).
+     */
+    private function refreshHourlySummaries(string $date, Carbon $now): void
+    {
+        $viewCounts = DB::table('tracking_hourly_summaries')
+            ->where('metric_date', $date)
+            ->get(['metric_hour', 'category_views', 'product_views'])
+            ->keyBy(fn (object $row) => (int) $row->metric_hour);
+
+        $hours = [];
+        for ($h = 0; $h < 24; $h++) {
+            $existing = $viewCounts->get($h);
+            $hours[$h] = [
+                'metric_date' => $date,
+                'metric_hour' => $h,
+                'category_views' => (int) ($existing->category_views ?? 0),
+                'product_views' => (int) ($existing->product_views ?? 0),
+                'unique_visitors' => 0,
+                'sessions' => 0,
+                'stay_seconds' => 0,
+                'cart_sessions' => 0,
+                'checkout_sessions' => 0,
+                'proceed_sessions' => 0,
+                'payments' => 0,
+                'items_sold' => 0,
+                'sale_amount' => 0.0,
+            ];
+        }
+
+        $visitorsByHour = array_fill(0, 24, []);
+
+        $sessions = DB::table('tracking_session as ts')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $date)
+            ->get([
+                'ts.tracking_daily_visitor_id', 'ts.duration_seconds', 'ts.created_at',
+                'ts.has_add_to_cart', 'ts.has_begin_checkout', 'ts.has_proceed_checkout', 'ts.has_order',
+            ]);
+
+        foreach ($sessions as $session) {
+            $hour = $this->localHour($session->created_at);
+            $row = &$hours[$hour];
+            $visitorId = (int) $session->tracking_daily_visitor_id;
+            $visitorsByHour[$hour][$visitorId] = true;
+
+            $row['sessions']++;
+            $row['stay_seconds'] += (int) $session->duration_seconds;
+            $row['cart_sessions'] += (int) (bool) $session->has_add_to_cart;
+            $row['checkout_sessions'] += (int) (bool) $session->has_begin_checkout;
+            $row['proceed_sessions'] += (int) (bool) $session->has_proceed_checkout;
+            $row['payments'] += (int) (bool) $session->has_order;
+        }
+
+        foreach ($visitorsByHour as $hour => $visitorIds) {
+            $hours[$hour]['unique_visitors'] = count($visitorIds);
+        }
+
+        $orders = DB::table('tracking_orders')
+            ->where('metric_date', $date)
+            ->get(['items_qty', 'amount_paid', 'ordered_at']);
+
+        foreach ($orders as $order) {
+            $hour = $this->localHour($order->ordered_at);
+            $hours[$hour]['items_sold'] += (int) $order->items_qty;
+            $hours[$hour]['sale_amount'] += (float) $order->amount_paid;
+        }
+
+        $rows = [];
+        foreach ($hours as $row) {
+            $row['sale_amount'] = round($row['sale_amount'], 2);
+            if ($this->hourlySummaryRowIsEmpty($row)) {
+                continue;
+            }
+            $rows[] = $row + ['created_at' => $now, 'updated_at' => $now];
+        }
+
+        DB::table('tracking_hourly_summaries')
+            ->where('metric_date', $date)
+            ->whereNotIn('metric_hour', array_column($rows, 'metric_hour') ?: [-1])
+            ->delete();
+
+        if ($rows === []) {
+            return;
+        }
+
+        $columns = [
+            'unique_visitors', 'sessions', 'stay_seconds', 'category_views', 'product_views',
+            'cart_sessions', 'checkout_sessions', 'proceed_sessions', 'payments', 'items_sold', 'sale_amount',
+        ];
+
+        DB::table('tracking_hourly_summaries')->upsert(
+            $rows,
+            ['metric_date', 'metric_hour'],
+            [...$columns, 'updated_at'],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function hourlySummaryRowIsEmpty(array $row): bool
+    {
+        foreach ([
+            'unique_visitors', 'sessions', 'stay_seconds', 'category_views', 'product_views',
+            'cart_sessions', 'checkout_sessions', 'proceed_sessions', 'payments', 'items_sold',
+        ] as $column) {
+            if ((int) ($row[$column] ?? 0) !== 0) {
+                return false;
+            }
+        }
+
+        return (float) ($row['sale_amount'] ?? 0) === 0.0;
     }
 
     /**

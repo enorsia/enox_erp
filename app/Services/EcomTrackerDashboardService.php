@@ -73,7 +73,9 @@ class EcomTrackerDashboardService
             'durations' => $this->durations($from, $to),
             'newReturning' => ['unique' => $current['unique_visitors'], 'returning' => $returning],
             'charts' => [
-                'trend' => $this->trend($summaries, $range, $days),
+                'trend' => $days === 1
+                    ? $this->hourlyTrend($from)
+                    : $this->trend($summaries, $range, $days),
                 'new_returning' => [
                     'labels' => ['Unique', 'Returning'],
                     'values' => [$current['unique_visitors'], $returning],
@@ -230,7 +232,58 @@ class EcomTrackerDashboardService
         }
         $series[] = ['key' => 'conversion_rate', 'label' => 'Conv. rate %', 'data' => $data['conversion_rate'], 'chart_type' => 'line', 'y_axis_id' => 'y1'];
 
-        return ['labels' => $labels, 'use_log_scale' => $days > self::TREND_LOG_SCALE_DAYS, 'series' => $series];
+        return ['labels' => $labels, 'use_log_scale' => $days > self::TREND_LOG_SCALE_DAYS, 'granularity' => 'day', 'series' => $series];
+    }
+
+    /**
+     * One point per store-local hour when the dashboard range is a single day.
+     */
+    private function hourlyTrend(string $date): array
+    {
+        $rows = DB::table('tracking_hourly_summaries')
+            ->where('metric_date', $date)
+            ->get()
+            ->keyBy(fn (object $row) => (int) $row->metric_hour);
+
+        $columns = [
+            'unique_visitors' => ['unique_visitors', 'Unique visitors', 'bar'],
+            'sessions' => ['sessions', 'Sessions', 'bar'],
+            'category_views' => ['category_views', 'Category view', 'line'],
+            'product_views' => ['product_views', 'Product view', 'line'],
+            'cart_sessions' => ['add_to_cart', 'Add to cart', 'line'],
+            'checkout_sessions' => ['begin_checkout', 'Begin checkout', 'line'],
+            'proceed_sessions' => ['proceed_checkout', 'Proceed checkout', 'line'],
+            'payments' => ['purchases', 'Purchase', 'line'],
+            'items_sold' => ['items_sold_qty', 'Items sold qty', 'line'],
+        ];
+
+        $labels = [];
+        $data = array_fill_keys([...array_keys($columns), 'conversion_rate'], []);
+
+        for ($hour = 0; $hour < 24; $hour++) {
+            $row = $rows->get($hour);
+            $labels[] = $this->hourLabel($hour);
+
+            foreach (array_keys($columns) as $column) {
+                $data[$column][] = (int) ($row?->{$column} ?? 0);
+            }
+
+            $sessions = (int) ($row?->sessions ?? 0);
+            $data['conversion_rate'][] = $sessions > 0 ? round((int) ($row?->payments ?? 0) / $sessions * 100, 1) : 0;
+        }
+
+        $series = [];
+        foreach ($columns as $column => [$key, $label, $type]) {
+            $series[] = ['key' => $key, 'label' => $label, 'data' => $data[$column], 'chart_type' => $type, 'y_axis_id' => 'y'];
+        }
+        $series[] = ['key' => 'conversion_rate', 'label' => 'Conv. rate %', 'data' => $data['conversion_rate'], 'chart_type' => 'line', 'y_axis_id' => 'y1'];
+
+        return ['labels' => $labels, 'use_log_scale' => false, 'granularity' => 'hour', 'series' => $series];
+    }
+
+    private function hourLabel(int $hour): string
+    {
+        return Carbon::createFromTime($hour, 0, 0, TrackerTime::timezone())->format('ga');
     }
 
     /**
