@@ -576,6 +576,71 @@ function resizeDashboardChartsForPrint() {
     });
 }
 
+function refreshDashboardChartTheme() {
+    const tickColor = isDark() ? '#94a3b8' : '#475569';
+    const gridColor = gridClr();
+    const trend = Chart.getChart('etdTrendChart');
+
+    if (trend?.options?.scales) {
+        for (const axis of ['x', 'y', 'y1']) {
+            const scale = trend.options.scales[axis];
+
+            if (!scale) {
+                continue;
+            }
+
+            if (scale.ticks) {
+                scale.ticks.color = tickColor;
+            }
+
+            if (scale.grid && scale.grid.display !== false) {
+                scale.grid.color = gridColor;
+            }
+
+            if (scale.title) {
+                scale.title.color = tickColor;
+            }
+        }
+
+        if (trend.options.plugins?.legend?.labels) {
+            trend.options.plugins.legend.labels.color = tickColor;
+        }
+
+        trend.update('none');
+    }
+
+    const doughnut = Chart.getChart('etdNewReturningChart');
+
+    if (doughnut?.options?.plugins?.legend?.labels) {
+        doughnut.options.plugins.legend.labels.color = tickColor;
+        doughnut.update('none');
+    }
+}
+
+function useLightUiForDashboardPrint() {
+    const root = document.documentElement;
+
+    if (!root.classList.contains('dark')) {
+        return;
+    }
+
+    root.classList.add('etd-print-was-dark');
+    root.classList.remove('dark');
+    refreshDashboardChartTheme();
+}
+
+function restoreDarkUiAfterDashboardPrint() {
+    const root = document.documentElement;
+
+    if (!root.classList.contains('etd-print-was-dark')) {
+        return;
+    }
+
+    root.classList.remove('etd-print-was-dark');
+    root.classList.add('dark');
+    refreshDashboardChartTheme();
+}
+
 function resetNewReturningChartForPrint() {
     const chart = Chart.getChart('etdNewReturningChart');
 
@@ -716,6 +781,7 @@ function prepareDashboardForPrint() {
     const main = document.querySelector('main');
 
     beginDashboardPrintSession();
+    useLightUiForDashboardPrint();
     document.body.classList.add('etd-print-measure');
 
     if (main) {
@@ -733,6 +799,7 @@ function restoreDashboardAfterPrint() {
     const main = document.querySelector('main');
 
     document.body.classList.remove('etd-print-measure');
+    restoreDarkUiAfterDashboardPrint();
     restoreCategoryDepartmentsAfterPrint();
     restoreTrendChartAfterPrint();
     restoreNewReturningChartAfterPrint();

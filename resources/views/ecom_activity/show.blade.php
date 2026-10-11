@@ -45,7 +45,7 @@
 
                     @if ($timeline->total() > 0)
                         <p class="text-[11px] text-slate-400 mb-3">
-                            Showing {{ $timeline->firstItem() }}–{{ $timeline->lastItem() }} of {{ $timeline->total() }}
+                            Journey order (oldest first). Showing {{ $timeline->firstItem() }}–{{ $timeline->lastItem() }} of {{ $timeline->total() }}
                         </p>
                     @endif
 

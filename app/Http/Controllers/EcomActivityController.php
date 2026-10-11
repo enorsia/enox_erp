@@ -8,6 +8,7 @@ use App\Services\EcomActivityListService;
 use App\Support\EcomActivityTableFocus;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerActionSequence;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -231,11 +232,7 @@ class EcomActivityController extends Controller
     private function buildTimeline(Collection $actions): Collection
     {
         $sorted = $actions
-            ->sortBy(fn (ActivityEcomUserAction $action) => [
-                $action->created_at?->timestamp ?? 0,
-                $action->start_time?->timestamp ?? 0,
-                $action->id,
-            ])
+            ->sort(fn (ActivityEcomUserAction $left, ActivityEcomUserAction $right) => $this->compareTimelineActions($left, $right))
             ->values();
 
         $timeline = collect();
@@ -309,11 +306,38 @@ class EcomActivityController extends Controller
         }
 
         return $timeline
-            ->sortByDesc(fn (object $item) => [
-                $item->created_at?->timestamp ?? 0,
-                $item->id ?? 0,
-            ])
+            ->sort(fn (object $left, object $right) => $this->compareTimelineItems($left, $right))
             ->values();
+    }
+
+    private function compareTimelineActions(ActivityEcomUserAction $left, ActivityEcomUserAction $right): int
+    {
+        $leftTs = $left->created_at?->timestamp ?? $left->start_time?->timestamp ?? 0;
+        $rightTs = $right->created_at?->timestamp ?? $right->start_time?->timestamp ?? 0;
+
+        return TrackerActionSequence::compare(
+            $leftTs,
+            (string) $left->action_type,
+            (int) $left->id,
+            $rightTs,
+            (string) $right->action_type,
+            (int) $right->id,
+        );
+    }
+
+    private function compareTimelineItems(object $left, object $right): int
+    {
+        $leftTs = $left->created_at?->timestamp ?? 0;
+        $rightTs = $right->created_at?->timestamp ?? 0;
+
+        return TrackerActionSequence::compare(
+            $leftTs,
+            (string) ($left->action_type ?? ''),
+            (int) ($left->id ?? 0),
+            $rightTs,
+            (string) ($right->action_type ?? ''),
+            (int) ($right->id ?? 0),
+        );
     }
 
     private function wrapSingleTimelineItem(ActivityEcomUserAction $action): object

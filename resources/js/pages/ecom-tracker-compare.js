@@ -79,13 +79,13 @@ const compareRoot = document.getElementById('ecom-tracker-compare-content');
 const compareSyncQuery = window.matchMedia('(min-width: 1200px)');
 let comparePrintSyncPaused = false;
 
-function syncElementHeights(elements) {
+function syncElementHeights(elements, { useImportant = false } = {}) {
     if (!elements?.length) {
         return;
     }
 
     elements.forEach((element) => {
-        element.style.minHeight = '';
+        element.style.removeProperty('min-height');
     });
 
     if (elements.length < 2) {
@@ -101,7 +101,11 @@ function syncElementHeights(elements) {
     const height = `${Math.ceil(maxHeight)}px`;
 
     elements.forEach((element) => {
-        element.style.minHeight = height;
+        if (useImportant) {
+            element.style.setProperty('min-height', height, 'important');
+        } else {
+            element.style.minHeight = height;
+        }
     });
 }
 
@@ -133,44 +137,65 @@ function clearCompareMatchedHeights() {
     }
 
     root.querySelectorAll('[data-compare-sync], [data-compare-sync] .etd-kpi--compact, [data-compare-sync] .etd-kpi-group, [data-compare-sync] .etd-compare-recoverable-card, [data-compare-sync="traffic"] .etd-table-scroll--traffic').forEach((element) => {
-        element.style.minHeight = '';
+        element.style.removeProperty('min-height');
     });
 }
 
-function syncCompareKpiHeights(root) {
+function clearComparePrintLayoutInlineStyles(root) {
+    root.querySelectorAll('[data-compare-sync], [data-compare-sync] .etd-kpi--compact, [data-compare-sync] .etd-kpi-group, [data-compare-sync] .etd-compare-recoverable-card, [data-compare-sync="traffic"] .etd-table-scroll--traffic').forEach((element) => {
+        element.style.removeProperty('min-height');
+    });
+
+    root.querySelectorAll('[data-compare-sync="categories"] .etd-table-scroll--fixed').forEach((scroll) => {
+        scroll.style.removeProperty('max-height');
+        scroll.style.removeProperty('height');
+        scroll.style.removeProperty('overflow');
+    });
+
+    root.querySelectorAll('[data-compare-sync="products"]').forEach((panel) => {
+        panel.style.removeProperty('margin-top');
+    });
+}
+
+/**
+ * A4 landscape print: only equalize compact section chrome (headers, labels, fixed trend).
+ * Tall blocks (KPI grids, tables, acquisition) keep natural height so the next section
+ * follows immediately without a large empty band under the shorter column.
+ */
+const COMPARE_PRINT_HEIGHT_SYNC_KEYS = new Set([
+    'header',
+    'merch-label',
+    'recover-label',
+    'acq-label',
+    'trend',
+]);
+
+function syncCompareKpiHeights(root, options = {}) {
     groupElementsByText(root, '[data-compare-sync="kpis"] .etd-kpi--compact', '.etd-kpi-label-text')
         .forEach((cards) => {
-            syncElementHeights(cards);
+            syncElementHeights(cards, options);
         });
 }
 
-function syncCompareRecoverableHeights(root) {
+function syncCompareRecoverableHeights(root, options = {}) {
     groupElementsByText(root, '[data-compare-sync="recoverable"] .etd-compare-recoverable-card', '.etd-compare-recoverable-card__title')
         .forEach((cards) => {
-            syncElementHeights(cards);
+            syncElementHeights(cards, options);
         });
 }
 
-function syncCompareTrafficScrollHeights(root) {
+function syncCompareTrafficScrollHeights(root, options = {}) {
     const scrollAreas = Array.from(root.querySelectorAll('[data-compare-sync="traffic"] .etd-table-scroll--traffic'));
 
     if (scrollAreas.length >= 2) {
-        syncElementHeights(scrollAreas);
+        syncElementHeights(scrollAreas, options);
     }
 }
 
-function syncCompareSectionHeights() {
+function applyCompareSectionHeightsSync() {
     const root = document.getElementById('ecom-tracker-compare-content');
 
-    if (comparePrintSyncPaused) {
-        clearCompareMatchedHeights();
-
-        return;
-    }
-
-    if (!root || !compareSyncQuery.matches) {
-        clearCompareMatchedHeights();
-
+    if (!root) {
         return;
     }
 
@@ -200,6 +225,67 @@ function syncCompareSectionHeights() {
     });
 }
 
+function syncCompareSectionHeights() {
+    const root = document.getElementById('ecom-tracker-compare-content');
+
+    if (comparePrintSyncPaused) {
+        clearCompareMatchedHeights();
+
+        return;
+    }
+
+    if (!root || !compareSyncQuery.matches) {
+        clearCompareMatchedHeights();
+
+        return;
+    }
+
+    applyCompareSectionHeightsSync();
+}
+
+function applyCompareSectionHeightsSyncForPrint() {
+    const root = document.getElementById('ecom-tracker-compare-content');
+
+    if (!root) {
+        return;
+    }
+
+    const printSync = { useImportant: true };
+
+    clearCompareMatchedHeights();
+    clearComparePrintLayoutInlineStyles(root);
+
+    const groups = new Map();
+
+    root.querySelectorAll('[data-compare-sync]').forEach((element) => {
+        const key = element.getAttribute('data-compare-sync');
+
+        if (!key || !COMPARE_PRINT_HEIGHT_SYNC_KEYS.has(key)) {
+            return;
+        }
+
+        if (!groups.has(key)) {
+            groups.set(key, []);
+        }
+
+        groups.get(key).push(element);
+    });
+
+    groups.forEach((elements) => {
+        syncElementHeights(elements, printSync);
+    });
+}
+
+function scheduleCompareSectionSyncForPrint() {
+    window.requestAnimationFrame(() => {
+        applyCompareSectionHeightsSyncForPrint();
+
+        window.requestAnimationFrame(() => {
+            applyCompareSectionHeightsSyncForPrint();
+        });
+    });
+}
+
 function scheduleCompareSectionSync() {
     window.requestAnimationFrame(() => {
         syncCompareSectionHeights();
@@ -215,7 +301,6 @@ let compareSyncObserver;
 function pauseCompareSectionSyncForPrint() {
     comparePrintSyncPaused = true;
     compareSyncObserver?.disconnect();
-    clearCompareMatchedHeights();
 }
 
 function resumeCompareSectionSyncAfterPrint() {
@@ -677,6 +762,14 @@ function prepareCompareExecutiveSummaryForPrint() {
         body.style.setProperty('height', 'auto', 'important');
         body.style.setProperty('max-height', 'none', 'important');
         body.style.setProperty('overflow', 'visible', 'important');
+
+        const content = body.querySelector('.etd-compare-exec__content');
+
+        if (content) {
+            content.style.height = 'auto';
+            content.style.maxHeight = 'none';
+            content.style.overflow = 'visible';
+        }
     });
 }
 
@@ -778,6 +871,74 @@ function resizeCompareTrendChartsForPrint() {
     });
 }
 
+function refreshCompareChartTheme() {
+    const tickColor = isDark() ? '#94a3b8' : '#475569';
+    const gridColor = gridClr();
+
+    for (const { canvasId } of compareTrendChartConfigs) {
+        const chart = Chart.getChart(canvasId);
+
+        if (!chart?.options?.scales) {
+            continue;
+        }
+
+        for (const axis of ['x', 'y', 'y1']) {
+            const scale = chart.options.scales[axis];
+
+            if (!scale) {
+                continue;
+            }
+
+            if (scale.ticks) {
+                scale.ticks.color = tickColor;
+            }
+
+            if (scale.grid && scale.grid.display !== false) {
+                scale.grid.color = gridColor;
+            }
+        }
+
+        if (chart.options.plugins?.legend?.labels) {
+            chart.options.plugins.legend.labels.color = tickColor;
+        }
+
+        chart.update('none');
+    }
+
+    for (const id of COMPARE_DOUGHNUT_CHART_IDS) {
+        const chart = Chart.getChart(id);
+
+        if (chart?.options?.plugins?.legend?.labels) {
+            chart.options.plugins.legend.labels.color = tickColor;
+            chart.update('none');
+        }
+    }
+}
+
+function useLightUiForComparePrint() {
+    const root = document.documentElement;
+
+    if (!root.classList.contains('dark')) {
+        return;
+    }
+
+    root.classList.add('etd-print-was-dark');
+    root.classList.remove('dark');
+    refreshCompareChartTheme();
+}
+
+function restoreDarkUiAfterComparePrint() {
+    const root = document.documentElement;
+
+    if (!root.classList.contains('etd-print-was-dark')) {
+        return;
+    }
+
+    root.classList.remove('etd-print-was-dark');
+    root.classList.add('dark');
+    refreshCompareChartTheme();
+}
+
 function beginComparePrintSession() {
     const main = document.querySelector('main');
 
@@ -797,6 +958,7 @@ function prepareCompareForPrint() {
     const main = document.querySelector('main');
 
     beginComparePrintSession();
+    useLightUiForComparePrint();
     document.body.classList.add('etd-print-measure');
     pauseCompareSectionSyncForPrint();
 
@@ -808,13 +970,22 @@ function prepareCompareForPrint() {
     expandCompareCategoryDepartmentsForPrint();
     prepareCompareExecutiveSummaryForPrint();
     compareTrendChartConfigs.forEach(resetCompareTrendChartForPrint);
+    scheduleCompareSectionSyncForPrint();
 }
 
 function restoreCompareAfterPrint() {
     const main = document.querySelector('main');
 
     document.body.classList.remove('etd-print-measure');
+    restoreDarkUiAfterComparePrint();
     restoreCompareCategoryDepartmentsAfterPrint();
+
+    const compareRootEl = document.getElementById('ecom-tracker-compare-content');
+
+    if (compareRootEl) {
+        clearComparePrintLayoutInlineStyles(compareRootEl);
+    }
+
     restoreCompareExecutiveSummaryAfterPrint();
     compareTrendChartConfigs.forEach(restoreCompareTrendChartAfterPrint);
     resumeCompareSectionSyncAfterPrint();
@@ -839,8 +1010,12 @@ function printEcomTrackerCompare() {
             resizeCompareTrendChartsForPrint();
 
             requestAnimationFrame(() => {
-                clearCompareMatchedHeights();
-                window.print();
+                applyCompareSectionHeightsSyncForPrint();
+
+                requestAnimationFrame(() => {
+                    applyCompareSectionHeightsSyncForPrint();
+                    window.print();
+                });
             });
         });
     });

@@ -7,6 +7,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerActionSequence;
 use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerRedisSupport;
@@ -1161,7 +1162,14 @@ class TrackIngestService
     private function sortEventsByClock(array $events): array
     {
         usort($events, function (array $left, array $right): int {
-            return $this->eventActivityTimestamp($left) <=> $this->eventActivityTimestamp($right);
+            return TrackerActionSequence::compare(
+                $this->eventActivityTimestamp($left),
+                (string) ($left['action_type'] ?? ''),
+                0,
+                $this->eventActivityTimestamp($right),
+                (string) ($right['action_type'] ?? ''),
+                0,
+            );
         });
 
         return $events;
