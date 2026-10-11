@@ -290,7 +290,7 @@ class EcomTrackerDashboardService
     }
 
     /**
-     * Top products by units sold (daily rows are per product code); the window totals cover every product.
+     * Top products ranked sold → proceed → adds → views → sale value (daily rows are per product code).
      *
      * @return array{rows: list<array<string, mixed>>, totals: array{views: int, product_count: int}}
      */
@@ -303,8 +303,10 @@ class EcomTrackerDashboardService
             ->selectRaw('SUM(sold_qty) as qty, SUM(sale_amount) as revenue')
             ->selectRaw('COUNT(*) OVER () as product_count, SUM(SUM(product_views)) OVER () as total_views')
             ->orderByDesc('qty')
-            ->orderByDesc('revenue')
+            ->orderByDesc('proceed_checkouts')
+            ->orderByDesc('adds')
             ->orderByDesc('views')
+            ->orderByDesc('revenue')
             ->limit(self::PRODUCT_LIMIT);
 
         // Titles only for the ten rows shown.
@@ -313,8 +315,10 @@ class EcomTrackerDashboardService
             ->select('top.*')
             ->selectSub(fn ($title) => $title->from('tracking_product')->whereColumn('code', 'top.code')->selectRaw('MIN(title)'), 'title')
             ->orderByDesc('qty')
-            ->orderByDesc('revenue')
+            ->orderByDesc('proceed_checkouts')
+            ->orderByDesc('adds')
             ->orderByDesc('views')
+            ->orderByDesc('revenue')
             ->get();
 
         $maxRevenue = (float) $rows->max('revenue');
@@ -382,7 +386,7 @@ class EcomTrackerDashboardService
     }
 
     /**
-     * Device, browser and traffic source rows for the range, keyed by audience type.
+     * Device, browser and traffic source rows for the range, keyed by audience type (sorted sold → proceed → cart → views → revenue).
      *
      * @return array<int, list<array<string, mixed>>>
      */
@@ -397,27 +401,60 @@ class EcomTrackerDashboardService
             ->selectRaw('SUM(a.sessions) as sessions, SUM(a.views) as views, SUM(a.add_to_carts) as add_to_cart')
             ->selectRaw('SUM(a.begin_checkouts) as begin_checkout, SUM(a.proceed_checkouts) as proceed_checkout')
             ->selectRaw('SUM(a.payments) as payment_success, SUM(a.sold_qty) as sold_qty, SUM(a.sale_amount) as revenue')
-            ->orderByDesc('sessions')
             ->get();
+
+        $performanceKeys = [
+            'sold' => 'sold_qty',
+            'proceed' => 'proceed_checkout',
+            'adds' => 'add_to_cart',
+            'views' => 'views',
+            'revenue' => 'revenue',
+        ];
 
         return $rows
             ->groupBy('type')
-            ->map(fn (Collection $typeRows) => $typeRows->map(fn (object $row) => [
-                'id' => (int) $row->dimension_id ?: null,
-                'label' => ucfirst((string) ($row->name ?? 'Unknown')),
-                'source' => (string) $row->source,
-                'medium' => (string) $row->medium,
-                'sessions' => (int) $row->sessions,
-                'views' => (int) $row->views,
-                'add_to_cart' => (int) $row->add_to_cart,
-                'begin_checkout' => (int) $row->begin_checkout,
-                'proceed_checkout' => (int) $row->proceed_checkout,
-                'payment_success' => (int) $row->payment_success,
-                'sold_qty' => (int) $row->sold_qty,
-                'revenue' => (float) $row->revenue,
-                'conversion_rate' => (int) $row->sessions > 0 ? round((int) $row->payment_success / (int) $row->sessions * 100, 1) : 0,
-            ])->values()->all())
+            ->map(fn (Collection $typeRows) => $this->sortByFunnelPerformance(
+                $typeRows->map(fn (object $row) => [
+                    'id' => (int) $row->dimension_id ?: null,
+                    'label' => ucfirst((string) ($row->name ?? 'Unknown')),
+                    'source' => (string) $row->source,
+                    'medium' => (string) $row->medium,
+                    'sessions' => (int) $row->sessions,
+                    'views' => (int) $row->views,
+                    'add_to_cart' => (int) $row->add_to_cart,
+                    'begin_checkout' => (int) $row->begin_checkout,
+                    'proceed_checkout' => (int) $row->proceed_checkout,
+                    'payment_success' => (int) $row->payment_success,
+                    'sold_qty' => (int) $row->sold_qty,
+                    'revenue' => (float) $row->revenue,
+                    'conversion_rate' => (int) $row->sessions > 0 ? round((int) $row->payment_success / (int) $row->sessions * 100, 1) : 0,
+                ])->all(),
+                $performanceKeys,
+            ))
             ->all();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array{sold: string, proceed: string, adds: string, views: string, revenue: string}  $fields
+     * @return list<array<string, mixed>>
+     */
+    private function sortByFunnelPerformance(array $rows, array $fields): array
+    {
+        usort($rows, function (array $a, array $b) use ($fields): int {
+            foreach (['sold', 'proceed', 'adds', 'views', 'revenue'] as $metric) {
+                $key = $fields[$metric];
+                $cmp = ((float) ($b[$key] ?? 0)) <=> ((float) ($a[$key] ?? 0));
+
+                if ($cmp !== 0) {
+                    return $cmp;
+                }
+            }
+
+            return 0;
+        });
+
+        return array_values($rows);
     }
 
     /**
