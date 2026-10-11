@@ -692,6 +692,136 @@ final class SessionTrafficAttribution
         )->all();
     }
 
+    public static function orderTrafficSourceSkippable(?string $source, ?string $medium): bool
+    {
+        if (AttributionRules::sessionUtmSourceIsEmpty($source)) {
+            return true;
+        }
+
+        $medium = strtolower(trim((string) ($medium ?? '')));
+
+        return $medium === '' || $medium === 'none';
+    }
+
+    /**
+     * Order attribution: last visitor touch on or before payment; skip Direct and medium "none".
+     *
+     * @return array{source: string, medium: string}
+     */
+    public static function resolveOrderTrafficBucket(string $visitorId, Carbon $paymentAt): array
+    {
+        if ($visitorId === '') {
+            return ['source' => '(direct)', 'medium' => 'none'];
+        }
+
+        $paymentAt = $paymentAt->copy()->utc();
+        $windowStart = $paymentAt->copy()->subDays(AttributionRules::attributionWindowDays());
+        $last = null;
+
+        $sessions = DB::table('activity_ecom_user')
+            ->where('visitor_id', $visitorId)
+            ->where('created_at', '>=', $windowStart)
+            ->where('created_at', '<=', $paymentAt)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['landing_page', 'created_at']);
+
+        foreach ($sessions as $session) {
+            if (! filled($session->landing_page ?? null)) {
+                continue;
+            }
+
+            $bucket = self::trafficBucketFromPage((string) $session->landing_page, null);
+
+            if ($bucket === null || self::orderTrafficSourceSkippable($bucket['source'], $bucket['medium'])) {
+                continue;
+            }
+
+            $last = ['source' => $bucket['source'], 'medium' => $bucket['medium']];
+        }
+
+        $rows = DB::table('activity_ecom_user_actions as a')
+            ->join('activity_ecom_user as s', 's.session_id', '=', 'a.session_id')
+            ->where('s.visitor_id', $visitorId)
+            ->where('a.created_at', '>=', $windowStart)
+            ->where('a.created_at', '<=', $paymentAt)
+            ->orderBy('a.created_at')
+            ->orderBy('a.id')
+            ->get([
+                'a.page_url',
+                'a.referer',
+            ]);
+
+        foreach ($rows as $row) {
+            $bucket = self::trafficBucketFromPage(
+                filled($row->page_url ?? null) ? (string) $row->page_url : null,
+                filled($row->referer ?? null) ? (string) $row->referer : null,
+            );
+
+            if ($bucket === null || self::orderTrafficSourceSkippable($bucket['source'], $bucket['medium'])) {
+                continue;
+            }
+
+            $last = ['source' => $bucket['source'], 'medium' => $bucket['medium']];
+        }
+
+        return $last ?? ['source' => '(direct)', 'medium' => 'none'];
+    }
+
+    /**
+     * Rebuild order traffic from synced session touches (refreshDay / backfill).
+     *
+     * @return array{source: string, medium: string, tracking_traffic_source_id: ?int}
+     */
+    public static function resolveOrderTrafficFromSyncedDetails(int $mainVisitorId, Carbon $orderedAt): array
+    {
+        if ($mainVisitorId <= 0) {
+            return ['source' => '(direct)', 'medium' => 'none', 'tracking_traffic_source_id' => null];
+        }
+
+        $orderedAt = $orderedAt->copy()->utc();
+        $windowStart = $orderedAt->copy()->subDays(AttributionRules::attributionWindowDays());
+
+        $rows = DB::table('tracking_session_details as tsd')
+            ->join('tracking_session as ts', 'ts.id', '=', 'tsd.tracking_session_id')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.tracking_main_visitor_id', $mainVisitorId)
+            ->where('tsd.captured_at', '>=', $windowStart)
+            ->where('tsd.captured_at', '<=', $orderedAt)
+            ->orderBy('tsd.captured_at')
+            ->orderBy('tsd.touch_sequence')
+            ->get([
+                'tsd.utm_source',
+                'tsd.utm_medium',
+                'tsd.tracking_traffic_source_id',
+            ]);
+
+        $last = null;
+
+        foreach ($rows as $row) {
+            $source = (string) ($row->utm_source ?? '');
+            $medium = (string) ($row->utm_medium ?? '');
+
+            if (self::orderTrafficSourceSkippable($source, $medium)) {
+                continue;
+            }
+
+            $last = [
+                'source' => $source,
+                'medium' => $medium,
+                'tracking_traffic_source_id' => $row->tracking_traffic_source_id !== null
+                    ? (int) $row->tracking_traffic_source_id
+                    : null,
+            ];
+        }
+
+        if ($last === null) {
+            return ['source' => '(direct)', 'medium' => 'none', 'tracking_traffic_source_id' => null];
+        }
+
+        return $last;
+    }
+
     /** @return list<array<string, mixed>> */
     public static function collectSessionTrafficTouches(array|ActivityEcomUser $session, ?iterable $actions = null): array
     {
@@ -1418,14 +1548,13 @@ final class SessionTrafficAttribution
      */
     public static function resolveListTrafficBucket(object $session): array
     {
-        if ($session->has_payment_success && filled($session->conversion_utm_source)) {
-            $source = self::normalizeSource((string) $session->conversion_utm_source)
-                ?? (string) $session->conversion_utm_source;
-            $medium = filled($session->conversion_utm_medium)
-                ? trim((string) $session->conversion_utm_medium)
-                : 'none';
+        if ($session->has_payment_success) {
+            $visitorId = trim((string) ($session->visitor_id ?? ''));
+            $referenceAt = TrackerTime::toUtc($session->last_active_at ?? $session->created_at);
 
-            return ['source' => $source, 'medium' => $medium];
+            if ($visitorId !== '' && $referenceAt !== null) {
+                return self::resolveOrderTrafficBucket($visitorId, $referenceAt);
+            }
         }
 
         $visitorId = trim((string) ($session->visitor_id ?? ''));

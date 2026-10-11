@@ -73,12 +73,19 @@
             </div>
         </div>
     </div>
-    <div class="etd-page-header-meta-row etd-page-header-meta-row--empty">
+    <div class="etd-page-header-meta-row @if (! $drillDownUi) etd-page-header-meta-row--empty @endif">
         <div class="etd-page-header-meta-row__left">
+            @if ($drillDownUi)
+                <p class="etd-kpi-section-label mb-1">Audience &amp; engagement</p>
+                @include('ecom_activity.partials.drill-down-context', [
+                    'drillDownUi' => $drillDownUi,
+                    'activityExport' => $activityExport,
+                ])
+            @endif
             <p class="etd-visitor-quality-summary text-[12px] text-slate-500 dark:text-slate-400 mb-0">
-                <span class="font-medium text-slate-700 dark:text-slate-200">0</span> real visitors ·
-                <span class="font-medium text-slate-700 dark:text-slate-200">0</span> automated ·
-                <span class="font-medium text-slate-700 dark:text-slate-200">0</span> not classified
+                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['human']) }}</span> real visitors ·
+                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['bot']) }}</span> automated ·
+                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['unclassified']) }}</span> not classified
             </p>
         </div>
         <div class="etd-page-header-meta-row__right"></div>

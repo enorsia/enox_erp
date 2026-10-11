@@ -131,7 +131,7 @@
                 </section>
                 <section class="etd-activity-filter-section">
                     <p class="etd-activity-filter-section-title">Traffic source</p>
-                    <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Counts sessions by last marketing touch within 7 days for the same visitor, then this visit.</p>
+                    <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Counts sessions by last marketing touch in that session (Direct after a 30‑minute gap with no new campaign).</p>
                     <div class="etd-activity-filter-grid">
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">UTM source</span>

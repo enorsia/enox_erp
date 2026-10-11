@@ -79,8 +79,22 @@ class EcomActivityController extends Controller
         }
 
         $sessions = $activityList->paginate($range, $filters, $sortBy, 25);
+        $summary = $activityList->filteredSummary($range, $filters);
+        $visitorQuality = $activityList->visitorQualitySummary($range, $filters);
+        $drillDownUi = $activityList->drillDownUi($request, $filters, $summary, $data['resetUrl'], $filterOptions);
+        $activityExport = null;
 
-        return view('ecom_activity.index', compact('data', 'sessions', 'sortBy', 'sortOptions', 'filterOptions'));
+        return view('ecom_activity.index', compact(
+            'data',
+            'sessions',
+            'sortBy',
+            'sortOptions',
+            'filterOptions',
+            'summary',
+            'visitorQuality',
+            'drillDownUi',
+            'activityExport',
+        ));
     }
 
     public function categories(Request $request, EcomActivityListService $activityList): JsonResponse

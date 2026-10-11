@@ -17,6 +17,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Ecom activity list: tracking_session rows + the latest action for each session's funnel stage
@@ -52,6 +53,14 @@ class EcomActivityListService
     public const PERIODS = ['24h', 'yesterday', '7d', '30d', 'custom'];
 
     public const DEFAULT_PERIOD = '24h';
+
+    /** latest_funnel_stage => activity drill-down label (matches dashboard abandon panels) */
+    private const FUNNEL_FOCUS_LABELS = [
+        3 => 'Cart abandoned',
+        4 => 'Begin checkout abandoned',
+        5 => 'Proceed checkout abandoned',
+        6 => 'Payment success',
+    ];
 
     /**
      * Option lists for the filter drawer: devices, traffic sources, departments and the selected
@@ -208,6 +217,272 @@ class EcomActivityListService
      * @param  array{from: Carbon, to: Carbon}  $range
      * @param  array<string, mixed>  $filters  from filtersFromRequest()
      */
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{
+     *     sessions: int,
+     *     unique_visitors: int,
+     *     avg_stay_seconds: int,
+     *     adds: int,
+     *     checkouts: int,
+     *     proceeds: int,
+     *     cart_abandoned: int,
+     *     sold: int,
+     *     sold_qty: int,
+     *     sale_amount: float
+     * }
+     */
+    public function filteredSummary(array $range, array $filters): array
+    {
+        $bounds = TrackerTime::storageRange($range['from'], $range['to']);
+        $scope = function (Builder $query) use ($bounds, $filters): void {
+            $query->whereBetween('ts.last_active_at', $bounds);
+            $this->applyFilters($query, $filters);
+        };
+
+        $row = DB::table('tracking_session as ts')
+            ->tap($scope)
+            ->selectRaw('COUNT(*) as sessions')
+            ->selectRaw('COUNT(DISTINCT ts.tracking_daily_visitor_id) as unique_visitors')
+            ->selectRaw('COALESCE(SUM(ts.duration_seconds), 0) as stay_seconds')
+            ->selectRaw('COALESCE(SUM(ts.has_add_to_cart), 0) as adds')
+            ->selectRaw('COALESCE(SUM(ts.has_begin_checkout), 0) as checkouts')
+            ->selectRaw('COALESCE(SUM(ts.has_proceed_checkout), 0) as proceeds')
+            ->selectRaw('SUM(CASE WHEN ts.latest_funnel_stage = 3 THEN 1 ELSE 0 END) as cart_abandoned')
+            ->selectRaw('COALESCE(SUM(ts.has_order), 0) as sold')
+            ->first();
+
+        $sales = DB::table('tracking_orders as o')
+            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
+            ->tap($scope)
+            ->selectRaw('COALESCE(SUM(o.items_qty), 0) as sold_qty')
+            ->selectRaw('COALESCE(SUM(o.amount_paid), 0) as sale_amount')
+            ->first();
+
+        $sessions = (int) ($row->sessions ?? 0);
+        $staySeconds = (int) ($row->stay_seconds ?? 0);
+
+        return [
+            'sessions' => $sessions,
+            'unique_visitors' => (int) ($row->unique_visitors ?? 0),
+            'avg_stay_seconds' => $sessions > 0 ? (int) round($staySeconds / $sessions) : 0,
+            'adds' => (int) ($row->adds ?? 0),
+            'checkouts' => (int) ($row->checkouts ?? 0),
+            'proceeds' => (int) ($row->proceeds ?? 0),
+            'cart_abandoned' => (int) ($row->cart_abandoned ?? 0),
+            'sold' => (int) ($row->sold ?? 0),
+            'sold_qty' => (int) ($sales->sold_qty ?? 0),
+            'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{human: int, bot: int, unclassified: int}
+     */
+    public function visitorQualitySummary(array $range, array $filters): array
+    {
+        $bounds = TrackerTime::storageRange($range['from'], $range['to']);
+
+        $row = DB::table('tracking_session as ts')
+            ->leftJoin('activity_ecom_user_bot_context as bc', 'bc.session_id', '=', 'ts.session_id')
+            ->whereBetween('ts.last_active_at', $bounds)
+            ->tap(fn (Builder $query) => $this->applyFilters($query, $filters))
+            ->selectRaw('SUM(CASE WHEN bc.id IS NULL THEN 1 ELSE 0 END) as unclassified')
+            ->selectRaw('SUM(CASE WHEN bc.is_bot = 1 THEN 1 ELSE 0 END) as bot')
+            ->selectRaw('SUM(CASE WHEN bc.id IS NOT NULL AND bc.is_bot = 0 THEN 1 ELSE 0 END) as human')
+            ->first();
+
+        return [
+            'human' => (int) ($row->human ?? 0),
+            'bot' => (int) ($row->bot ?? 0),
+            'unclassified' => (int) ($row->unclassified ?? 0),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @param  array<string, int|float>  $summary
+     * @return array<string, mixed>|null
+     */
+    public function drillDownUi(
+        Request $request,
+        array $filters,
+        array $summary,
+        string $resetUrl,
+        array $filterOptions = [],
+    ): ?array {
+        if (! self::hasActiveFilters($filters) && (int) ($summary['sessions'] ?? 0) === 0) {
+            return null;
+        }
+
+        $sessions = (int) ($summary['sessions'] ?? 0);
+        $sessionLabel = $sessions === 1 ? 'session' : 'sessions';
+
+        $extraMetrics = [
+            ['label' => 'Adds', 'value' => number_format((int) $summary['adds'])],
+            ['label' => 'Checkout', 'value' => number_format((int) $summary['checkouts'])],
+            ['label' => 'Proceed', 'value' => number_format((int) $summary['proceeds'])],
+            ['label' => 'Cart abandoned', 'value' => number_format((int) $summary['cart_abandoned'])],
+            ['label' => 'Sold', 'value' => number_format((int) $summary['sold'])],
+            ['label' => 'Sold qty', 'value' => number_format((int) $summary['sold_qty'])],
+            ['label' => 'Sale', 'value' => '£'.number_format((float) $summary['sale_amount'], 2)],
+            ['label' => 'Unique visitors', 'value' => number_format((int) $summary['unique_visitors'])],
+            ['label' => 'Avg stay', 'value' => format_duration((int) $summary['avg_stay_seconds'])],
+        ];
+
+        $chips = $this->filterChips($request, $resetUrl, $filterOptions);
+        if ($chips !== []) {
+            $chips[] = [
+                'label' => 'Clear filters',
+                'remove_url' => $resetUrl,
+            ];
+        }
+
+        $focusLabel = $this->funnelFocusLabel($filters);
+
+        return [
+            'contextAriaLabel' => 'Filtered session summary',
+            'tooltip' => $focusLabel !== null
+                ? "Sessions in this period that match: {$focusLabel}"
+                : 'Sessions in this period that match the active filters',
+            'sessionCount' => $sessions,
+            'sessionCountLabel' => $sessionLabel,
+            'extraMetrics' => $extraMetrics,
+            'showExport' => false,
+            'exportKey' => 'ecom_activity',
+            'filterChips' => $chips,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    public static function hasActiveFilters(array $filters): bool
+    {
+        if (trim((string) ($filters['search'] ?? '')) !== '') {
+            return true;
+        }
+
+        foreach (['funnel', 'devices', 'durations', 'utm_sources', 'utm_mediums', 'categories'] as $key) {
+            if (! empty($filters[$key])) {
+                return true;
+            }
+        }
+
+        if (($filters['has_order'] ?? null) !== null
+            || ($filters['logged_in'] ?? null) !== null
+            || ($filters['duration'] ?? null) !== null
+            || ($filters['department'] ?? null) !== null) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function funnelFocusLabel(array $filters): ?string
+    {
+        $stages = $filters['funnel'] ?? [];
+
+        if (count($stages) === 1) {
+            $stage = (int) $stages[0];
+
+            return self::FUNNEL_FOCUS_LABELS[$stage]
+                ?? (TrackingSession::FUNNEL_STAGES[$stage] ?? null);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array{funnelStages: array<int, string>, devices: array<int, string>, utmSources: array<int, string>, utmMediums: list<string>, departments: array<int, string>, categories: array<int, string>}  $filterOptions
+     * @return list<array{label: string, remove_url: string}>
+     */
+    private function filterChips(Request $request, string $resetUrl, array $filterOptions): array
+    {
+        $chips = [];
+        $baseQuery = collect($request->query())
+            ->except(['page', 'fragment'])
+            ->all();
+
+        $addChip = function (string $label, array $withoutKeys) use (&$chips, $baseQuery, $resetUrl): void {
+            $query = collect($baseQuery)->except($withoutKeys)->filter(fn ($value) => $value !== null && $value !== '')->all();
+
+            $chips[] = [
+                'label' => $label,
+                'remove_url' => $query === []
+                    ? $resetUrl
+                    : route('admin.ecom-activity.index', $query),
+            ];
+        };
+
+        if (filled($request->query('search'))) {
+            $addChip('Search: '.Str::limit((string) $request->query('search'), 40), ['search']);
+        }
+
+        $funnelStages = array_values(array_filter(array_map('intval', (array) $request->query('funnel', []))));
+        if ($funnelStages !== []) {
+            $labels = array_map(
+                fn (int $stage) => self::FUNNEL_FOCUS_LABELS[$stage]
+                    ?? ($filterOptions['funnelStages'][$stage] ?? "Stage {$stage}"),
+                $funnelStages,
+            );
+            $addChip('Funnel: '.implode(', ', $labels), ['funnel']);
+        }
+
+        if ($request->query('has_order') === '1') {
+            $addChip('Has order: With order', ['has_order']);
+        } elseif ($request->query('has_order') === '0') {
+            $addChip('Has order: No order', ['has_order']);
+        }
+
+        if ($request->query('logged_in') === '1') {
+            $addChip('Logged in', ['logged_in']);
+        } elseif ($request->query('logged_in') === '0') {
+            $addChip('Guest', ['logged_in']);
+        }
+
+        foreach ((array) $request->query('device_type', []) as $deviceId) {
+            $name = $filterOptions['devices'][(int) $deviceId] ?? $deviceId;
+            $addChip('Device: '.ucfirst((string) $name), ['device_type']);
+        }
+
+        foreach ((array) $request->query('utm_source', []) as $sourceId) {
+            $name = $filterOptions['utmSources'][(int) $sourceId] ?? $sourceId;
+            $addChip('Source: '.$name, ['utm_source']);
+        }
+
+        foreach ((array) $request->query('utm_medium', []) as $medium) {
+            $addChip('Medium: '.$medium, ['utm_medium']);
+        }
+
+        if (filled($request->query('department'))) {
+            $departmentId = (int) $request->query('department');
+            $name = $filterOptions['departments'][$departmentId] ?? $departmentId;
+            $addChip('Department: '.$name, ['department', 'category']);
+        }
+
+        foreach ((array) $request->query('category', []) as $categoryId) {
+            $name = $filterOptions['categories'][(int) $categoryId] ?? $categoryId;
+            $addChip('Category: '.$name, ['category']);
+        }
+
+        foreach ((array) $request->query('duration_bucket', []) as $bucket) {
+            $label = TrackingSession::DURATION_BUCKETS[$bucket]['label'] ?? $bucket;
+            $addChip('Duration: '.$label, ['duration_bucket']);
+        }
+
+        if (filled($request->query('duration'))) {
+            $bucket = TrackingDailyDuration::BUCKETS[(int) $request->query('duration')] ?? null;
+            $addChip('Duration: '.($bucket['label'] ?? $request->query('duration')), ['duration']);
+        }
+
+        return $chips;
+    }
+
     public function paginate(array $range, array $filters = [], string $sortBy = self::DEFAULT_SORT, int $perPage = 25): LengthAwarePaginator
     {
         $page = Paginator::resolveCurrentPage();

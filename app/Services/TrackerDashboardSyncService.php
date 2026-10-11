@@ -336,7 +336,7 @@ class TrackerDashboardSyncService
 
         $audienceKeys = $this->audienceKeys($deviceId, $browserId, $trafficId, $source, $medium);
 
-        $this->syncActionsForSession($trackingSessionId, $visitDate, $actions, $audienceKeys);
+        $this->syncActionsForSession($trackingSessionId, $visitDate, $actions, $audienceKeys, $visitorId);
         $this->upsertRecoverableSale($trackingSessionId, $visitDate, $sessionRow, $actions);
         $this->touchedDates[$visitDate] = true;
     }
@@ -389,7 +389,7 @@ class TrackerDashboardSyncService
      * @param  Collection<int, object>  $actions
      * @param  list<array{type: int, dimension_id: int, source: string, medium: string}>  $audienceKeys
      */
-    private function syncActionsForSession(int $trackingSessionId, string $visitDate, Collection $actions, array $audienceKeys): void
+    private function syncActionsForSession(int $trackingSessionId, string $visitDate, Collection $actions, array $audienceKeys, string $visitorId): void
     {
         $pCatRows = [];
         $counters = [];
@@ -454,7 +454,7 @@ class TrackerDashboardSyncService
             }
 
             if ($type === 'payment_success') {
-                $this->upsertOrder($trackingSessionId, $action, $orderLines);
+                $this->upsertOrder($trackingSessionId, $visitorId, $action, $orderLines);
             }
         }
 
@@ -1408,6 +1408,25 @@ class TrackerDashboardSyncService
     }
 
     /**
+     * Checkout session device/browser; order last non-direct traffic for revenue rollups.
+     */
+    private function audienceKeysForOrder(object $orderRow): array
+    {
+        [$source, $medium] = $this->trafficSourceMedium(
+            (string) ($orderRow->traffic_utm_source ?? '(direct)'),
+            (string) ($orderRow->traffic_utm_medium ?? 'none'),
+        );
+
+        return $this->audienceKeys(
+            $orderRow->tracking_device_id !== null ? (int) $orderRow->tracking_device_id : null,
+            $orderRow->tracking_browser_id !== null ? (int) $orderRow->tracking_browser_id : null,
+            $orderRow->order_tracking_traffic_source_id !== null ? (int) $orderRow->order_tracking_traffic_source_id : null,
+            $source,
+            $medium,
+        );
+    }
+
+    /**
      * Once per action: device / browser / traffic source product views
      * (their funnel columns count sessions, see refreshDay).
      *
@@ -1507,7 +1526,7 @@ class TrackerDashboardSyncService
      *
      * @param  list<array<string, mixed>>  $lines
      */
-    private function upsertOrder(int $trackingSessionId, object $action, array $lines): void
+    private function upsertOrder(int $trackingSessionId, string $visitorId, object $action, array $lines): void
     {
         $json = $this->actionJsonPayload($action);
         $checkout = is_array($json['checkout_info'] ?? null) ? $json['checkout_info'] : [];
@@ -1524,8 +1543,16 @@ class TrackerDashboardSyncService
         $money = fn (string $key): float => round((float) ($totals[$key] ?? 0), 2);
         $text = fn (mixed $value, int $limit): ?string => trim((string) $value) !== '' ? Str::limit(trim((string) $value), $limit, '') : null;
         $orderedAt = $action->created_at ?? now();
+        $paymentAt = TrackerTime::toUtc($orderedAt) ?? TrackerTime::nowUtc();
         $metricDate = $this->localDate($orderedAt);
         $now = now();
+
+        $orderTraffic = SessionTrafficAttribution::resolveOrderTrafficBucket($visitorId, $paymentAt);
+        [$trafficSource, $trafficMedium] = $this->trafficSourceMedium($orderTraffic['source'], $orderTraffic['medium']);
+        $orderTrafficId = $this->remember(
+            "traffic:{$trafficSource}|{$trafficMedium}",
+            fn () => $this->findOrCreateTrafficSource($trafficSource, $trafficMedium),
+        );
 
         $discount = round((float) ($action->commerce_discount ?? 0), 2)
             ?: $money('coupon_discount') + $money('scs_discount') + $money('sms_discount');
@@ -1554,6 +1581,9 @@ class TrackerDashboardSyncService
             'discount_total' => $discount,
             'grand_total' => $money('grand_total'),
             'amount_paid' => round((float) ($json['amount_paid'] ?? $action->amount_paid ?? $money('grand_total')), 2),
+            'traffic_utm_source' => $trafficSource,
+            'traffic_utm_medium' => $trafficMedium,
+            'tracking_traffic_source_id' => $orderTrafficId,
             'created_at' => $now,
             'updated_at' => $now,
         ];
@@ -1716,7 +1746,8 @@ class TrackerDashboardSyncService
             ->selectRaw('dv.visit_date = ? as same_day', [$date])
             ->addSelect([
                 'o.tracking_session_id', 'o.items_qty', 'o.amount_paid', 'o.ordered_at',
-                'sd.tracking_device_id', 'sd.tracking_browser_id', 'sd.tracking_traffic_source_id', 'sd.utm_source', 'sd.utm_medium',
+                'o.traffic_utm_source', 'o.traffic_utm_medium', 'o.tracking_traffic_source_id as order_tracking_traffic_source_id',
+                'sd.tracking_device_id', 'sd.tracking_browser_id',
             ])
             ->get();
 
@@ -1783,7 +1814,7 @@ class TrackerDashboardSyncService
             $paymentRows[$sessionId]['sale_value'] += (float) $order->amount_paid;
             $paymentRows[$sessionId]['occurred_at'] = max($paymentRows[$sessionId]['occurred_at'], $order->ordered_at);
 
-            foreach ($this->audienceKeysFromDetails($order) as $key) {
+            foreach ($this->audienceKeysForOrder($order) as $key) {
                 $id = implode('|', $key);
                 $audience[$id] ??= $key + $emptyAudience;
                 $audience[$id]['payments'] += (int) ! isset($paidSessions[$id][$sessionId]);

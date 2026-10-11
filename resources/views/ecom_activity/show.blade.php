@@ -255,7 +255,7 @@
                                     <span class="text-slate-400">#{{ $touch['sequence'] }}</span>
                                     {{ $touch['source_label'] }} / {{ $touch['medium'] !== 'none' ? $touch['medium'] : '—' }}
                                     @if ($touch['is_last'])
-                                        <span class="text-accent-600 dark:text-accent-400 text-[11px] font-semibold uppercase">· order credit</span>
+                                        <span class="text-accent-600 dark:text-accent-400 text-[11px] font-semibold uppercase">· last in session</span>
                                     @endif
                                 </div>
                                 @if (filled($touch['campaign'] ?? null))
@@ -281,7 +281,7 @@
                         <div class="section-title">
                             @include('ecom_activity.partials.section-title-with-tip', [
                                 'title' => 'Conversion',
-                                'tip' => 'After payment: purchase credit from last marketing touch within 7 days. Before payment: shows that same 7-day marketing attribution for this visitor. Session traffic above is this visit only.',
+                                'tip' => 'Order credit: last non-direct marketing touch for this visitor before payment (skips Direct). Session traffic above is this visit only (last touch in session).',
                             ])
                         </div>
                         <div class="divide-y divide-slate-100 dark:divide-slate-700/60 text-[13px]">

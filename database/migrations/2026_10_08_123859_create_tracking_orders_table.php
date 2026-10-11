@@ -36,6 +36,9 @@ return new class extends Migration
             $table->decimal('discount_total', 12, 2)->default(0);
             $table->decimal('grand_total', 12, 2)->default(0);
             $table->decimal('amount_paid', 12, 2)->default(0);
+            $table->string('traffic_utm_source', 100)->nullable()->comment('Order credit: last non-direct visitor touch before payment');
+            $table->string('traffic_utm_medium', 100)->nullable();
+            $table->foreignId('tracking_traffic_source_id')->nullable()->constrained('tracking_traffic_source')->nullOnDelete();
             $table->timestamps();
 
             $table->index(['metric_date', 'id'], 'to_date_idx');

@@ -60,6 +60,9 @@ class EcomTrackerDashboardService
         $current = $this->totals($summaries->filter(fn (object $row, string $date) => $date >= $from), (int) $visitors->current_count);
         $previous = $this->totals($summaries->filter(fn (object $row, string $date) => $date <= $prevTo->toDateString()), (int) $visitors->previous_count);
 
+        $current = array_merge($current, $this->saleTotalsFromOrders($from, $to));
+        $previous = array_merge($previous, $this->saleTotalsFromOrders($prevFrom->toDateString(), $prevTo->toDateString()));
+
         $audiences = $this->audiences($from, $to);
         $returning = max(0, $current['sessions'] - $current['unique_visitors']);
 
@@ -93,7 +96,10 @@ class EcomTrackerDashboardService
     {
         $totals = ['unique_visitors' => $uniqueVisitors];
 
-        foreach (['sessions', 'stay_seconds', 'cart_drops', 'checkout_drops', 'proceed_drops', 'payments', 'items_sold'] as $column) {
+        foreach ([
+            'sessions', 'stay_seconds', 'cart_sessions', 'checkout_sessions', 'proceed_sessions',
+            'cart_drops', 'checkout_drops', 'proceed_drops', 'payments', 'items_sold',
+        ] as $column) {
             $totals[$column] = (int) $rows->sum($column);
         }
 
@@ -120,24 +126,22 @@ class EcomTrackerDashboardService
             'comparison' => $this->comparison($current[$key], $previous[$key], $format($previous[$key]), $comparisonLabel),
         ];
 
-        $rate = fn (array $totals, string $key) => $totals['sessions'] > 0 ? round($totals[$key] / $totals['sessions'] * 100, 1) : 0.0;
-        $funnel = fn (string $label, string $key, string $tip, array $activity) => [
-            'label' => $label,
-            'formatted' => number_format($rate($current, $key), 1).'% / '.number_format($current[$key]),
-            'tip' => $tip,
-            'activity' => $activity,
-            'comparison' => $this->comparison(
-                $rate($current, $key),
-                $rate($previous, $key),
-                number_format($rate($previous, $key), 1).'% / '.number_format($previous[$key]),
-                $comparisonLabel,
-            ),
-        ];
-
         $count = fn (float|int $value) => number_format($value);
         $duration = fn (float|int $value) => format_duration((int) $value);
 
-        $payments = $funnel('Payments', 'payments', 'Share of all sessions that completed a payment (one count per session with payment_success).', ['funnel' => 6]);
+        $currentFunnel = $this->funnelKpisFromTotals($current);
+        $previousFunnel = $this->funnelKpisFromTotals($previous);
+
+        $payments = $this->funnelDropMetric(
+            'Payments',
+            $currentFunnel['payment_rate'],
+            $currentFunnel['payment_count'],
+            $previousFunnel['payment_rate'],
+            $previousFunnel['payment_count'],
+            'Share of all sessions that completed a payment (one count per session with payment_success).',
+            $comparisonLabel,
+            ['funnel' => 6],
+        );
         $payments['value_class'] = 'etd-kpi-value--success';
 
         return [
@@ -152,11 +156,114 @@ class EcomTrackerDashboardService
                 $metric('Sale amount', 'sale_amount', fn (float|int $value) => '£'.number_format((float) $value, 2), 'Total sale amount from completed orders in the period (sum of payment_success amount_paid in the date range).', ['has_order' => 1]),
             ]],
             ['title' => 'Funnel drop-off', 'modifier' => 'etd-kpi-group--funnel', 'cols' => 4, 'metrics' => [
-                $funnel('Cart drop', 'cart_drops', 'Sessions that added to cart but did not begin checkout (matches Cart abandoned drill-down).', ['funnel' => 3]),
-                $funnel('Checkout drop', 'checkout_drops', 'Sessions that began checkout but did not proceed (matches Begin checkout abandoned drill-down).', ['funnel' => 4]),
-                $funnel('Proceed drop', 'proceed_drops', 'Sessions that proceeded to checkout but did not pay (matches Proceed checkout abandoned drill-down).', ['funnel' => 5]),
+                $this->funnelDropMetric(
+                    'Cart drop',
+                    $currentFunnel['cart_drop_rate'],
+                    $currentFunnel['cart_drop_count'],
+                    $previousFunnel['cart_drop_rate'],
+                    $previousFunnel['cart_drop_count'],
+                    'Sessions that added to cart but did not begin checkout (matches Cart abandoned drill-down).',
+                    $comparisonLabel,
+                    ['funnel' => 3],
+                ),
+                $this->funnelDropMetric(
+                    'Checkout drop',
+                    $currentFunnel['checkout_drop_rate'],
+                    $currentFunnel['checkout_drop_count'],
+                    $previousFunnel['checkout_drop_rate'],
+                    $previousFunnel['checkout_drop_count'],
+                    'Sessions that began checkout but did not proceed (matches Begin checkout abandoned drill-down).',
+                    $comparisonLabel,
+                    ['funnel' => 4],
+                ),
+                $this->funnelDropMetric(
+                    'Proceed drop',
+                    $currentFunnel['proceed_drop_rate'],
+                    $currentFunnel['proceed_drop_count'],
+                    $previousFunnel['proceed_drop_rate'],
+                    $previousFunnel['proceed_drop_count'],
+                    'Sessions that proceeded to checkout but did not pay (matches Proceed checkout abandoned drill-down).',
+                    $comparisonLabel,
+                    ['funnel' => 5],
+                ),
                 $payments,
             ]],
+        ];
+    }
+
+    /**
+     * @param  array<string, float|int>  $totals
+     * @return array<string, float|int>
+     */
+    private function funnelKpisFromTotals(array $totals): array
+    {
+        $sessions = (int) ($totals['sessions'] ?? 0);
+        $cartStage = (int) ($totals['cart_sessions'] ?? 0);
+        $checkoutStage = (int) ($totals['checkout_sessions'] ?? 0);
+        $proceedStage = (int) ($totals['proceed_sessions'] ?? 0);
+        $payments = (int) ($totals['payments'] ?? 0);
+        $cartAbandoned = (int) ($totals['cart_drops'] ?? 0);
+        $checkoutAbandoned = (int) ($totals['checkout_drops'] ?? 0);
+        $proceedAbandoned = (int) ($totals['proceed_drops'] ?? 0);
+
+        return [
+            'cart_drop_rate' => $cartStage > 0 ? round($cartAbandoned / $cartStage * 100, 1) : 0.0,
+            'cart_drop_count' => $cartAbandoned,
+            'checkout_drop_rate' => $checkoutStage > 0 ? round($checkoutAbandoned / $checkoutStage * 100, 1) : 0.0,
+            'checkout_drop_count' => $checkoutAbandoned,
+            'proceed_drop_rate' => $proceedStage > 0 ? round($proceedAbandoned / $proceedStage * 100, 1) : 0.0,
+            'proceed_drop_count' => $proceedAbandoned,
+            'payment_rate' => $sessions > 0 ? round($payments / $sessions * 100, 1) : 0.0,
+            'payment_count' => $payments,
+        ];
+    }
+
+    private function formatFunnelDropValue(float $rate, int $count): string
+    {
+        return number_format($rate, 1).'% / '.number_format($count);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function funnelDropMetric(
+        string $label,
+        float $currentRate,
+        int $currentCount,
+        float $previousRate,
+        int $previousCount,
+        string $tip,
+        string $comparisonLabel,
+        array $activity = [],
+    ): array {
+        return [
+            'label' => $label,
+            'formatted' => $this->formatFunnelDropValue($currentRate, $currentCount),
+            'tip' => $tip,
+            'activity' => $activity,
+            'comparison' => $this->comparison(
+                $currentRate,
+                $previousRate,
+                $this->formatFunnelDropValue($previousRate, $previousCount),
+                $comparisonLabel,
+            ),
+        ];
+    }
+
+    /**
+     * @return array{items_sold: int, sale_amount: float}
+     */
+    private function saleTotalsFromOrders(string $from, string $to): array
+    {
+        $row = DB::table('tracking_orders')
+            ->whereBetween('metric_date', [$from, $to])
+            ->selectRaw('COALESCE(SUM(items_qty), 0) as items_sold')
+            ->selectRaw('COALESCE(SUM(amount_paid), 0) as sale_amount')
+            ->first();
+
+        return [
+            'items_sold' => (int) ($row->items_sold ?? 0),
+            'sale_amount' => round((float) ($row->sale_amount ?? 0), 2),
         ];
     }
 
