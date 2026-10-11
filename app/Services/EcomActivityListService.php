@@ -118,13 +118,14 @@ class EcomActivityListService
     /**
      * Calendar days in the store timezone, from start of the first day to end of the last day.
      *
-     * @return array{from: Carbon, to: Carbon}
+     * @return array{from: Carbon, to: Carbon, period: string}
      */
     public static function periodRange(string $period, string $dateFrom = '', string $dateTo = ''): array
     {
+        $period = self::normalizePeriod($period);
         $today = TrackerTime::localNow()->startOfDay();
 
-        [$from, $to] = match (self::normalizePeriod($period)) {
+        [$from, $to] = match ($period) {
             'yesterday' => [$today->copy()->subDay(), $today->copy()->subDay()],
             '7d' => [$today->copy()->subDays(6), $today->copy()],
             '30d' => [$today->copy()->subDays(29), $today->copy()],
@@ -136,7 +137,11 @@ class EcomActivityListService
             [$from, $to] = [$to, $from];
         }
 
-        return ['from' => $from->startOfDay(), 'to' => $to->endOfDay()];
+        return [
+            'from' => $from->startOfDay(),
+            'to' => $to->endOfDay(),
+            'period' => $period,
+        ];
     }
 
     /**
@@ -238,9 +243,8 @@ class EcomActivityListService
      */
     public function filteredSummary(array $range, array $filters): array
     {
-        $bounds = TrackerTime::storageRange($range['from'], $range['to']);
-        $scope = function (Builder $query) use ($bounds, $filters): void {
-            $query->whereBetween('ts.last_active_at', $bounds);
+        $scope = function (Builder $query) use ($range, $filters): void {
+            $this->applySessionDateScope($query, $range);
             $this->applyFilters($query, $filters);
         };
 
@@ -286,11 +290,9 @@ class EcomActivityListService
      */
     public function visitorQualitySummary(array $range, array $filters): array
     {
-        $bounds = TrackerTime::storageRange($range['from'], $range['to']);
-
         $row = DB::table('tracking_session as ts')
             ->leftJoin('activity_ecom_user_bot_context as bc', 'bc.session_id', '=', 'ts.session_id')
-            ->whereBetween('ts.last_active_at', $bounds)
+            ->tap(fn (Builder $query) => $this->applySessionDateScope($query, $range))
             ->tap(fn (Builder $query) => $this->applyFilters($query, $filters))
             ->selectRaw('SUM(CASE WHEN bc.id IS NULL THEN 1 ELSE 0 END) as unclassified')
             ->selectRaw('SUM(CASE WHEN bc.is_bot = 1 THEN 1 ELSE 0 END) as bot')
@@ -386,13 +388,12 @@ class EcomActivityListService
     }
 
     /**
-     * @param  array{from: Carbon, to: Carbon}  $range
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
      * @param  array<string, mixed>  $filters
      */
     public function constrainSessionsInRange(Builder $query, array $range, array $filters): void
     {
-        $bounds = TrackerTime::storageRange($range['from'], $range['to']);
-        $query->whereBetween('ts.last_active_at', $bounds);
+        $this->applySessionDateScope($query, $range);
         $this->applyFilters($query, $filters);
     }
 
@@ -405,9 +406,8 @@ class EcomActivityListService
      */
     public function dashboardTotals(array $range, array $filters): array
     {
-        $bounds = TrackerTime::storageRange($range['from'], $range['to']);
-        $scope = function (Builder $query) use ($bounds, $filters): void {
-            $query->whereBetween('ts.last_active_at', $bounds);
+        $scope = function (Builder $query) use ($range, $filters): void {
+            $this->applySessionDateScope($query, $range);
             $this->applyFilters($query, $filters);
         };
 
@@ -567,9 +567,8 @@ class EcomActivityListService
         bool $attachCatalogPaths = false,
     ): LengthAwarePaginator {
         $page = Paginator::resolveCurrentPage();
-        $bounds = TrackerTime::storageRange($range['from'], $range['to']);
-        $scope = function (Builder $query) use ($bounds, $filters) {
-            $query->whereBetween('ts.last_active_at', $bounds);
+        $scope = function (Builder $query) use ($range, $filters) {
+            $this->applySessionDateScope($query, $range);
             $this->applyFilters($query, $filters);
         };
 
@@ -639,6 +638,22 @@ class EcomActivityListService
      *
      * @param  array<string, mixed>  $filters
      */
+    /**
+     * Same calendar rules as master User activity ({@see TrackerTime::applyEcomActivitySessionScope}).
+     *
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     */
+    private function applySessionDateScope(Builder $query, array $range): void
+    {
+        TrackerTime::applyEcomActivitySessionScope(
+            $query,
+            $range['from'],
+            $range['to'],
+            $range['period'] ?? null,
+            'ts',
+        );
+    }
+
     private function applyFilters(Builder $query, array $filters): void
     {
         $this->applySearch($query, (string) ($filters['search'] ?? ''));
