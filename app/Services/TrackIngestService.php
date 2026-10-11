@@ -100,6 +100,7 @@ class TrackIngestService
         $this->upsertSession($request, $sessionId, $sessionData, $clientContext);
 
         $acceptedIds = [];
+        $paymentSuccessInBatch = false;
 
         foreach ($events as $event) {
             $event['session_id'] = $sessionId;
@@ -155,6 +156,7 @@ class TrackIngestService
             }
 
             if ($this->isDuplicatePaymentSuccess($event)) {
+                $paymentSuccessInBatch = true;
                 $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
                 $this->ensureCanonicalCommerceOrder($event);
 
@@ -201,6 +203,7 @@ class TrackIngestService
             }
 
             if (($event['action_type'] ?? '') === 'payment_success') {
+                $paymentSuccessInBatch = true;
                 $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
             }
 
@@ -229,6 +232,8 @@ class TrackIngestService
             DB::table('activity_ecom_user')
                 ->where('session_id', $sessionId)
                 ->update(['is_sync' => ActivityEcomUser::SYNC_PENDING]);
+
+            $this->pushSessionToTrackingTables($sessionId, $paymentSuccessInBatch);
         }
 
         $this->logInfo('ingest.complete', 'All actions saved', [
@@ -245,6 +250,23 @@ class TrackIngestService
      * @param  array<string, mixed>  $sessionData
      * @param  array<string, mixed>|null  $clientContext
      */
+    /**
+     * Mirror activity into tracking_* without extra User activity / dashboard queries.
+     * Payments sync inline so orders show in date search immediately; other events after the HTTP response.
+     */
+    private function pushSessionToTrackingTables(string $sessionId, bool $immediate): void
+    {
+        $sync = fn () => app(TrackerDashboardSyncService::class)->syncPendingBySessionId($sessionId);
+
+        if ($immediate) {
+            $sync();
+
+            return;
+        }
+
+        app()->terminating($sync);
+    }
+
     private function upsertSession(Request $request, string $sessionId, array $sessionData, ?array $clientContext = null): void
     {
         $userAgent = $clientContext['user_agent'] ?? $request->userAgent();

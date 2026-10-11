@@ -366,9 +366,51 @@ class TrackerTime
             return;
         }
 
-        $createdAt = $table ? "{$table}.created_at" : 'created_at';
-        $fromLocal = self::toLocal($from);
-        $toLocal = self::toLocal($to);
+        self::applyEcomActivityVisitDateScope($query, $from, $to, $table);
+    }
+
+    /**
+     * Same day bucket as {@see TrackerDashboardSyncService::refreshDay()} (tracking_daily_visitor.visit_date).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     */
+    public static function applyEcomActivityVisitDateScope($query, Carbon $from, Carbon $to, ?string $table = null): void
+    {
+        $fromDate = self::localDate($from);
+        $toDate = self::localDate($to);
+        $visitorColumn = $table ? "{$table}.tracking_daily_visitor_id" : 'tracking_daily_visitor_id';
+
+        $query->whereIn($visitorColumn, function ($sub) use ($fromDate, $toDate) {
+            $sub->from('tracking_daily_visitor')
+                ->select('id')
+                ->whereBetween('visit_date', [$fromDate, $toDate]);
+        });
+    }
+
+    /**
+     * Date rules for activity_ecom_user rows that are not in tracking_session yet (pre-sync).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     */
+    public static function applyActivityEcomUserSessionScope($query, array $range, string $alias = 'aeu'): void
+    {
+        $period = $range['period'] ?? null;
+        $createdAt = "{$alias}.created_at";
+        $lastActiveAt = "{$alias}.last_active_at";
+
+        if ($period === '24h') {
+            [$fromBound, $toBound] = self::storageRange($range['from'], $range['to']);
+            $query->where(function ($inner) use ($fromBound, $toBound, $createdAt, $lastActiveAt) {
+                $inner->whereBetween($createdAt, [$fromBound, $toBound])
+                    ->orWhereBetween($lastActiveAt, [$fromBound, $toBound]);
+            });
+
+            return;
+        }
+
+        $fromLocal = self::toLocal($range['from']);
+        $toLocal = self::toLocal($range['to']);
 
         if ($fromLocal !== null && $toLocal !== null) {
             $query->whereBetween($createdAt, self::storageRange(
@@ -379,7 +421,7 @@ class TrackerTime
             return;
         }
 
-        $query->whereBetween($createdAt, self::storageRange($from, $to));
+        $query->whereBetween($createdAt, self::storageRange($range['from'], $range['to']));
     }
 
     /**

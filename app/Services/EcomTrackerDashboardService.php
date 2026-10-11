@@ -61,14 +61,8 @@ class EcomTrackerDashboardService
         ];
         $rangeWithPeriod = $range + ['period' => $period];
 
-        $currentUnique = (int) $this->activityList->dashboardTotals($rangeWithPeriod, [])['unique_visitors'];
-        $previousUnique = (int) $this->activityList->dashboardTotals($prevRange, [])['unique_visitors'];
-
-        $current = $this->totals($summaries->filter(fn (object $row, string $date) => $date >= $from), $currentUnique);
-        $previous = $this->totals($summaries->filter(fn (object $row, string $date) => $date <= $prevTo->toDateString()), $previousUnique);
-
-        $current = array_merge($current, $this->saleTotalsFromOrders($from, $to));
-        $previous = array_merge($previous, $this->saleTotalsFromOrders($prevFrom->toDateString(), $prevTo->toDateString()));
+        $current = $this->activityList->dashboardTotals($rangeWithPeriod, []);
+        $previous = $this->activityList->dashboardTotals($prevRange, []);
 
         $audiences = $this->audiences($from, $to);
         $returning = max(0, $current['sessions'] - $current['unique_visitors']);
@@ -455,11 +449,9 @@ class EcomTrackerDashboardService
      */
     private function prefetchTrendSupportData(array $range): array
     {
-        $tz = str_replace("'", "''", TrackerTime::timezone());
-        $dateExpr = "DATE(CONVERT_TZ(ts.created_at, '+00:00', '{$tz}'))";
-
         $visitorsByDate = DB::table('tracking_session as ts')
-            ->selectRaw("{$dateExpr} as session_date, ts.tracking_daily_visitor_id")
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->select(['dv.visit_date as session_date', 'ts.tracking_daily_visitor_id'])
             ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope(
                 $query,
                 $range['from'],
@@ -690,14 +682,13 @@ class EcomTrackerDashboardService
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->pluck('sessions', 'metric_date');
 
-        $tz = str_replace("'", "''", TrackerTime::timezone());
-        $dateExpr = "DATE(CONVERT_TZ(ts.created_at, '+00:00', '{$tz}'))";
         $range = ['from' => $from, 'to' => $to, 'period' => $period];
 
         $filteredByDate = DB::table('tracking_session as ts')
-            ->selectRaw("{$dateExpr} as session_date, COUNT(*) as sessions")
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->selectRaw('dv.visit_date as session_date, COUNT(*) as sessions')
             ->tap(fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters))
-            ->groupBy('session_date')
+            ->groupBy('dv.visit_date')
             ->pluck('sessions', 'session_date');
 
         $ratios = [];

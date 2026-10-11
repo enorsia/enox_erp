@@ -76,7 +76,7 @@
                     <p class="etd-activity-filter-section-title">Search</p>
                     <label class="etd-filter-compact-field">
                         <span class="etd-filter-compact-label">Keyword</span>
-                        <input type="search" name="search" value="{{ request('search') }}" maxlength="100" placeholder="Name, email, phone, IP, session ID, product code, SKU or product name" class="etd-filter-input etd-filter-input--sm w-full">
+                        <input type="search" name="search" value="{{ request('search') }}" maxlength="100" placeholder="Order ID, name, email, phone, IP, session ID, product code, SKU or product name" class="etd-filter-input etd-filter-input--sm w-full">
                     </label>
                 </section>
                 <section class="etd-activity-filter-section">

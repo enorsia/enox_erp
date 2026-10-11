@@ -164,9 +164,10 @@
             <div class="etd-table-scroll etd-table-scroll--fixed">
                 @include('ecom_tracker.partials.product-performance-table', [
                     'products' => $products,
-                    'productActivityLink' => fn (array $query) => $activityLink([
-                        'search' => (string) ($query['product_code'] ?? ''),
-                    ]),
+                    'productActivityLink' => fn (array $query) => $activityLink(array_filter([
+                        'focus' => 'products',
+                        'product_code' => (string) ($query['product_code'] ?? ''),
+                    ])),
                 ])
             </div>
         </div>

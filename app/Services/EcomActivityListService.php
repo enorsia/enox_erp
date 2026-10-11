@@ -196,7 +196,7 @@ class EcomActivityListService
     }
 
     /**
-     * @return array{search: string, funnel: list<int>, has_order: ?bool, devices: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
+     * @return array{search: string, product_code: string, funnel: list<int>, has_order: ?bool, devices: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
      */
     public static function filtersFromRequest(Request $request): array
     {
@@ -205,9 +205,11 @@ class EcomActivityListService
         $bool = fn (string $key) => in_array($request->input($key), ['0', '1'], true) ? $request->input($key) === '1' : null;
         $visitorType = $request->input('visitor_type');
         $visitorType = in_array($visitorType, ['human', 'bot', 'unclassified'], true) ? $visitorType : null;
+        $productCode = mb_substr(trim((string) $request->input('product_code', '')), 0, 100);
 
         return [
-            'search' => mb_substr(trim((string) $request->input('search', '')), 0, 100),
+            'search' => $productCode !== '' ? '' : mb_substr(trim((string) $request->input('search', '')), 0, 100),
+            'product_code' => $productCode,
             'funnel' => array_values(array_intersect($ints('funnel'), TrackingSession::FILTER_FUNNEL_STAGES)),
             'has_order' => $bool('has_order'),
             'devices' => $ints('device_type'),
@@ -231,6 +233,14 @@ class EcomActivityListService
 
         if (trim((string) $request->query('search', '')) !== '') {
             $params['search'] = $request->query('search');
+        }
+
+        if (trim((string) $request->query('product_code', '')) !== '') {
+            $params['product_code'] = $request->query('product_code');
+        }
+
+        if ($request->query('focus') === 'products') {
+            $params['focus'] = 'products';
         }
 
         foreach (['device_type', 'utm_source', 'utm_medium', 'funnel', 'category', 'duration_bucket'] as $key) {
@@ -267,9 +277,14 @@ class EcomActivityListService
      */
     public function filteredSummary(array $range, array $filters): array
     {
+        $productCode = trim((string) ($filters['product_code'] ?? ''));
+        if ($productCode !== '') {
+            return $this->productCatalogFilteredSummary($range, $filters, $productCode);
+        }
+
         $scope = function (Builder $query) use ($range, $filters): void {
             $this->applySessionDateScope($query, $range);
-            $this->applyFilters($query, $filters);
+            $this->applyFilters($query, $filters, $range);
         };
 
         $row = DB::table('tracking_session as ts')
@@ -317,7 +332,7 @@ class EcomActivityListService
         $row = DB::table('tracking_session as ts')
             ->leftJoin('activity_ecom_user_bot_context as bc', 'bc.session_id', '=', 'ts.session_id')
             ->tap(fn (Builder $query) => $this->applySessionDateScope($query, $range))
-            ->tap(fn (Builder $query) => $this->applyFilters($query, $filters))
+            ->tap(fn (Builder $query) => $this->applyFilters($query, $filters, $range))
             ->selectRaw('SUM(CASE WHEN bc.id IS NULL THEN 1 ELSE 0 END) as unclassified')
             ->selectRaw('SUM(CASE WHEN bc.is_bot = 1 THEN 1 ELSE 0 END) as bot')
             ->selectRaw('SUM(CASE WHEN bc.id IS NOT NULL AND bc.is_bot = 0 THEN 1 ELSE 0 END) as human')
@@ -348,6 +363,8 @@ class EcomActivityListService
 
         $sessions = (int) ($summary['sessions'] ?? 0);
         $sessionLabel = $sessions === 1 ? 'session' : 'sessions';
+        $productCode = trim((string) ($filters['product_code'] ?? ''));
+        $isProductDrill = $productCode !== '';
 
         $extraMetrics = [
             ['label' => 'Adds', 'value' => number_format((int) $summary['adds'])],
@@ -357,12 +374,15 @@ class EcomActivityListService
             ['label' => 'Sold', 'value' => number_format((int) $summary['sold'])],
             ['label' => 'Sold qty', 'value' => number_format((int) $summary['sold_qty'])],
             ['label' => 'Sale', 'value' => '£'.number_format((float) $summary['sale_amount'], 2)],
-            ['label' => 'Unique visitors', 'value' => number_format((int) $summary['unique_visitors'])],
-            ['label' => 'Avg stay', 'value' => format_duration((int) $summary['avg_stay_seconds'])],
         ];
 
+        if (! $isProductDrill) {
+            $extraMetrics[] = ['label' => 'Unique visitors', 'value' => number_format((int) $summary['unique_visitors'])];
+            $extraMetrics[] = ['label' => 'Avg stay', 'value' => format_duration((int) $summary['avg_stay_seconds'])];
+        }
+
         $chips = $this->filterChips($request, $resetUrl, $filterOptions);
-        if ($chips !== []) {
+        if ($chips !== [] && ! $isProductDrill) {
             $chips[] = [
                 'label' => 'Clear filters',
                 'remove_url' => $resetUrl,
@@ -372,10 +392,14 @@ class EcomActivityListService
         $focusLabel = $this->funnelFocusLabel($filters);
 
         return [
-            'contextAriaLabel' => 'Filtered session summary',
-            'tooltip' => $focusLabel !== null
-                ? "Sessions in this period that match: {$focusLabel}"
-                : 'Sessions in this period that match the active filters',
+            'sectionLabel' => $isProductDrill ? 'Product performance' : 'Audience & engagement',
+            'sectionSubtitle' => $isProductDrill ? $productCode : null,
+            'contextAriaLabel' => $isProductDrill ? 'Product drill-down summary' : 'Filtered session summary',
+            'tooltip' => $isProductDrill
+                ? "Sessions in this period that touched product {$productCode}"
+                : ($focusLabel !== null
+                    ? "Sessions in this period that match: {$focusLabel}"
+                    : 'Sessions in this period that match the active filters'),
             'sessionCount' => $sessions,
             'sessionCountLabel' => $sessionLabel,
             'extraMetrics' => $extraMetrics,
@@ -391,6 +415,10 @@ class EcomActivityListService
     public static function hasActiveFilters(array $filters): bool
     {
         if (trim((string) ($filters['search'] ?? '')) !== '') {
+            return true;
+        }
+
+        if (trim((string) ($filters['product_code'] ?? '')) !== '') {
             return true;
         }
 
@@ -418,7 +446,7 @@ class EcomActivityListService
     public function constrainSessionsInRange(Builder $query, array $range, array $filters): void
     {
         $this->applySessionDateScope($query, $range);
-        $this->applyFilters($query, $filters);
+        $this->applyFilters($query, $filters, $range);
     }
 
     /**
@@ -432,7 +460,7 @@ class EcomActivityListService
     {
         $scope = function (Builder $query) use ($range, $filters): void {
             $this->applySessionDateScope($query, $range);
-            $this->applyFilters($query, $filters);
+            $this->applyFilters($query, $filters, $range);
         };
 
         $row = DB::table('tracking_session as ts')
@@ -519,6 +547,14 @@ class EcomActivityListService
             $addChip('Search: '.Str::limit((string) $request->query('search'), 40), ['search']);
         }
 
+        if (filled($request->query('product_code'))) {
+            $addChip((string) $request->query('product_code'), ['product_code', 'focus']);
+            $chips[] = [
+                'label' => 'Clear section',
+                'remove_url' => $resetUrl,
+            ];
+        }
+
         $funnelStages = array_values(array_filter(array_map('intval', (array) $request->query('funnel', []))));
         if ($funnelStages !== []) {
             $labels = array_map(
@@ -593,7 +629,7 @@ class EcomActivityListService
         $page = Paginator::resolveCurrentPage();
         $scope = function (Builder $query) use ($range, $filters) {
             $this->applySessionDateScope($query, $range);
-            $this->applyFilters($query, $filters);
+            $this->applyFilters($query, $filters, $range);
         };
 
         $counts = DB::table('tracking_session as ts')
@@ -678,9 +714,14 @@ class EcomActivityListService
         );
     }
 
-    private function applyFilters(Builder $query, array $filters): void
+    private function applyFilters(Builder $query, array $filters, ?array $range = null): void
     {
-        $this->applySearch($query, (string) ($filters['search'] ?? ''));
+        $productCode = trim((string) ($filters['product_code'] ?? ''));
+        if ($productCode !== '' && $range !== null) {
+            $this->applyProductCodeSessionFilter($query, $range, $productCode);
+        } else {
+            $this->applySearch($query, (string) ($filters['search'] ?? ''));
+        }
 
         if (! empty($filters['funnel'])) {
             $query->whereIn('ts.latest_funnel_stage', $filters['funnel']);
@@ -760,14 +801,144 @@ class EcomActivityListService
     }
 
     /**
+     * Sessions that touched a product (commerce line items), aligned with dashboard product drill-down.
+     *
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     */
+    private function applyProductCodeSessionFilter(Builder $query, array $range, string $productCode): void
+    {
+        $query->whereIn('ts.session_id', $this->productLineItemSessionsQuery($range, $productCode));
+    }
+
+    /**
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     */
+    private function productLineItemSessionsQuery(array $range, string $productCode): Builder
+    {
+        $query = DB::table('activity_ecom_commerce_line_items as li')
+            ->select('li.session_id')
+            ->join('activity_ecom_user as aeu', 'aeu.session_id', '=', 'li.session_id')
+            ->whereBetween('li.staged_at', TrackerTime::storageRange($range['from'], $range['to']))
+            ->where(function (Builder $inner) use ($productCode) {
+                $inner->where('li.product_code', $productCode)
+                    ->orWhere('li.sku', $productCode);
+            })
+            ->distinct();
+
+        TrackerTime::applyEcomActivitySessionScope(
+            $query,
+            $range['from'],
+            $range['to'],
+            $range['period'] ?? null,
+            'aeu',
+        );
+
+        return $query;
+    }
+
+    /**
+     * Product drill-down KPIs: sessions from commerce lines; funnel counts for that SKU/code; sold from order lines.
+     *
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     * @param  array<string, mixed>  $filters
+     * @return array<string, int|float>
+     */
+    private function productCatalogFilteredSummary(array $range, array $filters, string $productCode): array
+    {
+        $scope = function (Builder $query) use ($range, $filters): void {
+            $this->applySessionDateScope($query, $range);
+            $this->applyFilters($query, $filters, $range);
+        };
+
+        $row = DB::table('tracking_session as ts')
+            ->tap($scope)
+            ->selectRaw('COUNT(*) as sessions')
+            ->selectRaw('COUNT(DISTINCT ts.tracking_daily_visitor_id) as unique_visitors')
+            ->selectRaw('COALESCE(SUM(ts.duration_seconds), 0) as stay_seconds')
+            ->selectRaw('SUM(CASE WHEN ts.has_begin_checkout = 1 THEN 1 ELSE 0 END) as checkouts')
+            ->selectRaw('SUM(CASE WHEN ts.has_proceed_checkout = 1 THEN 1 ELSE 0 END) as proceeds')
+            ->selectRaw('SUM(CASE WHEN ts.latest_funnel_stage = 3 THEN 1 ELSE 0 END) as cart_abandoned')
+            ->first();
+
+        $fromDate = $range['from']->toDateString();
+        $toDate = $range['to']->toDateString();
+
+        $dailyAdds = (int) DB::table('tracking_daily_products')
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->where('product_code', $productCode)
+            ->sum('add_to_carts');
+
+        $lineAdds = (int) DB::query()
+            ->fromSub($this->productLineItemSessionsQuery($range, $productCode), 'li_add')
+            ->join('activity_ecom_commerce_line_items as li', function ($join) use ($productCode) {
+                $join->on('li.session_id', '=', 'li_add.session_id')
+                    ->where('li.funnel_stage', 'add_to_cart')
+                    ->where(function (Builder $inner) use ($productCode) {
+                        $inner->where('li.product_code', $productCode)
+                            ->orWhere('li.sku', $productCode);
+                    });
+            })
+            ->whereBetween('li.staged_at', TrackerTime::storageRange($range['from'], $range['to']))
+            ->distinct()
+            ->count('li_add.session_id');
+
+        $adds = $dailyAdds > 0 ? $dailyAdds : $lineAdds;
+
+        $sold = (int) DB::query()
+            ->fromSub($this->productLineItemSessionsQuery($range, $productCode), 'li_pay')
+            ->join('activity_ecom_commerce_line_items as li', function ($join) use ($productCode) {
+                $join->on('li.session_id', '=', 'li_pay.session_id')
+                    ->where('li.funnel_stage', 'payment_success')
+                    ->where(function (Builder $inner) use ($productCode) {
+                        $inner->where('li.product_code', $productCode)
+                            ->orWhere('li.sku', $productCode);
+                    });
+            })
+            ->whereBetween('li.staged_at', TrackerTime::storageRange($range['from'], $range['to']))
+            ->distinct()
+            ->count('li_pay.session_id');
+
+        [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
+
+        $sales = DB::table('tracking_order_details as od')
+            ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
+            ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
+            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
+            ->tap($scope)
+            ->where('p.code', $productCode)
+            ->whereBetween('o.ordered_at', [$fromBound, $toBound])
+            ->selectRaw('COALESCE(SUM(od.qty), 0) as sold_qty')
+            ->selectRaw('COALESCE(SUM(od.line_total), 0) as sale_amount')
+            ->first();
+
+        $sessions = (int) ($row->sessions ?? 0);
+        $staySeconds = (int) ($row->stay_seconds ?? 0);
+
+        return [
+            'sessions' => $sessions,
+            'unique_visitors' => (int) ($row->unique_visitors ?? 0),
+            'avg_stay_seconds' => $sessions > 0 ? (int) round($staySeconds / $sessions) : 0,
+            'adds' => $adds,
+            'checkouts' => (int) ($row->checkouts ?? 0),
+            'proceeds' => (int) ($row->proceeds ?? 0),
+            'cart_abandoned' => (int) ($row->cart_abandoned ?? 0),
+            'sold' => $sold,
+            'sold_qty' => (int) ($sales->sold_qty ?? 0),
+            'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),
+        ];
+    }
+
+    /**
      * Prefix match on indexed columns, picked by what the keyword looks like:
-     * IP → tracking_session_details.ip, email → email, digits → phone / session id,
-     * session-id-like hex → session_id or product, anything else → name, email or product.
+     * IP → tracking_session_details.ip, email → email, digits → order # / phone / session id,
+     * session-id-like hex → session_id or product, anything else → name, email, order # or product.
      * Product = code / SKU prefix or title contains (tracking_product is a small lookup table),
      * linked to sessions through tracking_session_p_cat.
      */
     private function applySearch(Builder $query, string $search): void
     {
+        $search = ltrim(trim($search), '#');
+
         if ($search === '') {
             return;
         }
@@ -791,6 +962,22 @@ class EcomActivityListService
             ->select('search_pc.tracking_session_id as id');
         $matching = fn (Builder ...$branches) => $query->joinSub($union(...$branches), 'search_match', 'search_match.id', '=', 'ts.id');
 
+        $orderSessions = DB::table('tracking_orders')
+            ->select('tracking_session_id as id')
+            ->whereNotNull('tracking_session_id')
+            ->where('order_number', 'like', $prefix);
+        $orderActionSessions = DB::table('activity_ecom_user_actions as oa')
+            ->join('tracking_session as ts_oa', 'ts_oa.session_id', '=', 'oa.session_id')
+            ->where('oa.action_type', 'payment_success')
+            ->whereNotNull('oa.order_id')
+            ->where('oa.order_id', 'like', $prefix)
+            ->select('ts_oa.id');
+        $phoneOrSessionSessions = DB::table('tracking_session')
+            ->select('id')
+            ->where(fn (Builder $q) => $q
+                ->where('phone', 'like', str_replace([' ', '(', ')'], '', $prefix))
+                ->orWhere('session_id', 'like', $prefix));
+
         match (true) {
             (bool) preg_match('/^\d{1,3}\.\d{0,3}(\.\d{0,3}){0,2}$/', $search),
             str_contains($search, ':') => $query->whereIn('ts.id', fn (Builder $details) => $details
@@ -798,11 +985,9 @@ class EcomActivityListService
                 ->from('tracking_session_details')
                 ->where('ip', 'like', $prefix)),
             str_contains($search, '@') => $query->where('ts.email', 'like', $prefix),
-            (bool) preg_match('/^\+?[\d\s()-]+$/', $search) => $query->where(fn (Builder $q) => $q
-                ->where('ts.phone', 'like', str_replace([' ', '(', ')'], '', $prefix))
-                ->orWhere('ts.session_id', 'like', $prefix)),
-            (bool) preg_match('/^(?=.*\d)[0-9a-f-]{4,}$/i', $search) => $matching($sessionsWhere('session_id'), $productSessions),
-            default => $matching($sessionsWhere('name'), $sessionsWhere('email'), $productSessions),
+            (bool) preg_match('/^\+?[\d\s()-]+$/', $search) => $matching($orderSessions, $orderActionSessions, $phoneOrSessionSessions),
+            (bool) preg_match('/^(?=.*\d)[0-9a-f-]{4,}$/i', $search) => $matching($orderSessions, $orderActionSessions, $sessionsWhere('session_id'), $productSessions),
+            default => $matching($sessionsWhere('name'), $sessionsWhere('email'), $orderSessions, $orderActionSessions, $productSessions),
         };
     }
 

@@ -76,7 +76,10 @@
     <div class="etd-page-header-meta-row @if (! $drillDownUi) etd-page-header-meta-row--empty @endif">
         <div class="etd-page-header-meta-row__left">
             @if ($drillDownUi)
-                <p class="etd-kpi-section-label mb-1">Audience &amp; engagement</p>
+                <p class="etd-kpi-section-label mb-1">{{ $drillDownUi['sectionLabel'] ?? 'Audience & engagement' }}</p>
+                @if (! empty($drillDownUi['sectionSubtitle']))
+                    <p class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">{{ $drillDownUi['sectionSubtitle'] }}</p>
+                @endif
                 @include('ecom_activity.partials.drill-down-context', [
                     'drillDownUi' => $drillDownUi,
                     'activityExport' => $activityExport,

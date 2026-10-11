@@ -16,6 +16,7 @@ final class EcomActivityTableFocus
         'devices' => ['device_detail'],
         'traffic' => ['traffic_source', 'traffic_medium'],
         'session_quality' => ['classification_reason'],
+        'products' => ['products_viewed', 'adds', 'purchased', 'purchases'],
     ];
 
     /** @var array<string, array{key: string, label: string, class?: string, tip?: string}> */

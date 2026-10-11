@@ -33,7 +33,7 @@
                 <input type="text"
                        name="search"
                        value="{{ request('search') }}"
-                       placeholder="Session, visitor, email, phone, IP, product, SKU, category, department…"
+                       placeholder="Order ID, session, visitor, email, phone, IP, product, SKU…"
                        class="etd-filter-input etd-filter-input--sm w-full">
             </label>
         </section>

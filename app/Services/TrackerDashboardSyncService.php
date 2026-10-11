@@ -107,6 +107,22 @@ class TrackerDashboardSyncService
      *
      * @param  list<int>  $ids
      */
+    /**
+     * Push one storefront session into tracking_* (same work as a sync chunk of size 1).
+     */
+    public function syncPendingBySessionId(string $sessionId): void
+    {
+        $activityUserId = (int) DB::table('activity_ecom_user')
+            ->where('session_id', $sessionId)
+            ->value('id');
+
+        if ($activityUserId <= 0) {
+            return;
+        }
+
+        $this->syncSessionIds([$activityUserId]);
+    }
+
     public function syncSessionIds(array $ids): void
     {
         $this->cache = [];
