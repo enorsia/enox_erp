@@ -6,7 +6,9 @@
     $products = $event['products'] ?? [];
     $cartQty = (int) ($event['cart_qty'] ?? 0);
     $cartTotal = $event['cart_total'] ?? null;
-    $showCartTotals = $products !== [] && ($cartQty > 0 || filled($cartTotal));
+    $pricingSummaryRows = $event['pricing_summary_rows'] ?? [];
+    $showPricingSummary = $pricingSummaryRows !== [];
+    $showCartTotals = $products !== [] && ! $showPricingSummary && ($cartQty > 0 || filled($cartTotal));
     $isCompact = $layout === 'compact';
 @endphp
 
@@ -35,7 +37,22 @@
                             </tr>
                         @endforeach
                     </tbody>
-                    @if ($showCartTotals)
+                    @if ($showPricingSummary)
+                        <tfoot>
+                            @foreach ($pricingSummaryRows as $summaryRow)
+                                <tr @class([
+                                    'etd-commerce-event-detail__product-total-row',
+                                    'etd-commerce-event-detail__product-total-row--grand' => ! empty($summaryRow['emphasis']),
+                                ])>
+                                    <td colspan="4" class="etd-commerce-event-detail__product-summary-label">{{ $summaryRow['label'] ?? '' }}</td>
+                                    <td @class([
+                                        'etd-num etd-commerce-event-detail__product-summary-value',
+                                        'etd-commerce-event-detail__product-total-price' => ! empty($summaryRow['emphasis']),
+                                    ]) data-label="{{ $summaryRow['label'] ?? 'Amount' }}">{{ $summaryRow['value'] ?? '—' }}</td>
+                                </tr>
+                            @endforeach
+                        </tfoot>
+                    @elseif ($showCartTotals)
                         <tfoot>
                             <tr class="etd-commerce-event-detail__product-total-row">
                                 <td colspan="3" class="etd-commerce-event-detail__product-total-spacer"></td>
@@ -46,10 +63,6 @@
                     @endif
                 </table>
             </div>
-        @endif
-
-        @if (filled($event['footer_note'] ?? null))
-            <p class="etd-commerce-event-detail__footer-note">{{ $event['footer_note'] }}</p>
         @endif
     </div>
 @else
@@ -107,6 +120,22 @@
                                 </tr>
                             @endforeach
                         </tbody>
+                        @if ($showPricingSummary)
+                            <tfoot>
+                                @foreach ($pricingSummaryRows as $summaryRow)
+                                    <tr @class([
+                                        'etd-commerce-event-detail__product-total-row',
+                                        'etd-commerce-event-detail__product-total-row--grand' => ! empty($summaryRow['emphasis']),
+                                    ])>
+                                        <td colspan="4" class="etd-commerce-event-detail__product-summary-label">{{ $summaryRow['label'] ?? '' }}</td>
+                                        <td @class([
+                                            'etd-num etd-commerce-event-detail__product-summary-value',
+                                            'etd-commerce-event-detail__product-total-price' => ! empty($summaryRow['emphasis']),
+                                        ]) data-label="{{ $summaryRow['label'] ?? 'Amount' }}">{{ $summaryRow['value'] ?? '—' }}</td>
+                                    </tr>
+                                @endforeach
+                            </tfoot>
+                        @endif
                     </table>
                 </div>
             </section>

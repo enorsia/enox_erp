@@ -290,7 +290,7 @@ class EcomTrackerDashboardService
     }
 
     /**
-     * Top products (daily rows are per product code); the window totals cover every product.
+     * Top products by units sold (daily rows are per product code); the window totals cover every product.
      *
      * @return array{rows: list<array<string, mixed>>, totals: array{views: int, product_count: int}}
      */
@@ -302,6 +302,7 @@ class EcomTrackerDashboardService
             ->selectRaw('product_code as code, SUM(product_views) as views, SUM(add_to_carts) as adds, SUM(proceed_checkouts) as proceed_checkouts')
             ->selectRaw('SUM(sold_qty) as qty, SUM(sale_amount) as revenue')
             ->selectRaw('COUNT(*) OVER () as product_count, SUM(SUM(product_views)) OVER () as total_views')
+            ->orderByDesc('qty')
             ->orderByDesc('revenue')
             ->orderByDesc('views')
             ->limit(self::PRODUCT_LIMIT);
@@ -311,6 +312,7 @@ class EcomTrackerDashboardService
             ->fromSub($top, 'top')
             ->select('top.*')
             ->selectSub(fn ($title) => $title->from('tracking_product')->whereColumn('code', 'top.code')->selectRaw('MIN(title)'), 'title')
+            ->orderByDesc('qty')
             ->orderByDesc('revenue')
             ->orderByDesc('views')
             ->get();

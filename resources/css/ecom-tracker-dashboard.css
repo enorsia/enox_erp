@@ -3158,6 +3158,10 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 }
 
 @media (min-width: 640px) {
+    .etd-device-browser-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .etd-device-browser-panel,
     .etd-table-scroll--device-browser.etd-table-scroll--fixed {
         width: 100%;
@@ -3986,6 +3990,33 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 
 .dark .etd-commerce-event-detail__product-total-row td {
     border-top-color: color-mix(in srgb, var(--etd-accent, #1d9e75) 28%, #475569);
+}
+
+.etd-commerce-event-detail__product-summary-label {
+    text-align: right;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.dark .etd-commerce-event-detail__product-summary-label {
+    color: #94a3b8;
+}
+
+.etd-commerce-event-detail__product-total-row--grand .etd-commerce-event-detail__product-summary-label {
+    color: #0f172a;
+}
+
+.dark .etd-commerce-event-detail__product-total-row--grand .etd-commerce-event-detail__product-summary-label {
+    color: #f1f5f9;
+}
+
+.etd-commerce-event-detail__product-summary-value {
+    font-weight: 600;
+    color: #334155;
+}
+
+.dark .etd-commerce-event-detail__product-summary-value {
+    color: #e2e8f0;
 }
 
 .etd-commerce-event-detail__product-total-qty,

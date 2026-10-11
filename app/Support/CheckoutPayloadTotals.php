@@ -12,6 +12,20 @@ final class CheckoutPayloadTotals
     {
         $totals = $payload['totals'] ?? [];
 
+        if (is_array($totals) && $totals !== []) {
+            return $totals;
+        }
+
+        $checkout = $payload['checkout_info'] ?? [];
+
+        if (is_array($checkout)) {
+            $nested = $checkout['totals'] ?? [];
+
+            if (is_array($nested) && $nested !== []) {
+                return $nested;
+            }
+        }
+
         return is_array($totals) ? $totals : [];
     }
 

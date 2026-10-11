@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\TrackingCategory;
 use App\Models\TrackingDailyDuration;
 use App\Models\TrackingSession;
+use App\Exceptions\CommerceParseException;
+use App\Support\CommercePricingExtractor;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
@@ -635,36 +637,32 @@ class EcomActivityListService
             'products' => $products,
         ];
 
-        if ($stageKey !== 'payment_success') {
-            $discount = (float) ($row->commerce_discount ?? 0);
-            $shipping = (float) ($row->commerce_shipping ?? 0);
-            $coupon = trim((string) ($row->commerce_coupon_code ?? ''));
+        $pricing = $this->resolvedCommercePricing($row, $stageKey, $json);
+        $grandTotal = $pricing['grand_total'] ?? $amount;
+        $summaryRows = $this->pricingSummaryRows($pricing);
 
+        if ($stageKey !== 'payment_success') {
             return $event + [
                 'title' => $stageKey === 'add_to_cart' ? 'Cart details' : $label,
                 'layout' => 'compact',
                 'cart_qty' => $qty,
-                'cart_total' => $amount !== null ? $this->money($amount) : null,
-                'footer_note' => implode(' · ', array_filter([
-                    $coupon !== '' ? 'Coupon '.$coupon : null,
-                    $discount > 0 ? 'Discount '.$this->money($discount) : null,
-                    $shipping > 0 ? 'Shipping '.$this->money($shipping) : null,
-                ])) ?: null,
+                'cart_total' => $grandTotal !== null ? $this->money($grandTotal) : null,
+                'pricing_summary_rows' => $summaryRows,
             ];
         }
 
         $customer = $json['checkout_info']['customer'] ?? [];
-        $totals = $json['checkout_info']['totals'] ?? [];
 
         return $event + [
             'title' => 'Order details'.($orderId !== '' ? ': #'.$orderId : ''),
             'layout' => 'detail',
+            'pricing_summary_rows' => $summaryRows,
             'info_groups' => array_values(array_filter([
                 [
                     'title' => 'Order info',
                     'fields' => array_values(array_filter([
                         $orderId !== '' ? ['label' => 'Order ID', 'value' => $orderId] : null,
-                        $amount !== null ? ['label' => 'Total', 'value' => $this->money($amount), 'emphasis' => true] : null,
+                        $grandTotal !== null ? ['label' => 'Total', 'value' => $this->money($grandTotal), 'emphasis' => true] : null,
                         $qty > 0 ? ['label' => 'Quantity', 'value' => (string) $qty] : null,
                         filled($json['payment_method'] ?? null) ? ['label' => 'Payment', 'value' => (string) $json['payment_method']] : null,
                         ['label' => 'Ordered', 'value' => TrackerTime::formatFromStorage($row->commerce_at, 'Y-m-d h:i A') ?? '—'],
@@ -679,17 +677,124 @@ class EcomActivityListService
                         ])),
                     ]
                     : null,
-                [
-                    'title' => 'Prices',
-                    'fields' => array_values(array_filter([
-                        $this->moneyField('Sub total', $row->commerce_subtotal ?? ($totals['subtotal'] ?? null)),
-                        $this->moneyField('Delivery charge', $row->commerce_shipping ?? ($totals['delivery_charge'] ?? null)),
-                        $this->moneyField('Discount', $row->commerce_discount ?? null, true),
-                        $amount !== null ? ['label' => 'Grand total', 'value' => $this->money($amount), 'emphasis' => true] : null,
-                    ])),
-                ],
+                $summaryRows !== []
+                    ? [
+                        'title' => 'Prices',
+                        'fields' => $summaryRows,
+                    ]
+                    : null,
             ])),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $json
+     * @return array{
+     *     subtotal: ?float,
+     *     shipping: ?float,
+     *     discount: ?float,
+     *     service_charge: ?float,
+     *     extra_charges: ?float,
+     *     grand_total: ?float,
+     *     coupon_code: ?string
+     * }
+     */
+    private function resolvedCommercePricing(object $row, string $stageKey, array $json): array
+    {
+        $actionType = $stageKey === 'proceed_checkout' ? 'proceed_checkout' : $stageKey;
+        $extracted = [];
+
+        try {
+            $extracted = CommercePricingExtractor::fromPayload($actionType, $json);
+        } catch (CommerceParseException) {
+            $extracted = [];
+        }
+
+        $pick = fn (mixed $primary, mixed $fallback = null): ?float => $this->amount($primary) ?? (is_numeric($fallback) ? round((float) $fallback, 2) : null);
+
+        $grandTotal = $pick(
+            $stageKey === 'payment_success' ? ($row->commerce_amount_paid ?? null) : null,
+            null,
+        ) ?? $pick($row->commerce_total ?? null, $extracted['grand_total'] ?? $extracted['commerce_total'] ?? null);
+
+        $subtotal = $pick($row->commerce_subtotal ?? null, $extracted['commerce_subtotal'] ?? $extracted['subtotal'] ?? null);
+        $shipping = $pick($row->commerce_shipping ?? null, $extracted['commerce_shipping'] ?? $extracted['shipping_charge'] ?? null);
+        $discount = $pick($row->commerce_discount ?? null, $extracted['commerce_discount'] ?? $extracted['discount_amount'] ?? null);
+        $serviceCharge = $pick(null, $extracted['service_charge'] ?? null);
+        $extraCharges = $pick(null, $extracted['extra_charges_total'] ?? null);
+
+        $couponCode = trim((string) ($row->commerce_coupon_code ?? $extracted['coupon_code'] ?? $json['coupon_code'] ?? ''));
+
+        return [
+            'subtotal' => $subtotal,
+            'shipping' => $shipping,
+            'discount' => $discount,
+            'service_charge' => $serviceCharge,
+            'extra_charges' => $extraCharges,
+            'grand_total' => $grandTotal,
+            'coupon_code' => $couponCode !== '' ? $couponCode : null,
+        ];
+    }
+
+    /**
+     * @param  array{
+     *     subtotal: ?float,
+     *     shipping: ?float,
+     *     discount: ?float,
+     *     service_charge: ?float,
+     *     extra_charges: ?float,
+     *     grand_total: ?float,
+     *     coupon_code: ?string
+     * }  $pricing
+     * @return list<array{label: string, value: string, emphasis?: bool}>
+     */
+    private function pricingSummaryRows(array $pricing): array
+    {
+        $subtotal = $pricing['subtotal'];
+        $shipping = $pricing['shipping'];
+        $discount = $pricing['discount'];
+        $serviceCharge = $pricing['service_charge'];
+        $extraCharges = $pricing['extra_charges'];
+        $grandTotal = $pricing['grand_total'];
+        $couponCode = $pricing['coupon_code'];
+
+        $hasAdjustments = ($shipping !== null && $shipping > 0)
+            || ($discount !== null && $discount > 0)
+            || ($serviceCharge !== null && $serviceCharge > 0)
+            || ($extraCharges !== null && $extraCharges > 0)
+            || filled($couponCode);
+
+        $rows = [];
+
+        if ($subtotal !== null && ($hasAdjustments || ($grandTotal !== null && abs($subtotal - $grandTotal) > 0.009))) {
+            $rows[] = ['label' => 'Subtotal', 'value' => $this->money($subtotal)];
+        }
+
+        if (filled($couponCode)) {
+            $rows[] = ['label' => 'Coupon', 'value' => (string) $couponCode];
+        }
+
+        if ($discount !== null && $discount > 0) {
+            $rows[] = ['label' => 'Discount', 'value' => '- '.$this->money($discount)];
+        }
+
+        if ($shipping !== null && $shipping > 0) {
+            $rows[] = ['label' => 'Delivery', 'value' => $this->money($shipping)];
+        }
+
+        if ($serviceCharge !== null && $serviceCharge > 0) {
+            $rows[] = ['label' => 'Service charge', 'value' => $this->money($serviceCharge)];
+        }
+
+        if ($extraCharges !== null && $extraCharges > 0) {
+            $rows[] = ['label' => 'Extra charges', 'value' => $this->money($extraCharges)];
+        }
+
+        if ($grandTotal !== null) {
+            $rows[] = ['label' => 'Total', 'value' => $this->money($grandTotal), 'emphasis' => true];
+        }
+
+        return $rows;
     }
 
     /**
