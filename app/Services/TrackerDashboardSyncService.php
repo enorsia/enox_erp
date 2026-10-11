@@ -830,8 +830,7 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * utm_source / utm_medium hold the dashboard traffic bucket (same rule as the master dashboard),
-     * resolved on the first sync and kept afterwards so the day counters always use the same key.
+     * utm_source / utm_medium hold the dashboard traffic bucket: last marketing touch in the session when recorded.
      *
      * @param  array<string, mixed>  $sessionRow
      * @param  Collection<int, object>  $actions
@@ -845,56 +844,69 @@ class TrackerDashboardSyncService
         ?int $browserId,
     ): array {
         $referer = $this->earliestRefererFromActions($actions);
+        $touches = SessionTrafficAttribution::collectSessionTrafficTouches($sessionRow, $actions);
 
-        $existing = DB::table('tracking_session_details')
+        if ($touches === []) {
+            $bucket = SessionTrafficAttribution::resolvedTrafficBucket((object) $sessionRow, [''], (string) $referer);
+            $touches = [[
+                'source' => $bucket['source'],
+                'medium' => $bucket['medium'],
+                'campaign' => $sessionRow['utm_campaign'] ?? null,
+                'landing_page' => $sessionRow['landing_page'] ?? null,
+                'referer' => $referer,
+                'captured_at' => TrackerTime::formatUtc($sessionRow['created_at'] ?? now()) ?? now()->toDateTimeString(),
+            ]];
+        }
+
+        $existingCount = (int) DB::table('tracking_session_details')
             ->where('tracking_session_id', $trackingSessionId)
+            ->count();
+
+        for ($index = $existingCount; $index < count($touches); $index++) {
+            $touch = $touches[$index];
+            [$source, $medium] = $this->trafficSourceMedium($touch['source'], $touch['medium']);
+            $trafficId = $this->remember("traffic:{$source}|{$medium}", fn () => $this->findOrCreateTrafficSource($source, $medium));
+            $payload = [
+                'tracking_session_id' => $trackingSessionId,
+                'touch_sequence' => $index + 1,
+                'captured_at' => $touch['captured_at'],
+                'ip' => $sessionRow['ip'] ?? null,
+                'tracking_device_id' => $deviceId,
+                'tracking_browser_id' => $browserId,
+                'tracking_traffic_source_id' => $trafficId,
+                'utm_source' => $source,
+                'utm_medium' => $medium,
+                'utm_campaign' => $touch['campaign'] ?? null,
+                'landing_page' => $touch['landing_page'] ?? null,
+                'referer' => $touch['referer'] ?? $referer,
+                'user_agent' => $sessionRow['user_agent'] ?? null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+
+            try {
+                DB::table('tracking_session_details')->insert($payload);
+            } catch (QueryException) {
+                // touch_sequence race — another worker inserted the same sequence.
+            }
+        }
+
+        $latest = DB::table('tracking_session_details')
+            ->where('tracking_session_id', $trackingSessionId)
+            ->orderByDesc('touch_sequence')
             ->first();
 
-        if ($existing?->tracking_traffic_source_id !== null) {
-            $trafficId = (int) $existing->tracking_traffic_source_id;
-            [$source, $medium] = $this->trafficSourceMedium($existing->utm_source, $existing->utm_medium);
-        } else {
-            // An empty referer makes the helper look up the session's first referer itself.
-            $bucket = SessionTrafficAttribution::resolvedTrafficBucket((object) $sessionRow, [''], (string) ($existing?->referer ?: $referer));
-            [$source, $medium] = $this->trafficSourceMedium($bucket['source'], $bucket['medium']);
-            $trafficId = $this->remember("traffic:{$source}|{$medium}", fn () => $this->findOrCreateTrafficSource($source, $medium));
+        if ($latest === null) {
+            return [null, '(direct)', 'none'];
         }
 
-        $payload = [
-            'tracking_session_id' => $trackingSessionId,
-            'ip' => $sessionRow['ip'] ?? null,
-            'tracking_device_id' => $deviceId,
-            'tracking_browser_id' => $browserId,
-            'tracking_traffic_source_id' => $trafficId,
-            'utm_source' => $source,
-            'utm_medium' => $medium,
-            'utm_campaign' => $sessionRow['utm_campaign'] ?? null,
-            'landing_page' => $sessionRow['landing_page'] ?? null,
-            'user_agent' => $sessionRow['user_agent'] ?? null,
+        $trafficId = $latest->tracking_traffic_source_id !== null ? (int) $latest->tracking_traffic_source_id : null;
+
+        return [
+            $trafficId,
+            (string) $latest->utm_source,
+            (string) $latest->utm_medium,
         ];
-
-        if ($existing) {
-            if ($referer !== null && trim((string) ($existing->referer ?? '')) === '') {
-                $payload['referer'] = $referer;
-            }
-
-            $this->applyTableUpdates('tracking_session_details', $existing, $payload);
-
-            return [$trafficId, $source, $medium];
-        }
-
-        $payload['referer'] = $referer;
-
-        $payload['created_at'] = now();
-        $payload['updated_at'] = now();
-
-        try {
-            DB::table('tracking_session_details')->insert($payload);
-        } catch (QueryException) {
-            // Unique tracking_session_id — race with another worker.
-        }
-
-        return [$trafficId, $source, $medium];
     }
 
     // ===== 4. Lookup tables =====
@@ -1666,22 +1678,23 @@ class TrackerDashboardSyncService
     {
         $now = now();
 
-        $sessions = DB::table('tracking_session as ts')
+        $sessionsQuery = DB::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->leftJoin('tracking_session_details as sd', 'sd.tracking_session_id', '=', 'ts.id')
-            ->where('dv.visit_date', $date)
-            ->get([
-                'ts.tracking_daily_visitor_id', 'ts.duration_seconds',
-                'ts.has_add_to_cart', 'ts.has_begin_checkout', 'ts.has_proceed_checkout', 'ts.has_order',
-                'sd.tracking_device_id', 'sd.tracking_browser_id', 'sd.tracking_traffic_source_id', 'sd.utm_source', 'sd.utm_medium',
-            ]);
+            ->where('dv.visit_date', $date);
+        SessionTrafficAttribution::joinLatestSessionDetails($sessionsQuery);
+        $sessions = $sessionsQuery->get([
+            'ts.tracking_daily_visitor_id', 'ts.duration_seconds',
+            'ts.has_add_to_cart', 'ts.has_begin_checkout', 'ts.has_proceed_checkout', 'ts.has_order',
+            'sd.tracking_device_id', 'sd.tracking_browser_id', 'sd.tracking_traffic_source_id', 'sd.utm_source', 'sd.utm_medium',
+        ]);
 
         // same_day: the order's session started that day too (device / traffic / payment panel need both, like master).
-        $orders = DB::table('tracking_orders as o')
+        $ordersQuery = DB::table('tracking_orders as o')
             ->leftJoin('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->leftJoin('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->leftJoin('tracking_session_details as sd', 'sd.tracking_session_id', '=', 'o.tracking_session_id')
-            ->where('o.metric_date', $date)
+            ->where('o.metric_date', $date);
+        SessionTrafficAttribution::joinLatestSessionDetails($ordersQuery, 'o.tracking_session_id');
+        $orders = $ordersQuery
             ->selectRaw('dv.visit_date = ? as same_day', [$date])
             ->addSelect([
                 'o.tracking_session_id', 'o.items_qty', 'o.amount_paid', 'o.ordered_at',

@@ -10,7 +10,9 @@ return new class extends Migration
     {
         Schema::create('tracking_session_details', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('tracking_session_id')->unique()->constrained('tracking_session')->cascadeOnDelete();
+            $table->foreignId('tracking_session_id')->constrained('tracking_session')->cascadeOnDelete();
+            $table->unsignedSmallInteger('touch_sequence')->default(1);
+            $table->timestamp('captured_at')->nullable();
             $table->string('ip', 45)->nullable();
             $table->foreignId('tracking_device_id')->nullable()->constrained('tracking_device')->nullOnDelete();
             $table->foreignId('tracking_browser_id')->nullable()->constrained('tracking_browser')->nullOnDelete();
@@ -25,6 +27,7 @@ return new class extends Migration
 
             $table->index('ip', 'tsd_search_ip_idx');
             $table->index(['tracking_session_id', 'tracking_device_id', 'tracking_traffic_source_id'], 'tsd_filter_idx');
+            $table->unique(['tracking_session_id', 'touch_sequence'], 'tsd_session_touch_unique');
         });
     }
 

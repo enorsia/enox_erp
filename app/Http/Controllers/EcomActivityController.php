@@ -153,6 +153,7 @@ class EcomActivityController extends Controller
         ]);
 
         $trafficAttribution = SessionTrafficAttribution::displayFields($activityUser, $actions);
+        $sessionTrafficTouches = SessionTrafficAttribution::touchesForSessionDisplay($activityUser, $actions);
         $conversionAttribution = SessionTrafficAttribution::conversionOrMarketingDisplayFields($activityUser);
         $landingPage = filled($activityUser->landing_page)
             ? $activityUser->landing_page
@@ -172,6 +173,7 @@ class EcomActivityController extends Controller
             'reachedSteps' => $reachedSteps,
             'backUrl' => $backUrl,
             'trafficAttribution' => $trafficAttribution,
+            'sessionTrafficTouches' => $sessionTrafficTouches,
             'conversionAttribution' => $conversionAttribution,
             'landingPage' => $landingPage,
             'latestActionAt' => $latestActionAt,

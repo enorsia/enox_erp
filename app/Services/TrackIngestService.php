@@ -190,6 +190,12 @@ class TrackIngestService
                 $event['referer'] ?? null,
             );
 
+            SessionTrafficAttribution::applySessionTouchFromEvent(
+                $sessionId,
+                $event['page_url'] ?? null,
+                $event['referer'] ?? null,
+            );
+
             if (($event['action_type'] ?? '') === 'proceed_checkout') {
                 $this->syncSessionUserFromProceedCheckout($sessionId, $event);
             }
@@ -287,6 +293,14 @@ class TrackIngestService
 
             $this->persistBotContextIfNeeded($sessionId, $clientContext);
             $this->mergeAttributionIntoSession($session, $sessionData);
+
+            if (filled($session->landing_page)) {
+                SessionTrafficAttribution::applySessionTouchFromEvent(
+                    $sessionId,
+                    (string) $session->landing_page,
+                    null,
+                );
+            }
 
             return;
         }

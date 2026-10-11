@@ -7,6 +7,7 @@ use App\Models\TrackingDailyDuration;
 use App\Models\TrackingSession;
 use App\Exceptions\CommerceParseException;
 use App\Support\CommercePricingExtractor;
+use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
@@ -309,14 +310,17 @@ class EcomActivityListService
         }
 
         if (! empty($filters['devices']) || ! empty($filters['utm_sources']) || ! empty($filters['utm_mediums'])) {
-            // One details row per session, so a join cannot duplicate rows and lets MySQL stop at the page limit.
-            $query->join(DB::raw('tracking_session_details as fd USE INDEX (tsd_filter_idx)'), 'fd.tracking_session_id', '=', 'ts.id')
-                ->when(! empty($filters['devices']), fn (Builder $q) => $q->whereIn('fd.tracking_device_id', $filters['devices']))
-                ->when(! empty($filters['utm_sources']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', $filters['utm_sources']))
-                ->when(! empty($filters['utm_mediums']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', fn (Builder $sources) => $sources
-                    ->select('id')
-                    ->from('tracking_traffic_source')
-                    ->whereIn('medium', $filters['utm_mediums'])));
+            $query->whereExists(function (Builder $exists) use ($filters) {
+                $exists->selectRaw('1')
+                    ->from('tracking_session_details as fd')
+                    ->whereColumn('fd.tracking_session_id', 'ts.id')
+                    ->when(! empty($filters['devices']), fn (Builder $q) => $q->whereIn('fd.tracking_device_id', $filters['devices']))
+                    ->when(! empty($filters['utm_sources']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', $filters['utm_sources']))
+                    ->when(! empty($filters['utm_mediums']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', fn (Builder $sources) => $sources
+                        ->select('id')
+                        ->from('tracking_traffic_source')
+                        ->whereIn('medium', $filters['utm_mediums'])));
+            });
         }
 
         if (! empty($filters['categories'])) {
@@ -471,8 +475,8 @@ class EcomActivityListService
 
     private function withVisitorTrust(Builder $query): void
     {
+        SessionTrafficAttribution::joinLatestSessionDetails($query);
         $query
-            ->leftJoin('tracking_session_details as sd', 'sd.tracking_session_id', '=', 'ts.id')
             ->leftJoin('activity_ecom_user_bot_context as bc', 'bc.session_id', '=', 'ts.session_id')
             ->addSelect([
                 'sd.ip as visitor_ip',

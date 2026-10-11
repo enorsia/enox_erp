@@ -249,13 +249,29 @@
                 <div class="section-card">
                     <div class="section-title">Session traffic</div>
                     <div class="divide-y divide-slate-100 dark:divide-slate-700/60 text-[13px]">
-                        @forelse ($trafficAttribution ?? [] as $label => $value)
+                        @forelse ($sessionTrafficTouches ?? [] as $touch)
                             <div class="py-2.5 first:pt-0 last:pb-0 min-w-0">
-                                <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
-                                <div class="text-slate-700 dark:text-slate-200 break-all text-[13px]">{{ $value }}</div>
+                                <div class="text-slate-800 dark:text-slate-100">
+                                    <span class="text-slate-400">#{{ $touch['sequence'] }}</span>
+                                    {{ $touch['source_label'] }} / {{ $touch['medium'] !== 'none' ? $touch['medium'] : '—' }}
+                                    @if ($touch['is_last'])
+                                        <span class="text-accent-600 dark:text-accent-400 text-[11px] font-semibold uppercase">· order credit</span>
+                                    @endif
+                                </div>
+                                @if (filled($touch['campaign'] ?? null))
+                                    <div class="text-slate-500 text-[12px]">{{ $touch['campaign'] }}</div>
+                                @endif
+                                <div class="text-[11px] text-slate-400">{{ $touch['captured_at'] }}</div>
                             </div>
                         @empty
-                            <p class="text-sm text-slate-400 dark:text-slate-500 py-1">No UTM or click tracking data for this session.</p>
+                            @forelse ($trafficAttribution ?? [] as $label => $value)
+                                <div class="py-2.5 first:pt-0 last:pb-0 min-w-0">
+                                    <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
+                                    <div class="text-slate-700 dark:text-slate-200 break-all">{{ $value }}</div>
+                                </div>
+                            @empty
+                                <p class="text-sm text-slate-400 py-1">No UTM or click tracking data for this session.</p>
+                            @endforelse
                         @endforelse
                     </div>
                 </div>

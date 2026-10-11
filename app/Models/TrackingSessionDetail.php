@@ -10,6 +10,8 @@ class TrackingSessionDetail extends Model
 
     protected $fillable = [
         'tracking_session_id',
+        'touch_sequence',
+        'captured_at',
         'ip',
         'tracking_device_id',
         'tracking_browser_id',
