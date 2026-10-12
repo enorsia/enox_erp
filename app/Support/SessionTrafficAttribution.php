@@ -664,20 +664,18 @@ final class SessionTrafficAttribution
     /** @return list<array<string, mixed>> */
     public static function touchesForSessionDisplay(ActivityEcomUser $session, ?Collection $actions = null): array
     {
+        // Activity session page has full action rows — use event times from ingest, not synced dashboard copies.
+        if ($actions !== null) {
+            return self::formatTouchesForDisplay(self::collectSessionTrafficTouches($session, $actions));
+        }
+
         $sessionId = (string) $session->session_id;
         $rows = self::sessionDetailsQuery($sessionId)
             ->orderBy('tsd.touch_sequence')
             ->get(['tsd.touch_sequence', 'tsd.utm_source', 'tsd.utm_medium', 'tsd.utm_campaign', 'tsd.captured_at']);
 
         if ($rows->isEmpty()) {
-            $touches = self::collectSessionTrafficTouches($session, $actions);
-            $last = count($touches) - 1;
-
-            return array_map(
-                fn (array $touch, int $index) => self::formatSessionTouch($touch, $index + 1, $index === $last),
-                $touches,
-                array_keys($touches),
-            );
+            return self::formatTouchesForDisplay(self::collectSessionTrafficTouches($session, null));
         }
 
         $last = $rows->count() - 1;
@@ -690,6 +688,25 @@ final class SessionTrafficAttribution
                 'captured_at' => $row->captured_at,
             ], (int) $row->touch_sequence, $index === $last),
         )->all();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $touches
+     * @return list<array<string, mixed>>
+     */
+    private static function formatTouchesForDisplay(array $touches): array
+    {
+        if ($touches === []) {
+            return [];
+        }
+
+        $last = count($touches) - 1;
+
+        return array_map(
+            fn (array $touch, int $index) => self::formatSessionTouch($touch, $index + 1, $index === $last),
+            $touches,
+            array_keys($touches),
+        );
     }
 
     public static function orderTrafficSourceSkippable(?string $source, ?string $medium): bool
@@ -829,7 +846,7 @@ final class SessionTrafficAttribution
         $touches = [];
         $lastKey = null;
 
-        $append = function (?array $bucket, Carbon|string $at) use (&$touches, &$lastKey): void {
+        $append = function (?array $bucket, Carbon|string $at, ?string $pageUrl = null, ?string $referer = null) use (&$touches, &$lastKey): void {
             if ($bucket === null) {
                 return;
             }
@@ -843,15 +860,13 @@ final class SessionTrafficAttribution
             $lastKey = $key;
             $touches[] = $bucket + [
                 'captured_at' => TrackerTime::formatUtc($at) ?? now()->toDateTimeString(),
+                'landing_page' => $pageUrl,
+                'referer' => $referer,
             ];
         };
 
         $landing = is_array($session) ? ($session['landing_page'] ?? null) : $session->landing_page;
         $createdAt = is_array($session) ? ($session['created_at'] ?? now()) : ($session->created_at ?? now());
-
-        if (filled($landing)) {
-            $append(self::trafficBucketFromPage((string) $landing, null), $createdAt);
-        }
 
         if ($actions === null && $sessionId !== '') {
             $actions = ActivityEcomUserAction::query()
@@ -861,13 +876,48 @@ final class SessionTrafficAttribution
                 ->get();
         }
 
-        foreach ($actions ?? [] as $action) {
+        $orderedActions = collect($actions ?? [])->sort(function (object $left, object $right): int {
+            $leftAt = TrackerTime::toUtc($left->created_at ?? null)?->getTimestamp() ?? 0;
+            $rightAt = TrackerTime::toUtc($right->created_at ?? null)?->getTimestamp() ?? 0;
+
+            if ($leftAt !== $rightAt) {
+                return $leftAt <=> $rightAt;
+            }
+
+            return ((int) ($left->id ?? 0)) <=> ((int) ($right->id ?? 0));
+        })->values();
+
+        $firstReferer = $orderedActions
+            ->first(fn (object $action): bool => filled($action->referer ?? null))
+            ?->referer;
+
+        $touchCountBeforeLanding = count($touches);
+
+        if (filled($landing)) {
+            $landingReferer = filled($firstReferer) ? (string) $firstReferer : null;
+
             $append(
-                self::trafficBucketFromPage(
-                    filled($action->page_url ?? null) ? (string) $action->page_url : null,
-                    filled($action->referer ?? null) ? (string) $action->referer : null,
-                ),
+                self::trafficBucketFromPage((string) $landing, $landingReferer),
+                $createdAt,
+                (string) $landing,
+                $landingReferer,
+            );
+        }
+
+        $landingTouchRecorded = count($touches) > $touchCountBeforeLanding;
+
+        foreach ($orderedActions as $index => $action) {
+            $pageUrl = filled($action->page_url ?? null) ? (string) $action->page_url : null;
+            $referer = filled($action->referer ?? null) ? (string) $action->referer : null;
+
+            // Later events: only new marketing on the page URL counts (not Referer headers on same-site navigation).
+            $refererForBucket = (! $landingTouchRecorded && $index === 0) ? $referer : null;
+
+            $append(
+                self::trafficBucketFromMarketingUrl($pageUrl, $refererForBucket),
                 $action->created_at ?? now(),
+                $pageUrl,
+                $referer,
             );
         }
 
@@ -876,11 +926,33 @@ final class SessionTrafficAttribution
 
     public static function applySessionTouchFromEvent(string $sessionId, ?string $pageUrl, ?string $referer): void
     {
-        $bucket = self::trafficBucketFromPage($pageUrl, $referer);
+        $bucket = self::trafficBucketFromMarketingUrl($pageUrl, null);
+
+        if ($bucket === null && ! filled($pageUrl) && filled($referer)) {
+            $bucket = self::trafficBucketFromPage(null, $referer);
+        }
 
         if ($bucket !== null) {
             self::applyLastTouchToSessionRow($sessionId, $bucket);
         }
+    }
+
+    /**
+     * Marketing touch from landing URL query params / click IDs only (referer ignored unless explicitly passed for first hit).
+     */
+    public static function trafficBucketFromMarketingUrl(?string $pageUrl, ?string $referer = null): ?array
+    {
+        $bucket = self::trafficBucketFromPage($pageUrl, null);
+
+        if ($bucket !== null) {
+            return $bucket;
+        }
+
+        if ($referer === null) {
+            return null;
+        }
+
+        return self::trafficBucketFromPage($pageUrl, $referer);
     }
 
     private static function sessionDetailsQuery(string $sessionId): Builder
@@ -901,7 +973,7 @@ final class SessionTrafficAttribution
             'source_label' => self::displaySourceLabel($source) ?? ucfirst($source),
             'medium' => (string) ($touch['medium'] ?? 'none'),
             'campaign' => filled($touch['campaign'] ?? null) ? (string) $touch['campaign'] : null,
-            'captured_at' => TrackerTime::formatFromStorage($touch['captured_at'] ?? null, 'd M Y, h:i A') ?? '—',
+            'captured_at' => TrackerTime::formatFromStorage($touch['captured_at'] ?? null, 'd M Y, h:i:s A') ?? '—',
             'is_last' => $isLast,
         ];
     }

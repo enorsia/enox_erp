@@ -320,6 +320,7 @@ class TrackerDashboardSyncService
                 ActivityEcomUserAction::SYNC_PENDING,
                 ActivityEcomUserAction::SYNC_FAILED,
             ])
+            ->orderBy('created_at')
             ->orderBy('id')
             ->get()
             ->groupBy('session_id');
