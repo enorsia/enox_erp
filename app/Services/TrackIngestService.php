@@ -217,6 +217,7 @@ class TrackIngestService
             ];
 
             if ($this->isCatalogSkuActionType((string) ($event['action_type'] ?? ''))) {
+                $storedLog['product_code'] = $row['product_code'] ?? $event['product_code'] ?? null;
                 $storedLog['sku'] = $row['sku'] ?? $event['sku'] ?? null;
                 $this->logInfo('grid.ingest.stored', 'Grid action saved to database', $storedLog);
             }

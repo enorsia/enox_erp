@@ -35,6 +35,8 @@ class TrackingCtrRollupService
 
                 $processedIds = [];
                 $skipped = 0;
+                $skippedUnprocessableIds = [];
+                $skipSamples = [];
                 $touchedKeys = [];
                 $dailyDeltas = [];
 
@@ -43,6 +45,23 @@ class TrackingCtrRollupService
 
                     if ($dimension === null) {
                         $skipped++;
+                        $skipReason = $this->skipReasonForAction($action);
+
+                        if (count($skipSamples) < 5) {
+                            $skipSamples[] = [
+                                'action_id' => (int) $action->id,
+                                'action_type' => (string) $action->action_type,
+                                'reason' => $skipReason,
+                                'product_code' => trim((string) ($action->product_code ?? '')),
+                                'sku' => trim((string) ($action->sku ?? '')),
+                                'created_at' => $action->created_at,
+                                'start_time' => $action->start_time,
+                            ];
+                        }
+
+                        if ($skipReason === 'missing_catalog_identity') {
+                            $skippedUnprocessableIds[] = (int) $action->id;
+                        }
 
                         continue;
                     }
@@ -89,6 +108,13 @@ class TrackingCtrRollupService
                         ->update(['ctr_tracking_status' => true]);
                 }
 
+                if ($skippedUnprocessableIds !== []) {
+                    ActivityEcomUserAction::query()
+                        ->whereIn('id', $skippedUnprocessableIds)
+                        ->whereNull('ctr_tracking_status')
+                        ->update(['ctr_tracking_status' => false]);
+                }
+
                 foreach ($touchedKeys as $key) {
                     $this->refreshSummaryForSku(
                         $key['department_id'],
@@ -98,11 +124,17 @@ class TrackingCtrRollupService
                     );
                 }
 
-                return [
+                $result = [
                     'processed' => count($processedIds),
                     'skipped' => $skipped,
                     'touched_keys' => array_values($touchedKeys),
                 ];
+
+                if ($skipSamples !== []) {
+                    $result['skip_samples'] = $skipSamples;
+                }
+
+                return $result;
             });
         } catch (Throwable $exception) {
             $this->logError('batch transaction rolled back', [
@@ -144,18 +176,8 @@ class TrackingCtrRollupService
         $departmentId = max(0, (int) trim((string) ($action->department_id ?? '')));
         $categoryId = max(0, (int) trim((string) ($action->category_id ?? '')));
 
-        $createdAt = TrackerTime::toUtc($action->created_at);
-
-        if (! $createdAt) {
-            return null;
-        }
-
-        $metricDate = $createdAt
-            ->timezone(TrackerTime::timezone())
-            ->toDateString();
-
         return [
-            'metric_date' => $metricDate,
+            'metric_date' => $this->metricDateForAction($action),
             'department_id' => $departmentId,
             'category_id' => $categoryId,
             'product_code' => $productCode,
@@ -189,6 +211,26 @@ class TrackingCtrRollupService
             'product_code' => $productCode,
             'sku' => $variantSku,
         ];
+    }
+
+    private function metricDateForAction(ActivityEcomUserAction $action): string
+    {
+        foreach ([$action->created_at, $action->start_time, $action->end_time] as $candidate) {
+            $utc = TrackerTime::toUtc($candidate);
+
+            if ($utc !== null) {
+                return $utc->timezone(TrackerTime::timezone())->toDateString();
+            }
+        }
+
+        return TrackerTime::localNow()->toDateString();
+    }
+
+    private function skipReasonForAction(ActivityEcomUserAction $action): string
+    {
+        return $this->resolveCatalogIdentity($action) === null
+            ? 'missing_catalog_identity'
+            : 'unknown';
     }
 
     /**
