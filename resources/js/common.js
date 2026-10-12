@@ -32,6 +32,10 @@ window.toggleDark = function () {
    MOBILE SIDEBAR
 ══════════════════════════════════════ */
 window.toggleSidebar = function () {
+    if (typeof window.closeFilterDrawer === 'function') {
+        window.closeFilterDrawer();
+    }
+
     const sidebar  = document.getElementById('sidebar');
     const backdrop = document.getElementById('sidebarBackdrop');
     if (!sidebar) return;
@@ -179,6 +183,12 @@ window.initTomSelectElements = function (root) {
             maxOptions: element.dataset.maxOptions ? Number(element.dataset.maxOptions) : 50,
         };
 
+        if (element.multiple) {
+            options.plugins = ['remove_button'];
+            options.persist = false;
+            options.hidePlaceholder = true;
+        }
+
         if (element.dataset.dropdownParent === 'body') {
             options.dropdownParent = 'body';
         }
@@ -197,6 +207,11 @@ window.refreshTomSelectIn = function (root) {
     const scope = root && root.querySelectorAll ? root : document;
     scope.querySelectorAll('.tom-select').forEach((element) => {
         if (element.tomselect) {
+            if (element.multiple) {
+                element.tomselect.settings.hidePlaceholder = true;
+                element.tomselect.inputState();
+            }
+
             element.tomselect.sync();
         }
     });

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\TrackerClientContextResolver;
 use App\Services\TrackIngestService;
 use App\Support\EcomTrackerLogger;
 use Illuminate\Http\JsonResponse;
@@ -14,18 +15,24 @@ class TrackController extends Controller
 {
     public function __construct(
         private TrackIngestService $ingestService,
+        private TrackerClientContextResolver $clientContextResolver,
     ) {}
 
     public function store(Request $request): JsonResponse
     {
         $startedAt = microtime(true);
 
+        $events = $request->input('events', []);
+
         EcomTrackerLogger::frontend()->info('api.track.request', 'Website sent user actions', [
             'ip' => $request->ip(),
             'session_id' => $request->input('session.session_id'),
             'visitor_id' => $request->input('session.visitor_id'),
-            'event_count' => count($request->input('events', [])),
-            'action_types' => collect($request->input('events', []))->pluck('action_type')->filter()->values()->all(),
+            'event_count' => count($events),
+            'action_types' => collect($events)->pluck('action_type')->filter()->values()->all(),
+            'grid_event_count' => collect($events)
+                ->whereIn('action_type', ['grid_impression', 'product_click'])
+                ->count(),
         ]);
 
         try {
@@ -42,6 +49,12 @@ class TrackController extends Controller
                 'session.utm_medium' => ['nullable', 'string', 'max:100'],
                 'session.utm_campaign' => ['nullable', 'string', 'max:100'],
                 'session.landing_page' => ['nullable', 'string', 'max:2048'],
+                'session.last_paid_touch' => ['nullable', 'array'],
+                'session.last_paid_touch.utm_source' => ['nullable', 'string', 'max:100'],
+                'session.last_paid_touch.utm_medium' => ['nullable', 'string', 'max:100'],
+                'session.last_paid_touch.utm_campaign' => ['nullable', 'string', 'max:100'],
+                'session.last_paid_touch.landing_page' => ['nullable', 'string', 'max:2048'],
+                'session.last_paid_touch.captured_at' => ['nullable', 'string', 'max:64'],
                 'events' => ['required', 'array', 'min:1', 'max:' . max(1, (int) config('tracker.ingest_max_events', 50))],
                 'events.*.id' => ['required', 'uuid'],
                 'events.*.session_id' => ['required', 'string', 'max:64'],
@@ -68,6 +81,16 @@ class TrackController extends Controller
                 'events.*.end_time' => ['nullable'],
                 'events.*.created_at' => ['nullable'],
             ]);
+
+            $clientContext = $this->clientContextResolver->resolve($request);
+
+            if ($clientContext !== null) {
+                EcomTrackerLogger::frontend()->info('ingest.client_context', 'Client context for batch', [
+                    'session_id' => $validated['session']['session_id'] ?? ($validated['events'][0]['session_id'] ?? null),
+                    'is_bot' => $clientContext['is_bot'] ?? null,
+                    'ip_country' => $clientContext['ip_country'] ?? null,
+                ]);
+            }
 
             $acceptedIds = $this->ingestService->ingest($request, $validated);
 

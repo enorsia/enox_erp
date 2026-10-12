@@ -112,7 +112,7 @@ return [
             ],
             'activity' => [
                 'guard' => 'web',
-                'actions' => ['index', 'show'],
+                'actions' => ['index', 'show', 'export'],
             ],
         ],
 

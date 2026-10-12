@@ -7,6 +7,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerActionSequence;
 use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerRedisSupport;
@@ -25,7 +26,6 @@ class TrackIngestService
         private TrackerClientContextResolver $clientContextResolver,
         private BotContextPersister $botContextPersister,
         private TrackerPaymentCheckoutEnricher $paymentCheckoutEnricher,
-        private CommerceIngestWriter $commerceIngestWriter,
     ) {}
 
     /**
@@ -52,6 +52,8 @@ class TrackIngestService
             ]);
         }
 
+        $events = $this->sortEventsByClock($events);
+
         TrackerRedisSupport::logFrontendHealth('track_ingest');
 
         $clientContext = $this->clientContextResolver->resolve($request);
@@ -68,11 +70,33 @@ class TrackIngestService
             $sessionData['session_id'] = $sessionId;
         }
 
+        $gridEventCount = collect($events)
+            ->filter(fn ($event) => $this->isCatalogSkuActionType((string) ($event['action_type'] ?? '')))
+            ->count();
+
         $this->logInfo('ingest.start', 'Saving user actions started', [
             'session_id' => $sessionId,
             'visitor_id' => $visitorId,
             'event_count' => count($events),
+            'grid_event_count' => $gridEventCount,
         ]);
+
+        if ($gridEventCount > 0) {
+            $this->logInfo('grid.ingest.batch', 'Grid events in track batch', [
+                'session_id' => $sessionId,
+                'grid_event_count' => $gridEventCount,
+                'grid_events' => collect($events)
+                    ->filter(fn ($event) => $this->isCatalogSkuActionType((string) ($event['action_type'] ?? '')))
+                    ->map(fn ($event) => [
+                        'event_id' => $event['id'] ?? null,
+                        'action_type' => $event['action_type'] ?? null,
+                        'sku' => $event['sku'] ?? null,
+                        'page_url' => $event['page_url'] ?? null,
+                    ])
+                    ->values()
+                    ->all(),
+            ]);
+        }
 
         $this->upsertSession($request, $sessionId, $sessionData, $clientContext);
 
@@ -92,6 +116,31 @@ class TrackIngestService
             }
 
             $this->validatePaymentSuccessPayload($event);
+
+            try {
+                $this->validateGridSkuEvent($event);
+            } catch (ValidationException $e) {
+                if ($this->isCatalogSkuActionType((string) ($event['action_type'] ?? ''))) {
+                    $this->logWarning('grid.ingest.rejected', 'Grid event failed validation', [
+                        'session_id' => $sessionId,
+                        'event_id' => $eventId,
+                        'action_type' => $event['action_type'] ?? null,
+                        'sku' => $event['sku'] ?? null,
+                        'errors' => $e->errors(),
+                    ]);
+                }
+
+                throw $e;
+            }
+
+            if ($this->isCatalogSkuActionType((string) ($event['action_type'] ?? ''))) {
+                $this->logInfo('grid.ingest.validated', 'Grid event passed validation', [
+                    'session_id' => $sessionId,
+                    'event_id' => $eventId,
+                    'action_type' => $event['action_type'] ?? null,
+                    'sku' => $event['sku'] ?? null,
+                ]);
+            }
 
             if (! $this->hasMeaningfulCheckoutPayload($event)) {
                 $acceptedIds[] = $eventId;
@@ -122,53 +171,27 @@ class TrackIngestService
             }
 
             $row = $this->mapEventToRow($sessionId, $event);
-            $actionAlreadyStored = ActivityEcomUserAction::query()
+            $row['is_sync'] = ActivityEcomUserAction::SYNC_PENDING;
+            $existingAction = ActivityEcomUserAction::query()
                 ->where('event_id', $eventId)
-                ->exists();
+                ->first();
+            $actionAlreadyStored = $existingAction !== null;
+            $previousSessionId = $existingAction?->session_id;
 
-            try {
-                if (CommerceIngestWriter::isSyncableActionType($event['action_type'] ?? '')) {
-                    DB::transaction(function () use ($eventId, $row, $event, $actionAlreadyStored, $sessionId) {
-                        ActivityEcomUserAction::query()->updateOrInsert(
-                            ['event_id' => $eventId],
-                            $row
-                        );
+            ActivityEcomUserAction::query()->updateOrInsert(
+                ['event_id' => $eventId],
+                $row
+            );
 
-                        if (! $actionAlreadyStored) {
-                            ActivityEcomUser::query()
-                                ->where('session_id', $sessionId)
-                                ->increment('actions_count');
-                        }
-
-                        $action = ActivityEcomUserAction::query()->where('event_id', $eventId)->first();
-                        if ($action !== null) {
-                            $this->commerceIngestWriter->syncFromAction($action);
-                        }
-                    });
-                } else {
-                    ActivityEcomUserAction::query()->updateOrInsert(
-                        ['event_id' => $eventId],
-                        $row
-                    );
-
-                    if (! $actionAlreadyStored) {
-                        ActivityEcomUser::query()
-                            ->where('session_id', $sessionId)
-                            ->increment('actions_count');
-                    }
-                }
-            } catch (Throwable $e) {
-                EcomTrackerLogger::frontend()->error('commerce.ingest.failed', 'Commerce ingest failed', [
-                    'session_id' => $sessionId,
-                    'event_id' => $eventId,
-                    'action_type' => $event['action_type'] ?? null,
-                    'message' => $e->getMessage(),
-                ]);
-
-                throw $e;
-            }
+            $this->syncSessionActionCount($sessionId, $actionAlreadyStored, $previousSessionId);
 
             $this->backfillSessionAttribution(
+                $sessionId,
+                $event['page_url'] ?? null,
+                $event['referer'] ?? null,
+            );
+
+            SessionTrafficAttribution::applySessionTouchFromEvent(
                 $sessionId,
                 $event['page_url'] ?? null,
                 $event['referer'] ?? null,
@@ -184,17 +207,30 @@ class TrackIngestService
 
             $acceptedIds[] = $eventId;
 
-            $this->logInfo('ingest.event_stored', 'One action saved', [
+            $storedLog = [
                 'session_id' => $sessionId,
                 'event_id' => $eventId,
                 'action_type' => $event['action_type'] ?? null,
                 'page_url' => $event['page_url'] ?? null,
                 'category_name' => $event['category_name'] ?? null,
                 'department_name' => $event['department_name'] ?? null,
-            ]);
+            ];
+
+            if ($this->isCatalogSkuActionType((string) ($event['action_type'] ?? ''))) {
+                $storedLog['sku'] = $row['sku'] ?? $event['sku'] ?? null;
+                $this->logInfo('grid.ingest.stored', 'Grid action saved to database', $storedLog);
+            }
+
+            $this->logInfo('ingest.event_stored', 'One action saved', $storedLog);
         }
 
         $this->syncSessionLastActiveFromEvents($sessionId, $events);
+
+        if ($acceptedIds !== []) {
+            DB::table('activity_ecom_user')
+                ->where('session_id', $sessionId)
+                ->update(['is_sync' => ActivityEcomUser::SYNC_PENDING]);
+        }
 
         $this->logInfo('ingest.complete', 'All actions saved', [
             'session_id' => $sessionId,
@@ -206,10 +242,6 @@ class TrackIngestService
         return $acceptedIds;
     }
 
-    /**
-     * @param  array<string, mixed>  $sessionData
-     * @param  array<string, mixed>|null  $clientContext
-     */
     private function upsertSession(Request $request, string $sessionId, array $sessionData, ?array $clientContext = null): void
     {
         $userAgent = $clientContext['user_agent'] ?? $request->userAgent();
@@ -258,6 +290,14 @@ class TrackIngestService
 
             $this->persistBotContextIfNeeded($sessionId, $clientContext);
             $this->mergeAttributionIntoSession($session, $sessionData);
+
+            if (filled($session->landing_page)) {
+                SessionTrafficAttribution::applySessionTouchFromEvent(
+                    $sessionId,
+                    (string) $session->landing_page,
+                    null,
+                );
+            }
 
             return;
         }
@@ -370,7 +410,9 @@ class TrackIngestService
         $scalarFields = [
             'category_name',
             'category_code',
+            'category_id',
             'department_name',
+            'department_id',
             'product_name',
             'product_code',
             'sku',
@@ -426,6 +468,18 @@ class TrackIngestService
 
             if ($departmentName !== '') {
                 $row['department_name'] = $departmentName;
+            }
+        }
+
+        if ($this->isCatalogSkuActionType($actionType)) {
+            $this->normalizeCatalogProductIdentity($row);
+
+            if (($row['department_name'] ?? '') === '' && ! empty($row['category_name'])) {
+                $departmentName = TrackerCategoryIdentity::departmentNameFromPageUrl((string) ($event['page_url'] ?? ''));
+
+                if ($departmentName !== '') {
+                    $row['department_name'] = $departmentName;
+                }
             }
         }
 
@@ -701,6 +755,33 @@ class TrackIngestService
         return $this->customerFieldsFromCheckoutActions($sessionId)['user_phone'] ?? null;
     }
 
+    private function syncSessionActionCount(
+        string $sessionId,
+        bool $actionAlreadyStored,
+        ?string $previousSessionId,
+    ): void {
+        if (! $actionAlreadyStored) {
+            ActivityEcomUser::query()
+                ->where('session_id', $sessionId)
+                ->increment('actions_count');
+
+            return;
+        }
+
+        if ($previousSessionId === null || $previousSessionId === $sessionId) {
+            return;
+        }
+
+        ActivityEcomUser::query()
+            ->where('session_id', $previousSessionId)
+            ->where('actions_count', '>', 0)
+            ->decrement('actions_count');
+
+        ActivityEcomUser::query()
+            ->where('session_id', $sessionId)
+            ->increment('actions_count');
+    }
+
     private function sessionDurationSeconds(ActivityEcomUser $session): int
     {
         $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
@@ -720,7 +801,10 @@ class TrackIngestService
             return 0;
         }
 
-        return max(0, (int) $from->diffInSeconds($to, absolute: true));
+        $seconds = max(0, (int) $from->diffInSeconds($to, absolute: true));
+        $maxSeconds = max(0, (int) config('tracker.session_gap_minutes', 30)) * 60;
+
+        return min($seconds, $maxSeconds);
     }
 
     /**
@@ -845,33 +929,7 @@ class TrackIngestService
      */
     private function ensureCanonicalCommerceOrder(array $event): void
     {
-        $orderId = $this->paymentSuccessOrderId($event);
-
-        if ($orderId === '' || DB::table('activity_ecom_orders')->where('order_id', $orderId)->exists()) {
-            return;
-        }
-
-        $canonicalId = $this->findCanonicalPaymentSuccessActionId($orderId);
-
-        if ($canonicalId === null) {
-            return;
-        }
-
-        $canonical = ActivityEcomUserAction::query()->find($canonicalId);
-
-        if ($canonical === null) {
-            return;
-        }
-
-        try {
-            $this->commerceIngestWriter->syncFromAction($canonical);
-        } catch (Throwable $e) {
-            $this->logWarning('commerce.ingest.canonical_backfill_failed', 'Failed to backfill canonical order row', [
-                'order_id' => $orderId,
-                'event_id' => $canonical->event_id,
-                'message' => $e->getMessage(),
-            ]);
-        }
+        // Legacy activity_ecom_orders rollups were removed on so-trackerjs-v3; actions stay on activity_ecom_user_actions.
     }
 
     /**
@@ -894,10 +952,6 @@ class TrackIngestService
 
     private function paymentSuccessExistsForOrder(string $orderId): bool
     {
-        if (DB::table('activity_ecom_orders')->where('order_id', $orderId)->exists()) {
-            return true;
-        }
-
         return DB::table('activity_ecom_user_actions')
             ->where('action_type', 'payment_success')
             ->where('order_id', $orderId)
@@ -962,6 +1016,58 @@ class TrackIngestService
         return false;
     }
 
+    private function isCatalogSkuActionType(string $actionType): bool
+    {
+        return in_array($actionType, ['grid_impression', 'product_click'], true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function validateGridSkuEvent(array $event): void
+    {
+        $actionType = (string) ($event['action_type'] ?? '');
+
+        if (! $this->isCatalogSkuActionType($actionType)) {
+            return;
+        }
+
+        $productCode = trim((string) ($event['product_code'] ?? ''));
+        $variantSku = trim((string) ($event['sku'] ?? ''));
+
+        if ($productCode === '' && $variantSku === '') {
+            $this->logWarning('grid.ingest.missing_catalog_identity', 'Grid event has no product_code or sku', [
+                'event_id' => $event['id'] ?? null,
+                'action_type' => $actionType,
+                'page_url' => $event['page_url'] ?? null,
+            ]);
+
+            throw ValidationException::withMessages([
+                'events' => ["{$actionType} requires product_code or sku."],
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function normalizeCatalogProductIdentity(array &$row): void
+    {
+        $productCode = trim((string) ($row['product_code'] ?? ''));
+        $variantSku = trim((string) ($row['sku'] ?? ''));
+
+        if ($productCode === '' && $variantSku !== '') {
+            $row['product_code'] = $variantSku;
+            unset($row['sku']);
+
+            return;
+        }
+
+        if ($productCode !== '' && $variantSku !== '' && strcasecmp($productCode, $variantSku) === 0) {
+            unset($row['sku']);
+        }
+    }
+
     /**
      * @param  array<string, mixed>  $event
      */
@@ -1021,5 +1127,47 @@ class TrackIngestService
     private function logError(string $step, string $message, array $context = []): void
     {
         EcomTrackerLogger::frontend()->error($step, $message, $context);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $events
+     * @return array<int, array<string, mixed>>
+     */
+    private function sortEventsByClock(array $events): array
+    {
+        usort($events, function (array $left, array $right): int {
+            return TrackerActionSequence::compare(
+                $this->eventActivityTimestamp($left),
+                (string) ($left['action_type'] ?? ''),
+                0,
+                $this->eventActivityTimestamp($right),
+                (string) ($right['action_type'] ?? ''),
+                0,
+            );
+        });
+
+        return $events;
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function eventActivityTimestamp(array $event): int
+    {
+        foreach (['end_time', 'created_at', 'start_time'] as $field) {
+            $value = $event[$field] ?? null;
+
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $parsed = TrackerTime::toUtc($value);
+
+            if ($parsed !== null) {
+                return $parsed->getTimestamp();
+            }
+        }
+
+        return PHP_INT_MAX;
     }
 }

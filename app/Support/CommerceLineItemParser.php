@@ -226,20 +226,35 @@ final class CommerceLineItemParser
      */
     private static function parseCatalogInterestLines(ActivityEcomUserAction $action, string $stage): array
     {
-        $department = trim((string) ($action->department_name ?? ''));
+        $pageUrl = (string) ($action->page_url ?? '');
+        $department = TrackerCategoryIdentity::normalizeDepartmentName(
+            TrackerCategoryIdentity::resolveDepartmentName([
+                'department_name' => (string) ($action->department_name ?? ''),
+                'page_url' => $pageUrl,
+            ]),
+        );
         $category = trim((string) ($action->category_name ?? ''));
 
-        if ($department === '' && $category === '') {
-            throw new CommerceParseException(
-                'Catalog interest action missing department and category',
-                'missing:catalog_interest_identity',
-                $action->event_id,
-                $action->action_type,
-            );
+        if ($category === '') {
+            $category = TrackerCategoryIdentity::categoryNameFromPageUrl($pageUrl, $department);
         }
 
         $productCode = trim((string) ($action->product_code ?? ''));
         $productName = trim((string) ($action->product_name ?? ''));
+        $hasProductIdentity = $productCode !== '' || $productName !== '';
+
+        if ($department === '' && $category === '') {
+            if ($stage !== self::STAGE_CATEGORY_VIEW && $hasProductIdentity) {
+                // Legacy product popups may only have product_code / product_name.
+            } else {
+                throw new CommerceParseException(
+                    'Catalog interest action missing department and category',
+                    'missing:catalog_interest_identity',
+                    $action->event_id,
+                    $action->action_type,
+                );
+            }
+        }
 
         if ($stage !== self::STAGE_CATEGORY_VIEW && $productCode === '' && $productName === '') {
             throw new CommerceParseException(

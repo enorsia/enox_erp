@@ -4,6 +4,8 @@
     'panelClass' => '',
     'inGrid' => false,
     'activityDurationLink' => null,
+    'compareSync' => null,
+    'compact' => false,
 ])
 
 @php
@@ -18,14 +20,17 @@
         'mb-5' => ! $inGrid,
         'etd-panel--in-grid' => $inGrid,
         $panelClass => filled($panelClass),
-    ]) @unless($inGrid) id="duration" @endunless>
+    ])
+        @unless($inGrid) id="duration" @endunless
+        @if (filled($compareSync)) data-compare-sync="{{ $compareSync }}" @endif
+    >
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Session duration distribution</h2>
         </div>
         <div class="etd-panel-body">
 @endif
 
-            <p class="etd-duration-summary m-0 mb-3">
+            <p @class(['etd-duration-summary m-0', 'mb-3' => ! $compact, 'mb-2' => $compact])>
                 <strong>{{ number_format($totalSessions) }}</strong> sessions
                 @if ($totalSessions > 0)
                     · median <strong>{{ $medianLabel }}</strong>
@@ -36,9 +41,11 @@
                 <div class="etd-duration-buckets" role="list">
                     @foreach ($buckets as $bucket)
                         @php
-                            $bucketUrl = is_callable($activityDurationLink)
-                                ? $activityDurationLink($bucket)
-                                : null;
+                            $bucketUrl = filled($bucket['activity_url'] ?? null)
+                                ? (string) $bucket['activity_url']
+                                : (is_callable($activityDurationLink)
+                                    ? $activityDurationLink($bucket)
+                                    : null);
                             $isLink = filled($bucketUrl);
                         @endphp
                         <{{ $isLink ? 'a' : 'div' }}
@@ -61,11 +68,13 @@
                     @endforeach
                 </div>
 
-                <p class="etd-panel-note etd-panel-note--duration m-0 mt-3">
-                    How long shoppers stay per session — useful for landing-page quality, content engagement, and checkout friction.
-                </p>
+                @unless ($compact)
+                    <p class="etd-panel-note etd-panel-note--duration m-0 mt-3">
+                        How long shoppers stay per session — useful for landing-page quality, content engagement, and checkout friction.
+                    </p>
+                @endunless
             @else
-                <p class="text-center text-slate-500 py-8 m-0">No sessions in this period.</p>
+                <p @class(['text-center text-slate-500 m-0', 'py-8' => ! $compact, 'py-4 text-sm' => $compact])>No sessions in this period.</p>
             @endif
 
 @if ($showPanel)

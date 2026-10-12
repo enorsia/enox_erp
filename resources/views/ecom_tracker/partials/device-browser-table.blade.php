@@ -54,7 +54,9 @@
             <tbody>
                 @forelse ($rows as $row)
                     @php
-                        $rowLink = is_callable($rowActivityLink) ? $rowActivityLink($row['label'] ?? '') : null;
+                        $rowLink = filled($row['activity_url'] ?? null)
+                            ? (string) $row['activity_url']
+                            : (is_callable($rowActivityLink) ? $rowActivityLink($row) : null);
                     @endphp
                     <tr>
                         <td>

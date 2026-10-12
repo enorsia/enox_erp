@@ -6,7 +6,7 @@
 @php
     $deviceRows = $devices['by_device'] ?? [];
     $browserRows = $devices['by_browser'] ?? [];
-    $devicesFocusLink = is_callable($deviceActivityLink) ? $deviceActivityLink('') : null;
+    $devicesFocusLink = is_callable($deviceActivityLink) ? $deviceActivityLink(['id' => null]) : null;
 @endphp
 
 <div class="etd-device-browser etd-device-browser-grid">
@@ -21,6 +21,6 @@
         'title' => 'Browser',
         'rows' => $browserRows,
         'emptyMessage' => 'No browser data in this period.',
-        'rowActivityLink' => fn (string $label) => $devicesFocusLink,
+        'rowActivityLink' => fn (array $row) => $devicesFocusLink,
     ])
 </div>

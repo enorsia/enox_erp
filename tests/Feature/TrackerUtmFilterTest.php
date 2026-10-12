@@ -27,6 +27,52 @@ test('tracker utm filter resolves source aliases', function () {
     expect(TrackerUtmFilter::resolveSource('bad value'))->toBeNull();
 });
 
+test('list traffic source filter matches stored direct bucket column', function () {
+    ActivityEcomUser::query()->create([
+        'session_id' => 'stored-direct-session',
+        'device_type' => 'desktop',
+        'utm_source' => 'google',
+        'utm_medium' => 'organic',
+        'landing_page' => 'https://enorsia.com/?srsltid=abc',
+        'list_traffic_utm_source' => '(direct)',
+        'list_traffic_utm_medium' => 'none',
+        'created_at' => now(),
+        'updated_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    $directQuery = ActivityEcomUser::query();
+    TrackerUtmFilter::applyListTrafficSourceFilter($directQuery, '(direct)');
+    expect($directQuery->pluck('session_id')->all())->toBe(['stored-direct-session']);
+
+    $googleQuery = ActivityEcomUser::query();
+    TrackerUtmFilter::applyListTrafficSourceFilter($googleQuery, 'google');
+    expect($googleQuery->pluck('session_id')->all())->toBe([]);
+});
+
+test('list traffic source filter uses conversion attribution on paid sessions', function () {
+    ActivityEcomUser::query()->create([
+        'session_id' => 'paid-conversion-google',
+        'device_type' => 'desktop',
+        'utm_source' => null,
+        'utm_medium' => null,
+        'has_payment_success' => true,
+        'conversion_utm_source' => 'google',
+        'conversion_utm_medium' => 'paid',
+        'created_at' => now(),
+        'updated_at' => now(),
+        'last_active_at' => now(),
+    ]);
+
+    $directQuery = ActivityEcomUser::query();
+    TrackerUtmFilter::applyListTrafficSourceFilter($directQuery, '(direct)');
+    expect($directQuery->pluck('session_id')->all())->toBe([]);
+
+    $googleQuery = ActivityEcomUser::query();
+    TrackerUtmFilter::applyListTrafficSourceFilter($googleQuery, 'google');
+    expect($googleQuery->pluck('session_id')->all())->toBe(['paid-conversion-google']);
+});
+
 test('tracker utm filter applies direct and none sentinels', function () {
     ActivityEcomUser::query()->create([
         'session_id' => 'direct-session',

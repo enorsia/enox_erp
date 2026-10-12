@@ -1,6 +1,7 @@
 @props([
     'metrics' => [],
     'events' => [],
+    'expandableEvents' => null,
     'sessionKey' => '',
 ])
 
@@ -9,7 +10,8 @@
     $meta = $metrics['commerce_meta'] ?? null;
     $tip = $metrics['commerce_tip'] ?? null;
     $hasOrder = (bool) ($metrics['commerce_has_order'] ?? false);
-    $hasExpandableEvents = $events !== [];
+    $expandableEvents = $expandableEvents ?? ($metrics['expandable_commerce_events'] ?? $events);
+    $hasExpandableEvents = $expandableEvents !== [];
 @endphp
 
 <div
@@ -26,7 +28,7 @@
 
     @if ($hasExpandableEvents)
         @include('ecom_activity.partials.commerce-events', [
-            'events' => $events,
+            'events' => $expandableEvents,
             'sessionKey' => $sessionKey,
             'hasOrder' => $hasOrder,
         ])

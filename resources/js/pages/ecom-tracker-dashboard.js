@@ -13,6 +13,7 @@ import {
     LineController,
     DoughnutController,
 } from 'chart.js';
+import './ecom-tracker-filters';
 
 Chart.register(
     CategoryScale,
@@ -29,10 +30,234 @@ Chart.register(
     DoughnutController,
 );
 
-const D = window.ecomTrackerDashboardData || {};
-
 Chart.defaults.font.family = "'DM Sans', ui-sans-serif, system-ui, sans-serif";
 Chart.defaults.font.size = 11;
+
+const ETD_FILTER_PANEL_CLOSED_CLASS = 'etd-filter-panel--closed';
+const ETD_CUSTOM_DATES_CLOSED_CLASS = 'etd-custom-dates--closed';
+const ETD_DRAWER_CUSTOM_CLOSED_CLASS = 'etd-filter-period__custom--closed';
+
+function getDashboardPage() {
+    return document.getElementById('ecom-tracker-dashboard-content');
+}
+
+function isDashboardFilterDrawerOpen(drawer) {
+    return drawer && !drawer.classList.contains(ETD_FILTER_PANEL_CLOSED_CLASS);
+}
+
+function initDashboardFilterDrawer(page) {
+    const backdrop = document.getElementById('ecom-dashboard-filter-backdrop');
+    const drawer = document.getElementById('ecom-dashboard-filter-drawer');
+    const openButton = page.querySelector('#ecom-dashboard-filter-open');
+
+    if (!backdrop || !drawer) {
+        return;
+    }
+
+    const setOpen = (isOpen) => {
+        backdrop.classList.toggle(ETD_FILTER_PANEL_CLOSED_CLASS, !isOpen);
+        drawer.classList.toggle(ETD_FILTER_PANEL_CLOSED_CLASS, !isOpen);
+        backdrop.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        drawer.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        document.body.classList.toggle('etd-filter-panel-open', isOpen);
+        openButton?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+
+        if (isOpen && typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(drawer);
+        }
+    };
+
+    const close = () => setOpen(false);
+    const toggle = () => setOpen(!isDashboardFilterDrawerOpen(drawer));
+
+    page.querySelectorAll('.js-ecom-dashboard-filter-open').forEach((el) => {
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            toggle();
+        });
+    });
+
+    page.querySelectorAll('.js-ecom-dashboard-filter-close').forEach((el) => {
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            close();
+        });
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && isDashboardFilterDrawerOpen(drawer)) {
+            close();
+        }
+    });
+
+    window.closeFilterDrawer = close;
+}
+
+function syncDashboardCustomFlatpickr(customPanel, drawerCustom, from, to) {
+    if (!from || !to) {
+        return;
+    }
+
+    const rangeDisplay = customPanel?.querySelector('.etd-flatpickr-date-range');
+    const fpRange = rangeDisplay?._etdFlatpickr;
+
+    if (fpRange) {
+        fpRange.setDate([from, to], false);
+    }
+
+    const drawerFrom = drawerCustom?.querySelector('[name="date_from"]');
+    const drawerTo = drawerCustom?.querySelector('[name="date_to"]');
+
+    if (drawerFrom?._etdFlatpickr) {
+        drawerFrom._etdFlatpickr.setDate(from, false);
+    }
+
+    if (drawerTo?._etdFlatpickr) {
+        drawerTo._etdFlatpickr.setDate(to, false);
+    }
+}
+
+function initDashboardPeriodControls(page) {
+    const headerNav = page.querySelector('.etd-header-period-nav');
+    const customToggle = headerNav?.querySelector('.js-ecom-dashboard-period-custom-toggle');
+    const customPanel = document.getElementById('ecom-dashboard-header-custom-dates');
+    const fromInput = document.getElementById('ecom-dashboard-header-date-from');
+    const toInput = document.getElementById('ecom-dashboard-header-date-to');
+    const applyBtn = customPanel?.querySelector('.js-ecom-dashboard-header-custom-apply');
+    const presetLinks = headerNav?.querySelectorAll('.etd-segmented .etd-segmented-btn[href]');
+    const drawerCustom = document.getElementById('ecom-dashboard-drawer-custom-dates');
+    const periodInput = document.getElementById('ecom-dashboard-filter-period');
+
+    const showHeaderCustom = (show) => {
+        if (!customPanel) {
+            return;
+        }
+
+        customPanel.classList.toggle(ETD_CUSTOM_DATES_CLOSED_CLASS, !show);
+        customToggle?.classList.toggle('active', show);
+
+        if (show) {
+            presetLinks?.forEach((link) => link.classList.remove('active'));
+
+            if (typeof window.refreshEtdFilterControls === 'function') {
+                window.refreshEtdFilterControls(customPanel);
+            }
+
+            syncDashboardCustomFlatpickr(
+                customPanel,
+                drawerCustom,
+                fromInput?.value ?? '',
+                toInput?.value ?? '',
+            );
+        }
+    };
+
+    customToggle?.addEventListener('click', (event) => {
+        event.preventDefault();
+        const isOpen = customPanel && !customPanel.classList.contains(ETD_CUSTOM_DATES_CLOSED_CLASS);
+        showHeaderCustom(!isOpen);
+    });
+
+    applyBtn?.addEventListener('click', () => {
+        const url = new URL(window.location.href);
+
+        url.searchParams.set('period', 'custom');
+
+        const from = fromInput?.value?.trim() ?? '';
+        const to = toInput?.value?.trim() ?? '';
+
+        if (from) {
+            url.searchParams.set('date_from', from);
+        } else {
+            url.searchParams.delete('date_from');
+        }
+
+        if (to) {
+            url.searchParams.set('date_to', to);
+        } else {
+            url.searchParams.delete('date_to');
+        }
+
+        window.location.href = url.toString();
+    });
+
+    page.querySelector('.js-ecom-dashboard-drawer-custom-preset')?.addEventListener('click', () => {
+        if (periodInput) {
+            periodInput.value = 'custom';
+        }
+
+        drawerCustom?.classList.remove(ETD_DRAWER_CUSTOM_CLOSED_CLASS);
+        drawerCustom?.querySelectorAll('[name="date_from"], [name="date_to"]').forEach((input) => {
+            input.disabled = false;
+        });
+
+        if (typeof window.syncEtdFlatpickrEnabled === 'function') {
+            window.syncEtdFlatpickrEnabled(drawerCustom, true);
+        }
+
+        if (typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(drawerCustom);
+        }
+
+        syncDashboardCustomFlatpickr(
+            customPanel,
+            drawerCustom,
+            drawerCustom?.querySelector('[name="date_from"]')?.value ?? '',
+            drawerCustom?.querySelector('[name="date_to"]')?.value ?? '',
+        );
+    });
+
+    const from = fromInput?.value?.trim() ?? '';
+    const to = toInput?.value?.trim() ?? '';
+
+    if (!from || !to) {
+        return;
+    }
+
+    if (customPanel && !customPanel.classList.contains(ETD_CUSTOM_DATES_CLOSED_CLASS)) {
+        if (typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(customPanel);
+        }
+    }
+
+    if (drawerCustom && !drawerCustom.classList.contains(ETD_DRAWER_CUSTOM_CLOSED_CLASS)) {
+        if (typeof window.refreshEtdFilterControls === 'function') {
+            window.refreshEtdFilterControls(drawerCustom);
+        }
+    }
+
+    syncDashboardCustomFlatpickr(customPanel, drawerCustom, from, to);
+}
+
+/** Chart data printed by dashboard.blade.php (EcomTrackerDashboardService::dashboard()['charts']). */
+const D = window.ecomTrackerDashboardData || { trend: null, new_returning: null };
+const dashboardRoot = document.getElementById('ecom-tracker-dashboard-content');
+
+const TREND_SERIES_COLORS = {
+    unique_visitors: '#7c3aed',
+    sessions: '#2563eb',
+    category_views: '#0d9488',
+    product_views: '#0284c7',
+    add_to_cart: '#d97706',
+    begin_checkout: '#ea580c',
+    proceed_checkout: '#e11d48',
+    purchases: '#16a34a',
+    items_sold_qty: '#65a30d',
+    conversion_rate: '#a21caf',
+};
+
+const TREND_SERIES_ORDER = [
+    'unique_visitors',
+    'sessions',
+    'category_views',
+    'product_views',
+    'add_to_cart',
+    'begin_checkout',
+    'proceed_checkout',
+    'purchases',
+    'items_sold_qty',
+    'conversion_rate',
+];
 
 const isDark = () => document.documentElement.classList.contains('dark');
 const isNarrow = () => window.matchMedia('(max-width: 639px)').matches;
@@ -41,26 +266,6 @@ const gridClr = () => (isDark() ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)')
 const accent = () => getComputedStyle(document.querySelector('.etd-page') || document.body)
     .getPropertyValue('--etd-accent')
     .trim() || '#1D9E75';
-const gold = () => '#f59e0b';
-const purchaseGreen = () => '#22c55e';
-
-/** Semantic colors per trend metric — each series gets a unique, meaningful color. */
-const TREND_SERIES_COLORS = {
-    unique_visitors: '#7c3aed',   // violet — distinct people
-    sessions: '#2563eb',          // blue — visits
-    category_views: '#0d9488',    // teal — category browsing
-    product_views: '#0284c7',     // sky — product pages
-    add_to_cart: '#d97706',       // amber — cart action
-    begin_checkout: '#ea580c',    // orange — checkout started
-    proceed_checkout: '#e11d48',  // rose — checkout in progress
-    purchases: '#16a34a',         // green — completed orders
-    items_sold_qty: '#65a30d',    // lime — units sold
-    conversion_rate: '#a21caf',   // fuchsia — conversion %
-};
-
-function trendSeriesColor(key) {
-    return TREND_SERIES_COLORS[key] || accent();
-}
 
 const tipStyle = () => ({
     backgroundColor: isDark() ? '#1e293b' : '#fff',
@@ -72,10 +277,17 @@ const tipStyle = () => ({
     cornerRadius: 8,
 });
 
-function ctx(id) {
-    const el = document.getElementById(id);
+function trendSeriesColor(key) {
+    return TREND_SERIES_COLORS[key] || '#1D9E75';
+}
 
-    return el ? el.getContext('2d') : null;
+function sortTrendSeries(series) {
+    return [...series].sort((a, b) => {
+        const aIndex = TREND_SERIES_ORDER.indexOf(a.key);
+        const bIndex = TREND_SERIES_ORDER.indexOf(b.key);
+
+        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+    });
 }
 
 function trendTickLimit(labelCount, useHorizontalScroll = false) {
@@ -114,6 +326,14 @@ function trendMinWidth(labelCount) {
     const pixelsPerLabel = isNarrow() ? 34 : 30;
 
     return Math.max(labelCount * pixelsPerLabel, 320);
+}
+
+function sessionsForLogScale(values) {
+    return values.map((value) => {
+        const numeric = Number(value) || 0;
+
+        return numeric > 0 ? numeric : null;
+    });
 }
 
 function applyTrendChartLayout(labelCount) {
@@ -155,43 +375,19 @@ function renderTrendLegend(series) {
     }).join('');
 }
 
-function sessionsForLogScale(values) {
-    return values.map((value) => {
-        const numeric = Number(value) || 0;
+function initDashboardTrendChart(trend) {
+    const canvas = document.getElementById('etdTrendChart');
 
-        return numeric > 0 ? numeric : null;
-    });
-}
+    if (!canvas || !trend) {
+        return;
+    }
 
-const TREND_SERIES_ORDER = [
-    'unique_visitors',
-    'sessions',
-    'category_views',
-    'product_views',
-    'add_to_cart',
-    'begin_checkout',
-    'proceed_checkout',
-    'purchases',
-    'items_sold_qty',
-    'conversion_rate',
-];
-
-function sortTrendSeries(series) {
-    return [...series].sort((a, b) => {
-        const aIndex = TREND_SERIES_ORDER.indexOf(a.key);
-        const bIndex = TREND_SERIES_ORDER.indexOf(b.key);
-
-        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-    });
-}
-
-const trendCtx = ctx('etdTrendChart');
-if (trendCtx && D.trend) {
+    const chartCtx = canvas.getContext('2d');
     const {
         labels = [],
         series = [],
         use_log_scale: useLogScale = false,
-    } = D.trend;
+    } = trend;
 
     const orderedSeries = sortTrendSeries(series);
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
@@ -228,12 +424,9 @@ if (trendCtx && D.trend) {
         };
     });
 
-    const trendChart = new Chart(trendCtx, {
+    const trendChart = new Chart(chartCtx, {
         type: 'bar',
-        data: {
-            labels,
-            datasets,
-        },
+        data: { labels, datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -335,134 +528,16 @@ if (trendCtx && D.trend) {
     });
 }
 
-const dwellCtx = ctx('etdDwellChart');
+function initDashboardNewReturningChart() {
+    const canvas = document.getElementById('etdNewReturningChart');
 
-function formatDwellSeconds(seconds) {
-    const value = Math.max(0, Number(seconds) || 0);
-
-    if (value <= 0) {
-        return '0s';
+    if (!canvas || !D.new_returning) {
+        return;
     }
 
-    const hours = Math.floor(value / 3600);
-    const minutes = Math.floor((value % 3600) / 60);
-    const remaining = value % 60;
+    const chartCtx = canvas.getContext('2d');
 
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    }
-
-    if (minutes > 0) {
-        return `${minutes}m ${remaining}s`;
-    }
-
-    return `${value}s`;
-}
-
-function formatDwellAxisTick(value) {
-    const seconds = Number(value) || 0;
-
-    if (seconds >= 3600) {
-        return `${Math.round(seconds / 3600)}h`;
-    }
-
-    if (seconds >= 60) {
-        return `${Math.round(seconds / 60)}m`;
-    }
-
-    return `${seconds}s`;
-}
-
-if (dwellCtx && D.engagement) {
-    const { labels = [], buyers = [], non_buyers: nonBuyers = [] } = D.engagement;
-    const rows = D.engagement.rows || [];
-
-    new Chart(dwellCtx, {
-        type: 'bar',
-        data: {
-            labels,
-            datasets: [
-                {
-                    label: 'Buyers',
-                    data: buyers,
-                    backgroundColor: `${gold()}D9`,
-                    borderColor: gold(),
-                    borderWidth: 1,
-                    borderRadius: 6,
-                    borderSkipped: false,
-                    barPercentage: 0.62,
-                    categoryPercentage: 0.72,
-                },
-                {
-                    label: 'Non-buyers',
-                    data: nonBuyers,
-                    backgroundColor: `${accent()}66`,
-                    borderColor: `${accent()}B3`,
-                    borderWidth: 1,
-                    borderRadius: 6,
-                    borderSkipped: false,
-                    barPercentage: 0.62,
-                    categoryPercentage: 0.72,
-                },
-            ],
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    ...tipStyle(),
-                    callbacks: {
-                        title: (items) => items[0]?.label || '',
-                        label: (context) => {
-                            const row = rows[context.dataIndex];
-                            const formatted = context.dataset.label === 'Buyers'
-                                ? row?.buyers_formatted
-                                : row?.non_buyers_formatted;
-
-                            return `${context.dataset.label}: ${formatted || formatDwellSeconds(context.parsed.x)}`;
-                        },
-                        afterBody: (items) => {
-                            const row = rows[items[0]?.dataIndex];
-
-                            if (!row || row.delta_seconds === 0) {
-                                return [];
-                            }
-
-                            return [`Gap: ${row.delta_formatted}`];
-                        },
-                    },
-                },
-            },
-            scales: {
-                x: {
-                    grid: { color: gridClr() },
-                    beginAtZero: true,
-                    ticks: {
-                        callback: (value) => formatDwellAxisTick(value),
-                        font: { size: isNarrow() ? 9 : 10 },
-                    },
-                },
-                y: {
-                    grid: { display: false },
-                    ticks: {
-                        font: { size: isNarrow() ? 10 : 11 },
-                    },
-                },
-            },
-        },
-    });
-}
-
-const newReturningCtx = ctx('etdNewReturningChart');
-if (newReturningCtx && D.new_returning) {
-    new Chart(newReturningCtx, {
+    new Chart(chartCtx, {
         type: 'doughnut',
         data: {
             labels: D.new_returning.labels || [],
@@ -487,167 +562,418 @@ if (newReturningCtx && D.new_returning) {
     });
 }
 
-function syncKpiPanelCardHeights() {
-    const panel = document.querySelector('.etd-kpi-panel');
+const DASHBOARD_CHART_IDS = ['etdTrendChart', 'etdNewReturningChart'];
 
-    if (!panel) {
-        return;
-    }
+let dashboardPrintSession = null;
 
-    const cards = panel.querySelectorAll('.etd-kpi--compact');
+function resizeDashboardChartsForPrint() {
+    DASHBOARD_CHART_IDS.forEach((id) => {
+        const chart = Chart.getChart(id);
 
-    if (!cards.length) {
-        return;
-    }
-
-    panel.style.removeProperty('--etd-kpi-sync-height');
-
-    let maxHeight = 0;
-
-    cards.forEach((card) => {
-        card.style.minHeight = '';
-        maxHeight = Math.max(maxHeight, card.getBoundingClientRect().height);
-    });
-
-    if (maxHeight <= 0) {
-        return;
-    }
-
-    const height = `${Math.ceil(maxHeight)}px`;
-    panel.style.setProperty('--etd-kpi-sync-height', height);
-    cards.forEach((card) => {
-        card.style.minHeight = height;
+        if (chart) {
+            chart.resize();
+        }
     });
 }
 
-const kpiPanel = document.querySelector('.etd-kpi-panel');
+function refreshDashboardChartTheme() {
+    const tickColor = isDark() ? '#94a3b8' : '#475569';
+    const gridColor = gridClr();
+    const trend = Chart.getChart('etdTrendChart');
 
-if (kpiPanel) {
-    syncKpiPanelCardHeights();
+    if (trend?.options?.scales) {
+        for (const axis of ['x', 'y', 'y1']) {
+            const scale = trend.options.scales[axis];
 
-    let syncFrame = null;
+            if (!scale) {
+                continue;
+            }
 
-    const scheduleKpiHeightSync = () => {
-        if (syncFrame !== null) {
-            cancelAnimationFrame(syncFrame);
+            if (scale.ticks) {
+                scale.ticks.color = tickColor;
+            }
+
+            if (scale.grid && scale.grid.display !== false) {
+                scale.grid.color = gridColor;
+            }
+
+            if (scale.title) {
+                scale.title.color = tickColor;
+            }
         }
 
-        syncFrame = requestAnimationFrame(() => {
-            syncFrame = null;
-            syncKpiPanelCardHeights();
-        });
+        if (trend.options.plugins?.legend?.labels) {
+            trend.options.plugins.legend.labels.color = tickColor;
+        }
+
+        trend.update('none');
+    }
+
+    const doughnut = Chart.getChart('etdNewReturningChart');
+
+    if (doughnut?.options?.plugins?.legend?.labels) {
+        doughnut.options.plugins.legend.labels.color = tickColor;
+        doughnut.update('none');
+    }
+}
+
+function useLightUiForDashboardPrint() {
+    const root = document.documentElement;
+
+    if (!root.classList.contains('dark')) {
+        return;
+    }
+
+    root.classList.add('etd-print-was-dark');
+    root.classList.remove('dark');
+    refreshDashboardChartTheme();
+}
+
+function restoreDarkUiAfterDashboardPrint() {
+    const root = document.documentElement;
+
+    if (!root.classList.contains('etd-print-was-dark')) {
+        return;
+    }
+
+    root.classList.remove('etd-print-was-dark');
+    root.classList.add('dark');
+    refreshDashboardChartTheme();
+}
+
+function resetNewReturningChartForPrint() {
+    const chart = Chart.getChart('etdNewReturningChart');
+
+    if (!chart) {
+        return;
+    }
+
+    chart.options.maintainAspectRatio = true;
+    chart.options.aspectRatio = 1;
+    chart.options.plugins.legend.display = false;
+    chart.options.layout = { padding: 4 };
+    chart.update('none');
+}
+
+function restoreNewReturningChartAfterPrint() {
+    const chart = Chart.getChart('etdNewReturningChart');
+
+    if (!chart) {
+        return;
+    }
+
+    chart.options.maintainAspectRatio = false;
+    chart.options.aspectRatio = undefined;
+    chart.options.plugins.legend.display = true;
+    chart.options.layout = { padding: 0 };
+    chart.update('none');
+}
+
+function expandCategoryDepartmentsForPrint() {
+    const root = document.getElementById('ecom-tracker-dashboard-content');
+
+    if (!root) {
+        return;
+    }
+
+    root.querySelectorAll('.etd-category-departments').forEach((wrap) => {
+        wrap.classList.add('etd-print-categories-expanded');
+    });
+
+    root.querySelectorAll('.etd-category-child-row').forEach((row) => {
+        row.dataset.printRestoreDisplay = row.style.display;
+        row.style.setProperty('display', 'table-row', 'important');
+    });
+}
+
+function restoreCategoryDepartmentsAfterPrint() {
+    const root = document.getElementById('ecom-tracker-dashboard-content');
+
+    if (!root) {
+        return;
+    }
+
+    root.querySelectorAll('.etd-category-departments').forEach((wrap) => {
+        wrap.classList.remove('etd-print-categories-expanded');
+    });
+
+    root.querySelectorAll('.etd-category-child-row').forEach((row) => {
+        row.style.display = row.dataset.printRestoreDisplay || '';
+        delete row.dataset.printRestoreDisplay;
+    });
+}
+
+function resetTrendChartForPrint() {
+    const wrap = document.getElementById('etdTrendChartWrap');
+    const hint = document.getElementById('etdTrendChartScrollHint');
+    const labels = D.trend?.labels || [];
+    const chart = Chart.getChart('etdTrendChart');
+
+    if (wrap) {
+        wrap.dataset.printRestoreMinWidth = wrap.style.minWidth;
+        wrap.style.minWidth = '';
+    }
+
+    if (hint) {
+        hint.hidden = true;
+    }
+
+    if (!chart || labels.length === 0) {
+        return;
+    }
+
+    chart.options.scales.x.ticks.autoSkip = labels.length > 12;
+    chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, false);
+    chart.options.scales.x.ticks.maxRotation = labels.length > 10 ? 45 : 0;
+    chart.options.scales.x.ticks.minRotation = labels.length > 10 ? 35 : 0;
+    chart.options.layout.padding.right = 0;
+    chart.options.plugins.legend.display = true;
+    chart.update('none');
+}
+
+function restoreTrendChartAfterPrint() {
+    const wrap = document.getElementById('etdTrendChartWrap');
+    const labels = D.trend?.labels || [];
+    const chart = Chart.getChart('etdTrendChart');
+
+    if (wrap) {
+        wrap.style.minWidth = wrap.dataset.printRestoreMinWidth || '';
+        delete wrap.dataset.printRestoreMinWidth;
+    }
+
+    if (labels.length === 0) {
+        return;
+    }
+
+    applyTrendChartLayout(labels.length);
+
+    if (!chart) {
+        return;
+    }
+
+    const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
+
+    chart.options.scales.x.ticks.autoSkip = !useHorizontalScroll && labels.length > 24;
+    chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, useHorizontalScroll);
+    chart.options.scales.x.ticks.maxRotation = useHorizontalScroll || labels.length > 20 ? 45 : 0;
+    chart.options.scales.x.ticks.minRotation = useHorizontalScroll ? 35 : 0;
+    chart.options.layout.padding.right = useHorizontalScroll ? 8 : 0;
+    chart.options.plugins.legend.display = !isCompactChart();
+    chart.update('none');
+}
+
+function beginDashboardPrintSession() {
+    const main = document.querySelector('main');
+
+    if (!main || dashboardPrintSession) {
+        return dashboardPrintSession;
+    }
+
+    dashboardPrintSession = {
+        scrollTop: main.scrollTop,
+        scrollLeft: main.scrollLeft,
     };
 
-    window.addEventListener('resize', scheduleKpiHeightSync);
-
-    if (typeof ResizeObserver !== 'undefined') {
-        const kpiResizeObserver = new ResizeObserver(scheduleKpiHeightSync);
-        kpiResizeObserver.observe(kpiPanel);
-        kpiPanel.querySelectorAll('.etd-kpi-group').forEach((group) => kpiResizeObserver.observe(group));
-    }
+    return dashboardPrintSession;
 }
 
-const DASHBOARD_SCROLL_HASH = /^etd-y=(\d+)$/;
-
-function dashboardScrollY() {
+function prepareDashboardForPrint() {
     const main = document.querySelector('main');
 
-    return Math.max(0, Math.round(main ? main.scrollTop : window.scrollY));
-}
-
-function applyDashboardScrollY(y) {
-    const main = document.querySelector('main');
+    beginDashboardPrintSession();
+    useLightUiForDashboardPrint();
+    document.body.classList.add('etd-print-measure');
 
     if (main) {
-        main.scrollTop = y;
-        return;
+        main.scrollTop = 0;
+        main.scrollLeft = 0;
     }
 
-    window.scrollTo(0, y);
+    resetTrendChartForPrint();
+    resetNewReturningChartForPrint();
+    expandCategoryDepartmentsForPrint();
+    resizeDashboardChartsForPrint();
 }
 
-function stampActivityBackScroll(anchor) {
-    const href = anchor.getAttribute('href');
+function restoreDashboardAfterPrint() {
+    const main = document.querySelector('main');
 
-    if (!href) {
-        return;
+    document.body.classList.remove('etd-print-measure');
+    restoreDarkUiAfterDashboardPrint();
+    restoreCategoryDepartmentsAfterPrint();
+    restoreTrendChartAfterPrint();
+    restoreNewReturningChartAfterPrint();
+    resizeDashboardChartsForPrint();
+
+    if (main && dashboardPrintSession) {
+        main.scrollTop = dashboardPrintSession.scrollTop;
+        main.scrollLeft = dashboardPrintSession.scrollLeft;
+    } else if (main) {
+        main.scrollLeft = 0;
     }
 
-    let url;
-
-    try {
-        url = new URL(href, window.location.origin);
-    } catch {
-        return;
-    }
-
-    if (!url.pathname.includes('/admin/ecom-activity')) {
-        return;
-    }
-
-    const back = url.searchParams.get('back');
-
-    if (!back) {
-        return;
-    }
-
-    let backUrl;
-
-    try {
-        backUrl = new URL(back, window.location.origin);
-    } catch {
-        return;
-    }
-
-    backUrl.hash = `etd-y=${dashboardScrollY()}`;
-    url.searchParams.set('back', backUrl.toString());
-    anchor.setAttribute('href', url.toString());
+    dashboardPrintSession = null;
 }
 
-function restoreDashboardScroll() {
-    const hash = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
-    const hashMatch = hash.match(DASHBOARD_SCROLL_HASH);
-    const storageKey = `admin_scroll_${window.location.pathname}`;
-    let y = hashMatch ? parseInt(hashMatch[1], 10) : Number.NaN;
+function printEcomTrackerDashboard() {
+    beginDashboardPrintSession();
+    prepareDashboardForPrint();
 
-    if (Number.isNaN(y)) {
-        const saved = sessionStorage.getItem(storageKey);
-        y = saved !== null && saved !== '' ? parseInt(saved, 10) : Number.NaN;
-    }
+    requestAnimationFrame(() => {
+        resizeDashboardChartsForPrint();
 
-    sessionStorage.removeItem(storageKey);
+        requestAnimationFrame(() => {
+            window.print();
+        });
+    });
+}
 
-    if (hashMatch) {
-        history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
-    }
+const SYNC_TOAST_ICONS = {
+    success: '<path stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 11v5M12 7.5h.01"/>',
+    warning: '<path stroke-linejoin="round" d="M12 3.5l9.5 16.5h-19L12 3.5z"/><path stroke-linecap="round" d="M12 10v4.5M12 17.5h.01"/>',
+    error: '<path stroke-linecap="round" d="M7 7l10 10M17 7L7 17"/>',
+};
 
-    if (Number.isNaN(y) || y < 1) {
+function escapeToastText(value) {
+    const div = document.createElement('div');
+    div.textContent = String(value ?? '');
+
+    return div.innerHTML;
+}
+
+/** Custom markup: the admin theme's vendor.min.css ships old swal2 rules that break the built-in icons. */
+function showSyncToast(type, title, text) {
+    if (!window.Swal) {
+        window.alert(text ? `${title}\n${text}` : title);
+
         return;
     }
 
-    applyDashboardScrollY(y);
+    const icon = SYNC_TOAST_ICONS[type] ?? SYNC_TOAST_ICONS.info;
+
+    window.Swal.fire({
+        toast: true,
+        position: 'top-end',
+        html: `
+            <div class="etd-sync-toast__body">
+                <span class="etd-sync-toast__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">${icon}</svg>
+                </span>
+                <div class="etd-sync-toast__content">
+                    <div class="etd-sync-toast__title">${escapeToastText(title)}</div>
+                    ${text ? `<div class="etd-sync-toast__text">${escapeToastText(text)}</div>` : ''}
+                </div>
+            </div>`,
+        showConfirmButton: false,
+        showCloseButton: true,
+        timer: type === 'error' ? 6000 : 4000,
+        timerProgressBar: true,
+        customClass: {
+            container: 'etd-sync-toast-container',
+            popup: `etd-sync-toast etd-sync-toast--${type}`,
+            htmlContainer: 'etd-sync-toast__html',
+            closeButton: 'etd-sync-toast__close',
+            timerProgressBar: 'etd-sync-toast__progress',
+        },
+        didOpen: (toast) => {
+            toast.addEventListener('mouseenter', window.Swal.stopTimer);
+            toast.addEventListener('mouseleave', window.Swal.resumeTimer);
+        },
+    });
 }
 
-const dashboardRoot = document.getElementById('ecom-tracker-dashboard-content');
+function initDashboardSyncButton(page) {
+    const syncBtn = document.getElementById('ecom-dashboard-sync');
+    const syncUrl = page?.dataset?.syncUrl ?? '';
 
-if (dashboardRoot) {
-    const rememberDashboardScrollForLink = (event) => {
-        const link = event.target.closest('a[href]');
+    if (!syncBtn || !syncUrl || syncBtn.dataset.etdSyncBound === '1') {
+        return;
+    }
 
-        if (!link || !dashboardRoot.contains(link)) {
+    syncBtn.dataset.etdSyncBound = '1';
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+
+    syncBtn.addEventListener('click', async () => {
+        if (syncBtn.disabled) {
             return;
         }
 
-        stampActivityBackScroll(link);
+        const label = syncBtn.querySelector('.etd-header-btn-text');
+        const prevText = label?.textContent ?? 'Sync';
 
-        if (typeof window.saveScrollPosition === 'function') {
-            window.saveScrollPosition();
+        syncBtn.disabled = true;
+        if (label) {
+            label.textContent = 'Syncing…';
         }
-    };
 
-    dashboardRoot.addEventListener('pointerdown', rememberDashboardScrollForLink);
-    dashboardRoot.addEventListener('click', rememberDashboardScrollForLink);
+        try {
+            const response = await fetch(syncUrl, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
 
-    restoreDashboardScroll();
+            const body = await response.json().catch(() => ({}));
+
+            if (response.status === 409) {
+                showSyncToast('warning', 'Sync already running', body.message || 'Please wait until it finishes.');
+            } else if (response.status === 422) {
+                showSyncToast('info', 'All up to date', body.message || 'No more data to sync.');
+            } else if (!response.ok || body.ok === false) {
+                showSyncToast('error', 'Sync failed', body.message || `Server responded with ${response.status}.`);
+            } else {
+                const sessions = Number(body.sessions || 0);
+                const batches = Number(body.batches || 0);
+
+                showSyncToast(
+                    'success',
+                    'Sync started',
+                    `${sessions} session${sessions === 1 ? '' : 's'} queued in ${batches} batch${batches === 1 ? '' : 'es'}.`,
+                );
+            }
+        } catch {
+            showSyncToast('error', 'Sync failed', 'Could not reach the server. Please try again.');
+        } finally {
+            if (label) {
+                label.textContent = prevText;
+            }
+            syncBtn.disabled = false;
+        }
+    });
 }
 
+function bootDashboardPage() {
+    const page = getDashboardPage();
+
+    if (!page) {
+        return;
+    }
+
+    initDashboardFilterDrawer(page);
+    initDashboardPeriodControls(page);
+    initDashboardSyncButton(page);
+    initDashboardTrendChart(D.trend);
+    initDashboardNewReturningChart();
+}
+
+window.printEcomTrackerDashboard = printEcomTrackerDashboard;
+
+function bindDashboardPrintControls() {
+    if (!dashboardRoot || dashboardRoot.dataset.etdPrintBound === '1') {
+        return;
+    }
+
+    dashboardRoot.dataset.etdPrintBound = '1';
+    window.addEventListener('beforeprint', prepareDashboardForPrint);
+    window.addEventListener('afterprint', restoreDashboardAfterPrint);
+    document.getElementById('etdDashboardPrintBtn')?.addEventListener('click', printEcomTrackerDashboard);
+}
+
+// Loaded via dynamic import() from app.js — DOM is already ready.
+bindDashboardPrintControls();
+bootDashboardPage();

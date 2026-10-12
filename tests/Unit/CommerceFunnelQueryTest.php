@@ -3,6 +3,7 @@
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Support\CommerceFunnelQuery;
+use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -252,6 +253,106 @@ test('payment rows prefer activity ecom orders over payment success actions', fu
         ->and($rows[0]['session_id'])->toBe($sessionId)
         ->and($rows[0]['value'])->toBe(75.5)
         ->and($rows[0]['qty'])->toBe(3);
+});
+
+test('payment rows fall back to payment_success actions when orders ordered_at is outside the window', function () {
+    $day = Carbon::parse('2026-09-26 12:00:00', TrackerTime::timezone());
+    $from = $day->copy()->startOfDay()->utc();
+    $to = $day->copy()->endOfDay()->utc();
+    $sessionId = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'has_payment_success' => true,
+        'created_at' => $from,
+        'updated_at' => $from,
+    ]);
+
+    DB::table('activity_ecom_orders')->insert([
+        'order_id' => 'ORD-EARLY',
+        'event_id' => (string) Str::uuid(),
+        'session_id' => $sessionId,
+        'amount_paid' => 99,
+        'item_qty' => 9,
+        'ordered_at' => $day->copy()->subDays(2)->utc()->format('Y-m-d H:i:s'),
+        'created_at' => $day->copy()->subDays(2)->utc()->format('Y-m-d H:i:s'),
+        'updated_at' => $day->copy()->subDays(2)->utc()->format('Y-m-d H:i:s'),
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => (string) Str::uuid(),
+        'session_id' => $sessionId,
+        'action_type' => 'payment_success',
+        'amount_paid' => 42.5,
+        'item_qty' => 2,
+        'created_at' => $day->copy()->addHours(3)->utc(),
+    ]);
+
+    $totals = CommerceFunnelQuery::paymentMetricTotals($from, $to, null, 'custom');
+
+    expect($totals['purchases'])->toBe(1)
+        ->and($totals['revenue'])->toBe(42.5)
+        ->and($totals['item_qty'])->toBe(2);
+});
+
+test('payment rows for custom calendar day include orders placed that day even when session started earlier', function () {
+    $day = Carbon::parse('2026-09-26 12:00:00', TrackerTime::timezone());
+    $from = $day->copy()->startOfDay()->utc();
+    $to = $day->copy()->endOfDay()->utc();
+    $sessionId = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'has_payment_success' => true,
+        'created_at' => $day->copy()->subDays(3)->utc(),
+        'updated_at' => $day->copy()->subDays(3)->utc(),
+    ]);
+
+    DB::table('activity_ecom_orders')->insert([
+        'order_id' => 'ORD-CUSTOM-1',
+        'event_id' => (string) Str::uuid(),
+        'session_id' => $sessionId,
+        'amount_paid' => 55,
+        'item_qty' => 2,
+        'ordered_at' => $day->copy()->addHours(4)->format('Y-m-d H:i:s'),
+        'created_at' => $day->copy()->addHours(4)->format('Y-m-d H:i:s'),
+        'updated_at' => $day->copy()->addHours(4)->format('Y-m-d H:i:s'),
+    ]);
+
+    $totals = CommerceFunnelQuery::paymentMetricTotals($from, $to, null, 'custom');
+
+    expect($totals['purchases'])->toBe(1)
+        ->and($totals['revenue'])->toBe(55.0)
+        ->and($totals['item_qty'])->toBe(2);
+});
+
+test('payment metric totals dedupe loaded duplicate order ids', function () {
+    $orders = collect([
+        (object) [
+            'order_id' => 'ORD-DUP',
+            'event_id' => 'event-a',
+            'session_id' => 'session-1',
+            'amount_paid' => 40,
+            'item_qty' => 2,
+            'ordered_at' => '2026-08-01 10:00:00',
+        ],
+        (object) [
+            'order_id' => 'ORD-DUP',
+            'event_id' => 'event-b',
+            'session_id' => 'session-1',
+            'amount_paid' => 40,
+            'item_qty' => 2,
+            'ordered_at' => '2026-08-01 10:00:00',
+        ],
+    ]);
+
+    $totals = CommerceFunnelQuery::paymentMetricTotalsFromPaymentRows(
+        CommerceFunnelQuery::paymentRowsFromLoadedData($orders, null),
+    );
+
+    expect($totals['purchases'])->toBe(1)
+        ->and($totals['revenue'])->toBe(40.0)
+        ->and($totals['item_qty'])->toBe(2);
 });
 
 test('abandoned rows from loaded data match sql hydrate for latest event lines', function () {
@@ -577,6 +678,41 @@ test('payment success filter matches in-period orders even when first payment is
 
     expect($ids)->toContain($repeatBuyerId)
         ->and($ids)->not->toContain($oldPaymentOnlyId);
+});
+
+test('activity payment success filter includes in-period orders when session flag is false', function () {
+    [$from, $to] = funnelWindow();
+    $sessionId = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'has_payment_success' => false,
+        'created_at' => $from->copy()->addHours(3),
+        'updated_at' => $from->copy()->addHours(3),
+    ]);
+
+    DB::table('activity_ecom_orders')->insert([
+        'order_id' => 'ORD-FLAG-OFF',
+        'event_id' => (string) Str::uuid(),
+        'session_id' => $sessionId,
+        'amount_paid' => 42,
+        'item_qty' => 2,
+        'ordered_at' => $from->copy()->addHours(4),
+        'created_at' => $from->copy()->addHours(4),
+        'updated_at' => $from->copy()->addHours(4),
+    ]);
+
+    $ids = ActivityEcomUser::query()
+        ->tap(fn ($query) => CommerceFunnelQuery::applyPaymentSuccessActivitySessionFilter(
+            $query,
+            $from,
+            $to,
+            null,
+        ))
+        ->pluck('session_id')
+        ->all();
+
+    expect($ids)->toContain($sessionId);
 });
 
 test('proceed checkout abandonment excludes sessions that paid in the period', function () {

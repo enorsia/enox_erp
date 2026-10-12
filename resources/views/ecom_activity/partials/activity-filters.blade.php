@@ -1,17 +1,27 @@
 @php
-    use App\Support\EcomActivityFocus;
+    use App\Support\TrackerMultiSelectFilter;
 
     $includeDateRange = $includeDateRange ?? true;
     $filterOptionCounts = $filterOptionCounts ?? [];
     $utmFilterState = $utmFilterState ?? null;
     $includeSessionSearch = $includeSessionSearch ?? true;
     $categoryFilterOptions = $categoryFilterOptions ?? ['departments' => [], 'categories_by_department' => []];
-    $funnelOptions = EcomActivityFocus::sidebarFunnelFilterOptions();
-    $selectedFunnel = EcomActivityFocus::drawerFunnelSelectedValue(request());
+    $funnelOptions = [
+        'cart_abandonment' => 'Cart abandoned',
+        'begin_checkout_abandonment' => 'Begin checkout abandoned',
+        'proceed_checkout_abandonment' => 'Proceed checkout abandoned',
+        'payment_success' => 'Payment success',
+    ];
+    $selectedFunnels = TrackerMultiSelectFilter::requestValues(request(), 'funnel');
+    $selectedDevices = TrackerMultiSelectFilter::allowedValues(request('device_type'), ['desktop', 'mobile', 'tablet']);
+    $selectedDurations = TrackerMultiSelectFilter::requestValues(request(), 'duration_bucket');
+    $selectedSources = $utmFilterState['selected_sources'] ?? TrackerMultiSelectFilter::requestValues(request(), 'utm_source');
+    $selectedMediums = $utmFilterState['selected_mediums'] ?? TrackerMultiSelectFilter::requestValues(request(), 'utm_medium');
     $countLabel = static function (string $value, string $label, array $counts): string {
         return isset($counts[$value]) ? "{$label} ({$counts[$value]})" : $label;
     };
     $tomSelectClass = 'tom-select etd-tom-select w-full';
+    $isSelected = static fn (array $selected, string $value): bool => in_array($value, $selected, true);
 @endphp
 
 <div class="etd-activity-filter-sections">
@@ -23,7 +33,7 @@
                 <input type="text"
                        name="search"
                        value="{{ request('search') }}"
-                       placeholder="Session, visitor, email, phone, IP, product, SKU, category, department, UTM…"
+                       placeholder="Order ID, session, visitor, email, phone, IP, product, SKU…"
                        class="etd-filter-input etd-filter-input--sm w-full">
             </label>
         </section>
@@ -66,9 +76,10 @@
         <div class="etd-activity-filter-grid">
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">Funnel stage</span>
-                <select name="funnel" class="{{ $tomSelectClass }}" data-placeholder="All">
+                <select name="funnel[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
                     @foreach ($funnelOptions as $value => $label)
-                        <option value="{{ $value }}" @selected($selectedFunnel === $value)>{{ $label }}</option>
+                        @continue($value === '')
+                        <option value="{{ $value }}" @selected($isSelected($selectedFunnels, $value))>{{ $label }}</option>
                     @endforeach
                 </select>
             </label>
@@ -88,10 +99,9 @@
         <div class="etd-activity-filter-grid">
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">Device</span>
-                <select name="device_type" class="{{ $tomSelectClass }}" data-placeholder="All">
-                    <option value="" @selected(request('device_type', '') === '')>All</option>
-                    @foreach (['desktop', 'mobile', 'tablet'] as $device)
-                        <option value="{{ $device }}" @selected(request('device_type') === $device)>{{ $countLabel($device, ucfirst($device), $filterOptionCounts['device_type'] ?? []) }}</option>
+                <select name="device_type[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
+                    @foreach (array_keys($filterOptionCounts['device_type'] ?? []) as $device)
+                        <option value="{{ $device }}" @selected($isSelected($selectedDevices, (string) $device))>{{ $countLabel((string) $device, ucfirst((string) $device), $filterOptionCounts['device_type'] ?? []) }}</option>
                     @endforeach
                 </select>
             </label>
@@ -105,9 +115,10 @@
             </label>
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">Duration</span>
-                <select name="duration_bucket" class="{{ $tomSelectClass }}" data-placeholder="All">
+                <select name="duration_bucket[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
                     @foreach (\App\Support\SessionDurationBuckets::optionLabels() as $value => $label)
-                        <option value="{{ $value }}" @selected((string) request('duration_bucket', '') === (string) $value)>{{ $label }}</option>
+                        @continue($value === '')
+                        <option value="{{ $value }}" @selected($isSelected($selectedDurations, (string) $value))>{{ $label }}</option>
                     @endforeach
                 </select>
             </label>
@@ -116,28 +127,25 @@
 
     <section class="etd-activity-filter-section">
         <p class="etd-activity-filter-section-title">Traffic source</p>
+        <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Counts sessions by last marketing touch within 7 days for the same visitor, then this visit.</p>
         @php
             $sources = $utmFilterState['sources'] ?? [];
             $mediums = $utmFilterState['mediums'] ?? [];
-            $selectedSource = $utmFilterState['selected_source'] ?? '';
-            $selectedMedium = $utmFilterState['selected_medium'] ?? '';
         @endphp
         <div class="etd-activity-filter-grid">
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">UTM source</span>
-                <select name="utm_source" class="{{ $tomSelectClass }}" data-placeholder="All">
-                    <option value="" @selected($selectedSource === '')>All</option>
+                <select name="utm_source[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
                     @foreach ($sources as $value => $label)
-                        <option value="{{ $value }}" @selected($selectedSource === $value)>{{ $label }}</option>
+                        <option value="{{ $value }}" @selected($isSelected($selectedSources, $value))>{{ $label }}</option>
                     @endforeach
                 </select>
             </label>
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">UTM medium</span>
-                <select name="utm_medium" class="{{ $tomSelectClass }}" data-placeholder="All">
-                    <option value="" @selected($selectedMedium === '')>All</option>
+                <select name="utm_medium[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
                     @foreach ($mediums as $value => $label)
-                        <option value="{{ $value }}" @selected($selectedMedium === $value)>{{ $label }}</option>
+                        <option value="{{ $value }}" @selected($isSelected($selectedMediums, $value))>{{ $label }}</option>
                     @endforeach
                 </select>
             </label>

@@ -15,6 +15,10 @@ test('tracker category identity resolves department from category page url', fun
         ->toBe('Women');
     expect(TrackerCategoryIdentity::departmentNameFromPageUrl('https://enorsia.com/women'))
         ->toBe('Women');
+    expect(TrackerCategoryIdentity::departmentNameFromPageUrl('https://enorsia.com/women-everyday-essentials'))
+        ->toBe('Women');
+    expect(TrackerCategoryIdentity::categoryNameFromPageUrl('https://enorsia.com/women-everyday-essentials'))
+        ->toBe('Everyday Essentials');
     expect(TrackerCategoryIdentity::resolveDepartmentName([
         'department_name' => '',
         'page_url' => 'https://enorsia.com/c/women/dresses',

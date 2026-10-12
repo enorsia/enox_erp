@@ -3,20 +3,6 @@
 @section('title', 'Session Activity')
 
 @section('content')
-    @php
-        use App\Support\TrackerTime;
-
-        $badgeColors = [
-            'category_view' => 'badge-blue',
-            'product_view' => 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
-            'product_view_popup' => 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
-            'add_to_cart' => 'badge-amber',
-            'begin_checkout' => 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
-            'proceed_checkout' => 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-            'payment_success' => 'badge-green',
-        ];
-    @endphp
-
     <div class="max-w-6xl mx-auto px-5 py-6 pb-28">
 
         <div class="flex items-start justify-between mb-6 flex-wrap gap-3">
@@ -30,7 +16,7 @@
                 <div>
                     <h1 class="text-xl font-semibold text-slate-800 dark:text-slate-100">Visitor Session</h1>
                     <p class="text-[12px] font-mono text-slate-400 mt-0.5">{{ $activityUser->session_id }}</p>
-                    <p class="text-[11px] text-slate-400 mt-1">All times {{ TrackerTime::timezoneLabel() }}</p>
+                    <p class="text-[11px] text-slate-400 mt-1">All times {{ \App\Support\TrackerTime::timezoneLabel() }}</p>
                 </div>
             </div>
             <a href="{{ $backUrl }}"
@@ -59,7 +45,7 @@
 
                     @if ($timeline->total() > 0)
                         <p class="text-[11px] text-slate-400 mb-3">
-                            Showing {{ $timeline->firstItem() }}–{{ $timeline->lastItem() }} of {{ $timeline->total() }}
+                            Newest first. Showing {{ $timeline->firstItem() }}–{{ $timeline->lastItem() }} of {{ $timeline->total() }}
                         </p>
                     @endif
 
@@ -78,12 +64,12 @@
                             <div class="flex flex-wrap items-center gap-2 mb-2">
                                 <span class="badge-custom {{ $badgeClass }}">{{ str_replace('_', ' ', $item->action_type) }}</span>
                                 <span class="text-[12px] text-slate-400">
-                                    {{ TrackerTime::formatFromStorage($item->created_at, 'd M Y, h:i:s A') }}
+                                    {{ \App\Support\TrackerTime::formatFromStorage($item->created_at, 'd M Y, h:i:s A') }}
                                 </span>
                                 @if ($item->dwell_seconds !== null)
                                     <span class="text-[11px] text-slate-500">
                                         Dwell: {{ $item->dwell_seconds }}s
-                                        @if ($item->is_grouped_product_view)
+                                        @if ($item->is_grouped_product_view || ($item->is_grouped_grid_impression ?? false))
                                             <span class="text-slate-400">(combined)</span>
                                         @endif
                                     </span>
@@ -127,6 +113,18 @@
                                     <div class="sm:col-span-2">
                                         <span class="text-slate-400">Colors:</span>
                                         <span class="text-slate-700 dark:text-slate-200">{{ $item->color_timeline }}</span>
+                                    </div>
+                                @endif
+                                @if ($item->action_type === 'grid_impression' && ($item->sku_timeline ?? null))
+                                    <div class="sm:col-span-2">
+                                        <span class="text-slate-400">Grid view:</span>
+                                        <span class="text-slate-700 dark:text-slate-200">{{ $item->sku_timeline }}</span>
+                                    </div>
+                                @endif
+                                @if ($item->action_type === 'grid_click' && ($item->sku_timeline ?? null))
+                                    <div class="sm:col-span-2">
+                                        <span class="text-slate-400">Grid click:</span>
+                                        <span class="text-slate-700 dark:text-slate-200">{{ $item->sku_timeline }}</span>
                                     </div>
                                 @endif
                                 @if ($item->product_price)
@@ -181,7 +179,7 @@
                                                 @if ($segmentSeconds !== null)
                                                     <span class="text-slate-400">· {{ $segmentSeconds }}s</span>
                                                 @endif
-                                                <span class="text-slate-400">· {{ TrackerTime::formatFromStorage($segmentAction->created_at ?? $segmentAction->start_time, 'h:i:s A') }}</span>
+                                                <span class="text-slate-400">· {{ \App\Support\TrackerTime::formatFromStorage($segmentAction->created_at ?? $segmentAction->start_time, 'h:i:s A') }}</span>
                                             </div>
                                         @endforeach
                                     </div>
@@ -205,8 +203,8 @@
                         @foreach ([
                             'Device' => ucfirst($activityUser->device_type ?? '—') . ' · ' . ($activityUser->browser ?? '') . ' · ' . ($activityUser->os ?? ''),
                             'User' => $activityUser->identitySummary(),
-                            'First seen' => TrackerTime::formatFromStorage($activityUser->created_at, 'd M Y, h:i A'),
-                            'Last active' => TrackerTime::formatFromStorage($latestActionAt ?? $activityUser->last_active_at, 'd M Y, h:i A'),
+                            'First seen' => \App\Support\TrackerTime::formatFromStorage($activityUser->created_at, 'd M Y, h:i A'),
+                            'Last active' => \App\Support\TrackerTime::formatFromStorage($latestActionAt ?? $activityUser->last_active_at, 'd M Y, h:i A'),
                         ] as $label => $value)
                             <div class="py-2.5 first:pt-0 min-w-0">
                                 <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
@@ -225,18 +223,53 @@
                 </div>
 
                 <div class="section-card">
-                    <div class="section-title">Traffic Attribution</div>
+                    <div class="section-title">Session traffic</div>
                     <div class="divide-y divide-slate-100 dark:divide-slate-700/60 text-[13px]">
-                        @forelse ($trafficAttribution ?? [] as $label => $value)
+                        @forelse ($sessionTrafficTouches ?? [] as $touch)
                             <div class="py-2.5 first:pt-0 last:pb-0 min-w-0">
-                                <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
-                                <div class="text-slate-700 dark:text-slate-200 break-all text-[13px]">{{ $value }}</div>
+                                <div class="text-slate-800 dark:text-slate-100">
+                                    <span class="text-slate-400">#{{ $touch['sequence'] }}</span>
+                                    {{ $touch['source_label'] }} / {{ $touch['medium'] !== 'none' ? $touch['medium'] : '—' }}
+                                    @if ($touch['is_last'])
+                                        <span class="text-accent-600 dark:text-accent-400 text-[11px] font-semibold uppercase">· last in session</span>
+                                    @endif
+                                </div>
+                                @if (filled($touch['campaign'] ?? null))
+                                    <div class="text-slate-500 text-[12px]">{{ $touch['campaign'] }}</div>
+                                @endif
+                                <div class="text-[11px] text-slate-400">{{ $touch['captured_at'] }}</div>
                             </div>
                         @empty
-                            <p class="text-sm text-slate-400 dark:text-slate-500 py-1">No UTM or click tracking data for this session.</p>
+                            @forelse ($trafficAttribution ?? [] as $label => $value)
+                                <div class="py-2.5 first:pt-0 last:pb-0 min-w-0">
+                                    <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
+                                    <div class="text-slate-700 dark:text-slate-200 break-all">{{ $value }}</div>
+                                </div>
+                            @empty
+                                <p class="text-sm text-slate-400 py-1">No UTM or click tracking data for this session.</p>
+                            @endforelse
                         @endforelse
                     </div>
                 </div>
+
+                @if (($conversionAttribution ?? []) !== [])
+                    <div class="section-card">
+                        <div class="section-title">
+                            @include('ecom_activity.partials.section-title-with-tip', [
+                                'title' => 'Conversion',
+                                'tip' => 'Order credit: last non-direct marketing touch for this visitor before payment (skips Direct). Session traffic above is this visit only (last touch in session).',
+                            ])
+                        </div>
+                        <div class="divide-y divide-slate-100 dark:divide-slate-700/60 text-[13px]">
+                            @foreach ($conversionAttribution as $label => $value)
+                                <div class="py-2.5 first:pt-0 last:pb-0 min-w-0">
+                                    <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
+                                    <div class="text-slate-700 dark:text-slate-200 break-all text-[13px]">{{ $value }}</div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
 
                 <div class="section-card">
                     <div class="section-title">Funnel Progress</div>
@@ -248,6 +281,11 @@
                             </span>
                         @endforeach
                     </div>
+
+                    @include('ecom_activity.partials.related-visitor-sessions', [
+                        'activityUser' => $activityUser,
+                        'relatedVisitorSessions' => $relatedVisitorSessions ?? collect(),
+                    ])
                 </div>
             </div>
         </div>

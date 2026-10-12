@@ -1,7 +1,7 @@
 @php
-    $rows = $d[$dataKey]['rows'] ?? [];
-    $sessionCount = $d[$dataKey]['session_count'] ?? 0;
-    $atStake = $d[$dataKey]['at_stake'] ?? 0;
+    $rows = $panel['rows'] ?? [];
+    $sessionCount = $panel['session_count'] ?? 0;
+    $atStake = $panel['at_stake'] ?? 0;
     $panelTone = $panelTone ?? 'cart';
 @endphp
 
@@ -21,7 +21,7 @@
             </p>
         </div>
         <div class="etd-panel-head-meta">
-            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailLink($detailSection)])
+            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $detailUrl])
         </div>
     </div>
 

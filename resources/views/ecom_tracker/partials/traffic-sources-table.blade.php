@@ -13,7 +13,7 @@
             return null;
         }
 
-        $url = $activitySourceLink($row['source']);
+        $url = $activitySourceLink($row);
 
         return filled($url) ? $url : null;
     };
@@ -102,7 +102,11 @@
         </thead>
         <tbody>
             @forelse ($rows as $source)
-                @php($sourceUrl = $resolveSourceLink($source))
+                @php
+                    $sourceUrl = filled($source['activity_url'] ?? null)
+                        ? (string) $source['activity_url']
+                        : $resolveSourceLink($source);
+                @endphp
                 <tr>
                     <td>
                         @if ($sourceUrl)

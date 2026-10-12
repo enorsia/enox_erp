@@ -2,80 +2,94 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\EcomTrackerDashboardExport;
-use App\Http\Controllers\Concerns\CountsTrackerFilters;
+use App\Jobs\TrackerDashboardSyncJob;
+use App\Services\EcomActivityListService;
+use App\Services\EcomTrackerCompareFilteredDashboardService;
 use App\Services\EcomTrackerDashboardService;
-use App\Services\EcomTrackerFeatureGate;
-use App\Support\EcomTrackerLogger;
-use App\Support\TrackerRedisSupport;
+use App\Services\TrackerDashboardSyncService;
+use App\Support\TrackerTime;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Maatwebsite\Excel\Facades\Excel;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
-class EcomTrackerDashboardController extends EcomTrackerAdminController
+class EcomTrackerDashboardController extends Controller
 {
-    use CountsTrackerFilters;
-
-    public function __construct(
-        EcomTrackerFeatureGate $featureGate,
-        private EcomTrackerDashboardService $service,
-    ) {
-        parent::__construct($featureGate);
-    }
-
-    public function index(Request $request): View
-    {
-        $startedAt = microtime(true);
+    public function index(
+        Request $request,
+        EcomTrackerDashboardService $dashboardService,
+        EcomTrackerCompareFilteredDashboardService $filteredDashboard,
+        EcomActivityListService $activityList,
+    ): View {
         Gate::authorize('ecom_tracker.dashboard.index');
 
-        $filters = array_merge(
-            $this->dashboardDateFilters($request),
-            $this->dashboardSessionFilters($request),
+        $period = EcomActivityListService::normalizePeriod($request->query('period'));
+        $range = EcomActivityListService::periodRange(
+            $period,
+            (string) $request->query('date_from', ''),
+            (string) $request->query('date_to', ''),
         );
+        $filters = EcomActivityListService::filtersFromRequest($request);
+        $filterQuery = EcomActivityListService::filterQueryParams($request);
+        $prevQuery = EcomActivityListService::shiftedPeriodQuery($range, -1);
+        $nextQuery = EcomActivityListService::shiftedPeriodQuery($range, 1);
+        $periodQuery = array_filter([
+            'period' => $period,
+            'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
+            'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
+            'back' => $request->fullUrl(),
+        ]) + $filterQuery;
 
-        $dashboard = $this->service->getDashboardData($filters);
-        $dashboard['chart_payload'] = $this->service->chartPayload($dashboard);
-        $activeFilterCount = $this->dashboardActiveFilterCount($request, includeProductCatalog: false);
+        $data = [
+            'period' => $period,
+            'dateFrom' => $range['from']->toDateString(),
+            'dateTo' => $range['to']->toDateString(),
+            'rangeLabel' => TrackerTime::formatLocalDateRangeLabel($range['from'], $range['to']),
+            'prevUrl' => $prevQuery ? route('admin.ecom-tracker.dashboard', $prevQuery + $filterQuery) : null,
+            'nextUrl' => $nextQuery ? route('admin.ecom-tracker.dashboard', $nextQuery + $filterQuery) : null,
+            'resetUrl' => route('admin.ecom-tracker.dashboard', array_filter([
+                'period' => $period,
+                'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
+                'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
+            ])),
+            'activityLink' => fn (array $activityFilters = []) => route('admin.ecom-activity.index', $periodQuery + array_filter($activityFilters, fn ($value) => $value !== null)),
+        ];
 
-        TrackerRedisSupport::logBackendHealth('store_dashboard');
+        $dashboard = $dashboardService->dashboard($range, $period, $request->fullUrl());
+        if (EcomActivityListService::hasActiveFilters($filters)) {
+            $dashboard = $filteredDashboard->apply($dashboard, $range, $period, $filters, $request->fullUrl());
+        }
 
-        EcomTrackerLogger::backend()->info('analytics.dashboard', 'Admin opened store dashboard', [
-            'date_from' => $filters['date_from'] ?? null,
-            'date_to' => $filters['date_to'] ?? null,
-            'active_filter_count' => $activeFilterCount,
-            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
-        ]);
+        $filterOptions = $activityList->filterOptions($filters['department'] ?? null);
 
-        return view('ecom_tracker.dashboard', [
-            'dashboard' => $dashboard,
-            'filters' => $dashboard['filters'],
-            'activeFilterCount' => $activeFilterCount,
-            'filterChips' => $this->buildDashboardFilterChips($request, includeProductCatalog: false),
-            'page' => \App\Support\EcomTrackerViewData::forDashboard(
-                $request,
-                $dashboard['filters'],
-                $activeFilterCount,
-            ),
-        ]);
+        return view('ecom_tracker.dashboard', compact('data', 'dashboard', 'filterOptions'));
     }
 
-    public function export(Request $request): BinaryFileResponse
+    public function sync(Request $request, TrackerDashboardSyncService $syncService): JsonResponse
     {
         Gate::authorize('ecom_tracker.dashboard.index');
 
-        $filters = array_merge(
-            $this->dashboardDateFilters($request),
-            $this->dashboardSessionFilters($request),
-        );
+        $result = TrackerDashboardSyncJob::start($syncService);
 
-        $range = $this->service->resolveDateRange($filters);
-        $filename = 'ecom-tracker-dashboard-'.$range['from']->format('Y-m-d').'-'.$range['to']->format('Y-m-d').'.xlsx';
+        if ($result['status'] === TrackerDashboardSyncJob::ALREADY_RUNNING) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Sync is already running. Please wait until it finishes.',
+            ], 409);
+        }
 
-        return Excel::download(
-            EcomTrackerDashboardExport::fromFilters($this->service, $filters),
-            $filename,
-        );
+        if ($result['status'] === TrackerDashboardSyncJob::NOTHING_TO_SYNC) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No more data to sync.',
+            ], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => "Sync started: {$result['batches']} batch(es), {$result['sessions']} session(s). Ensure a queue worker is running.",
+            'batches' => $result['batches'],
+            'sessions' => $result['sessions'],
+        ]);
     }
 }

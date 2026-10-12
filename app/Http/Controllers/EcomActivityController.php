@@ -4,33 +4,22 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
-use App\Models\ActivityEcomUserBotContext;
-use App\Models\TrackerUtmFilter;
-use App\Services\EcomActivityFilterCounts;
-use App\Services\EcomActivityFunnelSessions;
-use App\Services\EcomActivityRowMetrics;
-use App\Services\EcomActivityTimelinePresenter;
-use App\Services\EcomTrackerDashboardService;
-use App\Services\EcomTrackerFeatureGate;
-use App\Support\CommerceHasOrderFilter;
-use App\Support\EcomActivityFocus;
-use App\Support\EcomActivityKeywordSearch;
-use App\Support\EcomActivitySessionSort;
+use App\Services\EcomActivityListService;
+use App\Support\EcomActivityTableFocus;
 use App\Support\EcomTrackerLogger;
-use App\Support\EcomTrackerViewData;
-use App\Support\SessionDurationBuckets;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerActionSequence;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
-class EcomActivityController extends EcomTrackerAdminController
+class EcomActivityController extends Controller
 {
     private const TIMELINE_PER_PAGE = 15;
 
@@ -43,207 +32,96 @@ class EcomActivityController extends EcomTrackerAdminController
         'payment_success',
     ];
 
-    public function __construct(
-        EcomTrackerFeatureGate $featureGate,
-        private EcomTrackerDashboardService $dashboardService,
-        private EcomActivityFunnelSessions $funnelSessions,
-        private EcomActivityRowMetrics $rowMetrics,
-    ) {
-        parent::__construct($featureGate);
-    }
+    private const BADGE_COLORS = [
+        'category_view' => 'badge-blue',
+        'product_view' => 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+        'product_view_popup' => 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+        'grid_impression' => 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200',
+        'product_click' => 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-200',
+        'add_to_cart' => 'badge-amber',
+        'begin_checkout' => 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+        'proceed_checkout' => 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+        'payment_success' => 'badge-green',
+    ];
 
-    public function index(Request $request): View|RedirectResponse
+    public function index(Request $request, EcomActivityListService $activityList): View
     {
-        $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.activity.index');
 
-        $isTableFragment = $request->input('fragment') === 'table' && $request->ajax();
-        $focus = $request->input('focus');
-        $range = $this->resolveActivityRange($request);
-        $categoryFilterOptions = $this->dashboardService->categoryFilterOptionsForRange(
-            $range['from'],
-            $range['to'],
-            [],
-            $range['period'],
+        $period = EcomActivityListService::normalizePeriod($request->query('period'));
+        $range = EcomActivityListService::periodRange(
+            $period,
+            (string) $request->query('date_from', ''),
+            (string) $request->query('date_to', ''),
         );
 
-        $reconciledCatalogFilters = EcomActivityFocus::reconcileCatalogFilters($request, $categoryFilterOptions);
-
-        if ($reconciledCatalogFilters !== null) {
-            if (! $isTableFragment && ! $request->ajax()) {
-                return redirect()->to($this->activityIndexUrlWithCatalogFilters($request, $reconciledCatalogFilters));
-            }
-
-            $this->applyCatalogFilterOverrides($request, $reconciledCatalogFilters);
-        }
-
-        $resolvedDepartment = EcomActivityFocus::resolvedCategoryDepartment(
-            $request,
-            $range['from'],
-            $range['to'],
-            $range['period'],
-            $categoryFilterOptions,
-        );
-
-        if ($resolvedDepartment !== null && ! $request->filled('department')) {
-            $request->merge(['department' => $resolvedDepartment]);
-        }
-
-        $query = $this->buildIndexQuery($request, $range);
-        $sessions = $this->paginateSessions($query, $request, $focus, $range);
-
-        $funnelMetrics = [];
-
-        if (EcomActivityFocus::isValid($focus) && ! $isTableFragment) {
-            $funnelContext = EcomActivityFocus::resolveFunnelContext(
-                $focus,
-                $range['from'],
-                $range['to'],
-                EcomActivityFocus::sessionFiltersFromRequest($request),
-                $range['period'],
-                $this->funnelSessions,
-            );
-            $funnelMetrics = $funnelContext['metrics'];
-        }
-
-        $rowMetrics = $this->rowMetrics->forSessions(
-            collect($sessions->items()),
-            EcomActivityFocus::isValid($focus) ? $focus : null,
-            $range['from'],
-            $range['to'],
-            $funnelMetrics,
-            in_array($focus, ['products', 'categories'], true)
-                ? EcomActivityFocus::productCatalogFiltersFromRequest($request)
-                : EcomActivityFocus::indexCatalogFiltersFromRequest($request),
-        );
-
-        $tableViewData = [
-            'sessions' => $sessions,
-            'focusColumns' => EcomActivityFocus::tableColumns($focus, $request),
-            'rowMetrics' => $rowMetrics,
-            'emptyMessage' => EcomActivityFocus::emptyMessage($focus),
-            'clearFocusUrl' => $request->fullUrlWithQuery(['focus' => null, 'page' => null]),
-            'hasFocus' => EcomActivityFocus::isValid($focus),
+        $data = [
+            'period' => $period,
+            'dateFrom' => $range['from']->toDateString(),
+            'dateTo' => $range['to']->toDateString(),
+            'rangeLabel' => TrackerTime::formatLocalDateRangeLabel($range['from'], $range['to']),
         ];
 
-        if ($isTableFragment) {
-            return view('ecom_activity.partials.table-fragment', $tableViewData);
+        $sortQuery = $request->except(['period', 'date_from', 'date_to', 'page']);
+        $data['keepQuery'] = $sortQuery;
+        $prevQuery = EcomActivityListService::shiftedPeriodQuery($range, -1);
+        $nextQuery = EcomActivityListService::shiftedPeriodQuery($range, 1);
+        $data['prevUrl'] = $prevQuery ? route('admin.ecom-activity.index', $prevQuery + $sortQuery) : null;
+        $data['nextUrl'] = $nextQuery ? route('admin.ecom-activity.index', $nextQuery + $sortQuery) : null;
+        $data['backUrl'] = EcomActivityListService::backUrl($request, route('admin.ecom-tracker.dashboard'));
+        $data['resetUrl'] = route('admin.ecom-activity.index', array_filter(['back' => $request->query('back')]));
+
+        $sortBy = EcomActivityListService::normalizeSort($request->query('sort_by'));
+        $sortOptions = EcomActivityListService::SORT_OPTIONS;
+        $filters = EcomActivityListService::filtersFromRequest($request);
+
+        $filterOptions = $activityList->filterOptions($filters['department']);
+
+        if ($filters['department'] && $filters['categories'] === []) {
+            $filters['categories'] = [$filters['department'], ...array_keys($filterOptions['categories'])];
         }
 
-        $visitorQualitySummary = $this->visitorQualityCounts($request, $range);
-        $filterOptionCounts = app(EcomActivityFilterCounts::class)->counts(
-            $request,
-            fn (Request $filterRequest, array $except) => $this->buildIndexQuery(
-                $filterRequest,
-                $this->resolveActivityRange($filterRequest),
-                $except,
-                forCounts: true,
-            ),
-            fn (Request $filterRequest, array $except) => $this->deferredHasOrderFacetCounts($filterRequest, $except),
-        );
-        $utmFilterState = TrackerUtmFilter::formState(
-            $request->input('utm_source'),
-            $request->input('utm_medium'),
-            $filterOptionCounts['utm_source'] ?? [],
-            $filterOptionCounts['utm_medium'] ?? [],
-        );
+        $focusColumns = EcomActivityTableFocus::columnsForRequest($request);
+        $showCatalogFilterColumn = EcomActivityTableFocus::showCatalogFilterColumn($request);
 
-        $focusLabel = EcomActivityFocus::label($focus);
-        $summaryFocus = EcomActivityFocus::resolveFilterSummaryFocus($request);
-        $summaryCards = EcomActivityFocus::summaryForFocus(
-            $summaryFocus,
-            $sessions->total(),
-            $funnelMetrics,
-            $request,
-            $range['from'],
-            $range['to'],
-            $range['period'],
+        $sessions = $activityList->paginate(
+            $range,
+            $filters,
+            $sortBy,
+            25,
+            $focusColumns,
+            $showCatalogFilterColumn,
         );
-        $activityListContext = EcomActivityFocus::activityListContext(
-            $request,
-            $range['label'],
-            $sessions->total(),
-            $funnelMetrics,
-            $range['from'],
-            $range['to'],
-            $range['period'],
-        );
-        $backUrl = EcomTrackerViewData::activityIndexBackUrl($request);
-        $breadcrumbs = $this->buildBreadcrumbs(
-            $request,
-            $activityListContext ? null : $focusLabel,
-            $backUrl,
-        );
-        $focusColumns = EcomActivityFocus::tableColumns($focus, $request);
-        $emptyMessage = EcomActivityFocus::emptyMessage($focus);
-        $clearFocusUrl = $request->fullUrlWithQuery(['focus' => null, 'page' => null]);
+        $summary = $activityList->filteredSummary($range, $filters);
+        $visitorQuality = $activityList->visitorQualitySummary($range, $filters);
+        $drillDownUi = $activityList->drillDownUi($request, $filters, $summary, $data['resetUrl'], $filterOptions);
+        $activityExport = null;
 
-        $showCatalogFilters = EcomActivityFocus::showCatalogFiltersInDrawer($request);
-        $productFilterOptions = ['categories' => [], 'colors' => [], 'sizes' => []];
-        $eventScenarioOptions = [];
-        $productSortGroups = [];
-        $productActivityOptions = [];
-        if ($showCatalogFilters) {
-            $catalogData = $this->dashboardService->buildProductCatalogPerformance(
-                $range['from'],
-                $range['to'],
-                null,
-                EcomActivityFocus::sessionFiltersFromRequest($request),
-                ['period' => $range['period']],
-            );
-            $productFilterOptions = $catalogData['filter_options'] ?? $productFilterOptions;
-            $eventScenarioOptions = $this->dashboardService->productCatalogEventScenarioOptions();
-            $productSortGroups = $this->dashboardService->productCatalogSortGroups();
-            $productActivityOptions = $this->dashboardService->productCatalogActivityFilterOptions();
-        }
-
-        EcomTrackerLogger::backend()->info('analytics.activity.index', 'Admin opened user activity list', [
-            'session_count' => $sessions->total(),
-            'focus' => $focus,
-            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
-        ]);
-
-        return view('ecom_activity.index', [
-            'sessions' => $sessions,
-            'visitorQualitySummary' => $visitorQualitySummary,
-            'filterChips' => EcomActivityFocus::sidebarFilterChipsFromRequest($request),
-            'sidebarFilterCount' => EcomActivityFocus::sidebarFilterActiveCount($request),
-            'filterResetUrl' => EcomActivityFocus::sidebarFilterResetUrl($request),
-            'filterOptionCounts' => $filterOptionCounts,
-            'utmFilterState' => $utmFilterState,
-            'focus' => $focus,
-            'focusLabel' => $focusLabel,
-            'summaryCards' => $summaryCards,
-            'breadcrumbs' => $breadcrumbs,
-            'focusColumns' => $focusColumns,
-            'rowMetrics' => $rowMetrics,
-            'emptyMessage' => $emptyMessage,
-            'clearFocusUrl' => $clearFocusUrl,
-            'range' => [
-                'from' => $range['from'],
-                'to' => $range['to'],
-                'label' => $range['label'],
-            ],
-            'rangeLabel' => $range['label'],
-            'period' => ($range['period'] ?? $request->input('period', '24h')) === '90d'
-                ? '30d'
-                : ($range['period'] ?? $request->input('period', '24h')),
-            'dateFrom' => $request->input('date_from', ''),
-            'dateTo' => $request->input('date_to', ''),
-            'hasFocus' => EcomActivityFocus::isValid($focus),
-            'backUrl' => $backUrl,
-            'drillDownContext' => $activityListContext,
-            'activityListContext' => $activityListContext,
-            'showCatalogFilters' => $showCatalogFilters,
-            'productFilterOptions' => $productFilterOptions,
-            'categoryFilterOptions' => $categoryFilterOptions,
-            'eventScenarioOptions' => $eventScenarioOptions,
-            'productSortGroups' => $productSortGroups,
-            'productActivityOptions' => $productActivityOptions,
-        ]);
+        return view('ecom_activity.index', compact(
+            'data',
+            'sessions',
+            'sortBy',
+            'sortOptions',
+            'filterOptions',
+            'summary',
+            'visitorQuality',
+            'drillDownUi',
+            'activityExport',
+            'focusColumns',
+            'showCatalogFilterColumn',
+        ));
     }
 
-    public function show(Request $request, string $session, EcomActivityTimelinePresenter $timelinePresenter): View
+    public function categories(Request $request, EcomActivityListService $activityList): JsonResponse
+    {
+        Gate::authorize('ecom_tracker.activity.index');
+
+        $categories = $activityList->departmentCategories($request->integer('department'));
+
+        return response()->json(collect($categories)->map(fn (string $name, int $id) => ['id' => $id, 'name' => $name])->values());
+    }
+
+    public function show(Request $request, string $session): View
     {
         $startedAt = microtime(true);
         Gate::authorize('ecom_tracker.activity.show');
@@ -259,7 +137,11 @@ class EcomActivityController extends EcomTrackerAdminController
             ->orderByDesc('id')
             ->get();
 
-        $fullTimeline = $timelinePresenter->present($actions);
+        $fullTimeline = $this->buildTimeline(
+            $actions->filter(
+                fn (ActivityEcomUserAction $action) => $action->action_type !== 'product_click',
+            ),
+        );
         $latestActionAt = $actions
             ->map(fn (ActivityEcomUserAction $action) => TrackerTime::toUtc($action->created_at))
             ->filter()
@@ -276,7 +158,7 @@ class EcomActivityController extends EcomTrackerAdminController
         $total = $fullTimeline->count();
         $items = $fullTimeline->slice(($page - 1) * self::TIMELINE_PER_PAGE, self::TIMELINE_PER_PAGE)->values();
 
-        $showRouteParams = EcomTrackerViewData::activityShowParams($session, $request->input('back'));
+        $showRouteParams = $this->activityShowRouteParams($session, $request->input('back'));
 
         $timeline = new LengthAwarePaginator(
             $items,
@@ -291,11 +173,7 @@ class EcomActivityController extends EcomTrackerAdminController
 
         $timeline->appends($request->except('timeline_page'));
 
-        $returnQuery = EcomTrackerViewData::activityIndexQueryFromRequest($request);
-        $backUrl = EcomTrackerViewData::resolveBackUrl(
-            $request->input('back'),
-            route('admin.ecom-activity.index', $returnQuery),
-        );
+        $backUrl = EcomActivityListService::backUrl($request, route('admin.ecom-activity.index'));
 
         EcomTrackerLogger::backend()->info('analytics.activity.show', 'Admin opened one user session', [
             'session_id' => $session,
@@ -304,6 +182,8 @@ class EcomActivityController extends EcomTrackerAdminController
         ]);
 
         $trafficAttribution = SessionTrafficAttribution::displayFields($activityUser, $actions);
+        $sessionTrafficTouches = SessionTrafficAttribution::touchesForSessionDisplay($activityUser, $actions);
+        $conversionAttribution = SessionTrafficAttribution::conversionOrMarketingDisplayFields($activityUser);
         $landingPage = filled($activityUser->landing_page)
             ? $activityUser->landing_page
             : $actions
@@ -322,347 +202,457 @@ class EcomActivityController extends EcomTrackerAdminController
             'reachedSteps' => $reachedSteps,
             'backUrl' => $backUrl,
             'trafficAttribution' => $trafficAttribution,
+            'sessionTrafficTouches' => $sessionTrafficTouches,
+            'conversionAttribution' => $conversionAttribution,
             'landingPage' => $landingPage,
             'latestActionAt' => $latestActionAt,
+            'relatedVisitorSessions' => $this->relatedVisitorSessions($activityUser),
+            'badgeColors' => self::BADGE_COLORS,
         ]);
     }
 
     /**
-     * @return array{from: Carbon, to: Carbon, label: string, period: ?string}
+     * @return array<string, string>
      */
-    private function resolveActivityRange(Request $request): array
+    private function activityShowRouteParams(string $sessionId, mixed $back): array
     {
-        if ($request->input('period') === 'all') {
+        $params = ['session' => $sessionId];
+
+        if (is_string($back) && $back !== '') {
+            $params['back'] = $back;
+        }
+
+        return $params;
+    }
+
+    /**
+     * @param  Collection<int, ActivityEcomUserAction>  $actions
+     * @return Collection<int, object>
+     */
+    private function buildTimeline(Collection $actions): Collection
+    {
+        $sorted = $actions
+            ->sort(fn (ActivityEcomUserAction $left, ActivityEcomUserAction $right) => $this->compareTimelineActions($left, $right))
+            ->values();
+
+        $timeline = collect();
+        $index = 0;
+
+        while ($index < $sorted->count()) {
+            /** @var ActivityEcomUserAction $action */
+            $action = $sorted[$index];
+
+            if ($action->action_type === 'grid_impression') {
+                $group = collect([$action]);
+                $pageKey = $this->timelineGridPageKey($action);
+                $index++;
+
+                while ($index < $sorted->count()) {
+                    /** @var ActivityEcomUserAction $next */
+                    $next = $sorted[$index];
+
+                    if ($next->action_type !== 'grid_impression' || $this->timelineGridPageKey($next) !== $pageKey) {
+                        break;
+                    }
+
+                    $group->push($next);
+                    $index++;
+                }
+
+                $timeline->push($group->count() === 1
+                    ? $this->wrapSingleGridTimelineItem($group->first())
+                    : $this->wrapGroupedGridImpressionTimelineItem($group));
+
+                continue;
+            }
+
+            if ($action->action_type === 'grid_click') {
+                $timeline->push($this->wrapSingleGridTimelineItem($action));
+                $index++;
+
+                continue;
+            }
+
+            if (! in_array($action->action_type, ['product_view', 'product_view_popup'], true)) {
+                $timeline->push($this->wrapSingleTimelineItem($action));
+                $index++;
+
+                continue;
+            }
+
+            $group = collect([$action]);
+            $productKey = $this->timelineProductKey($action);
+            $index++;
+
+            while ($index < $sorted->count()) {
+                /** @var ActivityEcomUserAction $next */
+                $next = $sorted[$index];
+
+                if (
+                    ! in_array($next->action_type, ['product_view', 'product_view_popup'], true)
+                    || $this->timelineProductKey($next) !== $productKey
+                    || $action->action_type !== $next->action_type
+                ) {
+                    break;
+                }
+
+                $group->push($next);
+                $index++;
+            }
+
+            $timeline->push($group->count() === 1
+                ? $this->wrapSingleTimelineItem($group->first())
+                : $this->wrapGroupedProductViewTimelineItem($group));
+        }
+
+        return $timeline
+            ->sort(fn (object $left, object $right) => $this->compareTimelineItemsDescending($left, $right))
+            ->values();
+    }
+
+    private function compareTimelineActions(ActivityEcomUserAction $left, ActivityEcomUserAction $right): int
+    {
+        $leftTs = $left->created_at?->timestamp ?? $left->start_time?->timestamp ?? 0;
+        $rightTs = $right->created_at?->timestamp ?? $right->start_time?->timestamp ?? 0;
+
+        return TrackerActionSequence::compare(
+            $leftTs,
+            (string) $left->action_type,
+            (int) $left->id,
+            $rightTs,
+            (string) $right->action_type,
+            (int) $right->id,
+        );
+    }
+
+    private function compareTimelineItems(object $left, object $right): int
+    {
+        $leftTs = $this->timelineItemSortTimestamp($left);
+        $rightTs = $this->timelineItemSortTimestamp($right);
+
+        return TrackerActionSequence::compare(
+            $leftTs,
+            (string) ($left->action_type ?? ''),
+            (int) ($left->id ?? 0),
+            $rightTs,
+            (string) ($right->action_type ?? ''),
+            (int) ($right->id ?? 0),
+        );
+    }
+
+    private function compareTimelineItemsDescending(object $left, object $right): int
+    {
+        return $this->compareTimelineItems($right, $left);
+    }
+
+    private function timelineItemSortTimestamp(object $item): int
+    {
+        $actions = $item->actions ?? null;
+
+        if ($actions instanceof Collection && $actions->isNotEmpty()) {
+            $latest = $actions
+                ->map(fn (ActivityEcomUserAction $action) => $action->created_at?->timestamp ?? $action->start_time?->timestamp ?? 0)
+                ->max();
+
+            if (is_int($latest) && $latest > 0) {
+                return $latest;
+            }
+        }
+
+        return $item->created_at?->timestamp ?? 0;
+    }
+
+    private function wrapSingleTimelineItem(ActivityEcomUserAction $action): object
+    {
+        $dwellSeconds = $this->actionDwellSeconds($action);
+        $colorName = $action->general_color_name ?: 'Unknown';
+
+        return (object) [
+            'id' => $action->id,
+            'is_grouped_product_view' => false,
+            'action_type' => $action->action_type,
+            'action' => $action,
+            'actions' => collect([$action]),
+            'category_name' => $action->category_name,
+            'category_code' => $action->category_code,
+            'product_name' => $action->product_name,
+            'product_code' => $action->product_code,
+            'sku' => $action->sku,
+            'product_price' => $action->product_price,
+            'referer' => $action->referer,
+            'page_url' => $action->page_url,
+            'start_time' => $action->start_time,
+            'end_time' => $action->end_time,
+            'created_at' => $action->created_at ?? $action->start_time,
+            'dwell_seconds' => $dwellSeconds,
+            'color_timeline' => $dwellSeconds !== null
+                ? sprintf('%s (%ds)', $colorName, $dwellSeconds)
+                : $colorName,
+            'add_to_cart' => $action->add_to_cart,
+            'begin_checkout' => $action->begin_checkout,
+            'proceed_to_checkout' => $action->proceed_to_checkout,
+            'payment_success' => $action->payment_success,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, ActivityEcomUserAction>  $group
+     */
+    private function wrapGroupedProductViewTimelineItem(Collection $group): object
+    {
+        $segments = $group->map(function (ActivityEcomUserAction $action) {
             return [
-                'from' => Carbon::parse('2000-01-01', 'UTC'),
-                'to' => TrackerTime::nowUtc(),
-                'label' => 'All sessions',
-                'period' => 'all',
+                'name' => $action->general_color_name ?: 'Unknown',
+                'seconds' => $this->actionDwellSeconds($action),
             ];
-        }
+        });
 
-        $range = $this->dashboardService->resolveDateRange([
-            'period' => $request->input('period', '24h'),
-            'date_from' => $request->input('date_from'),
-            'date_to' => $request->input('date_to'),
+        $colorTimeline = $segments
+            ->map(function (array $segment) {
+                if ($segment['seconds'] === null) {
+                    return $segment['name'];
+                }
+
+                return sprintf('%s (%ds)', $segment['name'], $segment['seconds']);
+            })
+            ->join(' → ');
+
+        $totalDwell = $segments
+            ->pluck('seconds')
+            ->filter(fn ($seconds) => $seconds !== null)
+            ->sum();
+
+        $first = $group->first();
+        $last = $group->last();
+
+        return (object) [
+            'id' => $first->id,
+            'is_grouped_product_view' => true,
+            'action_type' => $first->action_type,
+            'action' => $first,
+            'actions' => $group->sortByDesc(fn (ActivityEcomUserAction $action) => [
+                $action->created_at?->timestamp ?? 0,
+                $action->start_time?->timestamp ?? 0,
+                $action->id,
+            ])->values(),
+            'category_name' => null,
+            'category_code' => null,
+            'product_name' => $first->product_name,
+            'product_code' => $first->product_code,
+            'sku' => $first->sku,
+            'product_price' => $last->product_price,
+            'referer' => $first->referer,
+            'page_url' => $last->page_url,
+            'start_time' => $first->start_time,
+            'end_time' => $last->end_time,
+            'created_at' => $last->created_at ?? $last->start_time ?? $first->created_at ?? $first->start_time,
+            'dwell_seconds' => $totalDwell > 0 ? $totalDwell : null,
+            'color_timeline' => $colorTimeline,
+            'add_to_cart' => null,
+            'begin_checkout' => null,
+            'proceed_to_checkout' => null,
+            'payment_success' => null,
+        ];
+    }
+
+    private function wrapSingleGridTimelineItem(ActivityEcomUserAction $action): object
+    {
+        $sku = $this->timelineGridSkuLabel($action);
+
+        return (object) array_merge((array) $this->wrapSingleTimelineItem($action), [
+            'is_grouped_grid_impression' => false,
+            'sku_timeline' => $sku,
         ]);
+    }
 
-        return [
-            'from' => $range['from'],
-            'to' => $range['to'],
-            'label' => $range['label'],
-            'period' => $range['period'] ?? $request->input('period', '24h'),
+    /**
+     * @param  Collection<int, ActivityEcomUserAction>  $group
+     */
+    private function wrapGroupedGridImpressionTimelineItem(Collection $group): object
+    {
+        $ordered = $group
+            ->sortBy(fn (ActivityEcomUserAction $action) => [
+                $action->created_at?->timestamp ?? 0,
+                $action->id,
+            ])
+            ->values();
+
+        $segments = $ordered->map(function (ActivityEcomUserAction $action, int $index) use ($ordered) {
+            $next = $ordered->get($index + 1);
+
+            return [
+                'name' => $this->timelineGridSkuLabel($action),
+                'seconds' => $next ? $this->timelineGridGapSeconds($action, $next) : null,
+            ];
+        });
+
+        $skuTimeline = $segments
+            ->pluck('name')
+            ->join(' → ');
+
+        $totalGap = $segments
+            ->pluck('seconds')
+            ->filter(fn ($seconds) => $seconds !== null)
+            ->sum();
+
+        $first = $ordered->first();
+        $last = $ordered->last();
+
+        return (object) [
+            'id' => $first->id,
+            'is_grouped_product_view' => false,
+            'is_grouped_grid_impression' => true,
+            'action_type' => 'grid_impression',
+            'action' => $first,
+            'actions' => $ordered->sortByDesc(fn (ActivityEcomUserAction $action) => [
+                $action->created_at?->timestamp ?? 0,
+                $action->id,
+            ])->values(),
+            'category_name' => $first->category_name,
+            'category_code' => $first->category_code,
+            'product_name' => null,
+            'product_code' => null,
+            'sku' => null,
+            'product_price' => null,
+            'referer' => $first->referer,
+            'page_url' => $last->page_url,
+            'start_time' => null,
+            'end_time' => null,
+            'created_at' => $last->created_at ?? $first->created_at,
+            'dwell_seconds' => $totalGap > 0 ? $totalGap : null,
+            'color_timeline' => null,
+            'sku_timeline' => $skuTimeline,
+            'add_to_cart' => null,
+            'begin_checkout' => null,
+            'proceed_to_checkout' => null,
+            'payment_success' => null,
         ];
     }
 
-    private function applySessionDateFilter(Builder $query, Request $request, array $range): void
+    private function timelineGridSkuLabel(ActivityEcomUserAction $action): string
     {
-        if (($range['period'] ?? null) === 'all') {
-            return;
+        $productCode = trim((string) ($action->product_code ?? ''));
+        $legacyStyleCode = trim((string) ($action->sku ?? ''));
+
+        if ($productCode !== '') {
+            return $productCode;
         }
 
-        TrackerTime::applyEcomActivitySessionScope(
-            $query,
-            $range['from'],
-            $range['to'],
-            $range['period'] ?? $request->input('period', '24h'),
-        );
+        return $legacyStyleCode !== '' ? $legacyStyleCode : 'Unknown';
+    }
+
+    private function timelineGridPageKey(ActivityEcomUserAction $action): string
+    {
+        $category = trim((string) ($action->category_code ?? $action->category_name ?? ''));
+
+        return $this->timelineProductPathKey($action->page_url).'|'.$category;
+    }
+
+    private function timelineGridGapSeconds(ActivityEcomUserAction $action, ActivityEcomUserAction $next): int
+    {
+        if (! $action->created_at || ! $next->created_at) {
+            return 0;
+        }
+
+        return max(0, (int) $action->created_at->diffInSeconds($next->created_at));
+    }
+
+    private function timelineProductKey(ActivityEcomUserAction $action): string
+    {
+        if (! empty($action->product_code)) {
+            return 'code:'.$action->product_code;
+        }
+
+        return 'url:'.$this->timelineProductPathKey($action->page_url);
+    }
+
+    private function timelineProductPathKey(?string $url): string
+    {
+        if (! $url) {
+            return '';
+        }
+
+        $path = parse_url($url, PHP_URL_PATH) ?: '';
+
+        return rtrim($path, '/');
+    }
+
+    private function actionDwellSeconds(ActivityEcomUserAction $action): ?int
+    {
+        if (! $action->start_time || ! $action->end_time) {
+            return null;
+        }
+
+        return (int) $action->start_time->diffInSeconds($action->end_time);
     }
 
     /**
-     * @param  array<int, string>  $except
+     * @return Collection<int, ActivityEcomUser>
      */
-    private function buildIndexQuery(
-        Request $request,
-        array $range,
-        array $except = [],
-        bool $forCounts = false,
-    ): Builder {
-        $query = ActivityEcomUser::query();
-        $focus = $request->input('focus');
+    private function relatedVisitorSessions(ActivityEcomUser $session, int $limit = 20): Collection
+    {
+        $sessionIds = $this->relatedVisitorSessionIds($session);
 
-        if (! $forCounts) {
-            $query->with(['botContext']);
+        if ($sessionIds->isEmpty()) {
+            return collect();
         }
 
-        if (! EcomActivityFocus::usesActionScopedSessionDate($request)) {
-            $this->applySessionDateFilter($query, $request, $range);
-        }
+        return ActivityEcomUser::query()
+            ->whereIn('session_id', $sessionIds)
+            ->orderByDesc('last_active_at')
+            ->orderByDesc('id')
+            ->limit(max(1, $limit))
+            ->get([
+                'session_id',
+                'created_at',
+                'last_active_at',
+            ]);
+    }
 
-        if (! in_array('focus', $except, true)) {
-            EcomActivityFocus::applyFocusFilter(
-                $query,
-                $focus,
-                $range['from'],
-                $range['to'],
-                $request,
-                $this->dashboardService,
-                $this->funnelSessions,
-                $except,
+    /**
+     * Session ids for the same person: cookie visitor, tracking main visitor, and logged-in account.
+     *
+     * @return Collection<int, string>
+     */
+    private function relatedVisitorSessionIds(ActivityEcomUser $session): Collection
+    {
+        $sessionIds = collect([(string) $session->session_id]);
+
+        $visitorId = trim((string) ($session->visitor_id ?? ''));
+        if ($visitorId !== '') {
+            $sessionIds = $sessionIds->merge(
+                ActivityEcomUser::query()
+                    ->where('visitor_id', $visitorId)
+                    ->pluck('session_id'),
             );
         }
 
-        if (! in_array('funnel', $except, true)) {
-            EcomActivityFocus::applyDrawerFunnelFilter(
-                $query,
-                $request,
-                $range['from'],
-                $range['to'],
-                $this->funnelSessions,
+        $mainVisitorId = DB::table('tracking_session as ts')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('ts.session_id', $session->session_id)
+            ->value('dv.tracking_main_visitor_id');
+
+        if ($mainVisitorId !== null && (int) $mainVisitorId > 0) {
+            $sessionIds = $sessionIds->merge(
+                DB::table('tracking_session as ts')
+                    ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+                    ->where('dv.tracking_main_visitor_id', (int) $mainVisitorId)
+                    ->pluck('ts.session_id'),
             );
         }
 
-        if (
-            $request->filled('search')
-            && EcomActivityFocus::shouldApplySessionKeywordSearch($request)
-        ) {
-            EcomActivityKeywordSearch::apply(
-                $query,
-                trim((string) $request->search),
-                $this->dashboardService,
-                $range['from'],
-                $range['to'],
-                $range['period'] ?? $request->input('period', '24h'),
+        if ($session->isRegisteredUser() && filled($session->user_id)) {
+            $sessionIds = $sessionIds->merge(
+                ActivityEcomUser::query()
+                    ->where('user_id', $session->user_id)
+                    ->pluck('session_id'),
             );
         }
 
-        if (! in_array('country', $except, true) && $request->filled('country')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('country', $request->country)
-                    ->orWhereHas('botContext', fn ($b) => $b->where('ip_country', $request->country));
-            });
-        }
-
-        if (! in_array('visitor_type', $except, true)) {
-            $visitorType = $request->input('visitor_type');
-
-            if ($visitorType === 'bot') {
-                $query->whereHas('botContext', fn ($b) => $b->where('is_bot', true));
-            } elseif ($visitorType === 'human') {
-                $query->whereHas('botContext', fn ($b) => $b->where('is_bot', false));
-            } elseif ($visitorType === 'unclassified') {
-                $query->whereDoesntHave('botContext');
-            }
-        }
-
-        if (! in_array('device_type', $except, true) && $request->filled('device_type')) {
-            $query->where('device_type', $request->device_type);
-        }
-
-        if (! in_array('duration_bucket', $except, true) && $request->filled('duration_bucket')) {
-            SessionDurationBuckets::applyToQuery($query, (string) $request->input('duration_bucket'));
-        }
-
-        if (! in_array('logged_in', $except, true) && $request->filled('logged_in')) {
-            $query->where('is_logged_in', $request->logged_in === '1');
-        }
-
-        if (! in_array('has_order', $except, true) && $request->filled('has_order') && ! EcomActivityFocus::shouldDeferHasOrderFilter($request)) {
-            CommerceHasOrderFilter::apply(
-                $query,
-                $request->has_order === '1',
-                $range['from'],
-                $range['to'],
-            );
-        }
-
-        if (! in_array('utm_source', $except, true)) {
-            TrackerUtmFilter::applySourceFilter($query, $request->input('utm_source'));
-        }
-
-        if (! in_array('utm_medium', $except, true)) {
-            TrackerUtmFilter::applyMediumFilter($query, $request->input('utm_medium'));
-        }
-
-        if (
-            ! in_array('focus', $except, true)
-            && EcomActivityFocus::shouldApplyCatalogConstraintsInIndexQuery($focus, $request)
-        ) {
-            EcomActivityFocus::applyProductCatalogConstraints(
-                $query,
-                $range['from'],
-                $range['to'],
-                $request,
-                $this->dashboardService,
-                $range['period'] ?? $request->input('period', '24h'),
-                $except,
-            );
-        }
-
-        return $query;
-    }
-
-    private function paginateSessions(
-        Builder $query,
-        Request $request,
-        ?string $focus,
-        array $range,
-    ): LengthAwarePaginator {
-        $perPage = 25;
-        $page = max(1, (int) $request->input('page', 1));
-        $sortBy = EcomActivitySessionSort::resolveSortBy($request);
-        $sortDir = EcomActivitySessionSort::resolveSortDir(
-            $request,
-            $sortBy ?? EcomActivitySessionSort::DEFAULT_SORT_KEY,
-        );
-
-        $scope = $this->sessionSortScope($request, $range, $focus);
-
-        return EcomActivitySessionSort::apply(
-            $query,
-            $sortBy,
-            $sortDir,
-            $scope,
-        )
-            ->paginate($perPage)
-            ->appends($this->activityPaginationQuery($request));
-    }
-
-    /**
-     * @return array{from: Carbon, to: Carbon, catalog_options: array<string, mixed>}
-     */
-    private function sessionSortScope(Request $request, array $range, ?string $focus): array
-    {
-        $catalogOptions = in_array($focus, ['products', 'categories'], true)
-            ? EcomActivityFocus::productCatalogFiltersFromRequest($request)
-            : EcomActivityFocus::indexCatalogFiltersFromRequest($request);
-
-        return [
-            'from' => $range['from'],
-            'to' => $range['to'],
-            'catalog_options' => EcomActivitySessionSort::usesCatalogActionScope($catalogOptions)
-                ? $catalogOptions
-                : [],
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function activityPaginationQuery(Request $request): array
-    {
-        return $request->except(['page', 'fragment']);
-    }
-
-    /**
-     * @param  array<int, string>  $except
-     * @return array{1: int, 0: int}
-     */
-    private function deferredHasOrderFacetCounts(Request $request, array $except): array
-    {
-        $range = $this->resolveActivityRange($request);
-        $baseFilters = array_merge(
-            EcomActivityFocus::sessionFiltersFromRequest($request, $except),
-            EcomActivityFocus::indexCatalogFiltersFromRequest($request, $except),
-        );
-
-        return [
-            '1' => $this->dashboardService->productCatalogSessionIds(
-                $range['from'],
-                $range['to'],
-                array_merge($baseFilters, ['has_order' => '1']),
-                $range['period'],
-            )->count(),
-            '0' => $this->dashboardService->productCatalogSessionIds(
-                $range['from'],
-                $range['to'],
-                array_merge($baseFilters, ['has_order' => '0']),
-                $range['period'],
-            )->count(),
-        ];
-    }
-
-    /**
-     * @return array{real_shoppers: int, automated_traffic: int, not_classified: int}
-     */
-    private function visitorQualityCounts(Request $request, array $range): array
-    {
-        $base = $this->buildIndexQuery($request, $range, forCounts: true);
-        $table = (new ActivityEcomUser)->getTable();
-        $botTable = (new ActivityEcomUserBotContext)->getTable();
-
-        $sessions = EcomActivityFilterCounts::aggregateQuery($base)
-            ->select("{$table}.id", "{$table}.session_id");
-
-        $bucketSql = "CASE WHEN {$botTable}.id IS NULL THEN 'unclassified' WHEN {$botTable}.is_bot = 1 THEN 'bot' ELSE 'human' END";
-        $rows = DB::query()
-            ->fromSub($sessions, 'et_activity_sessions')
-            ->leftJoin($botTable, $botTable.'.session_id', '=', 'et_activity_sessions.session_id')
-            ->selectRaw("{$bucketSql} as bucket, COUNT(DISTINCT et_activity_sessions.id) as total")
-            ->groupByRaw($bucketSql)
-            ->pluck('total', 'bucket');
-
-        return [
-            'real_shoppers' => (int) ($rows['human'] ?? 0),
-            'automated_traffic' => (int) ($rows['bot'] ?? 0),
-            'not_classified' => (int) ($rows['unclassified'] ?? 0),
-        ];
-    }
-
-    /**
-     * @return array<int, array{label: string, url?: string}>
-     */
-    private function buildBreadcrumbs(Request $request, ?string $focusLabel, ?string $dashboardBack = null): array
-    {
-        $dashboardBack ??= EcomTrackerViewData::resolveBackUrl($request->input('back'));
-
-        if ($dashboardBack !== null) {
-            return filled($focusLabel) ? [['label' => $focusLabel]] : [];
-        }
-
-        if (! filled($focusLabel)) {
-            return [];
-        }
-
-        return [['label' => $focusLabel]];
-    }
-
-    /**
-     * @param  array{department?: string|null, category?: string|null}  $filters
-     */
-    private function activityIndexUrlWithCatalogFilters(Request $request, array $filters): string
-    {
-        $query = $request->query();
-
-        foreach (['department', 'category'] as $key) {
-            if (! array_key_exists($key, $filters)) {
-                continue;
-            }
-
-            $value = $filters[$key];
-
-            if ($value === null || $value === '') {
-                unset($query[$key]);
-            } else {
-                $query[$key] = $value;
-            }
-        }
-
-        unset($query['page']);
-
-        return $request->url().(count($query) > 0 ? '?'.http_build_query($query) : '');
-    }
-
-    /**
-     * @param  array{department?: string|null, category?: string|null}  $filters
-     */
-    private function applyCatalogFilterOverrides(Request $request, array $filters): void
-    {
-        foreach (['department', 'category'] as $key) {
-            if (! array_key_exists($key, $filters)) {
-                continue;
-            }
-
-            $value = $filters[$key];
-
-            if ($value === null || $value === '') {
-                $request->query->remove($key);
-                $request->request->remove($key);
-
-                continue;
-            }
-
-            $request->merge([$key => $value]);
-        }
+        return $sessionIds
+            ->map(fn ($id) => trim((string) $id))
+            ->filter(fn (string $id) => $id !== '')
+            ->unique()
+            ->values();
     }
 }

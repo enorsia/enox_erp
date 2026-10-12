@@ -9,6 +9,12 @@ final class CommerceTestSchema
 {
     public static function up(): void
     {
+        Schema::dropIfExists('activity_ecom_daily_dimension_metrics');
+        Schema::dropIfExists('activity_ecom_daily_visitor_metrics');
+        Schema::dropIfExists('activity_ecom_daily_visitors');
+        Schema::dropIfExists('activity_ecom_daily_category_metrics');
+        Schema::dropIfExists('activity_ecom_daily_product_metrics');
+        Schema::dropIfExists('activity_ecom_daily_site_metrics');
         Schema::dropIfExists('activity_ecom_commerce_line_items');
         Schema::dropIfExists('activity_ecom_orders');
         Schema::dropIfExists('activity_ecom_user_actions');
@@ -18,6 +24,9 @@ final class CommerceTestSchema
             $table->id();
             $table->string('session_id', 64)->unique();
             $table->string('visitor_id', 64)->nullable();
+            $table->string('device_type', 64)->nullable();
+            $table->string('list_traffic_utm_source', 255)->nullable();
+            $table->string('list_traffic_utm_medium', 255)->nullable();
             $table->boolean('has_add_to_cart')->default(false);
             $table->boolean('has_begin_checkout')->default(false);
             $table->boolean('has_proceed_checkout')->default(false);
@@ -113,6 +122,90 @@ final class CommerceTestSchema
             $table->timestamp('created_at')->nullable();
             $table->unique(['event_id', 'line_no']);
             $table->unique(['order_id', 'line_no']);
+        });
+
+        Schema::create('activity_ecom_daily_site_metrics', function (Blueprint $table) {
+            $table->id();
+            $table->date('metric_date')->unique();
+            $table->unsignedInteger('action_count')->default(0);
+            $table->unsignedInteger('category_view_count')->default(0);
+            $table->unsignedInteger('product_view_count')->default(0);
+            $table->unsignedInteger('add_to_cart_count')->default(0);
+            $table->unsignedInteger('begin_checkout_count')->default(0);
+            $table->unsignedInteger('proceed_checkout_count')->default(0);
+            $table->unsignedInteger('payment_success_count')->default(0);
+            $table->unsignedInteger('order_count')->default(0);
+            $table->decimal('revenue_total', 14, 2)->default(0);
+            $table->decimal('items_sold_qty', 14, 2)->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('activity_ecom_daily_product_metrics', function (Blueprint $table) {
+            $table->id();
+            $table->date('metric_date');
+            $table->string('product_code', 255);
+            $table->string('product_name', 500)->nullable();
+            $table->string('sku', 255)->nullable();
+            $table->string('department_name', 255)->nullable();
+            $table->string('category_name', 255)->nullable();
+            $table->unsignedInteger('view_count')->default(0);
+            $table->unsignedInteger('add_to_cart_count')->default(0);
+            $table->unsignedInteger('begin_checkout_count')->default(0);
+            $table->unsignedInteger('proceed_checkout_count')->default(0);
+            $table->unsignedInteger('payment_count')->default(0);
+            $table->decimal('units_sold', 14, 2)->default(0);
+            $table->decimal('revenue', 14, 2)->default(0);
+            $table->timestamps();
+            $table->unique(['metric_date', 'product_code']);
+        });
+
+        Schema::create('activity_ecom_daily_category_metrics', function (Blueprint $table) {
+            $table->id();
+            $table->date('metric_date');
+            $table->string('department_name', 255);
+            $table->string('category_name', 255);
+            $table->unsignedInteger('category_view_count')->default(0);
+            $table->unsignedInteger('product_view_count')->default(0);
+            $table->unsignedInteger('add_to_cart_count')->default(0);
+            $table->unsignedInteger('payment_count')->default(0);
+            $table->decimal('units_sold', 14, 2)->default(0);
+            $table->decimal('revenue', 14, 2)->default(0);
+            $table->timestamps();
+            $table->unique(['metric_date', 'department_name', 'category_name']);
+        });
+
+        Schema::create('activity_ecom_daily_visitors', function (Blueprint $table) {
+            $table->id();
+            $table->string('visitor_id', 64);
+            $table->date('visit_date');
+            $table->timestamp('first_seen_at')->nullable();
+            $table->timestamp('last_seen_at')->nullable();
+            $table->unsignedInteger('session_count')->default(0);
+            $table->timestamps();
+            $table->unique(['visitor_id', 'visit_date']);
+        });
+
+        Schema::create('activity_ecom_daily_visitor_metrics', function (Blueprint $table) {
+            $table->id();
+            $table->date('metric_date');
+            $table->string('visitor_id', 64);
+            $table->unsignedInteger('session_count')->default(0);
+            $table->unsignedInteger('payment_count')->default(0);
+            $table->decimal('revenue', 14, 2)->default(0);
+            $table->timestamps();
+            $table->unique(['metric_date', 'visitor_id']);
+        });
+
+        Schema::create('activity_ecom_daily_dimension_metrics', function (Blueprint $table) {
+            $table->id();
+            $table->date('metric_date');
+            $table->string('dimension_type', 64);
+            $table->string('dimension_value', 500);
+            $table->unsignedInteger('session_count')->default(0);
+            $table->unsignedInteger('payment_count')->default(0);
+            $table->decimal('revenue', 14, 2)->default(0);
+            $table->timestamps();
+            $table->unique(['metric_date', 'dimension_type', 'dimension_value']);
         });
     }
 

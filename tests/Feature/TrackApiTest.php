@@ -51,6 +51,74 @@ test('track endpoint accepts valid batch and returns accepted ids', function () 
     expect(ActivityEcomUserAction::where('event_id', $eventId)->exists())->toBeTrue();
 });
 
+test('track endpoint stores grid impression and grid click with sku', function () {
+    $sessionId = Str::uuid()->toString();
+    $impressionId = Str::uuid()->toString();
+    $clickId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [
+        [
+            'id' => $impressionId,
+            'session_id' => $sessionId,
+            'action_type' => 'grid_impression',
+            'sku' => 'WS326290',
+            'category_name' => 'Dresses',
+            'category_code' => '221',
+            'department_name' => 'Women',
+            'page_url' => 'https://enorsia.com/women/dresses',
+            'referer' => 'https://enorsia.com/women',
+        ],
+        [
+            'id' => $clickId,
+            'session_id' => $sessionId,
+            'action_type' => 'grid_click',
+            'sku' => 'WS326290',
+            'category_name' => 'Dresses',
+            'category_code' => '221',
+            'department_name' => 'Women',
+            'page_url' => 'https://enorsia.com/women/dresses',
+            'referer' => 'https://enorsia.com/women/dresses',
+        ],
+    ]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])
+        ->assertOk()
+        ->assertJson(['accepted_ids' => [$impressionId, $clickId]]);
+
+    $impression = ActivityEcomUserAction::where('event_id', $impressionId)->first();
+    $click = ActivityEcomUserAction::where('event_id', $clickId)->first();
+
+    expect($impression)->not->toBeNull();
+    expect($impression->action_type)->toBe('grid_impression');
+    expect($impression->sku)->toBe('WS326290');
+    expect($impression->product_code)->toBeNull();
+    expect($impression->category_name)->toBe('Dresses');
+    expect($impression->category_code)->toBe('221');
+    expect($impression->department_name)->toBe('Women');
+    expect($impression->page_url)->toBe('https://enorsia.com/women/dresses');
+    expect($impression->referer)->toBe('https://enorsia.com/women');
+
+    expect($click)->not->toBeNull();
+    expect($click->action_type)->toBe('grid_click');
+    expect($click->sku)->toBe('WS326290');
+    expect($click->product_code)->toBeNull();
+});
+
+test('track endpoint rejects grid actions without sku', function () {
+    $sessionId = Str::uuid()->toString();
+
+    $this->postJson('/api/track', trackPayload($sessionId, [[
+        'id' => Str::uuid()->toString(),
+        'session_id' => $sessionId,
+        'action_type' => 'grid_impression',
+        'category_name' => 'Dresses',
+    ]]), [
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['events']);
+});
+
 test('track endpoint stores department name on category view', function () {
     $sessionId = Str::uuid()->toString();
     $eventId = Str::uuid()->toString();

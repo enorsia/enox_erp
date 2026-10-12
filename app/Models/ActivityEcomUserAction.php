@@ -7,6 +7,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ActivityEcomUserAction extends Model
 {
+    public const SYNC_PENDING = 0;
+
+    public const SYNC_DONE = 1;
+
+    public const SYNC_FAILED = 2;
+
     public $timestamps = false;
 
     protected $table = 'activity_ecom_user_actions';
@@ -17,10 +23,13 @@ class ActivityEcomUserAction extends Model
         'action_type',
         'category_name',
         'category_code',
+        'category_id',
         'department_name',
+        'department_id',
         'product_name',
         'product_code',
         'sku',
+        'ctr_tracking_status',
         'product_color_id',
         'product_color_code',
         'general_color_name',
@@ -34,6 +43,9 @@ class ActivityEcomUserAction extends Model
         'start_time',
         'end_time',
         'created_at',
+        'is_sync',
+        'sync_try',
+        'sync_at',
         'commerce_total',
         'commerce_subtotal',
         'commerce_shipping',
@@ -49,6 +61,7 @@ class ActivityEcomUserAction extends Model
     protected function casts(): array
     {
         return [
+            'ctr_tracking_status' => 'boolean',
             'add_to_cart' => 'array',
             'begin_checkout' => 'array',
             'proceed_to_checkout' => 'array',
@@ -62,6 +75,9 @@ class ActivityEcomUserAction extends Model
             'start_time' => 'datetime',
             'end_time' => 'datetime',
             'created_at' => 'datetime',
+            'is_sync' => 'integer',
+            'sync_try' => 'integer',
+            'sync_at' => 'datetime',
         ];
     }
 

@@ -97,7 +97,7 @@ class TrackerTime
 
     public static function todayPresetLabel(): string
     {
-        return 'Today (00:00:01 to 23:59:59)';
+        return self::todayPresetButtonLabel();
     }
 
     public static function todayPresetButtonLabel(): string
@@ -107,12 +107,175 @@ class TrackerTime
 
     public static function yesterdayPresetLabel(): string
     {
-        return 'Yesterday (00:00:01 to 23:59:59)';
+        return self::yesterdayPresetButtonLabel();
     }
 
     public static function yesterdayPresetButtonLabel(): string
     {
         return 'Yesterday';
+    }
+
+    public static function formatLocalDateLabel(Carbon $date): string
+    {
+        return $date->format('j M Y');
+    }
+
+    public static function formatLocalDateRangeLabel(Carbon $from, Carbon $to): string
+    {
+        $fromLocal = self::toLocal($from) ?? $from;
+        $toLocal = self::toLocal($to) ?? $to;
+
+        if ($fromLocal->toDateString() === $toLocal->toDateString()) {
+            return self::formatLocalDateLabel($fromLocal);
+        }
+
+        return self::formatLocalDateLabel($fromLocal).' – '.self::formatLocalDateLabel($toLocal);
+    }
+
+    /**
+     * @param  array{from?: Carbon|null, to?: Carbon|null, label?: string, period?: string}  $range
+     * @return array{type: 'single', label: string}|array{type: 'range', from: string, to: string}
+     */
+    public static function rangeDisplayParts(array $range): array
+    {
+        $label = trim((string) ($range['label'] ?? ''));
+        $period = (string) ($range['period'] ?? '');
+        $from = $range['from'] ?? null;
+        $to = $range['to'] ?? null;
+
+        if ($period === '24h') {
+            return ['type' => 'single', 'label' => self::todayPresetLabel()];
+        }
+
+        if ($period === 'yesterday') {
+            return ['type' => 'single', 'label' => self::yesterdayPresetLabel()];
+        }
+
+        if ($from instanceof Carbon && $to instanceof Carbon) {
+            $fromLocal = self::toLocal($from);
+            $toLocal = self::toLocal($to);
+
+            if ($fromLocal && $toLocal) {
+                $today = self::localNow()->toDateString();
+                $yesterday = self::localNow()->copy()->subDay()->toDateString();
+                $fromDate = $fromLocal->toDateString();
+                $toDate = $toLocal->toDateString();
+
+                if ($fromDate === $today && $toDate === $today) {
+                    return ['type' => 'single', 'label' => self::todayPresetLabel()];
+                }
+
+                if ($fromDate === $yesterday && $toDate === $yesterday) {
+                    return ['type' => 'single', 'label' => self::yesterdayPresetLabel()];
+                }
+
+                if ($fromDate === $toDate) {
+                    return ['type' => 'single', 'label' => self::formatLocalDateLabel($fromLocal)];
+                }
+
+                return [
+                    'type' => 'range',
+                    'from' => self::formatLocalDateLabel($fromLocal),
+                    'to' => self::formatLocalDateLabel($toLocal),
+                ];
+            }
+        }
+
+        return ['type' => 'single', 'label' => self::shortRangeDisplayLabel($label)];
+    }
+
+    /**
+     * @param  array{from?: Carbon|null, to?: Carbon|null, label?: string, period?: string}  $range
+     */
+    public static function rangeDisplayLabel(array $range): string
+    {
+        $parts = self::rangeDisplayParts($range);
+
+        if (($parts['type'] ?? '') === 'range') {
+            return $parts['from'].' – '.$parts['to'];
+        }
+
+        return $parts['label'] ?? '';
+    }
+
+    /**
+     * @return array{type: 'single', label: string}|array{type: 'range', from: string, to: string}
+     */
+    public static function comparisonLabelParts(?string $label): array
+    {
+        $label = self::shortRangeDisplayLabel($label);
+
+        if ($label === '') {
+            return ['type' => 'single', 'label' => ''];
+        }
+
+        if (preg_match('/^(.+?)\s+–\s+(.+)$/', $label, $matches)) {
+            $from = trim($matches[1]);
+            $to = trim($matches[2]);
+
+            if (preg_match('/^\d{1,2} \w{3} \d{4}$/', $from) && preg_match('/^\d{1,2} \w{3} \d{4}$/', $to)) {
+                if ($from === $to) {
+                    return ['type' => 'single', 'label' => $from];
+                }
+
+                return ['type' => 'range', 'from' => $from, 'to' => $to];
+            }
+        }
+
+        return ['type' => 'single', 'label' => $label];
+    }
+
+    /**
+     * Compact UI label without trailing time-window parentheticals.
+     */
+    public static function shortRangeDisplayLabel(?string $label): string
+    {
+        if ($label === null || $label === '') {
+            return '';
+        }
+
+        $label = trim($label);
+
+        if (preg_match('/^(.+?)\s*\([^)]*\)\s*$/', $label, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return $label;
+    }
+
+    /**
+     * Local calendar date (Y-m-d in visitor timezone) as inclusive UTC bounds for session `created_at`.
+     * Matches {@see applyEcomActivitySessionScope} for a single-day range.
+     *
+     * @return array{from: Carbon, to: Carbon}
+     */
+    public static function localCalendarDateBoundsUtc(string $localDateYmd): array
+    {
+        $fromLocal = Carbon::parse($localDateYmd, self::timezone())->startOfDay();
+        $toLocal = $fromLocal->copy()->endOfDay();
+
+        return [
+            'from' => $fromLocal->copy()->utc(),
+            'to' => $toLocal->copy()->utc(),
+        ];
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    public static function localCalendarDateStorageRange(string $localDateYmd): array
+    {
+        $bounds = self::localCalendarDateBoundsUtc($localDateYmd);
+
+        return self::storageRange($bounds['from'], $bounds['to']);
+    }
+
+    /**
+     * Default metric date for tracker:rollup-analytics (yesterday in visitor timezone).
+     */
+    public static function defaultRollupMetricDate(): string
+    {
+        return self::localNow()->subDay()->toDateString();
     }
 
     /**
@@ -203,9 +366,51 @@ class TrackerTime
             return;
         }
 
-        $createdAt = $table ? "{$table}.created_at" : 'created_at';
-        $fromLocal = self::toLocal($from);
-        $toLocal = self::toLocal($to);
+        self::applyEcomActivityVisitDateScope($query, $from, $to, $table);
+    }
+
+    /**
+     * Same day bucket as {@see TrackerDashboardSyncService::refreshDay()} (tracking_daily_visitor.visit_date).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     */
+    public static function applyEcomActivityVisitDateScope($query, Carbon $from, Carbon $to, ?string $table = null): void
+    {
+        $fromDate = self::localDate($from);
+        $toDate = self::localDate($to);
+        $visitorColumn = $table ? "{$table}.tracking_daily_visitor_id" : 'tracking_daily_visitor_id';
+
+        $query->whereIn($visitorColumn, function ($sub) use ($fromDate, $toDate) {
+            $sub->from('tracking_daily_visitor')
+                ->select('id')
+                ->whereBetween('visit_date', [$fromDate, $toDate]);
+        });
+    }
+
+    /**
+     * Date rules for activity_ecom_user rows that are not in tracking_session yet (pre-sync).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     */
+    public static function applyActivityEcomUserSessionScope($query, array $range, string $alias = 'aeu'): void
+    {
+        $period = $range['period'] ?? null;
+        $createdAt = "{$alias}.created_at";
+        $lastActiveAt = "{$alias}.last_active_at";
+
+        if ($period === '24h') {
+            [$fromBound, $toBound] = self::storageRange($range['from'], $range['to']);
+            $query->where(function ($inner) use ($fromBound, $toBound, $createdAt, $lastActiveAt) {
+                $inner->whereBetween($createdAt, [$fromBound, $toBound])
+                    ->orWhereBetween($lastActiveAt, [$fromBound, $toBound]);
+            });
+
+            return;
+        }
+
+        $fromLocal = self::toLocal($range['from']);
+        $toLocal = self::toLocal($range['to']);
 
         if ($fromLocal !== null && $toLocal !== null) {
             $query->whereBetween($createdAt, self::storageRange(
@@ -216,7 +421,7 @@ class TrackerTime
             return;
         }
 
-        $query->whereBetween($createdAt, self::storageRange($from, $to));
+        $query->whereBetween($createdAt, self::storageRange($range['from'], $range['to']));
     }
 
     /**

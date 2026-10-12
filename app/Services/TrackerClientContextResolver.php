@@ -82,22 +82,4 @@ class TrackerClientContextResolver
 
         return $validator->validated();
     }
-
-    /**
-     * @return array{is_bot: bool, confidence: 'high'|'medium'|'low', reason: string}
-     */
-    public function classifyFromRequest(Request $request): array
-    {
-        $sanitized = $this->sanitizeClientContext($request->input('client_context'));
-
-        if ($sanitized === null) {
-            return $this->botDetection->isLikelyBotFromContext([
-                'user_agent' => $request->userAgent(),
-            ]);
-        }
-
-        $client = $this->clientContext->resolveFromContext($sanitized, $request);
-
-        return $this->botDetection->isLikelyBotFromContext($client);
-    }
 }

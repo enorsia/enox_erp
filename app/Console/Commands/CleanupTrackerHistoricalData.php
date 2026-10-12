@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\TrackerDataCleanupService;
+use App\Services\VisitorPaidTouchService;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -93,6 +94,11 @@ class CleanupTrackerHistoricalData extends Command
                     $actions['updated'],
                 ));
             }
+        }
+
+        if (! $dryRun) {
+            $purged = app(VisitorPaidTouchService::class)->purgeOldTouchLogs();
+            $this->line(sprintf('Attribution touch log purge: deleted %d row(s)', $purged));
         }
 
         $this->info('Tracker cleanup complete.');
