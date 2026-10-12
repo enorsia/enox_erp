@@ -13,6 +13,7 @@ use Carbon\Carbon;
 use Closure;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -679,15 +680,29 @@ class TrackerDashboardSyncService
             return (int) $existing->id;
         }
 
-        $id = $this->insertOrFetch('tracking_main_visitor', [
-            'visitor_id' => $visitorId,
-            'name' => $name,
-            'email' => $email,
-            'phone' => $phone,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ], ['visitor_id' => $visitorId]);
+        $now = now();
 
+        // Parallel chunk jobs may create the same visitor_id at once; upsert is idempotent.
+        DB::table('tracking_main_visitor')->upsert(
+            [[
+                'visitor_id' => $visitorId,
+                'name' => $name,
+                'email' => $email,
+                'phone' => $phone,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]],
+            ['visitor_id'],
+            ['updated_at'],
+        );
+
+        $id = $this->lookupRowId('tracking_main_visitor', ['visitor_id' => $visitorId], true);
+
+        if ($id === null) {
+            throw new \RuntimeException('Failed to resolve main visitor after upsert');
+        }
+
+        $this->updateMainVisitorById($id, $name, $email, $phone);
         $this->cache[$cacheKey] = $id;
 
         return $id;
@@ -736,27 +751,40 @@ class TrackerDashboardSyncService
         $cacheKey = 'daily_visitor:'.$mainVisitorId.'|'.$visitDate;
 
         return $this->remember($cacheKey, function () use ($mainVisitorId, $visitorId, $visitDate): int {
-            $existing = DB::table('tracking_daily_visitor')
-                ->where('tracking_main_visitor_id', $mainVisitorId)
-                ->where('visit_date', $visitDate)
-                ->first();
+            $where = [
+                'tracking_main_visitor_id' => $mainVisitorId,
+                'visit_date' => $visitDate,
+            ];
 
-            if ($existing) {
-                return (int) $existing->id;
+            $existingId = $this->lookupRowId('tracking_daily_visitor', $where);
+
+            if ($existingId !== null) {
+                return $existingId;
             }
 
+            $now = now();
             $dailyVisitorId = md5($visitorId.'|'.$visitDate);
 
-            return $this->insertOrFetch('tracking_daily_visitor', [
-                'tracking_main_visitor_id' => $mainVisitorId,
-                'daily_visitor_id' => $dailyVisitorId,
-                'visit_date' => $visitDate,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ], [
-                'tracking_main_visitor_id' => $mainVisitorId,
-                'visit_date' => $visitDate,
-            ]);
+            // Upsert avoids duplicate-key races when parallel chunk jobs sync the same visitor/day.
+            DB::table('tracking_daily_visitor')->upsert(
+                [[
+                    'tracking_main_visitor_id' => $mainVisitorId,
+                    'daily_visitor_id' => $dailyVisitorId,
+                    'visit_date' => $visitDate,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]],
+                ['tracking_main_visitor_id', 'visit_date'],
+                ['updated_at'],
+            );
+
+            $resolvedId = $this->lookupRowId('tracking_daily_visitor', $where, true);
+
+            if ($resolvedId === null) {
+                throw new \RuntimeException('Failed to resolve daily visitor after upsert');
+            }
+
+            return $resolvedId;
         }) ?? throw new \RuntimeException('Failed to resolve daily visitor');
     }
 
@@ -1309,29 +1337,81 @@ class TrackerDashboardSyncService
      */
     private function insertOrFetch(string $table, array $row, array $where): int
     {
-        $existingId = $this->lookupRowId($table, $where);
+        $existingId = $this->lookupRowId($table, $where, true);
+
         if ($existingId !== null) {
             return $existingId;
+        }
+
+        $uniqueBy = array_keys($where);
+
+        if ($uniqueBy !== []) {
+            $row['created_at'] = $row['created_at'] ?? now();
+            $row['updated_at'] = $row['updated_at'] ?? now();
+
+            $updateColumns = array_values(array_filter(
+                array_keys($row),
+                static fn (string $column): bool => ! in_array($column, [...$uniqueBy, 'created_at'], true),
+            ));
+
+            if ($updateColumns === []) {
+                $updateColumns = ['updated_at'];
+            }
+
+            DB::table($table)->upsert([$row], $uniqueBy, $updateColumns);
+
+            $resolvedId = $this->lookupRowId($table, $where, true);
+
+            if ($resolvedId !== null) {
+                return $resolvedId;
+            }
         }
 
         try {
             return (int) DB::table($table)->insertGetId($row);
         } catch (QueryException $exception) {
-            $existingId = $this->lookupRowId($table, $where);
-            if ($existingId !== null) {
-                return $existingId;
+            if (! $this->isUniqueConstraintViolation($exception)) {
+                throw $exception;
+            }
+
+            for ($attempt = 0; $attempt < 5; $attempt++) {
+                $existingId = $this->lookupRowId($table, $where, true);
+
+                if ($existingId !== null) {
+                    return $existingId;
+                }
+
+                usleep(20_000);
             }
 
             throw $exception;
         }
     }
 
+    private function isUniqueConstraintViolation(QueryException $exception): bool
+    {
+        if ($exception instanceof UniqueConstraintViolationException) {
+            return true;
+        }
+
+        return (int) ($exception->errorInfo[1] ?? 0) === 1062;
+    }
+
     /**
      * @param  array<string, mixed>  $where
      */
-    private function lookupRowId(string $table, array $where): ?int
+    /**
+     * @param  array<string, mixed>  $where
+     */
+    private function lookupRowId(string $table, array $where, bool $useWritePdo = false): ?int
     {
-        $id = $this->lookupRowQuery($table, $where)->value('id');
+        $query = $this->lookupRowQuery($table, $where);
+
+        if ($useWritePdo) {
+            $query->useWritePdo();
+        }
+
+        $id = $query->value('id');
 
         return $id !== null ? (int) $id : null;
     }
