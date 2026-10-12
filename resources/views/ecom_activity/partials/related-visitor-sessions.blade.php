@@ -7,13 +7,16 @@
 
 @if ($related->count() > 1)
     <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60">
-        <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-2">Other sessions (same visitor)</div>
+        <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-2">Other sessions (same visitor, newest first)</div>
         <ul class="space-y-2">
             @foreach ($related as $relatedSession)
                 @php
                     $fullId = $relatedSession->session_id;
                     $isCurrent = $fullId === $currentSessionId;
-                    $when = TrackerTime::formatFromStorage($relatedSession->created_at, 'd M Y, h:i:s A');
+                    $when = TrackerTime::formatFromStorage(
+                        $relatedSession->last_active_at ?? $relatedSession->created_at,
+                        'd M Y, h:i:s A',
+                    );
                     $showUrl = route('admin.ecom-activity.show', ['session' => $fullId, 'back' => request()->input('back')]);
                     $activeClasses = 'border-accent-400/70 bg-accent-500/10 dark:bg-accent-500/15 ring-1 ring-accent-500/25';
                     $idleClasses = 'border-slate-200/80 dark:border-slate-600/50 bg-slate-50/50 dark:bg-slate-800/30 hover:border-accent-400/40 hover:bg-accent-500/5 dark:hover:bg-accent-500/10';

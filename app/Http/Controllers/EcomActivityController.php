@@ -306,7 +306,7 @@ class EcomActivityController extends Controller
         }
 
         return $timeline
-            ->sort(fn (object $left, object $right) => $this->compareTimelineItems($left, $right))
+            ->sort(fn (object $left, object $right) => $this->compareTimelineItemsDescending($left, $right))
             ->values();
     }
 
@@ -327,8 +327,8 @@ class EcomActivityController extends Controller
 
     private function compareTimelineItems(object $left, object $right): int
     {
-        $leftTs = $left->created_at?->timestamp ?? 0;
-        $rightTs = $right->created_at?->timestamp ?? 0;
+        $leftTs = $this->timelineItemSortTimestamp($left);
+        $rightTs = $this->timelineItemSortTimestamp($right);
 
         return TrackerActionSequence::compare(
             $leftTs,
@@ -338,6 +338,28 @@ class EcomActivityController extends Controller
             (string) ($right->action_type ?? ''),
             (int) ($right->id ?? 0),
         );
+    }
+
+    private function compareTimelineItemsDescending(object $left, object $right): int
+    {
+        return $this->compareTimelineItems($right, $left);
+    }
+
+    private function timelineItemSortTimestamp(object $item): int
+    {
+        $actions = $item->actions ?? null;
+
+        if ($actions instanceof Collection && $actions->isNotEmpty()) {
+            $latest = $actions
+                ->map(fn (ActivityEcomUserAction $action) => $action->created_at?->timestamp ?? $action->start_time?->timestamp ?? 0)
+                ->max();
+
+            if (is_int($latest) && $latest > 0) {
+                return $latest;
+            }
+        }
+
+        return $item->created_at?->timestamp ?? 0;
     }
 
     private function wrapSingleTimelineItem(ActivityEcomUserAction $action): object
@@ -423,7 +445,7 @@ class EcomActivityController extends Controller
             'page_url' => $last->page_url,
             'start_time' => $first->start_time,
             'end_time' => $last->end_time,
-            'created_at' => $first->created_at ?? $first->start_time,
+            'created_at' => $last->created_at ?? $last->start_time ?? $first->created_at ?? $first->start_time,
             'dwell_seconds' => $totalDwell > 0 ? $totalDwell : null,
             'color_timeline' => $colorTimeline,
             'add_to_cart' => null,
@@ -496,7 +518,7 @@ class EcomActivityController extends Controller
             'page_url' => $last->page_url,
             'start_time' => null,
             'end_time' => null,
-            'created_at' => $first->created_at,
+            'created_at' => $last->created_at ?? $first->created_at,
             'dwell_seconds' => $totalGap > 0 ? $totalGap : null,
             'color_timeline' => null,
             'sku_timeline' => $skuTimeline,

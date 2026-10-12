@@ -240,6 +240,7 @@ class TrackerDashboardSyncService
                 // Loaded actions are counted into the daily tables now, so they must be done even if the
                 // session row changed meanwhile (it stays pending and only its new actions are synced next time).
                 $this->markActionsSynced($actions);
+                $this->refreshTrackingSessionActionsCount($rawSessionId);
                 $this->markSessionSynced($sessionPk, $sessionUpdatedAt);
             }, 3);
 
@@ -815,31 +816,78 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Roll up metrics on each sync: actions sum, duration and funnel stage take the higher value.
+     * Roll up session metrics on each sync. actions_count is set separately after actions are marked synced
+     * ({@see refreshTrackingSessionActionsCount}) so category_view heartbeats do not inflate the total.
      *
      * @param  array<string, mixed>  $sessionRow
      * @param  Collection<int, object>  $actions
-     * @return array{duration_seconds: int, actions_count: int, latest_funnel_stage: ?int}
+     * @return array{duration_seconds: int, latest_funnel_stage: ?int}
      */
     private function mergedSessionRollups(?object $existing, array $sessionRow, Collection $actions): array
     {
         $incomingDuration = (int) ($sessionRow['session_duration_seconds'] ?? 0);
         $incomingFunnel = $this->funnelStageCode($sessionRow['latest_funnel_stage'] ?? null);
-        $batchActions = $actions->count();
 
         if ($existing === null) {
             return [
                 'duration_seconds' => $incomingDuration,
-                'actions_count' => $batchActions,
                 'latest_funnel_stage' => $incomingFunnel,
             ];
         }
 
         return [
             'duration_seconds' => max((int) ($existing->duration_seconds ?? 0), $incomingDuration),
-            'actions_count' => (int) ($existing->actions_count ?? 0) + $batchActions,
             'latest_funnel_stage' => $this->maxFunnelStage($existing->latest_funnel_stage ?? null, $incomingFunnel),
         ];
+    }
+
+    /**
+     * @param  list<string>  $sessionIds
+     */
+    public function reconcileActionCountsForSessions(array $sessionIds): void
+    {
+        foreach ($sessionIds as $sessionId) {
+            $this->refreshTrackingSessionActionsCount((string) $sessionId);
+        }
+    }
+
+    /**
+     * One row per session on tracking_session: distinct synced events whose timestamps fall in that
+     * session's own window (excludes actions reparented from other visitor sessions during merge).
+     */
+    private function refreshTrackingSessionActionsCount(string $sessionId): void
+    {
+        $sessionId = trim($sessionId);
+
+        if ($sessionId === '') {
+            return;
+        }
+
+        $tracking = DB::table('tracking_session')
+            ->where('session_id', $sessionId)
+            ->first(['id', 'created_at', 'last_active_at']);
+
+        if ($tracking === null) {
+            return;
+        }
+
+        $countQuery = DB::table('activity_ecom_user_actions')
+            ->where('session_id', $sessionId)
+            ->where('is_sync', ActivityEcomUserAction::SYNC_DONE)
+            ->where('created_at', '>=', $tracking->created_at);
+
+        if (filled($tracking->last_active_at)) {
+            $countQuery->where('created_at', '<=', $tracking->last_active_at);
+        }
+
+        $count = (int) $countQuery->distinct()->count('event_id');
+
+        DB::table('tracking_session')
+            ->where('id', $tracking->id)
+            ->update([
+                'actions_count' => $count,
+                'updated_at' => now(),
+            ]);
     }
 
     private function maxFunnelStage(mixed $current, mixed $incoming): ?int
