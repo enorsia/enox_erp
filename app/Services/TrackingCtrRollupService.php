@@ -63,7 +63,7 @@ class TrackingCtrRollupService
 
                     if ($action->action_type === 'grid_impression') {
                         $dailyDeltas[$deltaKey]['impressions']++;
-                    } elseif ($action->action_type === 'product_click') {
+                    } elseif ($this->isCtrClickAction((string) $action->action_type)) {
                         $dailyDeltas[$deltaKey]['clicks']++;
                     }
 
@@ -119,20 +119,27 @@ class TrackingCtrRollupService
      */
     public function ctrActionTypes(): array
     {
-        return ['grid_impression', 'product_click'];
+        return ['grid_impression', 'product_click', 'grid_click'];
+    }
+
+    private function isCtrClickAction(string $actionType): bool
+    {
+        return in_array($actionType, ['product_click', 'grid_click'], true);
     }
 
     /**
-     * @return array{metric_date: string, department_id: int, category_id: int, sku: string}|null
+     * @return array{metric_date: string, department_id: int, category_id: int, product_code: string, sku: string}|null
      */
     private function dimensionForAction(ActivityEcomUserAction $action): ?array
     {
-        $productCode = trim((string) ($action->product_code ?? ''));
-        $sku = trim((string) ($action->sku ?? ''));
+        $identity = $this->resolveCatalogIdentity($action);
 
-        if ($productCode === '' || $sku === '') {
+        if ($identity === null) {
             return null;
         }
+
+        $productCode = $identity['product_code'];
+        $sku = $identity['sku'];
 
         $departmentId = max(0, (int) trim((string) ($action->department_id ?? '')));
         $categoryId = max(0, (int) trim((string) ($action->category_id ?? '')));
@@ -153,6 +160,34 @@ class TrackingCtrRollupService
             'category_id' => $categoryId,
             'product_code' => $productCode,
             'sku' => $sku,
+        ];
+    }
+
+    /**
+     * Grid events are keyed by style/product code; variant sku is optional (frontend sends product_code only).
+     *
+     * @return array{product_code: string, sku: string}|null
+     */
+    private function resolveCatalogIdentity(ActivityEcomUserAction $action): ?array
+    {
+        $productCode = trim((string) ($action->product_code ?? ''));
+        $variantSku = trim((string) ($action->sku ?? ''));
+
+        if ($productCode === '' && $variantSku === '') {
+            return null;
+        }
+
+        if ($productCode === '') {
+            $productCode = $variantSku;
+        }
+
+        if ($variantSku === '' || strcasecmp($variantSku, $productCode) === 0) {
+            $variantSku = $productCode;
+        }
+
+        return [
+            'product_code' => $productCode,
+            'sku' => $variantSku,
         ];
     }
 
