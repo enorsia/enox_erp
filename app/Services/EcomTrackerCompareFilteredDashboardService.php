@@ -337,10 +337,7 @@ class EcomTrackerCompareFilteredDashboardService
         SessionTrafficAttribution::joinLatestSessionDetails($trafficRows);
         $trafficRows = $trafficRows
             ->when($utmSourceIds !== [], fn (Builder $query) => $query->whereIn('sd.tracking_traffic_source_id', $utmSourceIds))
-            ->when($utmMediums !== [], fn (Builder $query) => $query->whereIn('sd.tracking_traffic_source_id', fn (Builder $sources) => $sources
-                ->select('id')
-                ->from('tracking_traffic_source')
-                ->whereIn('medium', $utmMediums)))
+            ->when($utmMediums !== [], fn (Builder $query) => SessionTrafficAttribution::applySessionTouchMediumFilter($query, $utmMediums, 'sd.utm_medium'))
             ->leftJoin('tracking_traffic_source as tts', 'tts.id', '=', 'sd.tracking_traffic_source_id')
             ->groupBy('sd.tracking_traffic_source_id', 'tts.name', 'tts.medium')
             ->selectRaw('sd.tracking_traffic_source_id as dimension_id, tts.name as name, tts.name as source, tts.medium as medium')
@@ -403,10 +400,7 @@ class EcomTrackerCompareFilteredDashboardService
         $query
             ->when($deviceIds !== [] && $dimensionColumn === 'sd.tracking_device_id', fn (Builder $q) => $q->whereIn('sd.tracking_device_id', $deviceIds))
             ->when($utmSourceIds !== [] && $dimensionColumn === 'sd.tracking_traffic_source_id', fn (Builder $q) => $q->whereIn('sd.tracking_traffic_source_id', $utmSourceIds))
-            ->when($utmMediums !== [] && $dimensionColumn === 'sd.tracking_traffic_source_id', fn (Builder $q) => $q->whereIn('sd.tracking_traffic_source_id', fn (Builder $sources) => $sources
-                ->select('id')
-                ->from('tracking_traffic_source')
-                ->whereIn('medium', $utmMediums)));
+            ->when($utmMediums !== [] && $dimensionColumn === 'sd.tracking_traffic_source_id', fn (Builder $q) => SessionTrafficAttribution::applySessionTouchMediumFilter($q, $utmMediums, 'sd.utm_medium'));
         $rows = $query
             ->whereBetween('o.ordered_at', $bounds)
             ->groupBy($dimensionColumn)

@@ -81,13 +81,21 @@ class EcomActivityListService
             ->groupBy('type');
         $categories = $lookups->get('category', collect());
         $sources = $lookups->get('source', collect());
+        $utmMediums = collect(array_keys(config('tracker.utm_mediums', [])))
+            ->merge($sources->pluck('medium'))
+            ->map(fn ($medium) => trim((string) $medium))
+            ->filter()
+            ->unique()
+            ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
 
         return [
             'funnelStages' => array_intersect_key(TrackingSession::FUNNEL_STAGES, array_flip(TrackingSession::FILTER_FUNNEL_STAGES)),
             'durationBuckets' => array_map(fn (array $bucket) => $bucket['label'], TrackingSession::DURATION_BUCKETS),
             'devices' => $lookups->get('device', collect())->pluck('name', 'id')->all(),
             'utmSources' => $sources->pluck('name', 'id')->all(),
-            'utmMediums' => $sources->pluck('medium')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values()->all(),
+            'utmMediums' => $utmMediums,
             'departments' => $categories->whereNull('parent_id')->pluck('name', 'id')->all(),
             'categories' => $departmentId ? $categories->where('parent_id', $departmentId)->pluck('name', 'id')->all() : [],
         ];
@@ -764,10 +772,7 @@ class EcomActivityListService
                     )')
                     ->when(! empty($filters['devices']), fn (Builder $q) => $q->whereIn('fd.tracking_device_id', $filters['devices']))
                     ->when(! empty($filters['utm_sources']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', $filters['utm_sources']))
-                    ->when(! empty($filters['utm_mediums']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', fn (Builder $sources) => $sources
-                        ->select('id')
-                        ->from('tracking_traffic_source')
-                        ->whereIn('medium', $filters['utm_mediums'])));
+                    ->when(! empty($filters['utm_mediums']), fn (Builder $q) => SessionTrafficAttribution::applySessionTouchMediumFilter($q, $filters['utm_mediums']));
             });
         }
 

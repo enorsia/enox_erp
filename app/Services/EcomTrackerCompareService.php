@@ -363,7 +363,10 @@ class EcomTrackerCompareService
                     ? null
                     : route(
                         'admin.ecom-activity.index',
-                        array_merge($baseQuery, ['utm_source' => [(int) $sourceId]]),
+                        array_merge($baseQuery, array_filter([
+                            'utm_source' => [(int) $sourceId],
+                            'utm_medium' => filled($row['medium'] ?? null) ? [(string) $row['medium']] : null,
+                        ], fn ($value) => $value !== null && $value !== [])),
                     ),
             ]);
         }
