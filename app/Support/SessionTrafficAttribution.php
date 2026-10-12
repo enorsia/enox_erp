@@ -1667,6 +1667,30 @@ final class SessionTrafficAttribution
         return true;
     }
 
+    /**
+     * Match last-touch utm_medium on tracking_session_details (not tracking_traffic_source.medium).
+     *
+     * @param  list<string>  $mediums
+     */
+    public static function applySessionTouchMediumFilter(Builder $query, array $mediums, string $column = 'fd.utm_medium'): void
+    {
+        $mediums = array_values(array_filter(
+            array_map(static fn ($value) => trim((string) $value), $mediums),
+            static fn (string $value) => $value !== '',
+        ));
+
+        if ($mediums === []) {
+            return;
+        }
+
+        $matchValues = $mediums;
+        if (array_intersect($mediums, ['paid', 'cpc']) !== []) {
+            $matchValues = array_values(array_unique([...$matchValues, 'paid', 'cpc']));
+        }
+
+        $query->whereIn($column, $matchValues);
+    }
+
     public static function joinLatestSessionDetails(Builder $query, string $sessionIdColumn = 'ts.id', string $alias = 'sd'): void
     {
         $latest = DB::table('tracking_session_details as tsd_latest')
