@@ -1337,9 +1337,34 @@ class TrackerDashboardSyncService
      */
     private function insertOrFetch(string $table, array $row, array $where): int
     {
-        $existingId = $this->lookupRowId($table, $where);
+        $existingId = $this->lookupRowId($table, $where, true);
+
         if ($existingId !== null) {
             return $existingId;
+        }
+
+        $uniqueBy = array_keys($where);
+
+        if ($uniqueBy !== []) {
+            $row['created_at'] = $row['created_at'] ?? now();
+            $row['updated_at'] = $row['updated_at'] ?? now();
+
+            $updateColumns = array_values(array_filter(
+                array_keys($row),
+                static fn (string $column): bool => ! in_array($column, [...$uniqueBy, 'created_at'], true),
+            ));
+
+            if ($updateColumns === []) {
+                $updateColumns = ['updated_at'];
+            }
+
+            DB::table($table)->upsert([$row], $uniqueBy, $updateColumns);
+
+            $resolvedId = $this->lookupRowId($table, $where, true);
+
+            if ($resolvedId !== null) {
+                return $resolvedId;
+            }
         }
 
         try {
