@@ -16,6 +16,10 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Throwable;
 
+/**
+ * Persists visitor sessions to activity_ecom_user (async). Queue: tracker.redis / tracker.
+ * Daily visitor rollups live in tracking_daily_visitor after dashboard sync — not activity_ecom_daily_visitors.
+ */
 class RecordVisitorActivityJob implements ShouldQueue
 {
     use Dispatchable;
@@ -89,11 +93,15 @@ class RecordVisitorActivityJob implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        EcomTrackerLogger::frontend()->error('job.record_visitor.failed', 'Background job failed', [
-            'visitor_id' => $this->visitorId,
-            'session_id' => $this->sessionId,
-            'message' => $exception->getMessage(),
-        ]);
+        try {
+            EcomTrackerLogger::frontend()->error('job.record_visitor.failed', 'Background job failed', [
+                'visitor_id' => $this->visitorId,
+                'session_id' => $this->sessionId,
+                'message' => $exception->getMessage(),
+            ]);
+        } catch (Throwable) {
+            // Avoid masking the original failure when logs are not writable.
+        }
     }
 
     private function createSession(string $formattedNow): ActivityEcomUser

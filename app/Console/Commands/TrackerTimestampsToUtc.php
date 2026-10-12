@@ -19,7 +19,6 @@ class TrackerTimestampsToUtc extends Command
     private array $targets = [
         ['table' => 'activity_ecom_user', 'columns' => ['created_at', 'updated_at', 'last_active_at']],
         ['table' => 'activity_ecom_user_actions', 'columns' => ['created_at', 'start_time', 'end_time']],
-        ['table' => 'activity_ecom_daily_visitors', 'columns' => ['first_seen_at', 'last_seen_at', 'created_at', 'updated_at']],
     ];
 
     public function handle(): int
