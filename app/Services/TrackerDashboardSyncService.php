@@ -233,7 +233,7 @@ class TrackerDashboardSyncService
         $sessionUpdatedAt = $sessionRow['updated_at'] ?? null;
 
         try {
-            DB::transaction(function () use ($sessionRow, $actions, $sessionPk, $cacheBefore, $sessionUpdatedAt): void {
+            DB::transaction(function () use ($sessionRow, $actions, $sessionPk, $rawSessionId, $cacheBefore, $sessionUpdatedAt): void {
                 // Restored on each attempt so rolled-back dimension ids are not reused after deadlock.
                 $this->cache = $cacheBefore;
                 $this->upsertTrackingFromSession($sessionRow, $actions);

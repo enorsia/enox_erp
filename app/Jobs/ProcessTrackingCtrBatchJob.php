@@ -30,17 +30,24 @@ class ProcessTrackingCtrBatchJob implements ShouldQueue
         try {
             $result = $rollupService->processActionIds($this->actionIds);
 
-            Log::info('CTR:tracking batch completed', [
-                'action_ids' => $this->actionIds,
-                'processed' => $result['processed'],
-                'skipped' => $result['skipped'],
-                'skip_samples' => $result['skip_samples'] ?? [],
-            ]);
+            try {
+                Log::info('CTR:tracking batch completed', [
+                    'action_ids' => $this->actionIds,
+                    'processed' => $result['processed'],
+                    'skipped' => $result['skipped'],
+                    'skip_samples' => $result['skip_samples'] ?? [],
+                ]);
+            } catch (Throwable) {
+                // Rollup already committed; do not fail the job when storage/logs is not writable.
+            }
         } catch (Throwable $exception) {
-            Log::error('CTR:tracking job failed', [
-                'action_ids' => $this->actionIds,
-                'error' => $exception->getMessage(),
-            ]);
+            try {
+                Log::error('CTR:tracking job failed', [
+                    'action_ids' => $this->actionIds,
+                    'error' => $exception->getMessage(),
+                ]);
+            } catch (Throwable) {
+            }
 
             throw $exception;
         }
