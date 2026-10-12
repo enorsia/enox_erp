@@ -680,15 +680,29 @@ class TrackerDashboardSyncService
             return (int) $existing->id;
         }
 
-        $id = $this->insertOrFetch('tracking_main_visitor', [
-            'visitor_id' => $visitorId,
-            'name' => $name,
-            'email' => $email,
-            'phone' => $phone,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ], ['visitor_id' => $visitorId]);
+        $now = now();
 
+        // Parallel chunk jobs may create the same visitor_id at once; upsert is idempotent.
+        DB::table('tracking_main_visitor')->upsert(
+            [[
+                'visitor_id' => $visitorId,
+                'name' => $name,
+                'email' => $email,
+                'phone' => $phone,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]],
+            ['visitor_id'],
+            ['updated_at'],
+        );
+
+        $id = $this->lookupRowId('tracking_main_visitor', ['visitor_id' => $visitorId], true);
+
+        if ($id === null) {
+            throw new \RuntimeException('Failed to resolve main visitor after upsert');
+        }
+
+        $this->updateMainVisitorById($id, $name, $email, $phone);
         $this->cache[$cacheKey] = $id;
 
         return $id;
@@ -764,7 +778,7 @@ class TrackerDashboardSyncService
                 ['updated_at'],
             );
 
-            $resolvedId = $this->lookupRowId('tracking_daily_visitor', $where);
+            $resolvedId = $this->lookupRowId('tracking_daily_visitor', $where, true);
 
             if ($resolvedId === null) {
                 throw new \RuntimeException('Failed to resolve daily visitor after upsert');
@@ -1336,7 +1350,7 @@ class TrackerDashboardSyncService
             }
 
             for ($attempt = 0; $attempt < 5; $attempt++) {
-                $existingId = $this->lookupRowId($table, $where);
+                $existingId = $this->lookupRowId($table, $where, true);
 
                 if ($existingId !== null) {
                     return $existingId;
@@ -1361,9 +1375,18 @@ class TrackerDashboardSyncService
     /**
      * @param  array<string, mixed>  $where
      */
-    private function lookupRowId(string $table, array $where): ?int
+    /**
+     * @param  array<string, mixed>  $where
+     */
+    private function lookupRowId(string $table, array $where, bool $useWritePdo = false): ?int
     {
-        $id = $this->lookupRowQuery($table, $where)->value('id');
+        $query = $this->lookupRowQuery($table, $where);
+
+        if ($useWritePdo) {
+            $query->useWritePdo();
+        }
+
+        $id = $query->value('id');
 
         return $id !== null ? (int) $id : null;
     }
