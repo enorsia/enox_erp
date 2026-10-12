@@ -34,6 +34,7 @@ class ProcessTrackingCtrBatchJob implements ShouldQueue
                 'action_ids' => $this->actionIds,
                 'processed' => $result['processed'],
                 'skipped' => $result['skipped'],
+                'skip_samples' => $result['skip_samples'] ?? [],
             ]);
         } catch (Throwable $exception) {
             Log::error('CTR:tracking job failed', [
