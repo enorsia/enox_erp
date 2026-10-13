@@ -412,6 +412,7 @@ class TrackerDashboardSyncService
     {
         $pCatRows = [];
         $counters = [];
+        $funnelDedupe = [];
 
         foreach ($actions as $action) {
             $type = $this->metricActionType($action);
@@ -421,6 +422,9 @@ class TrackerDashboardSyncService
 
             $this->countAction($counters, $type, $actionDate, $audienceKeys);
 
+            $sessionId = $this->normalizeSessionId((string) ($action->session_id ?? ''));
+            $this->recordFunnelAction($counters, $action, $type, $actionDate, $sessionId, $funnelDedupe);
+
             foreach ($this->actionCommerceLines($action) as $line) {
                 $productId = $this->findOrCreateProduct(
                     $line['product_code'],
@@ -428,8 +432,6 @@ class TrackerDashboardSyncService
                     $line['product_name'],
                 );
                 $categoryId = $this->resolveCategoryIdFromLine($line);
-
-                $this->countLine($counters, $type, $actionDate, $metricHour, $productId !== null ? $this->productCode($line['product_code']) : null, $categoryId);
 
                 if ($productId === null) {
                     continue;
@@ -1585,35 +1587,209 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Once per product line of an action: category and product counts.
-     * Day view totals are the category totals, like the master dashboard KPI.
+     * Product performance funnel: views & proceed once per session per product; adds sum line qty.
      *
      * @param  array<string, array<string, array<string, mixed>>>  $counters
+     * @param  array<string, true>  $funnelDedupe
      */
-    private function countLine(array &$counters, string $type, string $date, int $metricHour, ?string $productCode, ?int $categoryId): void
-    {
-        $column = match ($type) {
-            'category_view' => 'category_views',
-            'product_view' => 'product_views',
-            'add_to_cart' => 'add_to_carts',
-            'proceed_checkout' => 'proceed_checkouts',
-            default => null,
-        };
+    private function recordFunnelAction(
+        array &$counters,
+        object $action,
+        string $type,
+        string $date,
+        string $sessionId,
+        array &$funnelDedupe,
+    ): void {
+        foreach ($this->funnelContributionsForAction($action, $type) as $contribution) {
+            if ($contribution['dedupe'] !== null) {
+                $key = $sessionId.'|'.$contribution['dedupe'];
+                if (isset($funnelDedupe[$key])) {
+                    continue;
+                }
+                $funnelDedupe[$key] = true;
+            }
 
-        if ($column === null) {
+            $this->applyFunnelContribution(
+                $counters,
+                $date,
+                $contribution['column'],
+                $contribution['product_code'],
+                $contribution['category_id'],
+                $contribution['amount'],
+            );
+        }
+    }
+
+    /**
+     * @return list<array{column: string, product_code: ?string, category_id: ?int, amount: int, dedupe: ?string}>
+     */
+    private function funnelContributionsForAction(object $action, string $type): array
+    {
+        if ($type === 'category_view') {
+            $contributions = [];
+            foreach ($this->actionCommerceLines($action) as $line) {
+                $categoryId = $this->resolveCategoryIdFromLine($line);
+                if ($categoryId === null) {
+                    continue;
+                }
+                $contributions[] = [
+                    'column' => 'category_views',
+                    'product_code' => null,
+                    'category_id' => $categoryId,
+                    'amount' => 1,
+                    'dedupe' => 'category_view|'.$categoryId,
+                ];
+            }
+
+            return $contributions;
+        }
+
+        if ($type === 'product_view') {
+            $contributions = [];
+            $seen = [];
+            foreach ($this->actionCommerceLines($action) as $line) {
+                $productCode = $this->productCode($line['product_code']);
+                if ($productCode === '' || isset($seen[$productCode])) {
+                    continue;
+                }
+                $seen[$productCode] = true;
+                $contributions[] = [
+                    'column' => 'product_views',
+                    'product_code' => $productCode,
+                    'category_id' => $this->resolveCategoryIdFromLine($line),
+                    'amount' => 1,
+                    'dedupe' => 'product_view|'.$productCode,
+                ];
+            }
+
+            return $contributions;
+        }
+
+        if ($type === 'add_to_cart') {
+            $contributions = [];
+            foreach ($this->addToCartMetricLines($action) as $line) {
+                $productCode = $this->productCode($line['product_code']);
+                if ($productCode === '') {
+                    continue;
+                }
+                $contributions[] = [
+                    'column' => 'add_to_carts',
+                    'product_code' => $productCode,
+                    'category_id' => $this->resolveCategoryIdFromLine($line),
+                    'amount' => max(1, (int) $line['qty']),
+                    'dedupe' => null,
+                ];
+            }
+
+            return $contributions;
+        }
+
+        if ($type === 'proceed_checkout') {
+            $contributions = [];
+            $seen = [];
+            foreach ($this->actionCommerceLines($action) as $line) {
+                $productCode = $this->productCode($line['product_code']);
+                if ($productCode === '' || isset($seen[$productCode])) {
+                    continue;
+                }
+                $seen[$productCode] = true;
+                $contributions[] = [
+                    'column' => 'proceed_checkouts',
+                    'product_code' => $productCode,
+                    'category_id' => $this->resolveCategoryIdFromLine($line),
+                    'amount' => 1,
+                    'dedupe' => 'proceed_checkout|'.$productCode,
+                ];
+            }
+
+            return $contributions;
+        }
+
+        return [];
+    }
+
+    /**
+     * @return list<array{qty: int, price: float, line_total: float, item_variant: string, product_code: string, sku: string, product_name: string, category_code: string, category_name: string, department_name: string, color_code: string, color_name: string, size_code: string, size_name: string}>
+     */
+    private function addToCartMetricLines(object $action): array
+    {
+        $json = $this->actionJsonPayload($action);
+        $added = $this->addedCartLineFromAddToCartPayload($json);
+        if ($added !== null) {
+            $line = $this->commerceLineFromItem($action, $added, $json);
+            if ($line !== null) {
+                return [$line];
+            }
+        }
+
+        $line = $this->commerceLineFromScalars($action, $json);
+        if ($this->productCode($line['product_code']) === '') {
+            return [];
+        }
+
+        $line['qty'] = max(1, (int) ($json['qty'] ?? $line['qty']));
+
+        return [$line];
+    }
+
+    /**
+     * Line added in this click (not every line in the cart snapshot).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>|null
+     */
+    private function addedCartLineFromAddToCartPayload(array $payload): ?array
+    {
+        $items = $payload['items'] ?? $payload['cart_items'] ?? [];
+        if (! is_array($items)) {
+            return null;
+        }
+
+        $addedProductId = trim((string) ($payload['product_id'] ?? ''));
+        if ($addedProductId !== '') {
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                if (trim((string) ($item['product_id'] ?? '')) === $addedProductId) {
+                    return $item;
+                }
+            }
+        }
+
+        $lines = array_values(array_filter($items, 'is_array'));
+        if (count($lines) === 1) {
+            return $lines[0];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, array<string, array<string, mixed>>>  $counters
+     */
+    private function applyFunnelContribution(
+        array &$counters,
+        string $date,
+        string $column,
+        ?string $productCode,
+        ?int $categoryId,
+        int $amount,
+    ): void {
+        if ($amount <= 0) {
             return;
         }
 
         if ($categoryId !== null) {
-            $this->bump($counters, 'tracking_daily_categories', ['metric_date' => $date, 'tracking_category_id' => $categoryId], $column);
+            $this->bump($counters, 'tracking_daily_categories', ['metric_date' => $date, 'tracking_category_id' => $categoryId], $column, $amount);
 
             if ($column === 'category_views' || $column === 'product_views') {
-                $this->bump($counters, 'tracking_daily_summaries', ['metric_date' => $date], $column);
+                $this->bump($counters, 'tracking_daily_summaries', ['metric_date' => $date], $column, $amount);
             }
         }
 
         if ($productCode !== null && $column !== 'category_views') {
-            $this->bump($counters, 'tracking_daily_products', ['metric_date' => $date, 'product_code' => $productCode], $column);
+            $this->bump($counters, 'tracking_daily_products', ['metric_date' => $date, 'product_code' => $productCode], $column, $amount);
         }
     }
 
@@ -1621,11 +1797,11 @@ class TrackerDashboardSyncService
      * @param  array<string, array<string, array<string, mixed>>>  $counters
      * @param  array<string, mixed>  $key
      */
-    private function bump(array &$counters, string $table, array $key, string $column): void
+    private function bump(array &$counters, string $table, array $key, string $column, int $amount = 1): void
     {
         $id = implode('|', $key);
         $counters[$table][$id] ??= $key;
-        $counters[$table][$id][$column] = ($counters[$table][$id][$column] ?? 0) + 1;
+        $counters[$table][$id][$column] = ($counters[$table][$id][$column] ?? 0) + $amount;
     }
 
     /**
@@ -2010,6 +2186,8 @@ class TrackerDashboardSyncService
             );
         }
 
+        $this->refreshProductFunnelCounts($date, $now);
+
         $this->refreshSoldTotals($date, 'tracking_daily_categories', 'tracking_category_id', 'od.tracking_category_id', true, $now);
         $this->refreshSoldTotals($date, 'tracking_daily_products', 'product_code', 'p.code', false, $now);
 
@@ -2237,6 +2415,62 @@ class TrackerDashboardSyncService
             ['metric_date', 'tracking_session_id'],
             ['type', 'qty', 'sale_value', 'occurred_at', 'updated_at'],
         );
+    }
+
+    /**
+     * Rebuild product/category funnel columns for one visit day (same rules as {@see recordFunnelAction}).
+     */
+    private function refreshProductFunnelCounts(string $date, Carbon $now): void
+    {
+        DB::table('tracking_daily_products')->where('metric_date', $date)->update([
+            'product_views' => 0,
+            'add_to_carts' => 0,
+            'proceed_checkouts' => 0,
+            'updated_at' => $now,
+        ]);
+
+        DB::table('tracking_daily_categories')->where('metric_date', $date)->update([
+            'category_views' => 0,
+            'product_views' => 0,
+            'add_to_carts' => 0,
+            'proceed_checkouts' => 0,
+            'updated_at' => $now,
+        ]);
+
+        DB::table('tracking_daily_summaries')->where('metric_date', $date)->update([
+            'category_views' => 0,
+            'product_views' => 0,
+            'updated_at' => $now,
+        ]);
+
+        $sessionIds = DB::table('tracking_session as ts')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $date)
+            ->pluck('ts.session_id');
+
+        if ($sessionIds->isEmpty()) {
+            return;
+        }
+
+        $actions = DB::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->orderBy('id')
+            ->get();
+
+        $counters = [];
+        $funnelDedupe = [];
+
+        foreach ($actions as $action) {
+            if ($this->localDate($action->created_at ?? null) !== $date) {
+                continue;
+            }
+
+            $type = $this->metricActionType($action);
+            $sessionId = $this->normalizeSessionId((string) ($action->session_id ?? ''));
+            $this->recordFunnelAction($counters, $action, $type, $date, $sessionId, $funnelDedupe);
+        }
+
+        $this->addCounters($counters);
     }
 
     /**

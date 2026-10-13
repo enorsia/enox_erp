@@ -476,7 +476,7 @@ class EcomActivityListService
             [
                 'label' => 'Add to cart',
                 'formatted' => number_format((int) $summary['adds']),
-                'tip' => "How many times this style was added to the cart in those sessions (each add click counts once, not cart quantity).",
+                'tip' => "Total units added to cart for {$style} in those sessions (quantity on each add click).",
             ],
             [
                 'label' => 'Begin checkout',
@@ -1247,7 +1247,7 @@ class EcomActivityListService
     {
         if ($metric === 'views') {
             $sub = DB::table('activity_ecom_user_actions as a')
-                ->selectRaw("COUNT(DISTINCT DATE_FORMAT(a.created_at, '%Y-%m-%d %H:%i'))")
+                ->selectRaw('CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END')
                 ->whereColumn('a.session_id', 'ts.session_id')
                 ->whereIn('a.action_type', ['product_view', 'product_view_popup'])
                 ->whereBetween('a.created_at', [$fromBound, $toBound])
@@ -1258,7 +1258,7 @@ class EcomActivityListService
 
         if ($metric === 'adds') {
             $sub = DB::table('activity_ecom_user_actions as a')
-                ->selectRaw('COUNT(*)')
+                ->selectRaw('COALESCE(SUM(GREATEST(1, COALESCE(a.item_qty, 1))), 0)')
                 ->whereColumn('a.session_id', 'ts.session_id')
                 ->where('a.action_type', 'add_to_cart')
                 ->whereBetween('a.created_at', [$fromBound, $toBound])
@@ -1480,9 +1480,9 @@ class EcomActivityListService
             ->whereIn('action_type', ['product_view', 'product_view_popup'])
             ->whereBetween('created_at', [$fromBound, $toBound])
             ->where(fn (Builder $match) => $this->whereActionMatchesParentStyleCode($match, $productCode))
-            ->groupBy('session_id')
-            ->selectRaw("session_id, COUNT(DISTINCT DATE_FORMAT(created_at, '%Y-%m-%d %H:%i')) as views")
-            ->pluck('views', 'session_id');
+            ->distinct()
+            ->pluck('session_id')
+            ->mapWithKeys(fn (string $sessionId) => [$sessionId => 1]);
 
         $adds = $this->addToCartEventCountForParentStyle($sessionIds, $productCode, $fromBound, $toBound);
 
@@ -1527,10 +1527,27 @@ class EcomActivityListService
                 continue;
             }
 
-            $counts[$action->session_id] = ($counts[$action->session_id] ?? 0) + 1;
+            $counts[$action->session_id] = ($counts[$action->session_id] ?? 0) + $this->addToCartQtyForAction($action);
         }
 
         return $counts;
+    }
+
+    private function addToCartQtyForAction(object $action): int
+    {
+        $payload = json_decode((string) ($action->add_to_cart ?? ''), true);
+        if (is_array($payload)) {
+            $addedLine = $this->addedCartLineFromAddToCartPayload($payload);
+            if ($addedLine !== null) {
+                return max(1, (int) ($addedLine['qty'] ?? 1));
+            }
+
+            if (isset($payload['qty'])) {
+                return max(1, (int) $payload['qty']);
+            }
+        }
+
+        return max(1, (int) ($action->item_qty ?? 1));
     }
 
     private function addToCartActionIncludesParentStyle(object $action, string $parentStyleCode): bool
@@ -2075,9 +2092,7 @@ class EcomActivityListService
             return [
                 'badge' => 'Viewed',
                 'tone' => 'view',
-                'headline' => $views === 1
-                    ? 'Browsed this product'
-                    : 'Browsed this product '.$views.' times',
+                'headline' => 'Browsed this product',
                 'lines' => [],
                 'detail_label' => null,
                 'show_expand' => false,

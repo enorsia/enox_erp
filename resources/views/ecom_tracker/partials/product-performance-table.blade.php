@@ -10,25 +10,31 @@
         <thead>
             <tr>
                 <th class="etd-col-product">Product</th>
-                <th class="etd-num etd-col-metric">Views</th>
+                <th class="etd-num etd-col-metric">
+                    @include('ecom_tracker.partials.column-header-with-tip', [
+                        'label' => 'Views',
+                        'tip' => 'Sessions that viewed this product (once per session, even if viewed many times)',
+                        'align' => 'center',
+                    ])
+                </th>
                 <th class="etd-num etd-col-metric">
                     @include('ecom_tracker.partials.column-header-with-tip', [
                         'label' => 'Adds',
-                        'tip' => 'Add to cart',
+                        'tip' => 'Total units added to cart for this product',
                         'align' => 'center',
                     ])
                 </th>
                 <th class="etd-num etd-col-metric">
                     @include('ecom_tracker.partials.column-header-with-tip', [
                         'label' => 'Proceed',
-                        'tip' => 'Proceed to checkout',
+                        'tip' => 'Sessions that proceeded to checkout with this product in the cart',
                         'align' => 'center',
                     ])
                 </th>
                 <th class="etd-num etd-col-metric">
                     @include('ecom_tracker.partials.column-header-with-tip', [
                         'label' => 'Sold',
-                        'tip' => 'Sale item',
+                        'tip' => 'Units sold (order line quantity)',
                         'align' => 'center',
                     ])
                 </th>
