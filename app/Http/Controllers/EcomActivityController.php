@@ -71,9 +71,10 @@ class EcomActivityController extends Controller
         $data['backUrl'] = EcomActivityListService::backUrl($request, route('admin.ecom-tracker.dashboard'));
         $data['resetUrl'] = route('admin.ecom-activity.index', array_filter(['back' => $request->query('back')]));
 
-        $sortBy = EcomActivityListService::normalizeSort($request->query('sort_by'));
-        $sortOptions = EcomActivityListService::SORT_OPTIONS;
         $filters = EcomActivityListService::filtersFromRequest($request);
+        $productDrillSort = trim((string) ($filters['product_code'] ?? '')) !== '';
+        $sortBy = EcomActivityListService::normalizeSort($request->query('sort_by'), $productDrillSort);
+        $sortOptions = EcomActivityListService::sortOptions($productDrillSort);
 
         $filterOptions = $activityList->filterOptions($filters['department']);
 
@@ -83,6 +84,7 @@ class EcomActivityController extends Controller
 
         $focusColumns = EcomActivityTableFocus::columnsForRequest($request);
         $showCatalogFilterColumn = EcomActivityTableFocus::showCatalogFilterColumn($request);
+        $productDrillTableLayout = EcomActivityTableFocus::usesProductDrillTableLayout($request);
 
         $sessions = $activityList->paginate(
             $range,
@@ -109,6 +111,7 @@ class EcomActivityController extends Controller
             'activityExport',
             'focusColumns',
             'showCatalogFilterColumn',
+            'productDrillTableLayout',
         ));
     }
 

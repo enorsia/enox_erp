@@ -4,7 +4,10 @@
 
 @section('content')
 
-<div class="etd-page etd-page--activity" id="ecom-activity-page-content">
+<div @class([
+    'etd-page etd-page--activity',
+    'etd-page--activity-product-drill' => $productDrillTableLayout ?? false,
+]) id="ecom-activity-page-content">
 
 @include('ecom_activity.filter-drawer')
 
@@ -14,9 +17,11 @@
             <div class="etd-page-header-left">
                 <div class="flex items-center flex-wrap gap-x-2 gap-y-1">
                     <h1 class="etd-page-title">User activity</h1>
-                    <span class="etd-header-sep" aria-hidden="true">·</span>
-                    <span class="etd-page-range">{{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => 'Custom', default => 'Today' } }} ({{ $data['rangeLabel'] }})</span>
-                    <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
+                    @unless ($productDrillTableLayout ?? false)
+                        <span class="etd-header-sep" aria-hidden="true">·</span>
+                        <span class="etd-page-range">{{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => 'Custom', default => 'Today' } }} ({{ $data['rangeLabel'] }})</span>
+                        <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
+                    @endunless
                     <div class="etd-page-meta">
                         <span class="etd-meta-item">
                             <svg class="etd-meta-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>
@@ -77,7 +82,34 @@
         <div class="etd-page-header-meta-row__left">
             @if ($drillDownUi)
                 <p class="etd-kpi-section-label mb-1">{{ $drillDownUi['sectionLabel'] ?? 'Audience & engagement' }}</p>
-                @if (! empty($drillDownUi['sectionSubtitle']))
+                @if ($productDrillTableLayout ?? false)
+                    <p class="etd-product-drill-period mb-1">
+                        {{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => 'Custom', default => 'Today' } }}
+                        <span class="etd-product-drill-period__dates">({{ $data['rangeLabel'] }})</span>
+                    </p>
+                    @if (! empty($drillDownUi['filterChips']))
+                        <div class="etd-activity-context__filters etd-activity-context__filters--product-drill mb-2">
+                            <div class="etd-activity-context__filter-chips">
+                                @foreach ($drillDownUi['filterChips'] as $chip)
+                                    <span class="etd-activity-context__chip">
+                                        <span class="etd-activity-context__chip-label">{{ $chip['label'] }}</span>
+                                        @if (! empty($chip['remove_url']))
+                                            <a
+                                                href="{{ $chip['remove_url'] }}"
+                                                class="etd-activity-context__chip-remove"
+                                                aria-label="Remove filter: {{ $chip['label'] }}"
+                                            >
+                                                <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/>
+                                                </svg>
+                                            </a>
+                                        @endif
+                                    </span>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+                @elseif (! empty($drillDownUi['sectionSubtitle']))
                     <p class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">{{ $drillDownUi['sectionSubtitle'] }}</p>
                 @endif
                 @include('ecom_activity.partials.drill-down-context', [
@@ -85,11 +117,13 @@
                     'activityExport' => $activityExport,
                 ])
             @endif
-            <p class="etd-visitor-quality-summary text-[12px] text-slate-500 dark:text-slate-400 mb-0">
-                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['human']) }}</span> real visitors ·
-                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['bot']) }}</span> automated ·
-                <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['unclassified']) }}</span> not classified
-            </p>
+            @unless ($productDrillTableLayout ?? false)
+                <p class="etd-visitor-quality-summary text-[12px] text-slate-500 dark:text-slate-400 mb-0">
+                    <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['human']) }}</span> real visitors ·
+                    <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['bot']) }}</span> automated ·
+                    <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['unclassified']) }}</span> not classified
+                </p>
+            @endunless
         </div>
         <div class="etd-page-header-meta-row__right"></div>
     </div>
@@ -110,8 +144,10 @@
         @php
             $focusColumns = $focusColumns ?? [];
             $showCatalogFilterColumn = $showCatalogFilterColumn ?? false;
+            $productDrillTableLayout = $productDrillTableLayout ?? false;
             $focusColspan = count($focusColumns);
-            $activityTableColspan = 8 + $focusColspan + ($showCatalogFilterColumn ? 1 : 0);
+            $activityTableBaseCols = $productDrillTableLayout ? 4 : 8;
+            $activityTableColspan = $activityTableBaseCols + $focusColspan + ($showCatalogFilterColumn ? 1 : 0);
             $activityTableWide = $focusColspan > 0 || $showCatalogFilterColumn;
         @endphp
         <div class="etd-activity-table-shell" data-etd-activity-table-shell>
@@ -126,14 +162,38 @@
                 @keydown.escape.window="openEvent = null"
                 @click.window="if (openEvent && ! $event.target.closest('.etd-commerce-event-detail') && ! $event.target.closest('.etd-commerce-event-trigger')) openEvent = null"
             >
-                <table class="etd-table etd-table--activity w-full">
+                <table @class(['etd-table etd-table--activity w-full', 'etd-table--activity-product-drill' => $productDrillTableLayout])>
                     <thead>
                         <tr>
-                            <th class="etd-col-session"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Session</span></a></th>
-                            <th class="etd-col-user">User</th>
-                            <th class="etd-col-trust">Visitor trust</th>
-                            <th class="etd-col-commerce"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Commerce</span></a></th>
-                            <th class="etd-col-actions etd-num"><a href="#" data-etd-activity-sort class="etd-sort-th-link etd-sort-th-link--center"><span class="etd-sort-th-label">Actions</span></a></th>
+                            @unless ($productDrillTableLayout)
+                                <th class="etd-col-session"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Session</span></a></th>
+                            @endunless
+                            <th class="etd-col-user">
+                                @if ($productDrillTableLayout)
+                                    @include('ecom_tracker.partials.column-header-with-tip', [
+                                        'label' => 'Visitor',
+                                        'tip' => 'Who visited, when they arrived, and how long they stayed.',
+                                    ])
+                                @else
+                                    User
+                                @endif
+                            </th>
+                            @unless ($productDrillTableLayout)
+                                <th class="etd-col-trust">Visitor trust</th>
+                            @endunless
+                            <th class="etd-col-commerce">
+                                @if ($productDrillTableLayout)
+                                    @include('ecom_tracker.partials.column-header-with-tip', [
+                                        'label' => 'Events',
+                                        'tip' => 'What this visitor did with this product — viewed, added to cart, checkout, or purchased. Purchased rows are highlighted in green.',
+                                    ])
+                                @else
+                                    <a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Commerce</span></a>
+                                @endif
+                            </th>
+                            @unless ($productDrillTableLayout)
+                                <th class="etd-col-actions etd-num"><a href="#" data-etd-activity-sort class="etd-sort-th-link etd-sort-th-link--center"><span class="etd-sort-th-label">Actions</span></a></th>
+                            @endunless
                             @if ($showCatalogFilterColumn)
                                 <th class="etd-col-catalog-filter">
                                     @include('ecom_tracker.partials.column-header-with-tip', [
@@ -155,55 +215,56 @@
                                     @endif
                                 </th>
                             @endforeach
-                            <th class="etd-col-duration etd-activity-col--optional"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Duration</span></a></th>
+                            @unless ($productDrillTableLayout)
+                                <th class="etd-col-duration etd-activity-col--optional"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Duration</span></a></th>
+                            @endunless
                             <th class="etd-col-last-active etd-activity-col--optional"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Last active</span></a></th>
                             <th class="etd-col-action">View</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($sessions as $row)
-                            <tr class="etd-activity-session-row">
-                                <td class="etd-col-session" data-label="Session">
-                                    <button type="button" class="etd-chip etd-chip--session etd-session-copy font-mono text-[11px]" data-etd-copy="{{ $row->session_id }}" title="{{ $row->session_id }} — click to copy">
-                                        <span class="etd-session-copy__text">{{ $row->session_id }}</span>
-                                    </button>
-                                    <div class="etd-subtle mt-0.5">{{ \App\Support\TrackerTime::formatFromStorage($row->created_at) }}</div>
-                                </td>
-                                <td class="etd-col-user" data-label="User">
-                                    @php
-                                        $identityBadge = $row->is_logged_in
-                                            ? '<span class="etd-badge etd-badge--user">User</span>'
-                                            : '<span class="etd-badge etd-badge--guest">Guest</span>';
-                                    @endphp
-                                    @if (filled($row->name) || filled($row->email) || filled($row->phone))
-                                        @php $displayName = $row->name ?: ($row->email ?: $row->phone); @endphp
-                                        <div class="etd-user-cell">
-                                            <div class="etd-user-cell__head">
-                                                <span class="etd-user-cell__name" title="{{ $displayName }}">{{ $displayName }}</span>
-                                                {!! $identityBadge !!}
-                                            </div>
-                                            @if (filled($row->email) && filled($row->name))
-                                                <div class="etd-subtle etd-user-cell__line" title="{{ $row->email }}">{{ $row->email }}</div>
-                                            @endif
-                                            @if (filled($row->phone) && (filled($row->name) || filled($row->email)))
-                                                <div class="etd-subtle etd-user-cell__line" title="{{ $row->phone }}">{{ $row->phone }}</div>
-                                            @endif
-                                        </div>
-                                    @else
-                                        {!! $identityBadge !!}
-                                    @endif
-                                </td>
-                                <td class="etd-col-trust" data-label="Visitor trust">
-                                    @include('ecom_activity.partials.trust-cell', ['trust' => $row->trust])
-                                </td>
-                                <td class="etd-col-commerce" data-label="Commerce">
-                                    @include('ecom_activity.partials.commerce-cell', [
-                                        'metrics' => $row->commerce,
-                                        'events' => $row->commerce['expandable_commerce_events'],
-                                        'sessionKey' => $row->session_id,
+                            <tr @class([
+                                'etd-activity-session-row',
+                                'etd-activity-session-row--product-sold' => ($productDrillTableLayout ?? false)
+                                    && (($row->commerce['presentation']['tone'] ?? '') === 'sold'),
+                            ])>
+                                @unless ($productDrillTableLayout)
+                                    <td class="etd-col-session" data-label="Session">
+                                        <button type="button" class="etd-chip etd-chip--session etd-session-copy font-mono text-[11px]" data-etd-copy="{{ $row->session_id }}" title="{{ $row->session_id }} — click to copy">
+                                            <span class="etd-session-copy__text">{{ $row->session_id }}</span>
+                                        </button>
+                                        <div class="etd-subtle mt-0.5">{{ \App\Support\TrackerTime::formatFromStorage($row->created_at) }}</div>
+                                    </td>
+                                @endunless
+                                <td class="etd-col-user" data-label="{{ $productDrillTableLayout ? 'Visitor' : 'User' }}">
+                                    @include('ecom_activity.partials.activity-user-cell', [
+                                        'row' => $row,
+                                        'productDrillTableLayout' => $productDrillTableLayout,
                                     ])
                                 </td>
-                                <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($row->actions_count ?? 0)) }}</td>
+                                @unless ($productDrillTableLayout)
+                                    <td class="etd-col-trust" data-label="Visitor trust">
+                                        @include('ecom_activity.partials.trust-cell', ['trust' => $row->trust])
+                                    </td>
+                                @endunless
+                                <td class="etd-col-commerce" data-label="{{ $productDrillTableLayout ? 'Events' : 'Commerce' }}">
+                                    @if ($productDrillTableLayout)
+                                        @include('ecom_activity.partials.product-drill-commerce-cell', [
+                                            'metrics' => $row->commerce,
+                                            'sessionKey' => $row->session_id,
+                                        ])
+                                    @else
+                                        @include('ecom_activity.partials.commerce-cell', [
+                                            'metrics' => $row->commerce,
+                                            'events' => $row->commerce['expandable_commerce_events'],
+                                            'sessionKey' => $row->session_id,
+                                        ])
+                                    @endif
+                                </td>
+                                @unless ($productDrillTableLayout)
+                                    <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($row->actions_count ?? 0)) }}</td>
+                                @endunless
                                 @if ($showCatalogFilterColumn)
                                     <td class="etd-col-catalog-filter" data-label="Category">
                                         @php $catalogPath = trim((string) ($row->catalog_path ?? '')); @endphp
@@ -215,7 +276,9 @@
                                         {{ $row->focus[$column['key']] ?? '—' }}
                                     </td>
                                 @endforeach
-                                <td class="etd-col-duration etd-activity-col--optional" data-label="Duration">{{ format_duration((int) ($row->duration_seconds ?? 0)) }}</td>
+                                @unless ($productDrillTableLayout)
+                                    <td class="etd-col-duration etd-activity-col--optional" data-label="Duration">{{ format_duration((int) ($row->duration_seconds ?? 0)) }}</td>
+                                @endunless
                                 <td class="etd-col-last-active etd-activity-col--optional" data-label="Last active">
                                     {{ \App\Support\TrackerTime::diffForHumansFromStorage($row->last_active_at) ?? '—' }}
                                 </td>

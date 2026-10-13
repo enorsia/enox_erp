@@ -16,7 +16,7 @@ final class EcomActivityTableFocus
         'devices' => ['device_detail'],
         'traffic' => ['traffic_source', 'traffic_medium'],
         'session_quality' => ['classification_reason'],
-        'products' => ['products_viewed', 'adds', 'purchased', 'purchases'],
+        'products' => ['products_viewed', 'adds', 'purchases'],
     ];
 
     /** @var array<string, array{key: string, label: string, class?: string, tip?: string}> */
@@ -26,11 +26,25 @@ final class EcomActivityTableFocus
         'traffic_source' => ['key' => 'traffic_source', 'label' => 'Source'],
         'traffic_medium' => ['key' => 'traffic_medium', 'label' => 'Medium'],
         'classification_reason' => ['key' => 'classification_reason', 'label' => 'Classification'],
-        'products_viewed' => ['key' => 'products_viewed', 'label' => 'Products viewed', 'class' => 'etd-num'],
-        'adds' => ['key' => 'adds', 'label' => 'Adds', 'class' => 'etd-num'],
-        'purchased' => ['key' => 'purchased', 'label' => 'Bought'],
+        'products_viewed' => [
+            'key' => 'products_viewed',
+            'label' => 'View',
+            'class' => 'etd-num',
+            'tip' => 'Yes if this parent style was viewed in the session (variant SKUs roll up to the style code)',
+        ],
+        'adds' => [
+            'key' => 'adds',
+            'label' => 'Adds',
+            'class' => 'etd-num',
+            'tip' => 'How many add-to-cart clicks included this parent style in the session',
+        ],
         'top_category' => ['key' => 'top_category', 'label' => 'Top category'],
-        'purchases' => ['key' => 'purchases', 'label' => 'Purchases', 'class' => 'etd-num', 'tip' => 'Completed orders with items in this category'],
+        'purchases' => [
+            'key' => 'purchases',
+            'label' => 'Purchases',
+            'class' => 'etd-num',
+            'tip' => 'Completed orders in this period that include this style',
+        ],
     ];
 
     public static function isValidFocus(?string $focus): bool
@@ -75,6 +89,15 @@ final class EcomActivityTableFocus
     public static function showCatalogFilterColumn(Request $request): bool
     {
         return $request->filled('department') || $request->filled('category');
+    }
+
+    /**
+     * Dashboard product performance drill-down: merge session metadata into the user column.
+     */
+    public static function usesProductDrillTableLayout(Request $request): bool
+    {
+        return $request->input('focus') === 'products'
+            && filled(trim((string) $request->input('product_code', '')));
     }
 
     /**
