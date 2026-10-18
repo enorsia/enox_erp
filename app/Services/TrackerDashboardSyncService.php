@@ -90,10 +90,15 @@ class TrackerDashboardSyncService
      */
     public function planChunks(int $chunkSize = 25): array
     {
+        $this->finalizePendingSessionsWithoutUnsyncedActions();
+
+        $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
+
         $query = DB::table('activity_ecom_user as u');
 
         $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
-        $this->applyPendingOrRetryFilter($query, now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES), 'u');
+        $this->applyPendingOrRetryFilter($query, $retryAfter, 'u');
+        $this->applyHasUnsyncedActionsFilter($query, 'u');
 
         return $query->orderBy('u.id')
             ->pluck('u.id')
@@ -287,8 +292,79 @@ class TrackerDashboardSyncService
 
         $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
         $this->applyPendingOrRetryFilter($query, $retryAfter, 'u');
+        $this->applyHasUnsyncedActionsFilter($query, 'u');
 
         return $query->orderBy('u.id')->limit($limit)->get();
+    }
+
+    /**
+     * Pending queue flag with every action already synced (e.g. session row changed during markSessionSynced).
+     * Clear the flag so Sync does not queue no-op chunk jobs.
+     */
+    private function finalizePendingSessionsWithoutUnsyncedActions(): void
+    {
+        $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
+
+        $query = DB::table('activity_ecom_user as u')
+            ->select('u.id', 'u.session_id')
+            ->where('u.sync_try', '<', self::MAX_SYNC_TRY);
+
+        $this->applyPendingOrRetryFilter($query, $retryAfter, 'u');
+        $this->applyHasNoUnsyncedActionsFilter($query, 'u');
+
+        $idle = $query->get();
+
+        if ($idle->isEmpty()) {
+            return;
+        }
+
+        $now = now();
+        $ids = $idle->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        DB::table('activity_ecom_user')
+            ->whereIn('id', $ids)
+            ->update([
+                'is_sync' => ActivityEcomUser::SYNC_DONE,
+                'sync_at' => $now,
+                'sync_try' => 0,
+            ]);
+
+        foreach ($idle as $row) {
+            $sessionId = trim((string) ($row->session_id ?? ''));
+            if ($sessionId !== '') {
+                $this->refreshTrackingSessionActionsCount($sessionId);
+            }
+        }
+
+        Log::info('tracker.dashboard.sync: finalized idle pending sessions', [
+            'count' => $idle->count(),
+        ]);
+    }
+
+    private function applyHasUnsyncedActionsFilter(Builder $query, string $alias): void
+    {
+        $query->whereExists(function (Builder $exists) use ($alias): void {
+            $exists->selectRaw('1')
+                ->from('activity_ecom_user_actions as a')
+                ->whereColumn('a.session_id', "{$alias}.session_id")
+                ->whereIn('a.is_sync', [
+                    ActivityEcomUserAction::SYNC_PENDING,
+                    ActivityEcomUserAction::SYNC_FAILED,
+                ]);
+        });
+    }
+
+    private function applyHasNoUnsyncedActionsFilter(Builder $query, string $alias): void
+    {
+        $query->whereNotExists(function (Builder $exists) use ($alias): void {
+            $exists->selectRaw('1')
+                ->from('activity_ecom_user_actions as a')
+                ->whereColumn('a.session_id', "{$alias}.session_id")
+                ->whereIn('a.is_sync', [
+                    ActivityEcomUserAction::SYNC_PENDING,
+                    ActivityEcomUserAction::SYNC_FAILED,
+                ]);
+        });
     }
 
     private function applyPendingOrRetryFilter(Builder $query, Carbon $retryAfter, string $alias): void
