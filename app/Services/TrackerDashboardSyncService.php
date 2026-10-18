@@ -8,6 +8,7 @@ use App\Models\TrackingDailyAudience;
 use App\Models\TrackingDailyDuration;
 use App\Models\TrackingOrderAddress;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerActionSequence;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Closure;
@@ -914,15 +915,14 @@ class TrackerDashboardSyncService
         ], $this->mergedSessionRollups($existing, $sessionRow, $actions));
 
         $sessionStartedAt = TrackerTime::formatUtc($sessionRow['created_at'] ?? null) ?? now()->toDateTimeString();
+        $sessionStartedAt = $this->earliestSessionTimestamp($sessionStartedAt, $actions);
 
         if ($existing) {
-            if (filled($sessionRow['created_at'] ?? null)) {
-                $activityStart = Carbon::parse($sessionRow['created_at']);
-                $trackingStart = Carbon::parse($existing->created_at);
+            $trackingStart = Carbon::parse($existing->created_at);
+            $earliestStart = Carbon::parse($sessionStartedAt);
 
-                if ($activityStart->lessThan($trackingStart)) {
-                    $payload['created_at'] = $sessionStartedAt;
-                }
+            if ($earliestStart->lessThan($trackingStart)) {
+                $payload['created_at'] = $sessionStartedAt;
             }
 
             $this->applyTableUpdates('tracking_session', $existing, $payload);
@@ -948,8 +948,8 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Roll up session metrics on each sync. actions_count is set separately after actions are marked synced
-     * ({@see refreshTrackingSessionActionsCount}) so category_view heartbeats do not inflate the total.
+     * Roll up session metrics on each sync. actions_count is set separately via
+     * {@see refreshTrackingSessionActionsCount()} (timeline-style count, same as admin session detail).
      *
      * @param  array<string, mixed>  $sessionRow
      * @param  Collection<int, object>  $actions
@@ -984,8 +984,8 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * One row per session on tracking_session: distinct synced events whose timestamps fall in that
-     * session's own window (excludes actions reparented from other visitor sessions during merge).
+     * One row per session on tracking_session: timeline display action count (grid rows grouped, product_click excluded)
+     * for events in the session window — same rules as admin session detail.
      */
     private function refreshTrackingSessionActionsCount(string $sessionId): void
     {
@@ -1003,16 +1003,41 @@ class TrackerDashboardSyncService
             return;
         }
 
-        $countQuery = DB::table('activity_ecom_user_actions')
+        $activity = DB::table('activity_ecom_user')
             ->where('session_id', $sessionId)
-            ->where('is_sync', ActivityEcomUserAction::SYNC_DONE)
-            ->where('created_at', '>=', $tracking->created_at);
+            ->first(['created_at', 'last_active_at']);
 
-        if (filled($tracking->last_active_at)) {
-            $countQuery->where('created_at', '<=', $tracking->last_active_at);
+        $windowStart = $this->sessionActionsWindowStart(
+            $tracking->created_at,
+            $activity?->created_at,
+            $sessionId,
+        );
+        $windowEnd = $this->sessionActionsWindowEnd(
+            $tracking->last_active_at,
+            $activity?->last_active_at,
+        );
+
+        $actionsQuery = DB::table('activity_ecom_user_actions')
+            ->where('session_id', $sessionId)
+            ->where('created_at', '>=', $windowStart)
+            ->orderBy('created_at')
+            ->orderBy('id');
+
+        if ($windowEnd !== null) {
+            $actionsQuery->where('created_at', '<=', $windowEnd);
         }
 
-        $count = (int) $countQuery->distinct()->count('event_id');
+        $count = TrackerActionSequence::displayActionCount($actionsQuery->get([
+            'id',
+            'action_type',
+            'created_at',
+            'start_time',
+            'page_url',
+            'category_code',
+            'category_name',
+            'product_code',
+            'sku',
+        ]));
 
         DB::table('tracking_session')
             ->where('id', $tracking->id)
@@ -1020,6 +1045,83 @@ class TrackerDashboardSyncService
                 'actions_count' => $count,
                 'updated_at' => now(),
             ]);
+    }
+
+    /**
+     * @param  Collection<int, object>  $actions
+     */
+    private function earliestSessionTimestamp(string $sessionStartedAt, Collection $actions): string
+    {
+        $earliest = Carbon::parse($sessionStartedAt);
+
+        foreach ($actions as $action) {
+            if (! filled($action->created_at ?? null)) {
+                continue;
+            }
+
+            $at = Carbon::parse($action->created_at);
+
+            if ($at->lessThan($earliest)) {
+                $earliest = $at;
+            }
+        }
+
+        return TrackerTime::formatUtc($earliest) ?? $sessionStartedAt;
+    }
+
+    private function sessionActionsWindowStart(
+        mixed $trackingCreatedAt,
+        mixed $activityCreatedAt,
+        string $sessionId,
+    ): string {
+        $start = filled($trackingCreatedAt)
+            ? Carbon::parse($trackingCreatedAt)
+            : now();
+
+        if (filled($activityCreatedAt)) {
+            $activityStart = Carbon::parse($activityCreatedAt);
+
+            if ($activityStart->lessThan($start)) {
+                $start = $activityStart;
+            }
+        }
+
+        $earliestActionAt = DB::table('activity_ecom_user_actions')
+            ->where('session_id', $sessionId)
+            ->min('created_at');
+
+        if (filled($earliestActionAt)) {
+            $actionStart = Carbon::parse($earliestActionAt);
+
+            if ($actionStart->lessThan($start)) {
+                $start = $actionStart;
+            }
+        }
+
+        return TrackerTime::formatUtc($start) ?? $start->toDateTimeString();
+    }
+
+    private function sessionActionsWindowEnd(mixed $trackingLastActiveAt, mixed $activityLastActiveAt): ?string
+    {
+        $end = null;
+
+        if (filled($trackingLastActiveAt)) {
+            $end = Carbon::parse($trackingLastActiveAt);
+        }
+
+        if (filled($activityLastActiveAt)) {
+            $activityEnd = Carbon::parse($activityLastActiveAt);
+
+            if ($end === null || $activityEnd->greaterThan($end)) {
+                $end = $activityEnd;
+            }
+        }
+
+        if ($end === null) {
+            return null;
+        }
+
+        return TrackerTime::formatUtc($end) ?? $end->toDateTimeString();
     }
 
     private function maxFunnelStage(mixed $current, mixed $incoming): ?int
