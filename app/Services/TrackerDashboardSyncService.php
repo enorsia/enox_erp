@@ -237,12 +237,12 @@ class TrackerDashboardSyncService
             DB::transaction(function () use ($sessionRow, $actions, $sessionPk, $rawSessionId, $cacheBefore, $sessionUpdatedAt): void {
                 // Restored on each attempt so rolled-back dimension ids are not reused after deadlock.
                 $this->cache = $cacheBefore;
-                $this->upsertTrackingFromSession($sessionRow, $actions);
+                $sessionRow = $this->upsertTrackingFromSession($sessionRow, $actions);
                 // Loaded actions are counted into the daily tables now, so they must be done even if the
                 // session row changed meanwhile (it stays pending and only its new actions are synced next time).
                 $this->markActionsSynced($actions);
                 $this->refreshTrackingSessionActionsCount($rawSessionId);
-                $this->markSessionSynced($sessionPk, $sessionUpdatedAt);
+                $this->markSessionSynced($sessionPk, $sessionUpdatedAt, $sessionRow);
             }, 3);
 
             return true;
@@ -305,6 +305,38 @@ class TrackerDashboardSyncService
     }
 
     /**
+     * Mark already-synced sessions as pending again so dashboard sync can rebuild tracking_* from actions.
+     * Only sessions with at least one row in activity_ecom_user_actions in the optional created_at window.
+     */
+    public function requeueSyncedSessionsForDashboard(Carbon $from, ?Carbon $to = null): int
+    {
+        return $this->syncedSessionsForDashboardRequeueQuery($from, $to)->update([
+            'is_sync' => ActivityEcomUser::SYNC_PENDING,
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function syncedSessionsForDashboardRequeueQuery(Carbon $from, ?Carbon $to): Builder
+    {
+        [$fromBound] = TrackerTime::storageRange($from->copy()->startOfDay(), $from->copy()->startOfDay());
+        $toBound = $to !== null
+            ? TrackerTime::storageRange($to->copy()->endOfDay(), $to->copy()->endOfDay())[1]
+            : null;
+
+        $query = DB::table('activity_ecom_user as u')
+            ->where('u.is_sync', ActivityEcomUser::SYNC_DONE)
+            ->where('u.created_at', '>=', $fromBound)
+            ->when($toBound !== null, fn (Builder $q) => $q->where('u.created_at', '<=', $toBound))
+            ->whereExists(function (Builder $exists): void {
+                $exists->selectRaw('1')
+                    ->from('activity_ecom_user_actions as a')
+                    ->whereColumn('a.session_id', 'u.session_id');
+            });
+
+        return $query;
+    }
+
+    /**
      * @param  list<string>  $sessionIds
      * @return Collection<string, Collection<int, object>>
      */
@@ -332,7 +364,10 @@ class TrackerDashboardSyncService
      * @param  array<string, mixed>  $sessionRow
      * @param  Collection<int, object>  $actions
      */
-    private function upsertTrackingFromSession(array $sessionRow, Collection $actions): void
+    /**
+     * @return array<string, mixed>
+     */
+    private function upsertTrackingFromSession(array $sessionRow, Collection $actions): array
     {
         $sessionId = $this->normalizeSessionId((string) ($sessionRow['session_id'] ?? ''));
         $visitorId = trim((string) ($sessionRow['visitor_id'] ?? ''));
@@ -341,7 +376,13 @@ class TrackerDashboardSyncService
             throw new \InvalidArgumentException('Missing session_id');
         }
 
-        $sessionRow = $this->withCheckoutCustomer($sessionRow, $actions);
+        // activity_ecom_user: session + visitor/contact; activity_ecom_user_actions: every event → tracking_*.
+        $allActions = $this->loadAllActionsForSession($sessionId);
+        $applyActions = $actions->isNotEmpty() ? $actions : $allActions;
+        $rebuildFromFullHistory = $actions->isEmpty() && $allActions->isNotEmpty();
+
+        $sessionRow = $this->withCheckoutCustomer($sessionRow, $allActions);
+        $sessionRow = $this->mergeFunnelIntoSessionRow($sessionRow, $allActions);
 
         $deviceId = $this->remember('device:'.($sessionRow['device_type'] ?? ''), fn () => $this->findOrCreateDevice((string) ($sessionRow['device_type'] ?? '')));
         $browserId = $this->remember('browser:'.($sessionRow['browser'] ?? ''), fn () => $this->findOrCreateBrowser((string) ($sessionRow['browser'] ?? '')));
@@ -350,14 +391,64 @@ class TrackerDashboardSyncService
         $visitDate = $this->visitDateForSession($sessionRow);
         $dailyVisitorRowId = $this->findOrCreateDailyVisitor($mainVisitorId, $visitorId, $visitDate);
 
-        $trackingSessionId = $this->upsertTrackingSession($sessionRow, $sessionId, $dailyVisitorRowId, $actions);
-        [$trafficId, $source, $medium] = $this->upsertSessionDetails($trackingSessionId, $sessionRow, $actions, $deviceId, $browserId);
+        $trackingSessionId = $this->upsertTrackingSession($sessionRow, $sessionId, $dailyVisitorRowId, $allActions);
+        [$trafficId, $source, $medium] = $this->upsertSessionDetails($trackingSessionId, $sessionRow, $applyActions, $deviceId, $browserId);
 
         $audienceKeys = $this->audienceKeys($deviceId, $browserId, $trafficId, $source, $medium);
 
-        $this->syncActionsForSession($trackingSessionId, $visitDate, $actions, $audienceKeys, $visitorId);
-        $this->upsertRecoverableSale($trackingSessionId, $visitDate, $sessionRow, $actions);
+        $this->syncActionsForSession($trackingSessionId, $visitDate, $applyActions, $audienceKeys, $visitorId, $rebuildFromFullHistory);
+        $this->upsertRecoverableSale($trackingSessionId, $visitDate, $sessionRow, $allActions);
         $this->touchedDates[$visitDate] = true;
+
+        return $sessionRow;
+    }
+
+    /**
+     * @return Collection<int, object>
+     */
+    private function loadAllActionsForSession(string $sessionId): Collection
+    {
+        return DB::table('activity_ecom_user_actions')
+            ->where('session_id', $sessionId)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * @param  array<string, mixed>  $sessionRow
+     * @return array<string, mixed>
+     */
+    private function mergeFunnelIntoSessionRow(array $sessionRow, Collection $actions): array
+    {
+        $hasCart = false;
+        $hasBegin = false;
+        $hasProceed = false;
+        $hasPayment = false;
+
+        foreach ($actions as $action) {
+            match ($this->metricActionType($action)) {
+                'add_to_cart' => $hasCart = true,
+                'begin_checkout' => $hasBegin = true,
+                'proceed_checkout' => $hasProceed = true,
+                'payment_success' => $hasPayment = true,
+                default => null,
+            };
+        }
+
+        $sessionRow['has_add_to_cart'] = (int) $hasCart;
+        $sessionRow['has_begin_checkout'] = (int) $hasBegin;
+        $sessionRow['has_proceed_checkout'] = (int) $hasProceed;
+        $sessionRow['has_payment_success'] = (int) $hasPayment;
+        $sessionRow['latest_funnel_stage'] = match (true) {
+            $hasPayment => 6,
+            $hasProceed => 5,
+            $hasBegin => 4,
+            $hasCart => 3,
+            default => null,
+        };
+
+        return $sessionRow;
     }
 
     /**
@@ -408,8 +499,18 @@ class TrackerDashboardSyncService
      * @param  Collection<int, object>  $actions
      * @param  list<array{type: int, dimension_id: int, source: string, medium: string}>  $audienceKeys
      */
-    private function syncActionsForSession(int $trackingSessionId, string $visitDate, Collection $actions, array $audienceKeys, string $visitorId): void
-    {
+    private function syncActionsForSession(
+        int $trackingSessionId,
+        string $visitDate,
+        Collection $actions,
+        array $audienceKeys,
+        string $visitorId,
+        bool $replaceSessionProductLinks = false,
+    ): void {
+        if ($replaceSessionProductLinks) {
+            DB::table('tracking_session_p_cat')->where('tracking_session_id', $trackingSessionId)->delete();
+        }
+
         $pCatRows = [];
         $counters = [];
         $funnelDedupe = [];
@@ -2520,7 +2621,10 @@ class TrackerDashboardSyncService
 
     // ===== 6. Status marks =====
 
-    private function markSessionSynced(int $sessionPk, mixed $sessionUpdatedAt): bool
+    /**
+     * @param  array<string, mixed>  $sessionRow
+     */
+    private function markSessionSynced(int $sessionPk, mixed $sessionUpdatedAt, array $sessionRow): bool
     {
         $updated = DB::table('activity_ecom_user')
             ->where('id', $sessionPk)
@@ -2529,6 +2633,11 @@ class TrackerDashboardSyncService
                 'is_sync' => ActivityEcomUser::SYNC_DONE,
                 'sync_at' => now(),
                 'sync_try' => 0,
+                'has_add_to_cart' => (int) ($sessionRow['has_add_to_cart'] ?? 0),
+                'has_begin_checkout' => (int) ($sessionRow['has_begin_checkout'] ?? 0),
+                'has_proceed_checkout' => (int) ($sessionRow['has_proceed_checkout'] ?? 0),
+                'has_payment_success' => (int) ($sessionRow['has_payment_success'] ?? 0),
+                'latest_funnel_stage' => $sessionRow['latest_funnel_stage'] ?? null,
             ]);
 
         if ($updated === 0) {

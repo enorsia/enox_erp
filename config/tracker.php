@@ -32,6 +32,14 @@ return [
         'product_click',
     ],
 
+    'payment_success_allowed_keys' => [
+        'order_id',
+        'amount_paid',
+        'payment_method',
+        'currency',
+        'checkout_info',
+    ],
+
     'scalar_field_limits' => [
         'category_name' => 255,
         'category_code' => 100,
