@@ -18,7 +18,7 @@
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
     </div>
-    <form method="GET" action="{{ route('admin.ecom-tracker.dashboard') }}" class="etd-filter-panel__form">
+    <form method="GET" action="{{ $data['filterFormAction'] ?? route('admin.ecom-tracker.dashboard') }}" class="etd-filter-panel__form">
         <div class="etd-filter-panel__body etd-filter-drawer__body">
             <section class="etd-filter-period etd-filter-period--drawer-mobile etd-activity-filter-section etd-activity-filter-section--full">
                 <p class="etd-activity-filter-section-title">Date range</p>

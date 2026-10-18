@@ -610,6 +610,394 @@ class EcomActivityListService
     }
 
     /**
+     * Distinct sessions per parent style that had a PDP view in the period (product_view / popup).
+     * Once per session per product; repeats in the same session do not add another count.
+     *
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     * @param  array<string, mixed>  $filters
+     * @param  list<string>  $productCodes
+     * @return array<string, int>
+     */
+    public function productViewSessionsByCode(array $range, array $filters, array $productCodes): array
+    {
+        $productCodes = array_values(array_unique(array_filter(array_map(
+            fn (string $code) => trim($code),
+            $productCodes,
+        ))));
+
+        if ($productCodes === []) {
+            return [];
+        }
+
+        $tracked = array_fill_keys($productCodes, true);
+        $counts = array_fill_keys($productCodes, 0);
+
+        $scope = function (Builder $query) use ($range, $filters): void {
+            $this->applySessionDateScope($query, $range);
+            $this->applyFilters($query, $filters, $range);
+        };
+
+        $sessionIds = DB::table('tracking_session as ts')
+            ->tap($scope)
+            ->pluck('session_id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        if ($sessionIds === []) {
+            return $counts;
+        }
+
+        [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
+
+        $skuToParent = DB::table('tracking_product')
+            ->whereIn('code', $productCodes)
+            ->whereNotNull('sku')
+            ->where('sku', '!=', '')
+            ->pluck('code', 'sku')
+            ->all();
+
+        $viewActions = DB::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->whereIn('action_type', ['product_view', 'product_view_popup'])
+            ->whereBetween('created_at', [$fromBound, $toBound])
+            ->get(['session_id', 'product_code', 'sku']);
+
+        $seen = [];
+        foreach ($viewActions as $action) {
+            $code = $this->resolveParentStyleCodeFromViewAction($action, $tracked, $skuToParent);
+            if ($code === null) {
+                continue;
+            }
+
+            $sessionId = (string) ($action->session_id ?? '');
+            if ($sessionId === '') {
+                continue;
+            }
+
+            $dedupeKey = $code.'|'.$sessionId;
+            if (isset($seen[$dedupeKey])) {
+                continue;
+            }
+
+            $seen[$dedupeKey] = true;
+            $counts[$code]++;
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Funnel unit totals per parent style, summed across sessions:
+     * - add_to_cart: per session, sum of qty on each add click for this style
+     * - begin / proceed / paid: per session, qty in the cart/checkout snapshot (last event in the period wins)
+     *
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     * @param  array<string, mixed>  $filters
+     * @param  list<string>  $productCodes
+     * @return array<string, array{add_to_cart: int, begin_checkout: int, proceed_checkout: int, paid: int}>
+     */
+    public function productFunnelStepUnitsByCode(array $range, array $filters, array $productCodes): array
+    {
+        $productCodes = array_values(array_unique(array_filter(array_map(
+            fn (string $code) => trim($code),
+            $productCodes,
+        ))));
+
+        if ($productCodes === []) {
+            return [];
+        }
+
+        $tracked = array_fill_keys($productCodes, true);
+        $metrics = [];
+        $sessionQty = [];
+        foreach ($productCodes as $code) {
+            $metrics[$code] = [
+                'add_to_cart' => 0,
+                'begin_checkout' => 0,
+                'proceed_checkout' => 0,
+                'paid' => 0,
+            ];
+            $sessionQty[$code] = [
+                'add_to_cart' => [],
+                'begin_checkout' => [],
+                'proceed_checkout' => [],
+                'paid' => [],
+            ];
+        }
+
+        $scope = function (Builder $query) use ($range, $filters): void {
+            $this->applySessionDateScope($query, $range);
+            $this->applyFilters($query, $filters, $range);
+        };
+
+        $sessionIds = DB::table('tracking_session as ts')
+            ->tap($scope)
+            ->pluck('session_id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        if ($sessionIds === []) {
+            return $metrics;
+        }
+
+        [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
+
+        $skuToParent = DB::table('tracking_product')
+            ->whereIn('code', $productCodes)
+            ->whereNotNull('sku')
+            ->where('sku', '!=', '')
+            ->pluck('code', 'sku')
+            ->all();
+
+        $stepActions = DB::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->whereIn('action_type', ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'proceed_to_checkout', 'payment_success'])
+            ->whereBetween('created_at', [$fromBound, $toBound])
+            ->orderBy('id')
+            ->get([
+                'id',
+                'session_id',
+                'action_type',
+                'product_code',
+                'sku',
+                'item_qty',
+                'add_to_cart',
+                'begin_checkout',
+                'proceed_to_checkout',
+                'payment_success',
+            ]);
+
+        foreach ($stepActions as $action) {
+            $type = (string) $action->action_type;
+            if ($type === 'proceed_to_checkout') {
+                $type = 'proceed_checkout';
+            }
+
+            $sessionId = (string) ($action->session_id ?? '');
+            if ($sessionId === '') {
+                continue;
+            }
+
+            if ($type === 'add_to_cart') {
+                $code = $this->resolveParentStyleCodeFromAddAction($action, $tracked, $skuToParent);
+                if ($code === null) {
+                    continue;
+                }
+
+                $qty = $this->addToCartQtyForAction($action);
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                $sessionQty[$code]['add_to_cart'][$sessionId] = ($sessionQty[$code]['add_to_cart'][$sessionId] ?? 0) + $qty;
+
+                continue;
+            }
+
+            [$jsonColumn, $metricKey] = match ($type) {
+                'begin_checkout' => ['begin_checkout', 'begin_checkout'],
+                'proceed_checkout' => ['proceed_to_checkout', 'proceed_checkout'],
+                'payment_success' => ['payment_success', 'paid'],
+                default => [null, null],
+            };
+
+            if ($jsonColumn === null || $metricKey === null) {
+                continue;
+            }
+
+            foreach ($this->parentStyleUnitsInCartAction($action, $jsonColumn, $tracked, $skuToParent) as $code => $qty) {
+                if ($qty <= 0) {
+                    continue;
+                }
+                $sessionQty[$code][$metricKey][$sessionId] = $qty;
+            }
+        }
+
+        foreach ($productCodes as $code) {
+            foreach (['add_to_cart', 'begin_checkout', 'proceed_checkout', 'paid'] as $key) {
+                $metrics[$code][$key] = (int) array_sum($sessionQty[$code][$key]);
+            }
+        }
+
+        return $metrics;
+    }
+
+    /**
+     * @param  array<string, true>  $trackedCodes
+     * @param  array<string, string>  $skuToParentCode
+     * @return list<string>
+     */
+    private function parentStyleCodesFromAddAction(object $action, array $trackedCodes, array $skuToParentCode): array
+    {
+        $code = $this->resolveParentStyleCodeFromAddAction($action, $trackedCodes, $skuToParentCode);
+
+        return $code !== null ? [$code] : [];
+    }
+
+    /**
+     * @param  array<string, true>  $trackedCodes
+     * @param  array<string, string>  $skuToParentCode
+     */
+    /**
+     * @param  array<string, true>  $trackedCodes
+     * @param  array<string, string>  $skuToParentCode
+     */
+    private function resolveParentStyleCodeFromViewAction(object $action, array $trackedCodes, array $skuToParentCode): ?string
+    {
+        $code = $this->resolveParentStyleCodeFromAddAction($action, $trackedCodes, $skuToParentCode);
+        if ($code !== null) {
+            return $code;
+        }
+
+        foreach (array_keys($trackedCodes) as $parentStyleCode) {
+            if ($this->actionScalarMatchesStyleCode($action, $parentStyleCode)) {
+                return $parentStyleCode;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveParentStyleCodeFromAddAction(object $action, array $trackedCodes, array $skuToParentCode): ?string
+    {
+        $scalarCode = trim((string) ($action->product_code ?? ''));
+        if ($scalarCode !== '' && isset($trackedCodes[$scalarCode])) {
+            return $scalarCode;
+        }
+
+        $scalarSku = trim((string) ($action->sku ?? ''));
+        if ($scalarSku !== '' && isset($skuToParentCode[$scalarSku], $trackedCodes[$skuToParentCode[$scalarSku]])) {
+            return $skuToParentCode[$scalarSku];
+        }
+
+        if ($scalarCode !== '' || $scalarSku !== '') {
+            return null;
+        }
+
+        $payload = json_decode((string) ($action->add_to_cart ?? ''), true);
+        if (! is_array($payload)) {
+            return null;
+        }
+
+        $addedLine = $this->addedCartLineFromAddToCartPayload($payload);
+        if ($addedLine === null) {
+            return null;
+        }
+
+        return $this->parentStyleCodesFromCartItem($addedLine, $trackedCodes, $skuToParentCode)[0] ?? null;
+    }
+
+    /**
+     * @param  array<string, true>  $trackedCodes
+     * @param  array<string, string>  $skuToParentCode
+     * @return list<string>
+     */
+    private function parentStyleCodesFromCartAction(
+        object $action,
+        string $jsonColumn,
+        array $trackedCodes,
+        array $skuToParentCode,
+    ): array {
+        $codes = [];
+        $payload = json_decode((string) ($action->{$jsonColumn} ?? ''), true);
+
+        if (is_array($payload)) {
+            if ($jsonColumn === 'payment_success') {
+                $checkout = is_array($payload['checkout_info'] ?? null) ? $payload['checkout_info'] : [];
+                $items = $checkout['items'] ?? [];
+            } else {
+                $items = $payload['items'] ?? $payload['cart_items'] ?? [];
+            }
+
+            if (is_array($items)) {
+                foreach ($items as $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+                    foreach ($this->parentStyleCodesFromCartItem($item, $trackedCodes, $skuToParentCode) as $code) {
+                        $codes[$code] = true;
+                    }
+                }
+            }
+        }
+
+        foreach (array_keys($trackedCodes) as $parentStyleCode) {
+            if ($this->actionScalarMatchesStyleCode($action, $parentStyleCode)) {
+                $codes[$parentStyleCode] = true;
+            }
+        }
+
+        return array_keys($codes);
+    }
+
+    /**
+     * @param  array<string, true>  $trackedCodes
+     * @param  array<string, string>  $skuToParentCode
+     * @return array<string, int>
+     */
+    private function parentStyleUnitsInCartAction(
+        object $action,
+        string $jsonColumn,
+        array $trackedCodes,
+        array $skuToParentCode,
+    ): array {
+        $units = [];
+        $payload = json_decode((string) ($action->{$jsonColumn} ?? ''), true);
+
+        if (is_array($payload)) {
+            if ($jsonColumn === 'payment_success') {
+                $checkout = is_array($payload['checkout_info'] ?? null) ? $payload['checkout_info'] : [];
+                $items = $checkout['items'] ?? [];
+            } else {
+                $items = $payload['items'] ?? $payload['cart_items'] ?? [];
+            }
+
+            if (is_array($items)) {
+                foreach ($items as $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+                    $lineQty = max(1, (int) ($item['qty'] ?? 1));
+                    foreach ($this->parentStyleCodesFromCartItem($item, $trackedCodes, $skuToParentCode) as $code) {
+                        $units[$code] = ($units[$code] ?? 0) + $lineQty;
+                    }
+                }
+            }
+        }
+
+        if ($units === []) {
+            foreach (array_keys($trackedCodes) as $parentStyleCode) {
+                if ($this->actionScalarMatchesStyleCode($action, $parentStyleCode)) {
+                    $units[$parentStyleCode] = max(1, (int) ($action->item_qty ?? 1));
+                }
+            }
+        }
+
+        return $units;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  array<string, true>  $trackedCodes
+     * @param  array<string, string>  $skuToParentCode
+     * @return list<string>
+     */
+    private function parentStyleCodesFromCartItem(array $item, array $trackedCodes, array $skuToParentCode): array
+    {
+        $lineCode = trim((string) ($item['product_code'] ?? ''));
+        if ($lineCode !== '' && isset($trackedCodes[$lineCode])) {
+            return [$lineCode];
+        }
+
+        $sku = trim((string) ($item['sku'] ?? ''));
+        if ($sku !== '' && isset($skuToParentCode[$sku], $trackedCodes[$skuToParentCode[$sku]])) {
+            return [$skuToParentCode[$sku]];
+        }
+
+        return [];
+    }
+
+    /**
      * @param  array<string, mixed>  $filters
      */
     private function funnelFocusLabel(array $filters): ?string

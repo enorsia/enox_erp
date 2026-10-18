@@ -7406,6 +7406,27 @@ main:has(> #ecom-activity-page-content.etd-page--activity-product-drill) {
     overflow: visible;
 }
 
+/* Product performance list: page scroll, no nested table viewport */
+.etd-page--product-performance-list {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+}
+
+.etd-product-performance-list .etd-product-catalog {
+    overflow: visible;
+}
+
+.etd-product-performance-list__pager {
+    margin-top: 0.75rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.dark .etd-product-performance-list__pager {
+    border-top-color: #334155;
+}
+
 .etd-page--activity-product-drill .etd-activity-table-shell .etd-table-scroll--activity.etd-table-scroll--fixed {
     flex: 0 0 auto;
     min-height: auto;

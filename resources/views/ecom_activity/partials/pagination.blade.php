@@ -1,4 +1,5 @@
 @php
+    $itemLabel = $itemLabel ?? 'sessions';
     $current = $paginator->currentPage();
     $last = $paginator->lastPage();
     $window = collect([1, $last])
@@ -22,7 +23,7 @@
 <div class="etd-pager">
     <p class="etd-pager__summary">
         <span>{{ number_format($paginator->firstItem() ?? 0) }}–{{ number_format($paginator->lastItem() ?? 0) }}</span>
-        of <span>{{ number_format($paginator->total()) }}</span> sessions
+        of <span>{{ number_format($paginator->total()) }}</span> {{ $itemLabel }}
     </p>
 
     @if ($paginator->hasPages())

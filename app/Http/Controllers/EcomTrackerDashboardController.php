@@ -11,10 +11,13 @@ use App\Support\TrackerTime;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 
 class EcomTrackerDashboardController extends Controller
 {
+    private const PRODUCT_PERFORMANCE_PER_PAGE = 30;
+
     public function index(
         Request $request,
         EcomTrackerDashboardService $dashboardService,
@@ -23,6 +26,85 @@ class EcomTrackerDashboardController extends Controller
     ): View {
         Gate::authorize('ecom_tracker.dashboard.index');
 
+        $context = $this->trackerPageContext($request, 'admin.ecom-tracker.dashboard');
+        $data = $context['data'];
+        $filters = $context['filters'];
+        $range = $context['range'];
+        $period = $context['period'];
+        $filterQuery = $context['filterQuery'];
+
+        $dashboard = $dashboardService->dashboard($range, $period, $request->fullUrl());
+        if (EcomActivityListService::hasActiveFilters($filters)) {
+            $dashboard = $filteredDashboard->apply($dashboard, $range, $period, $filters, $request->fullUrl());
+        }
+
+        $data['productsViewAllUrl'] = route('admin.ecom-tracker.dashboard.products', array_filter([
+            'period' => $period,
+            'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
+            'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
+        ]) + $filterQuery);
+
+        $filterOptions = $activityList->filterOptions($filters['department'] ?? null);
+
+        return view('ecom_tracker.dashboard', compact('data', 'dashboard', 'filterOptions'));
+    }
+
+    public function products(
+        Request $request,
+        EcomTrackerDashboardService $dashboardService,
+        EcomActivityListService $activityList,
+    ): View {
+        Gate::authorize('ecom_tracker.dashboard.index');
+
+        $context = $this->trackerPageContext($request, 'admin.ecom-tracker.dashboard.products');
+        $data = $context['data'];
+        $filters = $context['filters'];
+        $range = $context['range'];
+        $period = $context['period'];
+        $filterQuery = $context['filterQuery'];
+
+        $products = $dashboardService->products(
+            $range['from'],
+            $range['to'],
+            $period,
+            $filters,
+            null,
+        );
+
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = self::PRODUCT_PERFORMANCE_PER_PAGE;
+        $allRows = $products['rows'];
+        $paginator = new LengthAwarePaginator(
+            array_values(array_slice($allRows, ($page - 1) * $perPage, $perPage)),
+            count($allRows),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'pageName' => 'page'],
+        );
+        $paginator->appends($request->except('page'));
+
+        $data['dashboardUrl'] = route('admin.ecom-tracker.dashboard', array_filter([
+            'period' => $period,
+            'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
+            'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
+        ]) + $filterQuery);
+
+        $filterOptions = $activityList->filterOptions($filters['department'] ?? null);
+
+        return view('ecom_tracker.products', compact('data', 'products', 'paginator', 'filterOptions'));
+    }
+
+    /**
+     * @return array{
+     *     period: string,
+     *     range: array{from: \Carbon\Carbon, to: \Carbon\Carbon},
+     *     filters: array<string, mixed>,
+     *     filterQuery: array<string, mixed>,
+     *     data: array<string, mixed>
+     * }
+     */
+    private function trackerPageContext(Request $request, string $routeName): array
+    {
         $period = EcomActivityListService::normalizePeriod($request->query('period'));
         $range = EcomActivityListService::periodRange(
             $period,
@@ -45,24 +127,24 @@ class EcomTrackerDashboardController extends Controller
             'dateFrom' => $range['from']->toDateString(),
             'dateTo' => $range['to']->toDateString(),
             'rangeLabel' => TrackerTime::formatLocalDateRangeLabel($range['from'], $range['to']),
-            'prevUrl' => $prevQuery ? route('admin.ecom-tracker.dashboard', $prevQuery + $filterQuery) : null,
-            'nextUrl' => $nextQuery ? route('admin.ecom-tracker.dashboard', $nextQuery + $filterQuery) : null,
-            'resetUrl' => route('admin.ecom-tracker.dashboard', array_filter([
+            'prevUrl' => $prevQuery ? route($routeName, $prevQuery + $filterQuery) : null,
+            'nextUrl' => $nextQuery ? route($routeName, $nextQuery + $filterQuery) : null,
+            'resetUrl' => route($routeName, array_filter([
                 'period' => $period,
                 'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
                 'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
             ])),
             'activityLink' => fn (array $activityFilters = []) => route('admin.ecom-activity.index', $periodQuery + array_filter($activityFilters, fn ($value) => $value !== null)),
+            'filterFormAction' => route($routeName),
         ];
 
-        $dashboard = $dashboardService->dashboard($range, $period, $request->fullUrl());
-        if (EcomActivityListService::hasActiveFilters($filters)) {
-            $dashboard = $filteredDashboard->apply($dashboard, $range, $period, $filters, $request->fullUrl());
-        }
-
-        $filterOptions = $activityList->filterOptions($filters['department'] ?? null);
-
-        return view('ecom_tracker.dashboard', compact('data', 'dashboard', 'filterOptions'));
+        return [
+            'period' => $period,
+            'range' => $range,
+            'filters' => $filters,
+            'filterQuery' => $filterQuery,
+            'data' => $data,
+        ];
     }
 
     public function sync(Request $request, TrackerDashboardSyncService $syncService): JsonResponse

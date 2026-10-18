@@ -160,6 +160,14 @@
                         </p>
                     @endif
                 </div>
+                @if ($productTotals['product_count'] > count($products))
+                    <div class="etd-panel-head-actions etd-print-hide">
+                        @include('ecom_tracker.partials.view-details-button', [
+                            'detailUrl' => $data['productsViewAllUrl'],
+                            'viewLabel' => 'View all',
+                        ])
+                    </div>
+                @endif
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
                 @include('ecom_tracker.partials.product-performance-table', [

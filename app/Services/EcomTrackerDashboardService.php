@@ -780,13 +780,13 @@ class EcomTrackerDashboardService
      * @param  array<string, mixed>  $sessionFilters
      * @return array{rows: list<array<string, mixed>>, totals: array{views: int, product_count: int}}
      */
-    public function products(Carbon $from, Carbon $to, string $period, array $sessionFilters = []): array
+    public function products(Carbon $from, Carbon $to, string $period, array $sessionFilters = [], ?int $limit = self::PRODUCT_LIMIT): array
     {
         $fromDate = $from->toDateString();
         $toDate = $to->toDateString();
 
         if (EcomActivityListService::hasActiveFilters($sessionFilters)) {
-            return $this->productsWithSessionFilters($from, $to, $period, $sessionFilters);
+            return $this->productsWithSessionFilters($from, $to, $period, $sessionFilters, $limit);
         }
 
         $aggregated = DB::table('tracking_daily_products')
@@ -814,38 +814,87 @@ class EcomTrackerDashboardService
             ];
         });
 
-        $top = $all
-            ->sortBy([
-                ['qty', 'desc'],
-                ['proceed_checkouts', 'desc'],
-                ['adds', 'desc'],
-                ['views', 'desc'],
-                ['revenue', 'desc'],
-            ])
-            ->take(self::PRODUCT_LIMIT);
+        return $this->packageProductRows($all, $limit, $from, $to, $period, []);
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $all
+     * @return array{rows: list<array<string, mixed>>, totals: array{views: int, product_count: int}}
+     */
+    private function packageProductRows(
+        Collection $all,
+        ?int $limit,
+        Carbon $from,
+        Carbon $to,
+        string $period,
+        array $sessionFilters,
+    ): array {
+        $range = ['from' => $from, 'to' => $to, 'period' => $period];
+        $codes = $all->pluck('code')->unique()->values()->all();
+
+        $viewSessions = $this->activityList->productViewSessionsByCode($range, $sessionFilters, $codes);
+
+        $all = $all->map(function (array $row) use ($viewSessions) {
+            $code = (string) $row['code'];
+
+            return [
+                ...$row,
+                'views' => (int) ($viewSessions[$code] ?? 0),
+            ];
+        });
+
+        $sorted = $this->sortProductRows($all);
+        $visible = $limit === null ? $sorted : $sorted->take($limit);
 
         $titles = DB::table('tracking_product')
-            ->whereIn('code', $top->pluck('code')->all())
+            ->whereIn('code', $visible->pluck('code')->all())
             ->pluck('title', 'code');
 
-        $maxRevenue = max(1.0, (float) $top->max('revenue'));
+        $maxRevenue = max(1.0, (float) $visible->max('revenue'));
+
+        $stepUnits = $this->activityList->productFunnelStepUnitsByCode(
+            $range,
+            $sessionFilters,
+            $codes,
+        );
 
         return [
-            'rows' => $top->map(fn (array $row) => [
-                'code' => $row['code'],
-                'name' => (string) ($titles[$row['code']] ?? $row['code']),
-                'views' => $row['views'],
-                'adds' => $row['adds'],
-                'proceed_checkouts' => $row['proceed_checkouts'],
-                'qty' => $row['qty'],
-                'revenue' => $row['revenue'],
-                'revenue_bar_percent' => (int) round($row['revenue'] / $maxRevenue * 100),
-            ])->values()->all(),
+            'rows' => $visible->map(function (array $row) use ($titles, $maxRevenue, $stepUnits) {
+                $code = $row['code'];
+                $steps = $stepUnits[$code] ?? [];
+
+                return [
+                    'code' => $code,
+                    'name' => (string) ($titles[$code] ?? $code),
+                    'views' => (int) $row['views'],
+                    'add_to_cart' => (int) ($steps['add_to_cart'] ?? 0),
+                    'begin_checkout' => (int) ($steps['begin_checkout'] ?? 0),
+                    'proceed_checkout' => (int) ($steps['proceed_checkout'] ?? 0),
+                    'paid' => (int) ($steps['paid'] ?? 0),
+                    'revenue' => $row['revenue'],
+                    'revenue_bar_percent' => (int) round($row['revenue'] / $maxRevenue * 100),
+                ];
+            })->values()->all(),
             'totals' => [
                 'views' => (int) $all->sum('views'),
                 'product_count' => $all->count(),
             ],
         ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $all
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sortProductRows(Collection $all): Collection
+    {
+        return $all
+            ->sortBy([
+                ['qty', 'desc'],
+                ['revenue', 'desc'],
+                ['views', 'desc'],
+            ])
+            ->values();
     }
 
     /**
@@ -955,7 +1004,7 @@ class EcomTrackerDashboardService
      * @param  array<string, mixed>  $sessionFilters
      * @return array{rows: list<array<string, mixed>>, totals: array{views: int, product_count: int}}
      */
-    private function productsWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
+    private function productsWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters, ?int $limit = self::PRODUCT_LIMIT): array
     {
         $ratios = $this->sessionFilterRatiosByDate($from, $to, $period, $sessionFilters);
         $dailyRows = DB::table('tracking_daily_products')
@@ -984,38 +1033,8 @@ class EcomTrackerDashboardService
         }
 
         $all = collect($byCode)->values();
-        $top = $all
-            ->sortBy([
-                ['qty', 'desc'],
-                ['proceed_checkouts', 'desc'],
-                ['adds', 'desc'],
-                ['views', 'desc'],
-                ['revenue', 'desc'],
-            ])
-            ->take(self::PRODUCT_LIMIT);
 
-        $titles = DB::table('tracking_product')
-            ->whereIn('code', $top->pluck('code')->all())
-            ->pluck('title', 'code');
-
-        $maxRevenue = max(1.0, (float) $top->max('revenue'));
-
-        return [
-            'rows' => $top->map(fn (array $row) => [
-                'code' => $row['code'],
-                'name' => (string) ($titles[$row['code']] ?? $row['code']),
-                'views' => $row['views'],
-                'adds' => $row['adds'],
-                'proceed_checkouts' => $row['proceed_checkouts'],
-                'qty' => $row['qty'],
-                'revenue' => $row['revenue'],
-                'revenue_bar_percent' => (int) round($row['revenue'] / $maxRevenue * 100),
-            ])->values()->all(),
-            'totals' => [
-                'views' => (int) $all->sum('views'),
-                'product_count' => $all->count(),
-            ],
-        ];
+        return $this->packageProductRows($all, $limit, $from, $to, $period, $sessionFilters);
     }
 
     /**

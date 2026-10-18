@@ -52,6 +52,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
         Route::post('{export}/dismiss', 'cancel')->name('dismiss');
     });
     Route::get('ecom-tracker/dashboard', [EcomTrackerDashboardController::class, 'index'])->name('ecom-tracker.dashboard');
+    Route::get('ecom-tracker/dashboard/products', [EcomTrackerDashboardController::class, 'products'])->name('ecom-tracker.dashboard.products');
     Route::post('ecom-tracker/dashboard/sync', [EcomTrackerDashboardController::class, 'sync'])->name('ecom-tracker.dashboard.sync');
     Route::get('ecom-tracker/dashboard/compare', [EcomTrackerDashboardCompareController::class, 'index'])->name('ecom-tracker.dashboard.compare');
 
