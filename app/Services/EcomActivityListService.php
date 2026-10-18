@@ -1767,7 +1767,6 @@ class EcomActivityListService
                 'sd.utm_medium as session_touch_utm_medium',
                 'tts.name as traffic_source_name',
                 'tts.medium as traffic_source_medium',
-                'aeu.country as activity_country',
                 'bc.id as bot_context_id',
                 'bc.client_ip as bot_client_ip',
                 'bc.user_agent as bot_user_agent',
@@ -1795,7 +1794,7 @@ class EcomActivityListService
             $classification = $isBot ? 'bot' : 'human';
             $reason = $row->bot_reason;
         }
-        $countryRaw = $row->bot_ip_country ?? $row->activity_country ?? null;
+        $countryRaw = $row->bot_ip_country ?? null;
         $countryCode = filled($countryRaw) ? strtoupper((string) $countryRaw) : null;
         $help = $classification === 'unclassified'
             ? VisitorClassificationLabels::unclassifiedHelp()

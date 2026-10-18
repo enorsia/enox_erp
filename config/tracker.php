@@ -4,6 +4,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tracking database (separate from main ERP DB)
+    |--------------------------------------------------------------------------
+    |
+    | All activity_ecom_* and tracking_* tables — migrate --database=tracking --path=database/migrations/tracking
+    */
+    'database_connection' => env('TRACKING_DB_CONNECTION', 'tracking'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Ecom Tracker (admin UI + permissions)
     |--------------------------------------------------------------------------
     */

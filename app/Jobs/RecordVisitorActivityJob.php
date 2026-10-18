@@ -112,9 +112,6 @@ class RecordVisitorActivityJob implements ShouldQueue
             ['session_id' => $this->sessionId],
             [
                 'visitor_id' => $this->visitorId,
-                'ip' => $this->context['ip'] ?? null,
-                'user_agent' => $this->context['user_agent'] ?? null,
-                'country' => $this->context['country'] ?? null,
                 'device_type' => $parsed['device_type'],
                 'browser' => $parsed['browser'],
                 'os' => $parsed['os'],

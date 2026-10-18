@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\CheckoutPayloadTotals;
+use App\Support\CommercePricingExtractor;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Support\EcomTrackerLogger;
@@ -252,16 +253,10 @@ class TrackIngestService
         $existing = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
 
         $attributes = [
-            'ip' => $clientContext['client_ip'] ?? $request->ip(),
-            'user_agent' => $userAgent,
             'device_type' => $parsed['device_type'],
             'browser' => $parsed['browser'],
             'os' => $parsed['os'],
         ];
-
-        if ($clientContext !== null && ! empty($clientContext['ip_country'])) {
-            $attributes['country'] = $clientContext['ip_country'];
-        }
 
         $attributes = array_merge($attributes, $this->sessionIdentityUpdates($sessionData, $existing));
 
@@ -484,7 +479,7 @@ class TrackIngestService
             }
         }
 
-        return $row;
+        return CommercePricingExtractor::applyScalarsToActionRow($actionType, $row);
     }
 
     /**
@@ -587,6 +582,46 @@ class TrackIngestService
         }
 
         $this->syncSessionCustomerInfo($sessionId, $customer, $event['created_at'] ?? null);
+        $this->syncSessionPaymentRollups($sessionId, $payload, $event['created_at'] ?? null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function syncSessionPaymentRollups(string $sessionId, array $payload, mixed $eventCreatedAt = null): void
+    {
+        $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
+
+        if ($session === null) {
+            return;
+        }
+
+        $amount = CheckoutPayloadTotals::grandTotal($payload);
+
+        if ($amount === null && is_numeric($payload['amount_paid'] ?? null)) {
+            $amount = round((float) $payload['amount_paid'], 2);
+        }
+
+        $updates = [];
+
+        if ($amount !== null && $amount > 0) {
+            $currentMax = $session->max_order_value !== null ? (float) $session->max_order_value : 0.0;
+
+            if ($amount > $currentMax) {
+                $updates['max_order_value'] = $amount;
+            }
+        }
+
+        if ($session->first_payment_at === null) {
+            $updates['first_payment_at'] = TrackerTime::formatUtc($eventCreatedAt ?? TrackerTime::nowUtc());
+        }
+
+        if ($updates === []) {
+            return;
+        }
+
+        $updates['updated_at'] = TrackerTime::formatUtc(TrackerTime::nowUtc());
+        $session->update($updates);
     }
 
     /**

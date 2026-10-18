@@ -642,10 +642,6 @@ class TrackerDataCleanupService
             'last_active_at' => TrackerTime::formatUtc($lastActiveAt),
             'session_duration_seconds' => $duration,
             'actions_count' => $actionsCount,
-            'has_add_to_cart' => $cluster->contains(fn (ActivityEcomUser $s) => (bool) $s->has_add_to_cart),
-            'has_begin_checkout' => $cluster->contains(fn (ActivityEcomUser $s) => (bool) $s->has_begin_checkout),
-            'has_proceed_checkout' => $cluster->contains(fn (ActivityEcomUser $s) => (bool) $s->has_proceed_checkout),
-            'has_payment_success' => $cluster->contains(fn (ActivityEcomUser $s) => (bool) $s->has_payment_success),
             'is_logged_in' => $cluster->contains(fn (ActivityEcomUser $s) => (bool) $s->is_logged_in),
             'updated_at' => TrackerTime::formatUtc($lastActiveAt),
         ]);

@@ -438,9 +438,34 @@ class TrackerDashboardSyncService
     // ===== 2. Visitor / session =====
 
     /**
+     * IP / UA for tracking_session_details live on bot_context (not activity_ecom_user).
+     *
      * @param  array<string, mixed>  $sessionRow
-     * @param  Collection<int, object>  $actions
+     * @return array<string, mixed>
      */
+    private function enrichSessionRowWithBotContext(array $sessionRow): array
+    {
+        $sessionId = (string) ($sessionRow['session_id'] ?? '');
+
+        if ($sessionId === '') {
+            return $sessionRow;
+        }
+
+        $bot = DB::table('activity_ecom_user_bot_context')
+            ->where('session_id', $sessionId)
+            ->first(['client_ip', 'user_agent', 'ip_country']);
+
+        if ($bot === null) {
+            return $sessionRow;
+        }
+
+        $sessionRow['ip'] = $bot->client_ip;
+        $sessionRow['user_agent'] = $bot->user_agent;
+        $sessionRow['ip_country'] = $bot->ip_country;
+
+        return $sessionRow;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -458,6 +483,7 @@ class TrackerDashboardSyncService
         $applyActions = $actions->isNotEmpty() ? $actions : $allActions;
         $rebuildFromFullHistory = $actions->isEmpty() && $allActions->isNotEmpty();
 
+        $sessionRow = $this->enrichSessionRowWithBotContext($sessionRow);
         $sessionRow = $this->withCheckoutCustomer($sessionRow, $allActions);
         $sessionRow = $this->mergeFunnelIntoSessionRow($sessionRow, $allActions);
 
@@ -2811,11 +2837,6 @@ class TrackerDashboardSyncService
                 'is_sync' => ActivityEcomUser::SYNC_DONE,
                 'sync_at' => now(),
                 'sync_try' => 0,
-                'has_add_to_cart' => (int) ($sessionRow['has_add_to_cart'] ?? 0),
-                'has_begin_checkout' => (int) ($sessionRow['has_begin_checkout'] ?? 0),
-                'has_proceed_checkout' => (int) ($sessionRow['has_proceed_checkout'] ?? 0),
-                'has_payment_success' => (int) ($sessionRow['has_payment_success'] ?? 0),
-                'latest_funnel_stage' => $sessionRow['latest_funnel_stage'] ?? null,
             ]);
 
         if ($updated === 0) {

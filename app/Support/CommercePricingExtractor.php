@@ -6,6 +6,119 @@ use App\Exceptions\CommerceParseException;
 
 final class CommercePricingExtractor
 {
+    private const INGEST_JSON_COLUMNS = [
+        'add_to_cart' => 'add_to_cart',
+        'begin_checkout' => 'begin_checkout',
+        'proceed_checkout' => 'proceed_to_checkout',
+        'payment_success' => 'payment_success',
+    ];
+
+    /**
+     * Copy checkout JSON on an ingest action row into commerce scalar columns.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    public static function applyScalarsToActionRow(string $actionType, array $row): array
+    {
+        $payloadKey = self::INGEST_JSON_COLUMNS[$actionType] ?? null;
+
+        if ($payloadKey === null) {
+            return $row;
+        }
+
+        $payload = self::decodeIngestPayload($row[$payloadKey] ?? null);
+
+        if ($payload === null || $payload === []) {
+            return $row;
+        }
+
+        try {
+            $extracted = self::fromPayload($actionType, $payload);
+        } catch (CommerceParseException) {
+            return $row;
+        }
+
+        foreach ([
+            'commerce_total',
+            'commerce_subtotal',
+            'commerce_shipping',
+            'commerce_discount',
+            'coupon_code',
+            'discount_type',
+            'order_id',
+            'amount_paid',
+        ] as $column) {
+            if (! array_key_exists($column, $extracted) || $extracted[$column] === null) {
+                continue;
+            }
+
+            $row[$column] = $extracted[$column];
+        }
+
+        $counts = self::lineItemCounts($payload);
+
+        if ($counts['line_count'] > 0) {
+            $row['line_count'] = $counts['line_count'];
+        }
+
+        if ($counts['item_qty'] > 0) {
+            $row['item_qty'] = $counts['item_qty'];
+        }
+
+        return $row;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{line_count: int, item_qty: int}
+     */
+    public static function lineItemCounts(array $payload): array
+    {
+        $items = $payload['items'] ?? $payload['cart_items'] ?? null;
+
+        if (! is_array($items) || $items === []) {
+            $checkout = $payload['checkout_info'] ?? [];
+            $items = is_array($checkout) ? ($checkout['items'] ?? []) : [];
+        }
+
+        if (! is_array($items) || $items === []) {
+            return ['line_count' => 0, 'item_qty' => 0];
+        }
+
+        $lineCount = 0;
+        $itemQty = 0;
+
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $lineCount++;
+            $itemQty += max(1, (int) ($item['qty'] ?? 1));
+        }
+
+        return ['line_count' => $lineCount, 'item_qty' => $itemQty];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function decodeIngestPayload(mixed $raw): ?array
+    {
+        if (is_array($raw)) {
+            return $raw;
+        }
+
+        if (! is_string($raw) || $raw === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
