@@ -1,12 +1,12 @@
 # Tracking schema (final)
 
-See migrations `2026_10_04_100001` … `2026_10_04_100012` and models `App\Models\Tracking*`.
+Models: `App\Models\Tracking*`.
 
-**Keep:** `activity_ecom_user_actions`
+**Keep on ingest path:** `activity_ecom_user`, `activity_ecom_user_actions`, `activity_ecom_user_bot_context` (see `database/migrations/tracking/`).
 
 ## Dedicated database (local / prod)
 
-Connection `tracking` (`TRACKING_DB_*` in `.env`). One migration per table in `database/migrations/tracking/` (squashed schema; same columns/indexes as before).
+Connection `tracking` (`TRACKING_DB_*` in `.env`). One migration per table in `database/migrations/tracking/`.
 
 ```bash
 php artisan migrate --database=tracking --path=database/migrations/tracking

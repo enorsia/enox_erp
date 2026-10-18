@@ -13,12 +13,13 @@ class PurgeTrackerData extends Command
     protected $signature = 'tracker:purge-data
                             {--dry-run : Show row counts per table without deleting}
                             {--force : Required to delete data (ignored for dry-run)}
+                            {--drop-tables : Drop tables (not just truncate) on the default database connection}
                             {--queues : Also remove pending tracker jobs from jobs/failed_jobs/job_batches}
                             {--redis : Flush tracker Redis keys (prefix from TRACKER_REDIS_PREFIX)}';
 
-    protected $description = 'Delete all ecom tracker ingest (activity_*) and dashboard (tracking_*) data for a clean restart.';
+    protected $description = 'Clear ecom tracker tables from the default DB (truncate, or --drop-tables to remove schema).';
 
-    /** @var list<string> */
+    /** @var list<string> Child tables first — same names as database/migrations/tracking */
     private const TABLES = [
         'tracking_order_details',
         'tracking_order_addresses',
@@ -36,9 +37,6 @@ class PurgeTrackerData extends Command
         'tracking_ctr_daily_summaries',
         'tracking_ctr_summaries',
         'activity_ecom_user_bot_context',
-        'activity_ecom_commerce_line_items',
-        'activity_ecom_orders',
-        'attribution_touch_log',
         'activity_ecom_user_actions',
         'activity_ecom_user',
         'tracking_daily_visitor',
@@ -56,22 +54,31 @@ class PurgeTrackerData extends Command
     {
         $dryRun = (bool) $this->option('dry-run');
 
+        $dropTables = (bool) $this->option('drop-tables');
+
         if (! $dryRun && ! $this->option('force')) {
             $this->error('This permanently deletes all tracker data. Re-run with --force (or use --dry-run first).');
 
             return self::FAILURE;
         }
 
-        $this->warn($dryRun ? 'Dry run: row counts only.' : 'Purging all tracker tables…');
+        if ($dropTables && $dryRun) {
+            $this->line('With --drop-tables, a live run would drop each table listed below.');
+        }
 
-        $counts = $this->purgeTables($dryRun);
+        $this->warn($dryRun
+            ? 'Dry run: row counts only.'
+            : ($dropTables ? 'Dropping tracker tables on the default database…' : 'Truncating tracker tables…'));
+
+        $counts = $this->purgeTables($dryRun, $dropTables);
         $total = array_sum($counts);
 
         foreach ($counts as $table => $count) {
             $this->line(sprintf('  %s: %d', $table, $count));
         }
 
-        $this->info(sprintf('Tables: %d, rows %s: %d', count($counts), $dryRun ? 'that would be removed' : 'removed', $total));
+        $rowLabel = $dryRun ? 'that would be removed' : ($dropTables ? 'removed before drop' : 'removed');
+        $this->info(sprintf('Tables: %d, rows %s: %d', count($counts), $rowLabel, $total));
 
         if ($dryRun) {
             return self::SUCCESS;
@@ -87,7 +94,11 @@ class PurgeTrackerData extends Command
             $this->purgeRedis();
         }
 
-        $this->info('Tracker purge complete. Ingest and sync will repopulate from new storefront traffic.');
+        if ($dropTables) {
+            $this->info('Tracker tables dropped on the default database. Recreate on tracking DB: php artisan migrate --database=tracking --path=database/migrations/tracking');
+        } else {
+            $this->info('Tracker purge complete. Ingest and sync will repopulate from new storefront traffic.');
+        }
 
         return self::SUCCESS;
     }
@@ -95,7 +106,7 @@ class PurgeTrackerData extends Command
     /**
      * @return array<string, int>
      */
-    private function purgeTables(bool $dryRun): array
+    private function purgeTables(bool $dryRun, bool $dropTables): array
     {
         $counts = [];
 
@@ -113,7 +124,7 @@ class PurgeTrackerData extends Command
 
         $driver = Schema::getConnection()->getDriverName();
 
-        // TRUNCATE on MySQL implicitly commits; do not wrap in DB::transaction().
+        // TRUNCATE/DROP on MySQL implicitly commits; do not wrap in DB::transaction().
         if ($driver === 'mysql') {
             DB::statement('SET FOREIGN_KEY_CHECKS=0');
         }
@@ -121,6 +132,12 @@ class PurgeTrackerData extends Command
         try {
             foreach (self::TABLES as $table) {
                 if (! Schema::hasTable($table)) {
+                    continue;
+                }
+
+                if ($dropTables) {
+                    Schema::drop($table);
+
                     continue;
                 }
 
