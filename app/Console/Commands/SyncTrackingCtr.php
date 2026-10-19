@@ -33,7 +33,10 @@ class SyncTrackingCtr extends Command
             $connection,
             $queue,
         ));
-        $this->line(sprintf('`jobs` table: %d row(s) waiting.', DB::table('jobs')->count()));
+        $this->line(sprintf(
+            '`jobs` table: %d row(s) waiting.',
+            DB::connection($connection)->table('jobs')->count(),
+        ));
         $this->line('Process with: php artisan queue:work ' . $connection . ' --queue=' . $queue);
 
         return self::SUCCESS;

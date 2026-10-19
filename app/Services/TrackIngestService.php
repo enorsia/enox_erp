@@ -1058,7 +1058,7 @@ class TrackIngestService
 
     private function isCatalogSkuActionType(string $actionType): bool
     {
-        return in_array($actionType, ['grid_impression', 'product_click'], true);
+        return in_array($actionType, ['grid_impression', 'product_click', 'grid_click'], true);
     }
 
     /**

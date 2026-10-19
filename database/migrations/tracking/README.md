@@ -1,32 +1,60 @@
 # Tracking connection migrations
 
-```bash
-php artisan migrate --database=tracking --path=database/migrations/tracking
-php artisan migrate:fresh --database=tracking --path=database/migrations/tracking
+## Server cutover
+
+1. Stop queue workers.
+2. `.env`:
+
+```env
+TRACKING_DB_HOST=...
+TRACKING_DB_DATABASE=...
+TRACKING_DB_USERNAME=...
+TRACKING_DB_PASSWORD=...
+TRACKER_DATABASE_QUEUE_CONNECTION=tracking_database
 ```
 
-Includes Laravel queue tables (`jobs`, `failed_jobs`) for dashboard sync and CTR workers:
+3. Cutover:
+
+**Load new `.env`:**
+
+```bash
+php artisan config:clear
+```
+
+**Clean legacy tracker on ERP DB + queues + Redis:**
+
+```bash
+php artisan tracker:purge-data --force --drop-tables --queues --redis
+```
+
+**Tracking DB migrations:**
+
+```bash
+php artisan migrate --database=tracking --path=database/migrations/tracking
+```
+
+**Cache config (prod):**
+
+```bash
+php artisan config:cache
+```
+
+**Sync ingest → dashboard tables:**
+
+```bash
+php artisan tracker:sync-dashboard
+```
+
+4. Workers:
+
+**Dashboard sync + CTR** (tracking MySQL `jobs`):
 
 ```bash
 php artisan queue:work tracking_database --queue=default --sleep=3 --timeout=0 --memory=0
 ```
 
-New files: `php artisan make:migration ... --path=database/migrations/tracking` and extend `App\Database\Migrations\TrackingMigration`.
+**Shop ingest** (Redis):
 
-## Column order convention
-
-Within each `Schema::create` callback, define columns in this order (indexes/uniques/foreign keys after all columns):
-
-1. `id`
-2. Foreign keys (`foreignId` / `->constrained`), alphabetical by column name when multiple
-3. Natural / business keys (`session_id`, `order_number`, `visitor_id`, …)
-4. Identity (`name`, `email`, `phone`, `user_*`)
-5. Catalog dimensions (`code`, `name`, `sku`, category/product/color fields)
-6. Money (`decimal` fields, alphabetical)
-7. URLs and long text (`page_url`, `referer`, `landing_page`, …)
-8. JSON payloads
-9. Event / metric dates (`metric_date`, `ordered_at`, `captured_at`, `start_time`, `end_time`)
-10. Counters and durations
-11. Booleans, enums, flags (`is_*`, `has_*`, `type`, funnel stage)
-12. `timestamps()` (or `created_at` only where the table is append-only)
-13. Ingest sync columns (`is_sync`, `sync_try`, `sync_at`) on `activity_ecom_*` tables
+```bash
+php artisan queue:work tracker --queue=tracker --sleep=3 --timeout=0 --memory=0
+```
