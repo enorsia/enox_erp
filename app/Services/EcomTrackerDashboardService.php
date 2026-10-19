@@ -871,8 +871,11 @@ class EcomTrackerDashboardService
         return $all
             ->sortBy([
                 ['qty', 'desc'],
-                ['revenue', 'desc'],
+                ['proceed_checkouts', 'desc'],
+                ['begin_checkouts', 'desc'],
+                ['adds', 'desc'],
                 ['views', 'desc'],
+                ['revenue', 'desc'],
             ])
             ->values();
     }
