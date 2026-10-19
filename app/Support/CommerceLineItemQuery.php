@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Support\TrackerDatabase;
+
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -34,7 +36,7 @@ final class CommerceLineItemQuery
         array $funnelStages = [],
         ?string $period = null,
     ): Collection {
-        $query = DB::table('activity_ecom_commerce_line_items as li')
+        $query = TrackerDatabase::table('activity_ecom_commerce_line_items as li')
             ->select('li.session_id')
             ->whereBetween('li.staged_at', TrackerTime::storageRange($from, $to))
             ->distinct();
@@ -173,7 +175,7 @@ final class CommerceLineItemQuery
         Carbon $to,
         ?string $period = null,
     ): Collection {
-        $query = DB::table('activity_ecom_commerce_line_items as li')
+        $query = TrackerDatabase::table('activity_ecom_commerce_line_items as li')
             ->select('li.department_name', 'li.category_name')
             ->join('activity_ecom_user as s', 's.session_id', '=', 'li.session_id')
             ->whereBetween('li.staged_at', TrackerTime::storageRange($from, $to))
@@ -260,7 +262,7 @@ final class CommerceLineItemQuery
         $found = [];
 
         foreach ($sessionIds->chunk(1000) as $chunk) {
-            $query = DB::table('activity_ecom_commerce_line_items')
+            $query = TrackerDatabase::table('activity_ecom_commerce_line_items')
                 ->select('session_id')
                 ->whereIn('session_id', $chunk->values()->all())
                 ->where('funnel_stage', $funnelStage)

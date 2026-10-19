@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\TrackerDatabase;
+
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\ActivityEcomUserBotContext;
@@ -12,6 +14,10 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Optional maintenance that may DELETE ingest rows (duplicate payments, ghost sessions).
+ * Not used by dashboard sync or queue jobs — only via tracker:cleanup-historical-data (--force).
+ */
 class TrackerDataCleanupService
 {
     /**
@@ -406,13 +412,13 @@ class TrackerDataCleanupService
                             $actionsReassigned += $moved;
 
                             if (Schema::hasTable('activity_ecom_orders')) {
-                                DB::table('activity_ecom_orders')
+                                TrackerDatabase::table('activity_ecom_orders')
                                     ->where('session_id', $fromId)
                                     ->update(['session_id' => $keeperId]);
                             }
 
                             if (Schema::hasTable('activity_ecom_commerce_line_items')) {
-                                DB::table('activity_ecom_commerce_line_items')
+                                TrackerDatabase::table('activity_ecom_commerce_line_items')
                                     ->where('session_id', $fromId)
                                     ->update(['session_id' => $keeperId]);
                             }
@@ -642,10 +648,6 @@ class TrackerDataCleanupService
             'last_active_at' => TrackerTime::formatUtc($lastActiveAt),
             'session_duration_seconds' => $duration,
             'actions_count' => $actionsCount,
-            'has_add_to_cart' => $cluster->contains(fn (ActivityEcomUser $s) => (bool) $s->has_add_to_cart),
-            'has_begin_checkout' => $cluster->contains(fn (ActivityEcomUser $s) => (bool) $s->has_begin_checkout),
-            'has_proceed_checkout' => $cluster->contains(fn (ActivityEcomUser $s) => (bool) $s->has_proceed_checkout),
-            'has_payment_success' => $cluster->contains(fn (ActivityEcomUser $s) => (bool) $s->has_payment_success),
             'is_logged_in' => $cluster->contains(fn (ActivityEcomUser $s) => (bool) $s->is_logged_in),
             'updated_at' => TrackerTime::formatUtc($lastActiveAt),
         ]);
@@ -702,7 +704,7 @@ class TrackerDataCleanupService
             if (! $dryRun) {
                 $idList = $ids->implode(',');
 
-                DB::statement(<<<SQL
+                TrackerDatabase::connection()->statement(<<<SQL
 UPDATE activity_ecom_user u
 SET actions_count = (
     SELECT COUNT(*)

@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Support\TrackerDatabase;
+
 use App\Models\ActivityEcomUserAction;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -126,7 +128,7 @@ final class CommerceReadSupport
 
         foreach (array_chunk($eventIds, 1000) as $chunk) {
             $rows = $rows->concat(
-                DB::table('activity_ecom_commerce_line_items')
+                TrackerDatabase::table('activity_ecom_commerce_line_items')
                     ->whereIn('event_id', $chunk)
                     ->orderBy('line_no')
                     ->get()
@@ -141,7 +143,7 @@ final class CommerceReadSupport
      */
     public static function linesForEvent(string $eventId): Collection
     {
-        return DB::table('activity_ecom_commerce_line_items')
+        return TrackerDatabase::table('activity_ecom_commerce_line_items')
             ->where('event_id', $eventId)
             ->orderBy('line_no')
             ->get();
@@ -149,7 +151,7 @@ final class CommerceReadSupport
 
     public static function orderForEvent(string $eventId): ?object
     {
-        return DB::table('activity_ecom_orders')->where('event_id', $eventId)->first();
+        return TrackerDatabase::table('activity_ecom_orders')->where('event_id', $eventId)->first();
     }
 
     /**
@@ -323,7 +325,7 @@ final class CommerceReadSupport
         }
 
         $range = TrackerTime::storageRange($from, $to);
-        $bySession = DB::table('activity_ecom_orders')
+        $bySession = TrackerDatabase::table('activity_ecom_orders')
             ->selectRaw('session_id, SUM(amount_paid) as order_value, SUM(COALESCE(item_qty, 0)) as order_qty')
             ->whereIn('session_id', $sessionIds->all())
             ->whereBetween('ordered_at', $range)
@@ -331,7 +333,7 @@ final class CommerceReadSupport
             ->get()
             ->keyBy('session_id');
 
-        $actionRows = DB::table('activity_ecom_user_actions')
+        $actionRows = TrackerDatabase::table('activity_ecom_user_actions')
             ->select(self::scalarActionColumns())
             ->whereIn('session_id', $sessionIds->all())
             ->where('action_type', 'payment_success')
@@ -412,7 +414,7 @@ final class CommerceReadSupport
         $rows = collect();
 
         foreach ($sessionIds->chunk(1000) as $chunk) {
-            $query = DB::table('activity_ecom_commerce_line_items')
+            $query = TrackerDatabase::table('activity_ecom_commerce_line_items')
                 ->whereIn('session_id', $chunk->values()->all())
                 ->whereBetween('staged_at', TrackerTime::storageRange($from, $to));
 
@@ -445,7 +447,7 @@ final class CommerceReadSupport
 
         foreach ($sessionIds->chunk(1000) as $chunk) {
             $rows = $rows->concat(
-                DB::table('activity_ecom_orders')
+                TrackerDatabase::table('activity_ecom_orders')
                     ->whereIn('session_id', $chunk->values()->all())
                     ->whereBetween('ordered_at', TrackerTime::storageRange($from, $to))
                     ->orderBy('ordered_at')
@@ -470,7 +472,7 @@ final class CommerceReadSupport
         $counts = [];
 
         foreach ($sessionIds->chunk(1000) as $chunk) {
-            $rows = DB::table('activity_ecom_user_actions')
+            $rows = TrackerDatabase::table('activity_ecom_user_actions')
                 ->selectRaw('session_id, COUNT(*) as actions_count')
                 ->whereIn('session_id', $chunk->values()->all())
                 ->groupBy('session_id')

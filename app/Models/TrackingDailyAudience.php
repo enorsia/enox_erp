@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 
 class TrackingDailyAudience extends Model
 {
+    use UsesTrackingDatabase;
+
     public const TYPE_DEVICE = 1;
 
     public const TYPE_BROWSER = 2;

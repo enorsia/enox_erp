@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 
 class TrackingDailyDuration extends Model
 {
+    use UsesTrackingDatabase;
+
     /** bucket code => duration range in seconds; max is inclusive, null = no upper limit */
     public const BUCKETS = [
         1 => ['label' => '0–1 min', 'min' => 0, 'max' => 60],

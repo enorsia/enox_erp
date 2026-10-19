@@ -2,19 +2,21 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 
 class TrackingCtrDailySummary extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $table = 'tracking_ctr_daily_summaries';
 
     protected $fillable = [
         'metric_date',
         'department_id',
         'category_id',
-        'product_id',
         'product_code',
-        'sku',
         'total_click',
         'total_impression',
         'ctr',
@@ -27,9 +29,7 @@ class TrackingCtrDailySummary extends Model
             'metric_date' => 'date',
             'department_id' => 'integer',
             'category_id' => 'integer',
-            'product_id' => 'integer',
             'product_code' => 'string',
-            'sku' => 'string',
             'total_click' => 'integer',
             'total_impression' => 'integer',
             'ctr' => 'decimal:6',

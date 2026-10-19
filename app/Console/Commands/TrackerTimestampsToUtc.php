@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Support\TrackerDatabase;
+
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -28,7 +30,7 @@ class TrackerTimestampsToUtc extends Command
         $total = 0;
 
         foreach ($this->targets as $target) {
-            $rows = DB::table($target['table'])->get();
+            $rows = TrackerDatabase::table($target['table'])->get();
             $this->info(sprintf('Scanning %s (%d rows)', $target['table'], $rows->count()));
 
             foreach ($rows as $row) {
@@ -61,7 +63,7 @@ class TrackerTimestampsToUtc extends Command
                 ));
 
                 if (! $dryRun) {
-                    DB::table($target['table'])
+                    TrackerDatabase::table($target['table'])
                         ->where($this->primaryKey($target['table']), $this->primaryValue($row, $target['table']))
                         ->update($updates);
                 }

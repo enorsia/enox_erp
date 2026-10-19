@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
@@ -12,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ActivityEcomUser extends Model
 {
+    use UsesTrackingDatabase;
+
     public const SYNC_PENDING = 0;
 
     public const SYNC_DONE = 1;
@@ -27,13 +31,9 @@ class ActivityEcomUser extends Model
         'user_name',
         'user_email',
         'user_phone',
-        'ip',
-        'user_agent',
         'device_type',
         'browser',
         'os',
-        'country',
-        'city',
         'utm_source',
         'utm_medium',
         'utm_campaign',
@@ -46,14 +46,8 @@ class ActivityEcomUser extends Model
         'list_traffic_utm_source',
         'list_traffic_utm_medium',
         'is_logged_in',
-        'has_add_to_cart',
-        'has_begin_checkout',
-        'has_proceed_checkout',
-        'has_payment_success',
         'max_order_value',
         'first_payment_at',
-        'latest_funnel_stage',
-        'is_bot',
         'last_active_at',
         'session_duration_seconds',
         'actions_count',
@@ -68,13 +62,8 @@ class ActivityEcomUser extends Model
     {
         return [
             'is_logged_in' => 'boolean',
-            'has_add_to_cart' => 'boolean',
-            'has_begin_checkout' => 'boolean',
-            'has_proceed_checkout' => 'boolean',
-            'has_payment_success' => 'boolean',
             'max_order_value' => 'decimal:2',
             'first_payment_at' => 'datetime',
-            'is_bot' => 'boolean',
             'last_active_at' => 'datetime',
             'session_duration_seconds' => 'integer',
             'actions_count' => 'integer',
@@ -217,12 +206,12 @@ class ActivityEcomUser extends Model
             return $this->botContext->marketer_country_label;
         }
 
-        return VisitorClassificationLabels::countryLabel($this->country);
+        return VisitorClassificationLabels::countryLabel($this->botContext?->ip_country);
     }
 
     public function getMarketerCountryCodeAttribute(): ?string
     {
-        $code = $this->botContext?->ip_country ?? $this->country;
+        $code = $this->botContext?->ip_country;
 
         if (! filled($code)) {
             return null;

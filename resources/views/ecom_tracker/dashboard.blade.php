@@ -48,7 +48,7 @@
                     @endif
                     <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
                         @foreach (['24h' => 'Today', 'yesterday' => 'Yesterday', '7d' => '7d', '30d' => '30d'] as $periodKey => $periodLabel)
-                            <a href="{{ route('admin.ecom-tracker.dashboard', ['period' => $periodKey]) }}" class="etd-segmented-btn {{ $data['period'] === $periodKey ? 'active' : '' }} no-underline">{{ $periodLabel }}</a>
+                            <a href="{{ ($data['periodPresetUrl'] ?? fn (string $key) => route('admin.ecom-tracker.dashboard', ['period' => $key]))($periodKey) }}" class="etd-segmented-btn {{ $data['period'] === $periodKey ? 'active' : '' }} no-underline">{{ $periodLabel }}</a>
                         @endforeach
                         <button type="button" class="etd-segmented-btn js-ecom-dashboard-period-custom-toggle {{ $data['period'] === 'custom' ? 'active' : '' }}" aria-label="Custom date range">Custom</button>
                     </div>
@@ -160,6 +160,14 @@
                         </p>
                     @endif
                 </div>
+                @if ($productTotals['product_count'] > count($products))
+                    <div class="etd-panel-head-actions etd-print-hide">
+                        @include('ecom_tracker.partials.view-details-button', [
+                            'detailUrl' => $data['productsViewAllUrl'],
+                            'viewLabel' => 'View all',
+                        ])
+                    </div>
+                @endif
             </div>
             <div class="etd-table-scroll etd-table-scroll--fixed">
                 @include('ecom_tracker.partials.product-performance-table', [

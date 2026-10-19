@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Services\EcomActivityListService;
+use App\Services\TrackerDashboardSyncService;
 use App\Support\EcomActivityTableFocus;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerActionSequence;
+use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -16,7 +18,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class EcomActivityController extends Controller
@@ -71,9 +72,10 @@ class EcomActivityController extends Controller
         $data['backUrl'] = EcomActivityListService::backUrl($request, route('admin.ecom-tracker.dashboard'));
         $data['resetUrl'] = route('admin.ecom-activity.index', array_filter(['back' => $request->query('back')]));
 
-        $sortBy = EcomActivityListService::normalizeSort($request->query('sort_by'));
-        $sortOptions = EcomActivityListService::SORT_OPTIONS;
         $filters = EcomActivityListService::filtersFromRequest($request);
+        $productDrillSort = trim((string) ($filters['product_code'] ?? '')) !== '';
+        $sortBy = EcomActivityListService::normalizeSort($request->query('sort_by'), $productDrillSort);
+        $sortOptions = EcomActivityListService::sortOptions($productDrillSort);
 
         $filterOptions = $activityList->filterOptions($filters['department']);
 
@@ -83,6 +85,7 @@ class EcomActivityController extends Controller
 
         $focusColumns = EcomActivityTableFocus::columnsForRequest($request);
         $showCatalogFilterColumn = EcomActivityTableFocus::showCatalogFilterColumn($request);
+        $productDrillTableLayout = EcomActivityTableFocus::usesProductDrillTableLayout($request);
 
         $sessions = $activityList->paginate(
             $range,
@@ -109,6 +112,7 @@ class EcomActivityController extends Controller
             'activityExport',
             'focusColumns',
             'showCatalogFilterColumn',
+            'productDrillTableLayout',
         ));
     }
 
@@ -137,11 +141,13 @@ class EcomActivityController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        $fullTimeline = $this->buildTimeline(
-            $actions->filter(
-                fn (ActivityEcomUserAction $action) => $action->action_type !== 'product_click',
-            ),
-        );
+        $actions = TrackerActionSequence::filterForSessionTimeline($actions);
+
+        app(TrackerDashboardSyncService::class)->reconcileActionCountsForSessions([$session]);
+
+        $activityUser->refresh();
+
+        $fullTimeline = $this->buildTimeline($actions);
         $latestActionAt = $actions
             ->map(fn (ActivityEcomUserAction $action) => TrackerTime::toUtc($action->created_at))
             ->filter()
@@ -184,6 +190,18 @@ class EcomActivityController extends Controller
         $trafficAttribution = SessionTrafficAttribution::displayFields($activityUser, $actions);
         $sessionTrafficTouches = SessionTrafficAttribution::touchesForSessionDisplay($activityUser, $actions);
         $conversionAttribution = SessionTrafficAttribution::conversionOrMarketingDisplayFields($activityUser);
+        $sessionPaymentOrders = $actions
+            ->where('action_type', 'payment_success')
+            ->sortBy([
+                ['created_at', 'asc'],
+                ['id', 'asc'],
+            ])
+            ->values()
+            ->map(fn (ActivityEcomUserAction $action) => [
+                'order_id' => trim((string) ($action->order_id ?? '')),
+                'amount_paid' => $action->amount_paid,
+                'created_at' => $action->created_at,
+            ]);
         $landingPage = filled($activityUser->landing_page)
             ? $activityUser->landing_page
             : $actions
@@ -206,6 +224,7 @@ class EcomActivityController extends Controller
             'conversionAttribution' => $conversionAttribution,
             'landingPage' => $landingPage,
             'latestActionAt' => $latestActionAt,
+            'sessionPaymentOrders' => $sessionPaymentOrders,
             'relatedVisitorSessions' => $this->relatedVisitorSessions($activityUser),
             'badgeColors' => self::BADGE_COLORS,
         ]);
@@ -241,6 +260,12 @@ class EcomActivityController extends Controller
         while ($index < $sorted->count()) {
             /** @var ActivityEcomUserAction $action */
             $action = $sorted[$index];
+
+            if (! TrackerActionSequence::isVisibleInSessionTimeline($action->action_type)) {
+                $index++;
+
+                continue;
+            }
 
             if ($action->action_type === 'grid_impression') {
                 $group = collect([$action]);
@@ -627,14 +652,14 @@ class EcomActivityController extends Controller
             );
         }
 
-        $mainVisitorId = DB::table('tracking_session as ts')
+        $mainVisitorId = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->where('ts.session_id', $session->session_id)
             ->value('dv.tracking_main_visitor_id');
 
         if ($mainVisitorId !== null && (int) $mainVisitorId > 0) {
             $sessionIds = $sessionIds->merge(
-                DB::table('tracking_session as ts')
+                TrackerDatabase::table('tracking_session as ts')
                     ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
                     ->where('dv.tracking_main_visitor_id', (int) $mainVisitorId)
                     ->pluck('ts.session_id'),

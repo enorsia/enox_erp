@@ -45,6 +45,18 @@ return [
             'after_commit' => false,
         ],
 
+        /*
+        | Tracker dashboard sync + CTR batches (jobs / job_batches on TRACKING_DB_*).
+        */
+        'tracking_database' => [
+            'driver' => 'database',
+            'connection' => env('TRACKING_QUEUE_DB_CONNECTION', env('TRACKING_DB_CONNECTION', 'tracking')),
+            'table' => env('TRACKING_QUEUE_TABLE', 'jobs'),
+            'queue' => env('DB_QUEUE', 'default'),
+            'retry_after' => (int) env('TRACKER_QUEUE_RETRY_AFTER', env('DB_QUEUE_RETRY_AFTER', 86400)),
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),

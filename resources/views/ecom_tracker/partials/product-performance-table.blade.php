@@ -3,42 +3,62 @@
     $productActivityLink = $productActivityLink ?? null;
     $showInlineCompareDelta = $showInlineCompareDelta ?? false;
     $compareMetricDeltas = $compareMetricDeltas ?? [];
+    $funnelColumns = [
+        [
+            'key' => 'views',
+            'label' => 'View',
+            'tip' => 'Sessions in this period with a catalog click on this product (product_click). Once per session per product.',
+        ],
+        [
+            'key' => 'add_to_cart',
+            'label' => 'Add',
+            'tip' => 'Total units of this style added to cart: for each session, sum of quantities on every add click for this style in the period, then summed across sessions.',
+        ],
+        [
+            'key' => 'begin_checkout',
+            'label' => 'Begin',
+            'tip' => 'Total units of this style that moved into checkout: for each session, quantity in the cart when checkout began (once per session; last begin in the period if repeated), summed across sessions.',
+        ],
+        [
+            'key' => 'proceed_checkout',
+            'label' => 'Proceed',
+            'tip' => 'Total units at the proceed-to-payment step — same per-session quantity rules as Begin, summed across sessions.',
+        ],
+        [
+            'key' => 'paid',
+            'label' => 'Paid',
+            'tip' => 'Total units sold in the period (sold_qty on tracking_daily_products, summed across days after dashboard sync).',
+        ],
+    ];
+    $metricColspan = count($funnelColumns) + 2;
 @endphp
 
 <div @class(['etd-product-catalog', 'etd-product-catalog--compare-inline' => $showInlineCompareDelta])>
-    <table class="etd-table etd-table--product-catalog etd-table--performance-metrics w-full">
+    <table class="etd-table etd-table--product-catalog etd-table--performance-metrics etd-table--product-funnel w-full">
         <thead>
             <tr>
                 <th class="etd-col-product">Product</th>
-                <th class="etd-num etd-col-metric">Views</th>
-                <th class="etd-num etd-col-metric">
-                    @include('ecom_tracker.partials.column-header-with-tip', [
-                        'label' => 'Adds',
-                        'tip' => 'Add to cart',
-                        'align' => 'center',
-                    ])
-                </th>
-                <th class="etd-num etd-col-metric">
-                    @include('ecom_tracker.partials.column-header-with-tip', [
-                        'label' => 'Proceed',
-                        'tip' => 'Proceed to checkout',
-                        'align' => 'center',
-                    ])
-                </th>
-                <th class="etd-num etd-col-metric">
-                    @include('ecom_tracker.partials.column-header-with-tip', [
-                        'label' => 'Sold',
-                        'tip' => 'Sale item',
-                        'align' => 'center',
-                    ])
-                </th>
+                @foreach ($funnelColumns as $column)
+                    <th class="etd-num etd-col-metric">
+                        @include('ecom_tracker.partials.column-header-with-tip', [
+                            'label' => $column['label'],
+                            'tip' => $column['tip'],
+                            'align' => 'center',
+                        ])
+                    </th>
+                @endforeach
                 <th class="etd-num etd-col-metric">Sale</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($products as $product)
                 @php
-                    $productKey = 'product:'.trim((string) (($product['code'] ?? $product['product_code'] ?? '') !== '' ? ($product['code'] ?? $product['product_code']) : ($product['name'] ?? '')));
+                    $productCode = trim((string) ($product['code'] ?? $product['product_code'] ?? ''));
+                    $productTitle = trim((string) ($product['name'] ?? ''));
+                    $productDisplay = $productTitle !== '' && $productCode !== ''
+                        ? "{$productTitle} ({$productCode})"
+                        : ($productTitle !== '' ? $productTitle : $productCode);
+                    $productKey = 'product:'.trim((string) ($productCode !== '' ? $productCode : $productTitle));
                     $productDrillQuery = array_filter([
                         'product_code' => $product['code'] ?? ($product['product_code'] ?? null),
                     ]);
@@ -52,40 +72,21 @@
                     <td class="etd-col-product">
                         @if ($productLink)
                             <a href="{{ $productLink }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
-                                {{ $product['name'] }}
+                                {{ $productDisplay }}
                             </a>
                         @else
-                            {{ $product['name'] }}
+                            {{ $productDisplay }}
                         @endif
                     </td>
-                    <td class="etd-num etd-col-metric">
-                        @include('ecom_tracker.partials.category-performance-metric-cell', [
-                            'formatted' => number_format($product['views'] ?? 0),
-                            'showInlineCompareDelta' => $showInlineCompareDelta,
-                            'delta' => $compareMetricDeltas[$productKey]['views'] ?? null,
-                        ])
-                    </td>
-                    <td class="etd-num etd-col-metric">
-                        @include('ecom_tracker.partials.category-performance-metric-cell', [
-                            'formatted' => number_format($product['adds'] ?? 0),
-                            'showInlineCompareDelta' => $showInlineCompareDelta,
-                            'delta' => $compareMetricDeltas[$productKey]['adds'] ?? null,
-                        ])
-                    </td>
-                    <td class="etd-num etd-col-metric">
-                        @include('ecom_tracker.partials.category-performance-metric-cell', [
-                            'formatted' => number_format($product['proceed_checkouts'] ?? 0),
-                            'showInlineCompareDelta' => $showInlineCompareDelta,
-                            'delta' => $compareMetricDeltas[$productKey]['proceed_checkouts'] ?? null,
-                        ])
-                    </td>
-                    <td class="etd-num etd-col-metric">
-                        @include('ecom_tracker.partials.category-performance-metric-cell', [
-                            'formatted' => number_format($product['qty'] ?? 0),
-                            'showInlineCompareDelta' => $showInlineCompareDelta,
-                            'delta' => $compareMetricDeltas[$productKey]['qty'] ?? null,
-                        ])
-                    </td>
+                    @foreach ($funnelColumns as $column)
+                        <td class="etd-num etd-col-metric">
+                            @include('ecom_tracker.partials.category-performance-metric-cell', [
+                                'formatted' => number_format($product[$column['key']] ?? 0),
+                                'showInlineCompareDelta' => $showInlineCompareDelta,
+                                'delta' => $compareMetricDeltas[$productKey][$column['key']] ?? null,
+                            ])
+                        </td>
+                    @endforeach
                     <td class="etd-num etd-col-metric">
                         @include('ecom_tracker.partials.category-performance-metric-cell', [
                             'formatted' => '£'.number_format($product['revenue'] ?? 0, 2),
@@ -96,7 +97,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="text-slate-400">No product activity in this period.</td></tr>
+                <tr><td colspan="{{ $metricColspan }}" class="text-slate-400">No product activity in this period.</td></tr>
             @endforelse
         </tbody>
     </table>

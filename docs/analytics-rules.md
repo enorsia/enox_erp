@@ -1,8 +1,8 @@
 # EnoxTracker analytics rules
 
-Dashboard sync: **`TrackerDashboardSyncJob`** (planner, unique) plans chunks via **`planChunks()`** for **all** eligible unsynced idle sessions and dispatches a **`Bus::batch`** of **`TrackerDashboardSyncChunkJob`** (`TRACKER_DASHBOARD_SYNC_BATCH_SIZE` ids each). Chunk work: **`syncSessionIds()`**. Scheduler and Sync button both dispatch the planner. Queue: **database**; requires **`job_batches`** table.
+Dashboard sync: **`TrackerDashboardSyncJob`** (planner) plans chunks via **`planChunks()`** and queues one **`TrackerDashboardSyncChunkJob`** per chunk (`TRACKER_DASHBOARD_SYNC_BATCH_SIZE` session ids each). Chunk work: **`syncSessionIds()`**. Scheduler and Sync button both call **`start()`**. Queue: **`TRACKER_DATABASE_QUEUE_CONNECTION`** (default `tracking_database`; `jobs` on **tracking** MySQL). Worker queue name = **`DB_QUEUE`**. **`isRunning()`** checks for pending planner/chunk rows in that `jobs` table.
 
-**Worker (stay running, no job time limit):** `php artisan queue:work database --queue=default --sleep=3 --timeout=0 --memory=0` — do not use `--stop-when-empty`. Default `queue:work` uses **60s** job timeout and **128MB** memory, which stops the process while rows remain in `jobs`.
+**Worker (stay running, no job time limit):** `php artisan queue:work tracking_database --queue=default --sleep=3 --timeout=0 --memory=0` — do not use `--stop-when-empty`. Default `queue:work` uses **60s** job timeout and **128MB** memory, which stops the process while rows remain in `jobs`.
 
 ## Day boundary
 

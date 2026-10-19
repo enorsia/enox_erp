@@ -4,10 +4,10 @@ namespace App\Services;
 
 use App\Models\TrackingDailyAudience;
 use App\Models\TrackingDailyDuration;
+use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Store performance dashboard, read only from tracking_* tables (daily rollups filled by dashboard sync).
@@ -49,7 +49,7 @@ class EcomTrackerDashboardService
         $prevFrom = $range['from']->copy()->subDays($days);
         $prevTo = $range['from']->copy()->subDay();
 
-        $summaries = DB::table('tracking_daily_summaries')
+        $summaries = TrackerDatabase::table('tracking_daily_summaries')
             ->whereBetween('metric_date', [$prevFrom->toDateString(), $to])
             ->get()
             ->keyBy(fn (object $row) => (string) $row->metric_date);
@@ -139,7 +139,7 @@ class EcomTrackerDashboardService
             $currentFunnel['payment_count'],
             $previousFunnel['payment_rate'],
             $previousFunnel['payment_count'],
-            'Share of all sessions that completed a payment (one count per session with payment_success).',
+            'Share of sessions with at least one payment; count is completed orders (multiple orders in one session each count).',
             $comparisonLabel,
             ['funnel' => 6],
         );
@@ -203,6 +203,7 @@ class EcomTrackerDashboardService
         $checkoutStage = (int) ($totals['checkout_sessions'] ?? 0);
         $proceedStage = (int) ($totals['proceed_sessions'] ?? 0);
         $payments = (int) ($totals['payments'] ?? 0);
+        $purchaseSessions = (int) ($totals['purchase_sessions'] ?? $payments);
         $cartAbandoned = (int) ($totals['cart_drops'] ?? 0);
         $checkoutAbandoned = (int) ($totals['checkout_drops'] ?? 0);
         $proceedAbandoned = (int) ($totals['proceed_drops'] ?? 0);
@@ -214,7 +215,7 @@ class EcomTrackerDashboardService
             'checkout_drop_count' => $checkoutAbandoned,
             'proceed_drop_rate' => $proceedStage > 0 ? round($proceedAbandoned / $proceedStage * 100, 1) : 0.0,
             'proceed_drop_count' => $proceedAbandoned,
-            'payment_rate' => $sessions > 0 ? round($payments / $sessions * 100, 1) : 0.0,
+            'payment_rate' => $sessions > 0 ? round($purchaseSessions / $sessions * 100, 1) : 0.0,
             'payment_count' => $payments,
         ];
     }
@@ -256,7 +257,7 @@ class EcomTrackerDashboardService
      */
     private function saleTotalsFromOrders(string $from, string $to): array
     {
-        $row = DB::table('tracking_orders')
+        $row = TrackerDatabase::table('tracking_orders')
             ->whereBetween('metric_date', [$from, $to])
             ->selectRaw('COALESCE(SUM(items_qty), 0) as items_sold')
             ->selectRaw('COALESCE(SUM(amount_paid), 0) as sale_amount')
@@ -356,12 +357,12 @@ class EcomTrackerDashboardService
      */
     private function hourlyTrendFromTable(string $date, string $period, Carbon $dayLocal): array
     {
-        $rows = DB::table('tracking_hourly_summaries')
+        $rows = TrackerDatabase::table('tracking_hourly_summaries')
             ->where('metric_date', $date)
             ->get()
             ->keyBy(fn (object $row) => (int) $row->metric_hour);
 
-        $purchaseSessionsByHour = DB::table('tracking_orders')
+        $purchaseSessionsByHour = TrackerDatabase::table('tracking_orders')
             ->where('metric_date', $date)
             ->get(['tracking_session_id', 'ordered_at'])
             ->groupBy(fn (object $order) => (int) Carbon::parse($order->ordered_at)->timezone(TrackerTime::timezone())->format('G'))
@@ -449,7 +450,7 @@ class EcomTrackerDashboardService
      */
     private function prefetchTrendSupportData(array $range): array
     {
-        $visitorsByDate = DB::table('tracking_session as ts')
+        $visitorsByDate = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->select(['dv.visit_date as session_date', 'ts.tracking_daily_visitor_id'])
             ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope(
@@ -466,7 +467,7 @@ class EcomTrackerDashboardService
         $fromDate = $range['from']->toDateString();
         $toDate = $range['to']->toDateString();
 
-        $purchaseSessionIdsByDate = DB::table('tracking_orders')
+        $purchaseSessionIdsByDate = TrackerDatabase::table('tracking_orders')
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->select(['metric_date', 'tracking_session_id'])
             ->get()
@@ -646,7 +647,7 @@ class EcomTrackerDashboardService
      */
     public function summaryViewTotals(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
     {
-        $rows = DB::table('tracking_daily_summaries')
+        $rows = TrackerDatabase::table('tracking_daily_summaries')
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->get();
 
@@ -678,13 +679,13 @@ class EcomTrackerDashboardService
     {
         $fromDate = $from->toDateString();
         $toDate = $to->toDateString();
-        $totalsByDate = DB::table('tracking_daily_summaries')
+        $totalsByDate = TrackerDatabase::table('tracking_daily_summaries')
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->pluck('sessions', 'metric_date');
 
         $range = ['from' => $from, 'to' => $to, 'period' => $period];
 
-        $filteredByDate = DB::table('tracking_session as ts')
+        $filteredByDate = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->selectRaw('dv.visit_date as session_date, COUNT(*) as sessions')
             ->tap(fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters))
@@ -714,7 +715,7 @@ class EcomTrackerDashboardService
             return $this->categoriesWithSessionFilters($from, $to, $period, $sessionFilters);
         }
 
-        $rows = DB::table('tracking_daily_categories as dc')
+        $rows = TrackerDatabase::table('tracking_daily_categories as dc')
             ->join('tracking_category as c', 'c.id', '=', 'dc.tracking_category_id')
             ->leftJoin('tracking_category as d', 'd.id', '=', 'c.parent_id')
             ->whereBetween('dc.metric_date', [$fromDate, $toDate])
@@ -780,72 +781,103 @@ class EcomTrackerDashboardService
      * @param  array<string, mixed>  $sessionFilters
      * @return array{rows: list<array<string, mixed>>, totals: array{views: int, product_count: int}}
      */
-    public function products(Carbon $from, Carbon $to, string $period, array $sessionFilters = []): array
+    public function products(Carbon $from, Carbon $to, string $period, array $sessionFilters = [], ?int $limit = self::PRODUCT_LIMIT): array
     {
         $fromDate = $from->toDateString();
         $toDate = $to->toDateString();
 
         if (EcomActivityListService::hasActiveFilters($sessionFilters)) {
-            return $this->productsWithSessionFilters($from, $to, $period, $sessionFilters);
+            return $this->productsWithSessionFilters($from, $to, $period, $sessionFilters, $limit);
         }
 
-        $aggregated = DB::table('tracking_daily_products')
+        $aggregated = TrackerDatabase::table('tracking_daily_products')
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->groupBy('product_code')
             ->selectRaw('product_code as code')
-            ->selectRaw('SUM(product_views) as views, SUM(add_to_carts) as adds, SUM(proceed_checkouts) as proceed_checkouts')
+            ->selectRaw('SUM(product_views) as views, SUM(add_to_carts) as adds, SUM(begin_checkouts) as begin_checkouts')
+            ->selectRaw('SUM(proceed_checkouts) as proceed_checkouts')
             ->selectRaw('SUM(sold_qty) as qty, SUM(sale_amount) as revenue')
             ->get()
             ->keyBy('code');
 
-        $scopedSold = $this->scopedProductSoldTotals($from, $to, $period, []);
-
-        $all = $aggregated->map(function (object $row) use ($scopedSold) {
+        $all = $aggregated->map(function (object $row) {
             $code = (string) $row->code;
-            $sold = $scopedSold[$code] ?? ['qty' => (int) $row->qty, 'revenue' => (float) $row->revenue];
 
             return [
                 'code' => $code,
                 'views' => (int) $row->views,
                 'adds' => (int) $row->adds,
+                'begin_checkouts' => (int) ($row->begin_checkouts ?? 0),
                 'proceed_checkouts' => (int) $row->proceed_checkouts,
-                'qty' => (int) $sold['qty'],
-                'revenue' => round((float) $sold['revenue'], 2),
+                'qty' => (int) $row->qty,
+                'revenue' => round((float) $row->revenue, 2),
             ];
         });
 
-        $top = $all
-            ->sortBy([
-                ['qty', 'desc'],
-                ['proceed_checkouts', 'desc'],
-                ['adds', 'desc'],
-                ['views', 'desc'],
-                ['revenue', 'desc'],
-            ])
-            ->take(self::PRODUCT_LIMIT);
+        return $this->packageProductRows($all, $limit, $from, $to, $period, []);
+    }
 
-        $titles = DB::table('tracking_product')
-            ->whereIn('code', $top->pluck('code')->all())
+    /**
+     * @param  Collection<int, array<string, mixed>>  $all
+     * @return array{rows: list<array<string, mixed>>, totals: array{views: int, product_count: int}}
+     */
+    private function packageProductRows(
+        Collection $all,
+        ?int $limit,
+        Carbon $from,
+        Carbon $to,
+        string $period,
+        array $sessionFilters,
+    ): array {
+        $range = ['from' => $from, 'to' => $to, 'period' => $period];
+        $sorted = $this->sortProductRows($all);
+        $visible = $limit === null ? $sorted : $sorted->take($limit);
+
+        $titles = TrackerDatabase::table('tracking_product')
+            ->whereIn('code', $visible->pluck('code')->all())
             ->pluck('title', 'code');
 
-        $maxRevenue = max(1.0, (float) $top->max('revenue'));
+        $maxRevenue = max(1.0, (float) $visible->max('revenue'));
 
         return [
-            'rows' => $top->map(fn (array $row) => [
-                'code' => $row['code'],
-                'name' => (string) ($titles[$row['code']] ?? $row['code']),
-                'views' => $row['views'],
-                'adds' => $row['adds'],
-                'proceed_checkouts' => $row['proceed_checkouts'],
-                'qty' => $row['qty'],
-                'revenue' => $row['revenue'],
-                'revenue_bar_percent' => (int) round($row['revenue'] / $maxRevenue * 100),
-            ])->values()->all(),
+            'rows' => $visible->map(function (array $row) use ($titles, $maxRevenue) {
+                $code = $row['code'];
+
+                return [
+                    'code' => $code,
+                    'name' => (string) ($titles[$code] ?? $code),
+                    'views' => (int) ($row['views'] ?? 0),
+                    'add_to_cart' => (int) ($row['adds'] ?? 0),
+                    'begin_checkout' => (int) ($row['begin_checkouts'] ?? 0),
+                    'proceed_checkout' => (int) ($row['proceed_checkouts'] ?? 0),
+                    'paid' => (int) ($row['qty'] ?? 0),
+                    'revenue' => $row['revenue'],
+                    'revenue_bar_percent' => (int) round($row['revenue'] / $maxRevenue * 100),
+                ];
+            })->values()->all(),
             'totals' => [
                 'views' => (int) $all->sum('views'),
                 'product_count' => $all->count(),
             ],
         ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $all
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sortProductRows(Collection $all): Collection
+    {
+        return $all
+            ->sortBy([
+                ['qty', 'desc'],
+                ['proceed_checkouts', 'desc'],
+                ['begin_checkouts', 'desc'],
+                ['adds', 'desc'],
+                ['views', 'desc'],
+                ['revenue', 'desc'],
+            ])
+            ->values();
     }
 
     /**
@@ -855,7 +887,7 @@ class EcomTrackerDashboardService
     private function categoriesWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
     {
         $ratios = $this->sessionFilterRatiosByDate($from, $to, $period, $sessionFilters);
-        $dailyRows = DB::table('tracking_daily_categories as dc')
+        $dailyRows = TrackerDatabase::table('tracking_daily_categories as dc')
             ->join('tracking_category as c', 'c.id', '=', 'dc.tracking_category_id')
             ->leftJoin('tracking_category as d', 'd.id', '=', 'c.parent_id')
             ->whereBetween('dc.metric_date', [$from->toDateString(), $to->toDateString()])
@@ -955,67 +987,127 @@ class EcomTrackerDashboardService
      * @param  array<string, mixed>  $sessionFilters
      * @return array{rows: list<array<string, mixed>>, totals: array{views: int, product_count: int}}
      */
-    private function productsWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
+    private function productsWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters, ?int $limit = self::PRODUCT_LIMIT): array
     {
-        $ratios = $this->sessionFilterRatiosByDate($from, $to, $period, $sessionFilters);
-        $dailyRows = DB::table('tracking_daily_products')
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->get();
+        $range = ['from' => $from, 'to' => $to, 'period' => $period];
+        [$fromBound, $toBound] = TrackerTime::storageRange($from, $to);
 
-        $byCode = [];
-        foreach ($dailyRows as $row) {
-            $ratio = $ratios[(string) $row->metric_date] ?? 0.0;
-            if ($ratio <= 0) {
-                continue;
-            }
+        $sessionIds = TrackerDatabase::table('tracking_session as ts')
+            ->tap(fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters))
+            ->pluck('session_id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
 
-            $code = (string) $row->product_code;
-            $byCode[$code] ??= ['code' => $code, 'views' => 0, 'adds' => 0, 'proceed_checkouts' => 0, 'qty' => 0, 'revenue' => 0.0];
-            $byCode[$code]['views'] += (int) round((int) $row->product_views * $ratio);
-            $byCode[$code]['adds'] += (int) round((int) $row->add_to_carts * $ratio);
-            $byCode[$code]['proceed_checkouts'] += (int) round((int) $row->proceed_checkouts * $ratio);
+        if ($sessionIds === []) {
+            return $this->packageProductRows(collect(), $limit, $from, $to, $period, $sessionFilters);
         }
 
-        $scopedSold = $this->scopedProductSoldTotals($from, $to, $period, $sessionFilters);
-        foreach ($scopedSold as $code => $sold) {
-            $byCode[$code] ??= ['code' => $code, 'views' => 0, 'adds' => 0, 'proceed_checkouts' => 0, 'qty' => 0, 'revenue' => 0.0];
+        $skuToParent = TrackerDatabase::table('tracking_product')
+            ->whereNotNull('sku')
+            ->where('sku', '!=', '')
+            ->pluck('code', 'sku')
+            ->all();
+
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->whereIn('action_type', [
+                'product_click',
+                'add_to_cart',
+                'begin_checkout',
+                'proceed_checkout',
+                'proceed_to_checkout',
+                'payment_success',
+            ])
+            ->whereBetween('created_at', [$fromBound, $toBound])
+            ->orderBy('id')
+            ->get([
+                'id',
+                'session_id',
+                'action_type',
+                'product_code',
+                'sku',
+                'item_qty',
+                'add_to_cart',
+                'begin_checkout',
+                'proceed_to_checkout',
+                'payment_success',
+            ]);
+
+        $byCode = [];
+        foreach ($actions->groupBy('session_id') as $sessionActions) {
+            $units = $this->activityList->productFunnelUnitsForSessionActions($sessionActions, $skuToParent);
+            foreach ($units as $code => $steps) {
+                $code = trim((string) $code);
+                if ($code === '') {
+                    continue;
+                }
+
+                $byCode[$code] ??= [
+                    'code' => $code,
+                    'views' => 0,
+                    'adds' => 0,
+                    'begin_checkouts' => 0,
+                    'proceed_checkouts' => 0,
+                    'qty' => 0,
+                    'revenue' => 0.0,
+                ];
+                $byCode[$code]['views'] += (int) ($steps['views'] ?? 0);
+                $byCode[$code]['adds'] += (int) ($steps['add_to_cart'] ?? 0);
+                $byCode[$code]['begin_checkouts'] += (int) ($steps['begin_checkout'] ?? 0);
+                $byCode[$code]['proceed_checkouts'] += (int) ($steps['proceed_checkout'] ?? 0);
+            }
+        }
+
+        foreach ($this->filteredProductSoldTotalsByCode($from, $to, $period, $sessionFilters) as $code => $sold) {
+            $byCode[$code] ??= [
+                'code' => $code,
+                'views' => 0,
+                'adds' => 0,
+                'begin_checkouts' => 0,
+                'proceed_checkouts' => 0,
+                'qty' => 0,
+                'revenue' => 0.0,
+            ];
             $byCode[$code]['qty'] = (int) $sold['qty'];
             $byCode[$code]['revenue'] = (float) $sold['revenue'];
         }
 
         $all = collect($byCode)->values();
-        $top = $all
-            ->sortBy([
-                ['qty', 'desc'],
-                ['proceed_checkouts', 'desc'],
-                ['adds', 'desc'],
-                ['views', 'desc'],
-                ['revenue', 'desc'],
-            ])
-            ->take(self::PRODUCT_LIMIT);
 
-        $titles = DB::table('tracking_product')
-            ->whereIn('code', $top->pluck('code')->all())
-            ->pluck('title', 'code');
+        return $this->packageProductRows($all, $limit, $from, $to, $period, $sessionFilters);
+    }
 
-        $maxRevenue = max(1.0, (float) $top->max('revenue'));
+    /**
+     * Sold qty / sale amount for filtered sessions (same order lines as sync writes to tracking_daily_products).
+     *
+     * @param  array<string, mixed>  $sessionFilters
+     * @return array<string, array{qty: int, revenue: float}>
+     */
+    private function filteredProductSoldTotalsByCode(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
+    {
+        [$fromBound, $toBound] = TrackerTime::storageRange($from, $to);
+        $range = ['from' => $from, 'to' => $to, 'period' => $period];
 
-        return [
-            'rows' => $top->map(fn (array $row) => [
-                'code' => $row['code'],
-                'name' => (string) ($titles[$row['code']] ?? $row['code']),
-                'views' => $row['views'],
-                'adds' => $row['adds'],
-                'proceed_checkouts' => $row['proceed_checkouts'],
-                'qty' => $row['qty'],
-                'revenue' => $row['revenue'],
-                'revenue_bar_percent' => (int) round($row['revenue'] / $maxRevenue * 100),
-            ])->values()->all(),
-            'totals' => [
-                'views' => (int) $all->sum('views'),
-                'product_count' => $all->count(),
-            ],
-        ];
+        $rows = TrackerDatabase::table('tracking_order_details as od')
+            ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
+            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
+            ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
+            ->whereBetween('o.ordered_at', [$fromBound, $toBound])
+            ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, 'ts'))
+            ->tap(fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters))
+            ->groupBy('p.code')
+            ->selectRaw('p.code as product_code, SUM(od.qty) as qty, SUM(od.line_total) as revenue')
+            ->get();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(string) $row->product_code] = [
+                'qty' => (int) $row->qty,
+                'revenue' => round((float) $row->revenue, 2),
+            ];
+        }
+
+        return $map;
     }
 
     /**
@@ -1026,7 +1118,7 @@ class EcomTrackerDashboardService
         [$fromBound, $toBound] = TrackerTime::storageRange($from, $to);
         $range = ['from' => $from, 'to' => $to, 'period' => $period];
 
-        $rows = DB::table('tracking_order_details as od')
+        $rows = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->whereBetween('o.ordered_at', [$fromBound, $toBound])
@@ -1053,49 +1145,13 @@ class EcomTrackerDashboardService
     }
 
     /**
-     * @return array<string, array{qty: int, revenue: float}>
-     */
-    /**
-     * @param  array<string, mixed>  $sessionFilters
-     */
-    private function scopedProductSoldTotals(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
-    {
-        [$fromBound, $toBound] = TrackerTime::storageRange($from, $to);
-        $range = ['from' => $from, 'to' => $to, 'period' => $period];
-
-        $rows = DB::table('tracking_order_details as od')
-            ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
-            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
-            ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
-            ->whereBetween('o.ordered_at', [$fromBound, $toBound])
-            ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, 'ts'))
-            ->when(
-                EcomActivityListService::hasActiveFilters($sessionFilters),
-                fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters),
-            )
-            ->groupBy('p.code')
-            ->selectRaw('p.code as product_code, SUM(od.qty) as qty, SUM(od.line_total) as revenue')
-            ->get();
-
-        $map = [];
-        foreach ($rows as $row) {
-            $map[(string) $row->product_code] = [
-                'qty' => (int) $row->qty,
-                'revenue' => round((float) $row->revenue, 2),
-            ];
-        }
-
-        return $map;
-    }
-
-    /**
      * The four recoverable panels: totals per type and its latest rows, in one query.
      *
      * @return list<array<string, mixed>>
      */
     private function recoverable(string $from, string $to, string $backUrl): array
     {
-        $ranked = DB::table('tracking_recoverable_sales as rs')
+        $ranked = TrackerDatabase::table('tracking_recoverable_sales as rs')
             ->join('tracking_session as ts', 'ts.id', '=', 'rs.tracking_session_id')
             ->whereBetween('rs.metric_date', [$from, $to])
             ->select('rs.type', 'rs.qty', 'rs.sale_value', 'rs.occurred_at', 'ts.session_id')
@@ -1103,7 +1159,7 @@ class EcomTrackerDashboardService
             ->selectRaw('COUNT(*) OVER (PARTITION BY rs.type) as total_count')
             ->selectRaw('SUM(rs.sale_value) OVER (PARTITION BY rs.type) as total_value');
 
-        $rows = DB::query()
+        $rows = TrackerDatabase::query()
             ->fromSub($ranked, 'r')
             ->where('row_no', '<=', self::RECOVERABLE_ROW_LIMIT)
             ->orderBy('row_no')
@@ -1139,7 +1195,7 @@ class EcomTrackerDashboardService
      */
     private function audiences(string $from, string $to): array
     {
-        $rows = DB::table('tracking_daily_audiences as a')
+        $rows = TrackerDatabase::table('tracking_daily_audiences as a')
             ->leftJoin('tracking_device as dv', fn ($join) => $join->on('dv.id', '=', 'a.dimension_id')->where('a.type', TrackingDailyAudience::TYPE_DEVICE))
             ->leftJoin('tracking_browser as br', fn ($join) => $join->on('br.id', '=', 'a.dimension_id')->where('a.type', TrackingDailyAudience::TYPE_BROWSER))
             ->whereBetween('a.metric_date', [$from, $to])
@@ -1211,7 +1267,7 @@ class EcomTrackerDashboardService
      */
     private function durations(string $from, string $to): array
     {
-        $counts = DB::table('tracking_daily_durations')
+        $counts = TrackerDatabase::table('tracking_daily_durations')
             ->whereBetween('metric_date', [$from, $to])
             ->groupBy('bucket')
             ->selectRaw('bucket, SUM(sessions) as sessions')
@@ -1229,7 +1285,7 @@ class EcomTrackerDashboardService
             ];
         }
 
-        $middle = $total === 0 ? collect() : DB::table('tracking_daily_visitor as dv')
+        $middle = $total === 0 ? collect() : TrackerDatabase::table('tracking_daily_visitor as dv')
             ->join('tracking_session as ts', 'ts.tracking_daily_visitor_id', '=', 'dv.id')
             ->whereBetween('dv.visit_date', [$from, $to])
             ->orderBy('ts.duration_seconds')

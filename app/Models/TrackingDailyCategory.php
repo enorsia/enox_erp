@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TrackingDailyCategory extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $fillable = [
         'metric_date',
         'tracking_category_id',

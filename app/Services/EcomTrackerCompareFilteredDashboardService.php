@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\TrackerDatabase;
+
 use App\Models\TrackingDailyAudience;
 use App\Models\TrackingDailyDuration;
 use App\Support\EcomTrackerCompareKpiGroups;
@@ -136,7 +138,7 @@ class EcomTrackerCompareFilteredDashboardService
 
         $views = $this->dashboardService->summaryViewTotals($range['from'], $range['to'], $period, $filters);
 
-        $purchaseSessions = (int) DB::table('tracking_orders as o')
+        $purchaseSessions = (int) TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->tap($scope)
             ->whereBetween('o.ordered_at', $orderBounds)
@@ -168,7 +170,7 @@ class EcomTrackerCompareFilteredDashboardService
         $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $range, $filters);
         $hourExpr = "HOUR(CONVERT_TZ(ts.last_active_at, '+00:00', '".str_replace("'", "''", $tz)."'))";
 
-        $sessionRows = DB::table('tracking_session as ts')
+        $sessionRows = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->selectRaw("{$hourExpr} as hour")
             ->selectRaw('COUNT(*) as sessions')
@@ -181,12 +183,12 @@ class EcomTrackerCompareFilteredDashboardService
             ->get()
             ->keyBy(fn (object $row) => (int) $row->hour);
 
-        $hourlyRows = DB::table('tracking_hourly_summaries')
+        $hourlyRows = TrackerDatabase::table('tracking_hourly_summaries')
             ->where('metric_date', $dayLocal->toDateString())
             ->get()
             ->keyBy(fn (object $row) => (int) $row->metric_hour);
 
-        $filteredByHour = DB::table('tracking_session as ts')
+        $filteredByHour = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->selectRaw("{$hourExpr} as hour")
             ->selectRaw('COUNT(*) as sessions')
@@ -195,11 +197,12 @@ class EcomTrackerCompareFilteredDashboardService
 
         $orderHourExpr = "HOUR(CONVERT_TZ(o.ordered_at, '+00:00', '".str_replace("'", "''", $tz)."'))";
 
-        $itemRows = DB::table('tracking_orders as o')
+        $itemRows = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->tap($scope)
             ->whereBetween('o.ordered_at', $bounds)
             ->selectRaw("{$orderHourExpr} as hour")
+            ->selectRaw('COUNT(o.id) as payments')
             ->selectRaw('COALESCE(SUM(o.items_qty), 0) as items_sold')
             ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as purchase_sessions')
             ->groupBy('hour')
@@ -225,7 +228,7 @@ class EcomTrackerCompareFilteredDashboardService
                 'cart_sessions' => (int) ($session->cart_sessions ?? 0),
                 'checkout_sessions' => (int) ($session->checkout_sessions ?? 0),
                 'proceed_sessions' => (int) ($session->proceed_sessions ?? 0),
-                'payments' => (int) ($session->payments ?? 0),
+                'payments' => (int) ($items->payments ?? $session->payments ?? 0),
                 'items_sold' => (int) ($items->items_sold ?? 0),
                 'purchase_sessions' => (int) ($items->purchase_sessions ?? 0),
             ]);
@@ -253,7 +256,7 @@ class EcomTrackerCompareFilteredDashboardService
         ];
         $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $range, $filters);
 
-        $ranked = DB::table('tracking_recoverable_sales as rs')
+        $ranked = TrackerDatabase::table('tracking_recoverable_sales as rs')
             ->join('tracking_session as ts', 'ts.id', '=', 'rs.tracking_session_id')
             ->whereBetween('rs.metric_date', [$from, $to])
             ->tap($scope)
@@ -262,7 +265,7 @@ class EcomTrackerCompareFilteredDashboardService
             ->selectRaw('COUNT(*) OVER (PARTITION BY rs.type) as total_count')
             ->selectRaw('SUM(rs.sale_value) OVER (PARTITION BY rs.type) as total_value');
 
-        $rows = DB::query()
+        $rows = TrackerDatabase::query()
             ->fromSub($ranked, 'r')
             ->where('row_no', '<=', self::RECOVERABLE_ROW_LIMIT)
             ->orderBy('row_no')
@@ -303,7 +306,7 @@ class EcomTrackerCompareFilteredDashboardService
         $utmSourceIds = array_values(array_filter(array_map('intval', $filters['utm_sources'] ?? [])));
         $utmMediums = array_values(array_filter(array_map('strval', $filters['utm_mediums'] ?? []), 'filled'));
 
-        $deviceRows = DB::table('tracking_session as ts')
+        $deviceRows = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope);
         SessionTrafficAttribution::joinLatestSessionDetails($deviceRows);
         $deviceRows = $deviceRows
@@ -318,7 +321,7 @@ class EcomTrackerCompareFilteredDashboardService
             ->selectRaw('COALESCE(SUM(ts.has_order), 0) as payment_success')
             ->get();
 
-        $browserRows = DB::table('tracking_session as ts')
+        $browserRows = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope);
         SessionTrafficAttribution::joinLatestSessionDetails($browserRows);
         $browserRows = $browserRows
@@ -332,7 +335,7 @@ class EcomTrackerCompareFilteredDashboardService
             ->selectRaw('COALESCE(SUM(ts.has_order), 0) as payment_success')
             ->get();
 
-        $trafficRows = DB::table('tracking_session as ts')
+        $trafficRows = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope);
         SessionTrafficAttribution::joinLatestSessionDetails($trafficRows);
         $trafficRows = $trafficRows
@@ -393,7 +396,7 @@ class EcomTrackerCompareFilteredDashboardService
         array $utmSourceIds = [],
         array $utmMediums = [],
     ): array {
-        $query = DB::table('tracking_orders as o')
+        $query = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->tap($scope);
         SessionTrafficAttribution::joinLatestSessionDetails($query);
@@ -490,7 +493,7 @@ class EcomTrackerCompareFilteredDashboardService
     {
         $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $range, $filters);
 
-        $durations = DB::table('tracking_session as ts')
+        $durations = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->orderBy('ts.duration_seconds')
             ->pluck('ts.duration_seconds');

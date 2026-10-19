@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\TrackingCtrBatchDispatcher;
+use App\Support\TrackerQueueSupport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -22,8 +23,10 @@ class SyncTrackingCtr extends Command
             return self::SUCCESS;
         }
 
-        $connection = (string) config('tracker.ctr_queue_connection', 'database');
-        $queue = (string) config('tracker.ctr_queue_name', 'default');
+        $connection = TrackerQueueSupport::connection();
+        $queue = TrackerQueueSupport::queue();
+        $jobsConnection = (string) config("queue.connections.{$connection}.connection", 'tracking');
+        $jobsTable = (string) config("queue.connections.{$connection}.table", 'jobs');
 
         $this->info(sprintf(
             'CTR sync: queued %d job(s) for %d action(s) → connection [%s], queue [%s].',
@@ -32,8 +35,11 @@ class SyncTrackingCtr extends Command
             $connection,
             $queue,
         ));
-        $this->line(sprintf('`jobs` table: %d row(s) waiting.', DB::table('jobs')->count()));
-        $this->line('Process with: php artisan queue:work ' . $connection . ' --queue=' . $queue);
+        $this->line(sprintf(
+            '`jobs` table: %d row(s) waiting.',
+            DB::connection($jobsConnection)->table($jobsTable)->count(),
+        ));
+        $this->line('Process with: php artisan queue:work '.$connection.' --queue='.$queue);
 
         return self::SUCCESS;
     }

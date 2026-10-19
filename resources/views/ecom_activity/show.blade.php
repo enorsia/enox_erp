@@ -203,12 +203,28 @@
                         @foreach ([
                             'Device' => ucfirst($activityUser->device_type ?? '—') . ' · ' . ($activityUser->browser ?? '') . ' · ' . ($activityUser->os ?? ''),
                             'User' => $activityUser->identitySummary(),
+                            'Orders' => ($sessionPaymentOrders ?? collect())->isEmpty()
+                                ? '—'
+                                : ($sessionPaymentOrders->count() === 1
+                                    ? '#'.($sessionPaymentOrders->first()['order_id'] ?: '—').' · £'.number_format((float) ($sessionPaymentOrders->first()['amount_paid'] ?? 0), 2)
+                                    : $sessionPaymentOrders->count().' orders'),
                             'First seen' => \App\Support\TrackerTime::formatFromStorage($activityUser->created_at, 'd M Y, h:i A'),
                             'Last active' => \App\Support\TrackerTime::formatFromStorage($latestActionAt ?? $activityUser->last_active_at, 'd M Y, h:i A'),
                         ] as $label => $value)
                             <div class="py-2.5 first:pt-0 min-w-0">
                                 <div class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">{{ $label }}</div>
                                 <div class="text-slate-700 dark:text-slate-200 break-words text-[13px]">{{ $value ?: '—' }}</div>
+                                @if ($label === 'Orders' && ($sessionPaymentOrders ?? collect())->count() > 1)
+                                    <ul class="mt-1.5 space-y-1 text-[12px] text-slate-600 dark:text-slate-300">
+                                        @foreach ($sessionPaymentOrders as $order)
+                                            <li>
+                                                #{{ $order['order_id'] ?: '—' }}
+                                                · £{{ number_format((float) ($order['amount_paid'] ?? 0), 2) }}
+                                                <span class="text-slate-400">· {{ \App\Support\TrackerTime::formatFromStorage($order['created_at'], 'd M, h:i A') }}</span>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                @endif
                             </div>
                         @endforeach
                         <div class="py-2.5 min-w-0">

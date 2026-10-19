@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 
 class TrackingDailySummary extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $fillable = [
         'metric_date',
         'unique_visitors',

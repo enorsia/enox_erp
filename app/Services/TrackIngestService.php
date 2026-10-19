@@ -2,20 +2,21 @@
 
 namespace App\Services;
 
-use App\Support\CheckoutPayloadTotals;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Support\CheckoutPayloadTotals;
+use App\Support\CommercePricingExtractor;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerActionSequence;
 use App\Support\TrackerCategoryIdentity;
+use App\Support\TrackerDatabase;
 use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -42,7 +43,13 @@ class TrackIngestService
         }
 
         $sessionId = $sessionData['session_id'] ?? $events[0]['session_id'] ?? null;
-        $visitorId = $sessionData['visitor_id'] ?? null;
+        $visitorId = trim((string) ($sessionData['visitor_id'] ?? ''));
+
+        if ($visitorId === '') {
+            throw ValidationException::withMessages([
+                'session.visitor_id' => ['Visitor ID is required (call resolve-visit before track).'],
+            ]);
+        }
 
         if (! $sessionId) {
             $this->logError('ingest.missing_session', 'No session ID in request');
@@ -228,7 +235,7 @@ class TrackIngestService
         $this->syncSessionLastActiveFromEvents($sessionId, $events);
 
         if ($acceptedIds !== []) {
-            DB::table('activity_ecom_user')
+            TrackerDatabase::table('activity_ecom_user')
                 ->where('session_id', $sessionId)
                 ->update(['is_sync' => ActivityEcomUser::SYNC_PENDING]);
         }
@@ -252,21 +259,19 @@ class TrackIngestService
         $existing = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
 
         $attributes = [
-            'ip' => $clientContext['client_ip'] ?? $request->ip(),
-            'user_agent' => $userAgent,
             'device_type' => $parsed['device_type'],
             'browser' => $parsed['browser'],
             'os' => $parsed['os'],
         ];
 
-        if ($clientContext !== null && ! empty($clientContext['ip_country'])) {
-            $attributes['country'] = $clientContext['ip_country'];
-        }
-
         $attributes = array_merge($attributes, $this->sessionIdentityUpdates($sessionData, $existing));
 
-        if (! empty($sessionData['visitor_id'])) {
-            $attributes['visitor_id'] = $sessionData['visitor_id'];
+        $attributes['visitor_id'] = trim((string) ($sessionData['visitor_id'] ?? ''));
+
+        if ($attributes['visitor_id'] === '') {
+            throw ValidationException::withMessages([
+                'session.visitor_id' => ['Visitor ID is required.'],
+            ]);
         }
 
         if (! $existing) {
@@ -484,7 +489,7 @@ class TrackIngestService
             }
         }
 
-        return $row;
+        return CommercePricingExtractor::applyScalarsToActionRow($actionType, $row);
     }
 
     /**
@@ -587,6 +592,46 @@ class TrackIngestService
         }
 
         $this->syncSessionCustomerInfo($sessionId, $customer, $event['created_at'] ?? null);
+        $this->syncSessionPaymentRollups($sessionId, $payload, $event['created_at'] ?? null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function syncSessionPaymentRollups(string $sessionId, array $payload, mixed $eventCreatedAt = null): void
+    {
+        $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
+
+        if ($session === null) {
+            return;
+        }
+
+        $amount = CheckoutPayloadTotals::grandTotal($payload);
+
+        if ($amount === null && is_numeric($payload['amount_paid'] ?? null)) {
+            $amount = round((float) $payload['amount_paid'], 2);
+        }
+
+        $updates = [];
+
+        if ($amount !== null && $amount > 0) {
+            $currentMax = $session->max_order_value !== null ? (float) $session->max_order_value : 0.0;
+
+            if ($amount > $currentMax) {
+                $updates['max_order_value'] = $amount;
+            }
+        }
+
+        if ($session->first_payment_at === null) {
+            $updates['first_payment_at'] = TrackerTime::formatUtc($eventCreatedAt ?? TrackerTime::nowUtc());
+        }
+
+        if ($updates === []) {
+            return;
+        }
+
+        $updates['updated_at'] = TrackerTime::formatUtc(TrackerTime::nowUtc());
+        $session->update($updates);
     }
 
     /**
@@ -953,7 +998,7 @@ class TrackIngestService
 
     private function paymentSuccessExistsForOrder(string $orderId): bool
     {
-        return DB::table('activity_ecom_user_actions')
+        return TrackerDatabase::table('activity_ecom_user_actions')
             ->where('action_type', 'payment_success')
             ->where('order_id', $orderId)
             ->exists();
@@ -961,7 +1006,7 @@ class TrackIngestService
 
     private function findCanonicalPaymentSuccessActionId(string $orderId): ?int
     {
-        $id = DB::table('activity_ecom_user_actions')
+        $id = TrackerDatabase::table('activity_ecom_user_actions')
             ->where('action_type', 'payment_success')
             ->where('order_id', $orderId)
             ->orderBy('created_at')
@@ -989,12 +1034,6 @@ class TrackIngestService
             return false;
         }
 
-        $total = (float) (CheckoutPayloadTotals::commerceAmount($payload) ?? 0);
-
-        if ($total > 0) {
-            return true;
-        }
-
         $items = $payload['cart_items'] ?? $payload['items'] ?? [];
 
         if (! is_array($items) || $items === []) {
@@ -1019,7 +1058,7 @@ class TrackIngestService
 
     private function isCatalogSkuActionType(string $actionType): bool
     {
-        return in_array($actionType, ['grid_impression', 'product_click'], true);
+        return in_array($actionType, ['grid_impression', 'product_click', 'grid_click'], true);
     }
 
     /**
@@ -1101,7 +1140,7 @@ class TrackIngestService
             ]);
 
             throw ValidationException::withMessages([
-                'events' => ['payment_success contains disallowed fields: ' . implode(', ', $extra)],
+                'events' => ['payment_success contains disallowed fields: '.implode(', ', $extra)],
             ]);
         }
     }

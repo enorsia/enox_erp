@@ -930,11 +930,15 @@ function initDashboardSyncButton(page) {
                 const sessions = Number(body.sessions || 0);
                 const batches = Number(body.batches || 0);
 
-                showSyncToast(
-                    'success',
-                    'Sync started',
-                    `${sessions} session${sessions === 1 ? '' : 's'} queued in ${batches} batch${batches === 1 ? '' : 'es'}.`,
-                );
+                if (sessions <= 0 || batches <= 0) {
+                    showSyncToast('info', 'All up to date', body.message || 'No more data to sync.');
+                } else {
+                    showSyncToast(
+                        'success',
+                        'Sync started',
+                        `${sessions} session${sessions === 1 ? '' : 's'} queued in ${batches} batch${batches === 1 ? '' : 'es'}.`,
+                    );
+                }
             }
         } catch {
             showSyncToast('error', 'Sync failed', 'Could not reach the server. Please try again.');

@@ -840,6 +840,37 @@ body.etd-filter-panel-open {
     border-color: color-mix(in srgb, var(--etd-flatpickr-accent, var(--etd-accent, #1D9E75)) 25%, #e2e8f0);
 }
 
+/* Padding days from the previous/next month (single-month view) */
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay {
+    color: #94a3b8;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.flatpickr-day.prevMonthDay.inRange,
+.flatpickr-day.nextMonthDay.inRange {
+    background: color-mix(in srgb, var(--etd-flatpickr-accent, var(--etd-accent, #1d9e75)) 10%, #f1f5f9);
+    border-color: transparent;
+    box-shadow: none;
+    color: #64748b;
+}
+
+.flatpickr-day.prevMonthDay:hover,
+.flatpickr-day.nextMonthDay:hover,
+.flatpickr-day.prevMonthDay:focus,
+.flatpickr-day.nextMonthDay:focus {
+    background: color-mix(in srgb, var(--etd-flatpickr-accent, var(--etd-accent, #1d9e75)) 8%, #f1f5f9);
+    border-color: transparent;
+    color: #64748b;
+}
+
+.flatpickr-day.prevMonthDay.today,
+.flatpickr-day.nextMonthDay.today {
+    border-color: color-mix(in srgb, var(--etd-flatpickr-accent, var(--etd-accent, #1d9e75)) 28%, #e2e8f0);
+}
+
 .etd-filter-drawer .flatpickr-input.is-disabled,
 .etd-filter-drawer .flatpickr-input:disabled {
     opacity: 0.55;
@@ -847,19 +878,164 @@ body.etd-filter-panel-open {
 }
 
 .dark .flatpickr-calendar {
-    background: #1e293b;
+    --etd-fp-surface: #1e293b;
+    --etd-fp-surface-muted: #334155;
+    --etd-fp-border: #475569;
+    --etd-fp-text: #e2e8f0;
+    --etd-fp-text-muted: #94a3b8;
+    --etd-fp-in-range: color-mix(in srgb, var(--etd-flatpickr-accent, var(--etd-accent, #1d9e75)) 22%, var(--etd-fp-surface-muted));
+    background: var(--etd-fp-surface);
+    border-color: var(--etd-fp-border);
+    color: var(--etd-fp-text);
+    box-shadow:
+        0 0 0 1px rgba(15, 23, 42, 0.4),
+        0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.dark .flatpickr-calendar.arrowTop:before {
+    border-bottom-color: var(--etd-fp-border);
+}
+
+.dark .flatpickr-calendar.arrowTop:after {
+    border-bottom-color: var(--etd-fp-surface);
+}
+
+.dark .flatpickr-calendar.arrowBottom:before {
+    border-top-color: var(--etd-fp-border);
+}
+
+.dark .flatpickr-calendar.arrowBottom:after {
+    border-top-color: var(--etd-fp-surface);
+}
+
+.dark .flatpickr-months,
+.dark .flatpickr-months .flatpickr-month {
+    background: var(--etd-fp-surface);
+}
+
+.dark .flatpickr-months .flatpickr-month,
+.dark .flatpickr-current-month .flatpickr-monthDropdown-months,
+.dark .flatpickr-current-month input.cur-year,
+.dark .flatpickr-months .flatpickr-prev-month,
+.dark .flatpickr-months .flatpickr-next-month {
+    color: var(--etd-fp-text);
+    fill: var(--etd-fp-text);
+}
+
+.dark .flatpickr-current-month .flatpickr-monthDropdown-months {
+    background: var(--etd-fp-surface);
+}
+
+.dark .flatpickr-current-month .flatpickr-monthDropdown-months:hover,
+.dark .flatpickr-current-month input.cur-year:hover {
+    background: var(--etd-fp-surface-muted);
+}
+
+.dark .flatpickr-weekdays {
+    background: var(--etd-fp-surface);
+}
+
+.dark span.flatpickr-weekday {
+    background: var(--etd-fp-surface);
+    color: var(--etd-fp-text-muted);
+}
+
+.dark .flatpickr-days {
+    border-color: var(--etd-fp-border);
+}
+
+.dark .dayContainer + .dayContainer {
+    box-shadow: -1px 0 0 var(--etd-fp-border);
+}
+
+.dark .flatpickr-day {
+    color: var(--etd-fp-text);
+}
+
+.dark .flatpickr-day.flatpickr-disabled {
+    color: #475569;
+}
+
+.dark .flatpickr-day.prevMonthDay,
+.dark .flatpickr-day.nextMonthDay {
+    color: #64748b;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.dark .flatpickr-day.prevMonthDay.inRange,
+.dark .flatpickr-day.nextMonthDay.inRange {
+    background: color-mix(in srgb, var(--etd-flatpickr-accent, var(--etd-accent, #1d9e75)) 14%, var(--etd-fp-surface));
+    border-color: transparent;
+    box-shadow: none;
+    color: #64748b;
+}
+
+.dark .flatpickr-day.prevMonthDay:hover,
+.dark .flatpickr-day.nextMonthDay:hover,
+.dark .flatpickr-day.prevMonthDay:focus,
+.dark .flatpickr-day.nextMonthDay:focus {
+    background: color-mix(in srgb, var(--etd-flatpickr-accent, var(--etd-accent, #1d9e75)) 10%, var(--etd-fp-surface-muted));
+    border-color: transparent;
+    color: #94a3b8;
+}
+
+.dark .flatpickr-day.prevMonthDay.today,
+.dark .flatpickr-day.nextMonthDay.today {
+    border-color: color-mix(in srgb, var(--etd-flatpickr-accent, var(--etd-accent, #1d9e75)) 35%, var(--etd-fp-border));
+}
+
+.dark .flatpickr-day.today {
+    border-color: color-mix(in srgb, var(--etd-flatpickr-accent, var(--etd-accent, #1d9e75)) 50%, var(--etd-fp-border));
+}
+
+.dark .flatpickr-day.inRange {
+    background: var(--etd-fp-in-range);
+    border-color: transparent;
+    box-shadow:
+        -5px 0 0 var(--etd-fp-in-range),
+        5px 0 0 var(--etd-fp-in-range);
+}
+
+.dark .flatpickr-day:hover,
+.dark .flatpickr-day:focus {
+    background: var(--etd-fp-surface-muted);
+    border-color: var(--etd-fp-border);
+    color: var(--etd-fp-text);
+}
+
+.dark .flatpickr-day.selected,
+.dark .flatpickr-day.startRange,
+.dark .flatpickr-day.endRange,
+.dark .flatpickr-day.selected.inRange,
+.dark .flatpickr-day.startRange.inRange,
+.dark .flatpickr-day.endRange.inRange {
+    color: #fff;
+}
+
+.dark .numInputWrapper span.arrowUp:after {
+    border-bottom-color: var(--etd-fp-text-muted);
+}
+
+.dark .numInputWrapper span.arrowDown:after {
+    border-top-color: var(--etd-fp-text-muted);
+}
+
+.dark #ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-input,
+.dark #ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header input.form-control.input,
+.dark #ecom-tracker-dashboard-content .etd-header-period-nav .etd-date-input--range,
+.dark #ecom-activity-page-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-input,
+.dark #ecom-activity-page-content .etd-header-period-nav .etd-custom-dates--header input.form-control.input,
+.dark #ecom-activity-page-content .etd-header-period-nav .etd-date-input--range {
+    background-color: #1e293b;
     border-color: #475569;
     color: #e2e8f0;
 }
 
-.dark .flatpickr-day {
-    color: #e2e8f0;
-}
-
-.dark .flatpickr-day.flatpickr-disabled,
-.dark .flatpickr-day.prevMonthDay,
-.dark .flatpickr-day.nextMonthDay {
-    color: #64748b;
+.dark #ecom-tracker-dashboard-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-input::placeholder,
+.dark #ecom-activity-page-content .etd-header-period-nav .etd-custom-dates--header .flatpickr-input::placeholder {
+    color: #94a3b8;
 }
 
 
@@ -6146,6 +6322,59 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
+.etd-activity-context--product-kpis {
+    padding: 0.55rem 0.7rem 0.65rem;
+    margin-top: 0.25rem;
+}
+
+.etd-activity-product-kpis {
+    width: 100%;
+    min-width: 0;
+}
+
+.etd-activity-product-kpis__grid {
+    width: 100%;
+    gap: 0.45rem;
+}
+
+.etd-product-drill-period {
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    line-height: 1.35;
+}
+
+.etd-product-drill-period__dates {
+    font-weight: 500;
+    color: #64748b;
+}
+
+.dark .etd-product-drill-period {
+    color: #e2e8f0;
+}
+
+.dark .etd-product-drill-period__dates {
+    color: #94a3b8;
+}
+
+.etd-activity-context__filters--product-drill {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+
+.etd-activity-context--product-kpis .etd-kpi--compact {
+    background: rgba(248, 250, 252, 0.85);
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.55rem;
+}
+
+.dark .etd-activity-context--product-kpis .etd-kpi--compact {
+    background: rgba(15, 23, 42, 0.55);
+    border-color: #334155;
+}
+
 .dark .etd-activity-context {
     border-color: #334155;
     background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
@@ -6712,6 +6941,208 @@ a.etd-pager__btn:hover {
     vertical-align: top;
 }
 
+#ecom-activity-page-content .etd-table--activity-product-drill th.etd-col-user,
+#ecom-activity-page-content .etd-table--activity-product-drill td.etd-col-user {
+    min-width: 11rem;
+    max-width: 18rem;
+}
+
+#ecom-activity-page-content .etd-user-cell--product-drill .etd-user-cell__meta {
+    margin-top: 0.125rem;
+}
+
+#ecom-activity-page-content .etd-user-cell--product-drill .etd-user-cell__head--drill {
+    margin-bottom: 0.15rem;
+}
+
+#ecom-activity-page-content .etd-user-cell__drill-fact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.5rem;
+    font-size: 12px;
+    line-height: 1.35;
+    margin-top: 0.2rem;
+}
+
+#ecom-activity-page-content .etd-user-cell__drill-fact-label {
+    color: #64748b;
+    font-size: 11px;
+}
+
+#ecom-activity-page-content .etd-user-cell__drill-fact-value {
+    color: #334155;
+    font-weight: 500;
+}
+
+.dark #ecom-activity-page-content .etd-user-cell__drill-fact-value {
+    color: #e2e8f0;
+}
+
+#ecom-activity-page-content .etd-user-cell__drill-muted {
+    font-size: 11px;
+    margin-top: 0.15rem;
+}
+
+#ecom-activity-page-content .etd-table--activity-product-drill tbody tr.etd-activity-session-row--product-sold {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 55%, transparent 100%);
+}
+
+.dark #ecom-activity-page-content .etd-table--activity-product-drill tbody tr.etd-activity-session-row--product-sold {
+    background: linear-gradient(90deg, rgba(52, 211, 153, 0.12) 0%, rgba(52, 211, 153, 0.03) 55%, transparent 100%);
+}
+
+#ecom-activity-page-content .etd-product-event {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+#ecom-activity-page-content .etd-product-event__badge {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    line-height: 1.2;
+    border: 1px solid transparent;
+}
+
+#ecom-activity-page-content .etd-product-event__badge--sold {
+    background: rgba(16, 185, 129, 0.16);
+    color: #047857;
+    border-color: rgba(16, 185, 129, 0.35);
+}
+
+#ecom-activity-page-content .etd-product-event__badge--proceed {
+    background: rgba(217, 119, 6, 0.14);
+    color: #b45309;
+    border-color: rgba(217, 119, 6, 0.28);
+}
+
+#ecom-activity-page-content .etd-product-event__badge--checkout {
+    background: rgba(249, 115, 22, 0.14);
+    color: #c2410c;
+    border-color: rgba(249, 115, 22, 0.28);
+}
+
+#ecom-activity-page-content .etd-product-event__badge--cart {
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
+    border-color: rgba(245, 158, 11, 0.28);
+}
+
+#ecom-activity-page-content .etd-product-event__badge--view {
+    background: rgba(147, 51, 234, 0.12);
+    color: #6d28d9;
+    border-color: rgba(147, 51, 234, 0.22);
+}
+
+#ecom-activity-page-content .etd-product-event__badge--muted {
+    background: rgba(100, 116, 139, 0.12);
+    color: #475569;
+    border-color: rgba(100, 116, 139, 0.2);
+}
+
+.dark #ecom-activity-page-content .etd-product-event__badge--sold {
+    background: rgba(52, 211, 153, 0.18);
+    color: #a7f3d0;
+}
+
+.dark #ecom-activity-page-content .etd-product-event__badge--proceed,
+.dark #ecom-activity-page-content .etd-product-event__badge--cart {
+    color: #fde68a;
+}
+
+.dark #ecom-activity-page-content .etd-product-event__badge--checkout {
+    color: #fed7aa;
+}
+
+.dark #ecom-activity-page-content .etd-product-event__badge--view {
+    color: #ddd6fe;
+}
+
+.dark #ecom-activity-page-content .etd-product-event__badge--muted {
+    color: #cbd5e1;
+}
+
+#ecom-activity-page-content .etd-product-event__headline {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    line-height: 1.35;
+}
+
+.dark #ecom-activity-page-content .etd-product-event__headline {
+    color: #e2e8f0;
+}
+
+#ecom-activity-page-content .etd-product-event__line {
+    margin: 0;
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.35;
+}
+
+#ecom-activity-page-content .etd-commerce-event-trigger--product-drill {
+    margin-top: 0.25rem;
+    font-size: 11px;
+}
+
+#ecom-activity-page-content .etd-commerce-event-trigger--product-drill-sold .etd-commerce-event-trigger__label {
+    color: #047857;
+    font-weight: 600;
+}
+
+.dark #ecom-activity-page-content .etd-commerce-event-trigger--product-drill-sold .etd-commerce-event-trigger__label {
+    color: #6ee7b7;
+}
+
+#ecom-activity-page-content .etd-table--activity-product-drill thead th.etd-num,
+#ecom-activity-page-content .etd-table--activity-product-drill tbody td.etd-num {
+    text-align: center;
+}
+
+#ecom-activity-page-content .etd-product-commerce-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+#ecom-activity-page-content .etd-product-commerce-cell__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.5rem;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+#ecom-activity-page-content .etd-product-commerce-cell__label {
+    color: #64748b;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+#ecom-activity-page-content .etd-product-commerce-cell__value {
+    color: #334155;
+    font-weight: 600;
+}
+
+.dark #ecom-activity-page-content .etd-product-commerce-cell__value {
+    color: #e2e8f0;
+}
+
+#ecom-activity-page-content .etd-product-commerce-cell .etd-commerce-events {
+    margin-top: 0.15rem;
+}
+
 #ecom-activity-page-content .etd-session-copy {
     position: relative;
     display: block;
@@ -7129,6 +7560,60 @@ a.etd-pager__btn:hover {
 .etd-activity-table-shell .etd-table-scroll--activity.etd-table-scroll--fixed {
     flex: 1 1 auto;
     min-height: 0;
+}
+
+/* Product drill: KPI header is tall — do not shrink table to ~0; page scrolls in main */
+main:has(> #ecom-activity-page-content.etd-page--activity-product-drill) {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.etd-page--activity-product-drill {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+}
+
+.etd-page--activity-product-drill .etd-activity-table-block,
+.etd-page--activity-product-drill .etd-activity-table-block .etd-panel,
+.etd-page--activity-product-drill .etd-activity-table-shell {
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow: visible;
+}
+
+/* Product performance list: page scroll, no nested table viewport */
+.etd-page--product-performance-list {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+}
+
+.etd-product-performance-list .etd-product-catalog {
+    overflow: visible;
+}
+
+.etd-product-performance-list__pager {
+    margin-top: 0.75rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.dark .etd-product-performance-list__pager {
+    border-top-color: #334155;
+}
+
+.etd-page--activity-product-drill .etd-activity-table-shell .etd-table-scroll--activity.etd-table-scroll--fixed {
+    flex: 0 0 auto;
+    min-height: auto;
+    --etd-activity-visible-rows: 15;
+    --etd-activity-row-estimate: 3.375rem;
+    --etd-activity-thead-estimate: 2.85rem;
+    --etd-table-scroll-height: calc(
+        var(--etd-activity-thead-estimate) + var(--etd-activity-visible-rows) * var(--etd-activity-row-estimate)
+    );
+    max-height: var(--etd-table-scroll-height);
+    overflow-y: auto;
 }
 
 .etd-activity-table-shell.is-loading .etd-table-scroll--activity {

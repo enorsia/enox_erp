@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 
 class TrackingSession extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $table = 'tracking_session';
 
     /** latest_funnel_stage code => label */

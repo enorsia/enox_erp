@@ -3,13 +3,13 @@
 namespace App\Jobs;
 
 use App\Services\TrackerDashboardSyncService;
+use App\Support\TrackerDatabase;
+use App\Support\TrackerQueueSupport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -26,8 +26,6 @@ class TrackerDashboardSyncJob implements ShouldQueue
 
     public const NOTHING_TO_SYNC = 'nothing_to_sync';
 
-    private const BATCH_NAME = 'tracker-dashboard-sync';
-
     private const START_LOCK = 'tracker-dashboard-sync-start';
 
     /** Batches older than this are treated as abandoned so they never block a new sync. */
@@ -35,8 +33,8 @@ class TrackerDashboardSyncJob implements ShouldQueue
 
     public function __construct()
     {
-        $this->onConnection((string) config('tracker.dashboard_sync_queue_connection', 'database'));
-        $this->onQueue((string) config('tracker.dashboard_sync_queue_name', 'default'));
+        $this->onConnection(TrackerQueueSupport::connection());
+        $this->onQueue(TrackerQueueSupport::queue());
     }
 
     public function handle(TrackerDashboardSyncService $syncService): void
@@ -72,14 +70,9 @@ class TrackerDashboardSyncJob implements ShouldQueue
                 return ['status' => self::NOTHING_TO_SYNC, 'batches' => 0, 'sessions' => 0];
             }
 
-            $jobs = array_map(fn (array $ids) => new TrackerDashboardSyncChunkJob($ids), $chunks);
-
-            Bus::batch($jobs)
-                ->name(self::BATCH_NAME)
-                ->onConnection((string) config('tracker.dashboard_sync_queue_connection', 'database'))
-                ->onQueue((string) config('tracker.dashboard_sync_queue_name', 'default'))
-                ->allowFailures()
-                ->dispatch();
+            foreach ($chunks as $sessionIds) {
+                TrackerDashboardSyncChunkJob::dispatch($sessionIds);
+            }
 
             return [
                 'status' => self::STARTED,
@@ -91,16 +84,14 @@ class TrackerDashboardSyncJob implements ShouldQueue
         }
     }
 
-    /**
-     * A sync batch still has chunk jobs waiting or working (failed jobs stay counted in pending_jobs).
-     */
+    /** Chunk or planner jobs still queued on the tracking database connection. */
     public static function isRunning(): bool
     {
-        return DB::table('job_batches')
-            ->where('name', self::BATCH_NAME)
-            ->whereNull('finished_at')
-            ->whereNull('cancelled_at')
-            ->whereColumn('pending_jobs', '>', 'failed_jobs')
+        return TrackerDatabase::table('jobs')
+            ->where(function ($query): void {
+                $query->where('payload', 'like', '%TrackerDashboardSyncChunkJob%')
+                    ->orWhere('payload', 'like', '%TrackerDashboardSyncJob%');
+            })
             ->where('created_at', '>=', now()->subHours(self::STALE_BATCH_HOURS)->getTimestamp())
             ->exists();
     }

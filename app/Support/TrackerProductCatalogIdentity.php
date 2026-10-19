@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Support\TrackerDatabase;
+
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -106,7 +108,7 @@ final class TrackerProductCatalogIdentity
         /** @var array<string, array<string, int>> $scores */
         $scores = [];
 
-        $rows = DB::table('activity_ecom_commerce_line_items')
+        $rows = TrackerDatabase::table('activity_ecom_commerce_line_items')
             ->select('product_code', 'department_name', 'category_name', 'funnel_stage')
             ->whereIn('product_code', $productCodes)
             ->whereNotNull('department_name')

@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 
 class TrackingHourlySummary extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $fillable = [
         'metric_date',
         'metric_hour',

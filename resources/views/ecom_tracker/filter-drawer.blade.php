@@ -18,7 +18,7 @@
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
     </div>
-    <form method="GET" action="{{ route('admin.ecom-tracker.dashboard') }}" class="etd-filter-panel__form">
+    <form method="GET" action="{{ $data['filterFormAction'] ?? route('admin.ecom-tracker.dashboard') }}" class="etd-filter-panel__form">
         <div class="etd-filter-panel__body etd-filter-drawer__body">
             <section class="etd-filter-period etd-filter-period--drawer-mobile etd-activity-filter-section etd-activity-filter-section--full">
                 <p class="etd-activity-filter-section-title">Date range</p>
@@ -29,10 +29,10 @@
                 </div>
                 <input type="hidden" name="period" id="ecom-dashboard-filter-period" value="{{ $data['period'] }}">
                 <div class="etd-filter-period__presets" role="group" aria-label="Date presets">
-                    <a href="{{ route('admin.ecom-tracker.dashboard', ['period' => '24h']) }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '24h' ? 'is-active' : '' }}">Today</a>
-                    <a href="{{ route('admin.ecom-tracker.dashboard', ['period' => 'yesterday']) }}" class="etd-filter-period__preset no-underline {{ $data['period'] === 'yesterday' ? 'is-active' : '' }}">Yesterday</a>
-                    <a href="{{ route('admin.ecom-tracker.dashboard', ['period' => '7d']) }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '7d' ? 'is-active' : '' }}">7 days</a>
-                    <a href="{{ route('admin.ecom-tracker.dashboard', ['period' => '30d']) }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '30d' ? 'is-active' : '' }}">30 days</a>
+                    <a href="{{ ($data['periodPresetUrl'] ?? fn (string $key) => route('admin.ecom-tracker.dashboard', ['period' => $key]))('24h') }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '24h' ? 'is-active' : '' }}">Today</a>
+                    <a href="{{ ($data['periodPresetUrl'] ?? fn (string $key) => route('admin.ecom-tracker.dashboard', ['period' => $key]))('yesterday') }}" class="etd-filter-period__preset no-underline {{ $data['period'] === 'yesterday' ? 'is-active' : '' }}">Yesterday</a>
+                    <a href="{{ ($data['periodPresetUrl'] ?? fn (string $key) => route('admin.ecom-tracker.dashboard', ['period' => $key]))('7d') }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '7d' ? 'is-active' : '' }}">7 days</a>
+                    <a href="{{ ($data['periodPresetUrl'] ?? fn (string $key) => route('admin.ecom-tracker.dashboard', ['period' => $key]))('30d') }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '30d' ? 'is-active' : '' }}">30 days</a>
                     <button type="button" class="etd-filter-period__preset js-ecom-dashboard-drawer-custom-preset {{ $data['period'] === 'custom' ? 'is-active' : '' }}">Custom range</button>
                 </div>
                 <div id="ecom-dashboard-drawer-custom-dates"
