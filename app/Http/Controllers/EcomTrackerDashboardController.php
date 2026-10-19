@@ -136,6 +136,7 @@ class EcomTrackerDashboardController extends Controller
             ])),
             'activityLink' => fn (array $activityFilters = []) => route('admin.ecom-activity.index', $periodQuery + array_filter($activityFilters, fn ($value) => $value !== null)),
             'filterFormAction' => route($routeName),
+            'periodPresetUrl' => fn (string $periodKey) => route($routeName, ['period' => $periodKey] + $filterQuery),
         ];
 
         return [

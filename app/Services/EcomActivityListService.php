@@ -1405,6 +1405,18 @@ class EcomActivityListService
                 ->whereIn('fc.tracking_category_id', $filters['categories']));
         }
 
+        if (($filters['department'] ?? null) !== null) {
+            $departmentId = (int) $filters['department'];
+            $query->whereExists(fn (Builder $catalog) => $catalog
+                ->selectRaw('1')
+                ->from('tracking_session_p_cat as fd')
+                ->join('tracking_category as c', 'c.id', '=', 'fd.tracking_category_id')
+                ->whereColumn('fd.tracking_session_id', 'ts.id')
+                ->where(fn (Builder $scope) => $scope
+                    ->where('c.id', $departmentId)
+                    ->orWhere('c.parent_id', $departmentId)));
+        }
+
         $visitorType = $filters['visitor_type'] ?? null;
         if ($visitorType === 'bot') {
             $query->whereExists(fn (Builder $exists) => $exists
