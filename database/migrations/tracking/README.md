@@ -45,9 +45,15 @@ php artisan config:cache
 php artisan tracker:sync-dashboard
 ```
 
+**CTR rollup** (`activity_ecom_user_actions` → `tracking_ctr_daily_summaries` / `tracking_ctr_summaries`):
+
+```bash
+php artisan tracker:sync-ctr
+```
+
 4. Workers:
 
-**Dashboard sync + CTR** (tracking MySQL `jobs`):
+**Dashboard sync + CTR jobs** (`jobs` on `TRACKING_DB_*` — run worker before or after `tracker:sync-ctr`; both commands use this queue):
 
 ```bash
 php artisan queue:work tracking_database --queue=default --sleep=3 --timeout=0 --memory=0
