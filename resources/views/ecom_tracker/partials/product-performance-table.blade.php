@@ -7,7 +7,7 @@
         [
             'key' => 'views',
             'label' => 'View',
-            'tip' => 'Shopping sessions in this period that opened this product (PDP or popup). Counted once per session, even if they view it many times; a new session after ~30 minutes idle can count again.',
+            'tip' => 'Sessions in this period with a catalog click on this product (product_click). Once per session per product.',
         ],
         [
             'key' => 'add_to_cart',
@@ -27,7 +27,7 @@
         [
             'key' => 'paid',
             'label' => 'Paid',
-            'tip' => 'Total units of this style on successful payment — quantity in the checkout snapshot per session (once per session), summed across sessions.',
+            'tip' => 'Total units sold in the period (sold_qty on tracking_daily_products, summed across days after dashboard sync).',
         ],
     ];
     $metricColspan = count($funnelColumns) + 2;
@@ -53,7 +53,12 @@
         <tbody>
             @forelse ($products as $product)
                 @php
-                    $productKey = 'product:'.trim((string) (($product['code'] ?? $product['product_code'] ?? '') !== '' ? ($product['code'] ?? $product['product_code']) : ($product['name'] ?? '')));
+                    $productCode = trim((string) ($product['code'] ?? $product['product_code'] ?? ''));
+                    $productTitle = trim((string) ($product['name'] ?? ''));
+                    $productDisplay = $productTitle !== '' && $productCode !== ''
+                        ? "{$productTitle} ({$productCode})"
+                        : ($productTitle !== '' ? $productTitle : $productCode);
+                    $productKey = 'product:'.trim((string) ($productCode !== '' ? $productCode : $productTitle));
                     $productDrillQuery = array_filter([
                         'product_code' => $product['code'] ?? ($product['product_code'] ?? null),
                     ]);
@@ -67,10 +72,10 @@
                     <td class="etd-col-product">
                         @if ($productLink)
                             <a href="{{ $productLink }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">
-                                {{ $product['name'] }}
+                                {{ $productDisplay }}
                             </a>
                         @else
-                            {{ $product['name'] }}
+                            {{ $productDisplay }}
                         @endif
                     </td>
                     @foreach ($funnelColumns as $column)

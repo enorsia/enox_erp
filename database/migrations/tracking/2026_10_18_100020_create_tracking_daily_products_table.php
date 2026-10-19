@@ -17,6 +17,7 @@ return new class extends TrackingMigration
             $table->string('product_code', 100)->comment('tracking_product.code; all skus of a product share one row');
             $table->unsignedInteger('product_views')->default(0);
             $table->unsignedInteger('add_to_carts')->default(0);
+            $table->unsignedInteger('begin_checkouts')->default(0);
             $table->unsignedInteger('proceed_checkouts')->default(0);
             $table->unsignedInteger('sold_qty')->default(0);
             $table->decimal('sale_amount', 12, 2)->default(0);

@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use App\Support\TrackerDatabase;
-
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackingDailyAudience;
@@ -11,6 +9,7 @@ use App\Models\TrackingDailyDuration;
 use App\Models\TrackingOrderAddress;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerActionSequence;
+use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Closure;
@@ -75,7 +74,7 @@ class TrackerDashboardSyncService
         ],
         'tracking_daily_products' => [
             'unique' => ['metric_date', 'product_code'],
-            'counters' => ['product_views', 'add_to_carts', 'proceed_checkouts'],
+            'counters' => ['product_views', 'add_to_carts', 'begin_checkouts', 'proceed_checkouts'],
         ],
         'tracking_daily_audiences' => [
             'unique' => ['metric_date', 'type', 'dimension_id', 'source', 'medium'],
@@ -2025,59 +2024,17 @@ class TrackerDashboardSyncService
 
         if ($type === 'product_view') {
             $contributions = [];
-            $seen = [];
             foreach ($this->actionCommerceLines($action) as $line) {
-                $productCode = $this->productCode($line['product_code']);
-                if ($productCode === '' || isset($seen[$productCode])) {
+                $categoryId = $this->resolveCategoryIdFromLine($line);
+                if ($categoryId === null) {
                     continue;
                 }
-                $seen[$productCode] = true;
                 $contributions[] = [
                     'column' => 'product_views',
-                    'product_code' => $productCode,
-                    'category_id' => $this->resolveCategoryIdFromLine($line),
+                    'product_code' => null,
+                    'category_id' => $categoryId,
                     'amount' => 1,
-                    'dedupe' => 'product_view|'.$productCode,
-                ];
-            }
-
-            return $contributions;
-        }
-
-        if ($type === 'add_to_cart') {
-            $contributions = [];
-            foreach ($this->addToCartMetricLines($action) as $line) {
-                $productCode = $this->productCode($line['product_code']);
-                if ($productCode === '') {
-                    continue;
-                }
-                $contributions[] = [
-                    'column' => 'add_to_carts',
-                    'product_code' => $productCode,
-                    'category_id' => $this->resolveCategoryIdFromLine($line),
-                    'amount' => max(1, (int) $line['qty']),
-                    'dedupe' => null,
-                ];
-            }
-
-            return $contributions;
-        }
-
-        if ($type === 'proceed_checkout') {
-            $contributions = [];
-            $seen = [];
-            foreach ($this->actionCommerceLines($action) as $line) {
-                $productCode = $this->productCode($line['product_code']);
-                if ($productCode === '' || isset($seen[$productCode])) {
-                    continue;
-                }
-                $seen[$productCode] = true;
-                $contributions[] = [
-                    'column' => 'proceed_checkouts',
-                    'product_code' => $productCode,
-                    'category_id' => $this->resolveCategoryIdFromLine($line),
-                    'amount' => 1,
-                    'dedupe' => 'proceed_checkout|'.$productCode,
+                    'dedupe' => 'category_product_view|'.$categoryId,
                 ];
             }
 
@@ -2802,6 +2759,7 @@ class TrackerDashboardSyncService
         TrackerDatabase::table('tracking_daily_products')->where('metric_date', $date)->update([
             'product_views' => 0,
             'add_to_carts' => 0,
+            'begin_checkouts' => 0,
             'proceed_checkouts' => 0,
             'updated_at' => $now,
         ]);
@@ -2834,17 +2792,52 @@ class TrackerDashboardSyncService
             ->orderBy('id')
             ->get();
 
+        $skuToParent = TrackerDatabase::table('tracking_product')
+            ->whereNotNull('sku')
+            ->where('sku', '!=', '')
+            ->pluck('code', 'sku')
+            ->all();
+
+        $activityList = app(EcomActivityListService::class);
         $counters = [];
         $funnelDedupe = [];
 
-        foreach ($actions as $action) {
-            if ($this->localDate($action->created_at ?? null) !== $date) {
+        foreach ($actions->groupBy('session_id') as $sessionActions) {
+            $dayActions = $sessionActions->filter(
+                fn (object $action) => $this->localDate($action->created_at ?? null) === $date,
+            );
+
+            if ($dayActions->isEmpty()) {
                 continue;
             }
 
-            $type = $this->metricActionType($action);
-            $sessionId = $this->normalizeSessionId((string) ($action->session_id ?? ''));
-            $this->recordFunnelAction($counters, $action, $type, $date, $sessionId, $funnelDedupe);
+            foreach ($dayActions as $action) {
+                $type = $this->metricActionType($action);
+                $sessionId = $this->normalizeSessionId((string) ($action->session_id ?? ''));
+                $this->recordFunnelAction($counters, $action, $type, $date, $sessionId, $funnelDedupe);
+            }
+
+            $units = $activityList->productFunnelUnitsForSessionActions($dayActions, $skuToParent);
+            foreach ($units as $productCode => $steps) {
+                $productCode = $this->productCode($productCode);
+                if ($productCode === '') {
+                    continue;
+                }
+
+                $key = ['metric_date' => $date, 'product_code' => $productCode];
+                if (($steps['views'] ?? 0) > 0) {
+                    $this->bump($counters, 'tracking_daily_products', $key, 'product_views', (int) $steps['views']);
+                }
+                if (($steps['add_to_cart'] ?? 0) > 0) {
+                    $this->bump($counters, 'tracking_daily_products', $key, 'add_to_carts', (int) $steps['add_to_cart']);
+                }
+                if (($steps['begin_checkout'] ?? 0) > 0) {
+                    $this->bump($counters, 'tracking_daily_products', $key, 'begin_checkouts', (int) $steps['begin_checkout']);
+                }
+                if (($steps['proceed_checkout'] ?? 0) > 0) {
+                    $this->bump($counters, 'tracking_daily_products', $key, 'proceed_checkouts', (int) $steps['proceed_checkout']);
+                }
+            }
         }
 
         $this->addCounters($counters);
