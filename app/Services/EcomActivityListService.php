@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use App\Support\TrackerDatabase;
-
 use App\Exceptions\CommerceParseException;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
@@ -12,22 +10,24 @@ use App\Models\TrackingDailyDuration;
 use App\Models\TrackingSession;
 use App\Support\CheckoutPayloadTotals;
 use App\Support\CommercePricingExtractor;
-use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerDatabase;
+use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
  * Ecom activity list: tracking_session rows + commerce actions for the Commerce column.
- * Checkout/cart use the latest action at that funnel stage; payment_success lists every order in the session.
+ * Cart/checkout commerce uses the latest add_to_cart / begin_checkout / proceed_checkout action (by id).
+ * Funnel stage label still reflects the highest stage reached. payment_success lists every order in the session.
  */
 class EcomActivityListService
 {
@@ -1640,7 +1640,7 @@ class EcomActivityListService
     }
 
     /**
-     * @return \Illuminate\Database\Query\Expression
+     * @return Expression
      */
     private function productDrillMetricSubquery(string $metric, string $productCode, $fromBound, $toBound)
     {
@@ -1724,23 +1724,18 @@ class EcomActivityListService
 
     private function withCommerceAction(Builder $query): Builder
     {
-        $stageActionType = "CASE ts.latest_funnel_stage
-            WHEN 6 THEN 'payment_success'
-            WHEN 5 THEN 'proceed_checkout'
-            WHEN 4 THEN 'begin_checkout'
-            WHEN 3 THEN 'add_to_cart'
-        END";
-
         return $query
-            ->leftJoin('activity_ecom_user_actions as ca', function ($join) use ($stageActionType) {
+            ->leftJoin('activity_ecom_user_actions as ca', function ($join) {
                 $join->on('ca.session_id', '=', 'ts.session_id')
                     ->whereRaw("ca.id = (
                         SELECT MAX(a2.id) FROM activity_ecom_user_actions a2
-                        WHERE a2.session_id = ts.session_id AND a2.action_type = {$stageActionType}
+                        WHERE a2.session_id = ts.session_id
+                        AND a2.action_type IN ('add_to_cart', 'begin_checkout', 'proceed_checkout')
                     )");
             })
             ->select([
                 'ts.*',
+                'ca.action_type as commerce_action_type',
                 'ca.id as commerce_action_id',
                 'ca.order_id as commerce_order_id',
                 'ca.amount_paid as commerce_amount_paid',
@@ -2571,15 +2566,57 @@ class EcomActivityListService
         $triggerLabel = ($isOrder ? ($orderId !== '' ? '#'.$orderId : 'Order') : $label)
             .($amount !== null ? ' · '.$this->money($amount) : '');
 
+        $payloadStageKey = $this->commercePayloadStageKey($row, $stageKey);
+        $json = $row->commerce_action_id
+            ? $this->commerceJsonFromJoinedRow($row, $payloadStageKey)
+            : [];
+
         $event = $row->commerce_action_id
-            ? $this->commerceEvent($row, $stageKey, $label, $triggerLabel, $amount, $orderId)
+            ? $this->commerceEvent($row, $payloadStageKey, $label, $triggerLabel, $amount, $orderId, $json)
             : null;
+
+        if ($event !== null) {
+            $event['stage'] = $stageKey;
+            $event['stage_label'] = $label;
+        }
 
         return [
             'commerce_display' => $triggerLabel,
             'commerce_has_order' => $isOrder,
             'expandable_commerce_events' => $event ? [$event] : [],
         ];
+    }
+
+    private function commercePayloadStageKey(object $row, string $funnelStageKey): string
+    {
+        $snapshotType = trim((string) ($row->commerce_action_type ?? ''));
+
+        if (in_array($snapshotType, ['add_to_cart', 'begin_checkout', 'proceed_checkout'], true)) {
+            return $snapshotType;
+        }
+
+        return $funnelStageKey;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function commerceJsonFromJoinedRow(object $row, string $stageKey): array
+    {
+        $column = match ($stageKey) {
+            'proceed_checkout' => 'commerce_proceed_to_checkout',
+            'add_to_cart' => 'commerce_add_to_cart',
+            'begin_checkout' => 'commerce_begin_checkout',
+            default => 'commerce_'.$stageKey,
+        };
+
+        $raw = $row->{$column} ?? null;
+
+        if (is_array($raw)) {
+            return $raw;
+        }
+
+        return json_decode((string) $raw, true) ?: [];
     }
 
     /**
