@@ -192,7 +192,7 @@ class PurgeTrackerData extends Command
 
     private function purgeQueues(): void
     {
-        $erp = $this->purgeTrackerQueueTables(DB::connection(), Schema::getConnection());
+        $erp = $this->purgeTrackerQueueTables(DB::connection(), DB::connection()->getSchemaBuilder());
         $tracking = $this->purgeTrackerQueueTables(
             TrackerDatabase::connection(),
             TrackerDatabase::connection()->getSchemaBuilder(),
