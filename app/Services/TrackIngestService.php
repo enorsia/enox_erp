@@ -446,10 +446,6 @@ class TrackIngestService
             $row[$field] = $value;
         }
 
-        if (in_array($actionType, ['product_view', 'product_view_popup', 'category_view'], true) && ! empty($row['start_time'])) {
-            $row['created_at'] = $row['start_time'];
-        }
-
         if ($actionType === 'add_to_cart' && isset($event['add_to_cart'])) {
             $row['add_to_cart'] = json_encode($event['add_to_cart']);
             $row = $this->enrichAddToCartScalars($row, $event['add_to_cart']);
@@ -1198,13 +1194,7 @@ class TrackIngestService
      */
     private function eventActivityTimestamp(array $event): int
     {
-        $actionType = (string) ($event['action_type'] ?? '');
-        $durationView = in_array($actionType, ['product_view', 'product_view_popup', 'category_view'], true);
-        $fields = $durationView
-            ? ['start_time', 'created_at', 'end_time']
-            : ['created_at', 'start_time', 'end_time'];
-
-        foreach ($fields as $field) {
+        foreach (['end_time', 'created_at', 'start_time'] as $field) {
             $value = $event[$field] ?? null;
 
             if ($value === null || $value === '') {

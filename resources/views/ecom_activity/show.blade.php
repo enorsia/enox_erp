@@ -155,12 +155,6 @@
                                 @endif
                             </div>
 
-                            @if ($timelineCommerce = ($timelineCommerceByActionId[$item->id] ?? null))
-                                <div class="mt-3 border-t border-slate-100 dark:border-slate-700/60 pt-3">
-                                    @include('ecom_activity.partials.commerce-event-detail', ['event' => $timelineCommerce])
-                                </div>
-                            @endif
-
                             @if ($jsonPayload)
                                 <details class="mt-3">
                                     <summary class="text-[12px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">View JSON payload</summary>

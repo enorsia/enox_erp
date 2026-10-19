@@ -46,81 +46,9 @@ final class TrackerActionSequence
      */
     public static function filterForSessionTimeline(Collection $actions): Collection
     {
-        $suppressGridIds = self::gridImpressionIdsBetweenProductClickAndView($actions);
-
         return $actions
-            ->filter(function (object $action) use ($suppressGridIds): bool {
-                if (in_array((int) ($action->id ?? 0), $suppressGridIds, true)) {
-                    return false;
-                }
-
-                return self::isVisibleInSessionTimeline($action->action_type ?? null);
-            })
+            ->filter(fn (object $action) => self::isVisibleInSessionTimeline($action->action_type ?? null))
             ->values();
-    }
-
-    /**
-     * PDP grid impressions between a catalog click and its product_view are not shown on the session timeline.
-     *
-     * @param  Collection<int, object>  $actions
-     * @return list<int>
-     */
-    private static function gridImpressionIdsBetweenProductClickAndView(Collection $actions): array
-    {
-        $chronological = $actions
-            ->sort(fn (object $left, object $right) => self::compareDisplayActions($left, $right))
-            ->values();
-
-        $suppress = [];
-
-        foreach ($chronological as $view) {
-            $viewType = (string) ($view->action_type ?? '');
-            if (! in_array($viewType, ['product_view', 'product_view_popup'], true)) {
-                continue;
-            }
-
-            $viewKey = self::timelineProductKey($view);
-            $viewTs = self::displayActionTimestamp($view);
-            $click = null;
-            $clickTs = 0;
-
-            foreach ($chronological as $candidate) {
-                if ((string) ($candidate->action_type ?? '') !== 'product_click') {
-                    continue;
-                }
-
-                if (self::timelineProductKey($candidate) !== $viewKey) {
-                    continue;
-                }
-
-                $candidateTs = self::displayActionTimestamp($candidate);
-                if ($candidateTs > $viewTs || ($viewTs - $candidateTs) > 30) {
-                    continue;
-                }
-
-                if ($click === null || $candidateTs >= $clickTs) {
-                    $click = $candidate;
-                    $clickTs = $candidateTs;
-                }
-            }
-
-            if ($click === null) {
-                continue;
-            }
-
-            foreach ($chronological as $row) {
-                if ((string) ($row->action_type ?? '') !== 'grid_impression') {
-                    continue;
-                }
-
-                $ts = self::displayActionTimestamp($row);
-                if ($ts > $clickTs && $ts < $viewTs) {
-                    $suppress[] = (int) ($row->id ?? 0);
-                }
-            }
-        }
-
-        return array_values(array_unique(array_filter($suppress)));
     }
 
     /**
@@ -227,24 +155,23 @@ final class TrackerActionSequence
 
     private static function displayActionTimestamp(object $action): int
     {
-        $actionType = (string) ($action->action_type ?? '');
-        $durationView = in_array($actionType, ['product_view', 'product_view_popup', 'category_view'], true);
-        $fields = $durationView ? ['start_time', 'created_at'] : ['created_at', 'start_time'];
+        $created = $action->created_at ?? null;
+        $start = $action->start_time ?? null;
 
-        foreach ($fields as $field) {
-            $value = $action->{$field} ?? null;
+        if ($created instanceof \DateTimeInterface) {
+            return $created->getTimestamp();
+        }
 
-            if ($value instanceof \DateTimeInterface) {
-                return $value->getTimestamp();
-            }
+        if (is_string($created) && $created !== '') {
+            return strtotime($created) ?: 0;
+        }
 
-            if (is_string($value) && $value !== '') {
-                $ts = strtotime($value);
+        if ($start instanceof \DateTimeInterface) {
+            return $start->getTimestamp();
+        }
 
-                if ($ts !== false) {
-                    return $ts;
-                }
-            }
+        if (is_string($start) && $start !== '') {
+            return strtotime($start) ?: 0;
         }
 
         return 0;

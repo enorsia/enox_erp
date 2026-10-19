@@ -147,14 +147,6 @@ class EcomActivityController extends Controller
 
         $activityUser->refresh();
 
-        $timelineCommerceByActionId = [];
-        foreach ($actions as $action) {
-            $commerceEvent = app(EcomActivityListService::class)->commerceEventForSessionAction($action);
-            if ($commerceEvent !== null) {
-                $timelineCommerceByActionId[$action->id] = $commerceEvent;
-            }
-        }
-
         $fullTimeline = $this->buildTimeline($actions);
         $latestActionAt = $actions
             ->map(fn (ActivityEcomUserAction $action) => TrackerTime::toUtc($action->created_at))
@@ -233,7 +225,6 @@ class EcomActivityController extends Controller
             'landingPage' => $landingPage,
             'latestActionAt' => $latestActionAt,
             'sessionPaymentOrders' => $sessionPaymentOrders,
-            'timelineCommerceByActionId' => $timelineCommerceByActionId,
             'relatedVisitorSessions' => $this->relatedVisitorSessions($activityUser),
             'badgeColors' => self::BADGE_COLORS,
         ]);
