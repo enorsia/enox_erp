@@ -7,9 +7,15 @@ use Illuminate\Support\Collection;
 /**
  * Stable ordering for session timeline and ingest batches (time first, then funnel stage).
  * {@see displayActionCount()} mirrors admin session timeline grouping in EcomActivityController.
+ * {@see TIMELINE_HIDDEN_ACTION_TYPES} are stored for CTR/grid analytics but not shown on session detail.
  */
 final class TrackerActionSequence
 {
+    /** @var list<string> */
+    public const TIMELINE_HIDDEN_ACTION_TYPES = [
+        'product_click',
+    ];
+
     /** @var array<string, int> */
     private const FUNNEL_RANK = [
         'category_view' => 10,
@@ -27,6 +33,94 @@ final class TrackerActionSequence
     public static function funnelRank(?string $actionType): int
     {
         return self::FUNNEL_RANK[$actionType] ?? 0;
+    }
+
+    public static function isVisibleInSessionTimeline(?string $actionType): bool
+    {
+        return ! in_array((string) $actionType, self::TIMELINE_HIDDEN_ACTION_TYPES, true);
+    }
+
+    /**
+     * @param  Collection<int, object>  $actions
+     * @return Collection<int, object>
+     */
+    public static function filterForSessionTimeline(Collection $actions): Collection
+    {
+        $suppressGridIds = self::gridImpressionIdsBetweenProductClickAndView($actions);
+
+        return $actions
+            ->filter(function (object $action) use ($suppressGridIds): bool {
+                if (in_array((int) ($action->id ?? 0), $suppressGridIds, true)) {
+                    return false;
+                }
+
+                return self::isVisibleInSessionTimeline($action->action_type ?? null);
+            })
+            ->values();
+    }
+
+    /**
+     * PDP grid impressions between a catalog click and its product_view are not shown on the session timeline.
+     *
+     * @param  Collection<int, object>  $actions
+     * @return list<int>
+     */
+    private static function gridImpressionIdsBetweenProductClickAndView(Collection $actions): array
+    {
+        $chronological = $actions
+            ->sort(fn (object $left, object $right) => self::compareDisplayActions($left, $right))
+            ->values();
+
+        $suppress = [];
+
+        foreach ($chronological as $view) {
+            $viewType = (string) ($view->action_type ?? '');
+            if (! in_array($viewType, ['product_view', 'product_view_popup'], true)) {
+                continue;
+            }
+
+            $viewKey = self::timelineProductKey($view);
+            $viewTs = self::displayActionTimestamp($view);
+            $click = null;
+            $clickTs = 0;
+
+            foreach ($chronological as $candidate) {
+                if ((string) ($candidate->action_type ?? '') !== 'product_click') {
+                    continue;
+                }
+
+                if (self::timelineProductKey($candidate) !== $viewKey) {
+                    continue;
+                }
+
+                $candidateTs = self::displayActionTimestamp($candidate);
+                if ($candidateTs > $viewTs || ($viewTs - $candidateTs) > 30) {
+                    continue;
+                }
+
+                if ($click === null || $candidateTs >= $clickTs) {
+                    $click = $candidate;
+                    $clickTs = $candidateTs;
+                }
+            }
+
+            if ($click === null) {
+                continue;
+            }
+
+            foreach ($chronological as $row) {
+                if ((string) ($row->action_type ?? '') !== 'grid_impression') {
+                    continue;
+                }
+
+                $ts = self::displayActionTimestamp($row);
+                if ($ts > $clickTs && $ts < $viewTs) {
+                    $suppress[] = (int) ($row->id ?? 0);
+                }
+            }
+        }
+
+        return array_values(array_unique(array_filter($suppress)));
     }
 
     /**
@@ -52,7 +146,7 @@ final class TrackerActionSequence
      */
     public static function displayActionCount(Collection $actions): int
     {
-        $sorted = $actions
+        $sorted = self::filterForSessionTimeline($actions)
             ->sort(fn (object $left, object $right) => self::compareDisplayActions($left, $right))
             ->values();
 
@@ -133,23 +227,24 @@ final class TrackerActionSequence
 
     private static function displayActionTimestamp(object $action): int
     {
-        $created = $action->created_at ?? null;
-        $start = $action->start_time ?? null;
+        $actionType = (string) ($action->action_type ?? '');
+        $durationView = in_array($actionType, ['product_view', 'product_view_popup', 'category_view'], true);
+        $fields = $durationView ? ['start_time', 'created_at'] : ['created_at', 'start_time'];
 
-        if ($created instanceof \DateTimeInterface) {
-            return $created->getTimestamp();
-        }
+        foreach ($fields as $field) {
+            $value = $action->{$field} ?? null;
 
-        if (is_string($created) && $created !== '') {
-            return strtotime($created) ?: 0;
-        }
+            if ($value instanceof \DateTimeInterface) {
+                return $value->getTimestamp();
+            }
 
-        if ($start instanceof \DateTimeInterface) {
-            return $start->getTimestamp();
-        }
+            if (is_string($value) && $value !== '') {
+                $ts = strtotime($value);
 
-        if (is_string($start) && $start !== '') {
-            return strtotime($start) ?: 0;
+                if ($ts !== false) {
+                    return $ts;
+                }
+            }
         }
 
         return 0;

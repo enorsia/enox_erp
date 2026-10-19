@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Support\TrackerDatabase;
-
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Services\EcomActivityListService;
@@ -12,6 +10,7 @@ use App\Support\EcomActivityTableFocus;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerActionSequence;
+use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -19,7 +18,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class EcomActivityController extends Controller
@@ -142,6 +140,8 @@ class EcomActivityController extends Controller
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->get();
+
+        $actions = TrackerActionSequence::filterForSessionTimeline($actions);
 
         app(TrackerDashboardSyncService::class)->reconcileActionCountsForSessions([$session]);
 
@@ -269,6 +269,12 @@ class EcomActivityController extends Controller
         while ($index < $sorted->count()) {
             /** @var ActivityEcomUserAction $action */
             $action = $sorted[$index];
+
+            if (! TrackerActionSequence::isVisibleInSessionTimeline($action->action_type)) {
+                $index++;
+
+                continue;
+            }
 
             if ($action->action_type === 'grid_impression') {
                 $group = collect([$action]);

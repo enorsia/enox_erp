@@ -2,23 +2,21 @@
 
 namespace App\Services;
 
-use App\Support\TrackerDatabase;
-
-use App\Support\CheckoutPayloadTotals;
-use App\Support\CommercePricingExtractor;
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Support\CheckoutPayloadTotals;
+use App\Support\CommercePricingExtractor;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerActionSequence;
 use App\Support\TrackerCategoryIdentity;
+use App\Support\TrackerDatabase;
 use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -446,6 +444,10 @@ class TrackIngestService
             }
 
             $row[$field] = $value;
+        }
+
+        if (in_array($actionType, ['product_view', 'product_view_popup', 'category_view'], true) && ! empty($row['start_time'])) {
+            $row['created_at'] = $row['start_time'];
         }
 
         if ($actionType === 'add_to_cart' && isset($event['add_to_cart'])) {
@@ -1142,7 +1144,7 @@ class TrackIngestService
             ]);
 
             throw ValidationException::withMessages([
-                'events' => ['payment_success contains disallowed fields: ' . implode(', ', $extra)],
+                'events' => ['payment_success contains disallowed fields: '.implode(', ', $extra)],
             ]);
         }
     }
@@ -1196,7 +1198,13 @@ class TrackIngestService
      */
     private function eventActivityTimestamp(array $event): int
     {
-        foreach (['end_time', 'created_at', 'start_time'] as $field) {
+        $actionType = (string) ($event['action_type'] ?? '');
+        $durationView = in_array($actionType, ['product_view', 'product_view_popup', 'category_view'], true);
+        $fields = $durationView
+            ? ['start_time', 'created_at', 'end_time']
+            : ['created_at', 'start_time', 'end_time'];
+
+        foreach ($fields as $field) {
             $value = $event[$field] ?? null;
 
             if ($value === null || $value === '') {
