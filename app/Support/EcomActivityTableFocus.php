@@ -30,7 +30,7 @@ final class EcomActivityTableFocus
             'key' => 'products_viewed',
             'label' => 'View',
             'class' => 'etd-num',
-            'tip' => 'Yes if this parent style was viewed in the session (variant SKUs roll up to the style code)',
+            'tip' => 'Yes if this parent style was viewed in the session (catalog click, PDP view, or popup; variant SKUs roll up to the style code)',
         ],
         'adds' => [
             'key' => 'adds',
