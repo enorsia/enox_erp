@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\TrackingCtrRollupService;
+use App\Support\TrackerQueueSupport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -21,8 +22,8 @@ class ProcessTrackingCtrBatchJob implements ShouldQueue
     public function __construct(
         public readonly array $actionIds,
     ) {
-        $this->onConnection((string) config('tracker.ctr_queue_connection', 'database'));
-        $this->onQueue((string) config('tracker.ctr_queue_name', 'default'));
+        $this->onConnection(TrackerQueueSupport::connection());
+        $this->onQueue(TrackerQueueSupport::queue());
     }
 
     public function handle(TrackingCtrRollupService $rollupService): void

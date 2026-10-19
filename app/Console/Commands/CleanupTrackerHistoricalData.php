@@ -12,6 +12,7 @@ class CleanupTrackerHistoricalData extends Command
 {
     protected $signature = 'tracker:cleanup-historical-data
                             {--dry-run : Report changes without writing}
+                            {--force : Required to delete ingest rows (ignored for dry-run)}
                             {--before= : Optional; only rows on/before this date (Europe/London). Omit to process all data}
                             {--skip-customer-backfill : Skip restoring name/email/phone from checkout actions}
                             {--skip-dedupe-payments : Skip removing duplicate payment_success rows for the same order}
@@ -19,11 +20,24 @@ class CleanupTrackerHistoricalData extends Command
                             {--include-empty-sessions : Also remove sessions with zero actions}
                             {--skip-actions-count-backfill : Skip recounting actions_count from user_actions}';
 
-    protected $description = 'Clean tracker data: ghost payment-only sessions, duplicate orders, and missing checkout customer identity.';
+    protected $description = 'Optional ingest cleanup (deletes rows). Dry-run first; live deletes need --force. Not run by sync.';
 
     public function handle(TrackerDataCleanupService $cleanup): int
     {
         $dryRun = (bool) $this->option('dry-run');
+
+        $willDelete = ! $dryRun && (
+            ! $this->option('skip-orphan-sessions')
+            || ! $this->option('skip-dedupe-payments')
+            || $this->option('include-empty-sessions')
+        );
+
+        if ($willDelete && ! $this->option('force')) {
+            $this->error('This command can delete activity_ecom_user / activity_ecom_user_actions rows.');
+            $this->line('Use --dry-run to preview, then re-run with --force if you intend to delete.');
+
+            return self::FAILURE;
+        }
         $beforeOption = $this->option('before');
         $before = filled($beforeOption)
             ? Carbon::parse((string) $beforeOption, TrackerTime::timezone())->endOfDay()

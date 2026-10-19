@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TrackingOrderAddress extends Model
 {
+    use UsesTrackingDatabase;
+
     public const TYPE_SHIPPING = 1;
 
     public const TYPE_BILLING = 2;

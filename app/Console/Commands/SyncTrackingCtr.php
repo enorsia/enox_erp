@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\TrackingCtrBatchDispatcher;
+use App\Support\TrackerQueueSupport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -22,8 +23,8 @@ class SyncTrackingCtr extends Command
             return self::SUCCESS;
         }
 
-        $connection = (string) config('tracker.ctr_queue_connection', 'database');
-        $queue = (string) config('tracker.ctr_queue_name', 'default');
+        $connection = TrackerQueueSupport::connection();
+        $queue = TrackerQueueSupport::queue();
 
         $this->info(sprintf(
             'CTR sync: queued %d job(s) for %d action(s) → connection [%s], queue [%s].',

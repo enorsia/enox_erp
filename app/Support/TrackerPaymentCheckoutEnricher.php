@@ -53,7 +53,86 @@ class TrackerPaymentCheckoutEnricher
         $payload['checkout_info'] ??= [];
         $payload['checkout_info']['items'] = $enrichedItems;
 
+        return $this->mergeCheckoutTotalsFromSession($payload, $sessionActions);
+    }
+
+    /**
+     * Storefront payment_success often ships net totals only; copy discount breakdown from the last checkout step.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  Collection<int, ActivityEcomUserAction>  $sessionActions
+     * @return array<string, mixed>
+     */
+    private function mergeCheckoutTotalsFromSession(array $payload, Collection $sessionActions): array
+    {
+        $checkoutAction = $sessionActions
+            ->filter(fn (ActivityEcomUserAction $action) => in_array($action->action_type, ['proceed_checkout', 'begin_checkout'], true))
+            ->sortByDesc(fn (ActivityEcomUserAction $action) => sprintf('%s|%010d', TrackerTime::formatUtc($action->created_at) ?? '', (int) $action->id))
+            ->first();
+
+        if ($checkoutAction === null) {
+            return $payload;
+        }
+
+        $checkoutPayload = match ($checkoutAction->action_type) {
+            'proceed_checkout' => is_array($checkoutAction->proceed_to_checkout) ? $checkoutAction->proceed_to_checkout : [],
+            default => is_array($checkoutAction->begin_checkout) ? $checkoutAction->begin_checkout : [],
+        };
+
+        if ($checkoutPayload === []) {
+            return $payload;
+        }
+
+        $sourceTotals = CheckoutPayloadTotals::totals($checkoutPayload);
+        $sourceDiscount = $this->discountTotalFromTotals($sourceTotals);
+
+        if ($sourceDiscount <= 0) {
+            return $payload;
+        }
+
+        $payload['checkout_info'] ??= [];
+        $paymentTotals = CheckoutPayloadTotals::totals($payload);
+
+        if ($this->discountTotalFromTotals($paymentTotals) > 0) {
+            return $payload;
+        }
+
+        $mergedTotals = array_merge($paymentTotals, array_filter([
+            'subtotal' => $sourceTotals['subtotal'] ?? null,
+            'coupon_discount' => $sourceTotals['coupon_discount'] ?? null,
+            'scs_discount' => $sourceTotals['scs_discount'] ?? null,
+            'sms_discount' => $sourceTotals['sms_discount'] ?? null,
+            'service_charge' => $paymentTotals['service_charge'] ?? $sourceTotals['service_charge'] ?? null,
+            'delivery_charge' => $paymentTotals['delivery_charge'] ?? $sourceTotals['delivery_charge'] ?? null,
+            'shipping_cost' => $paymentTotals['shipping_cost'] ?? $sourceTotals['shipping_cost'] ?? null,
+            'extra_charges_total' => $paymentTotals['extra_charges_total'] ?? $sourceTotals['extra_charges_total'] ?? null,
+            'grand_total' => $paymentTotals['grand_total'] ?? $sourceTotals['grand_total'] ?? CheckoutPayloadTotals::grandTotal($payload),
+        ], fn (mixed $value) => $value !== null && $value !== ''));
+
+        $payload['checkout_info']['totals'] = $mergedTotals;
+
+        $couponCode = trim((string) ($payload['checkout_info']['coupon_code'] ?? $payload['coupon_code'] ?? ''));
+        if ($couponCode === '') {
+            $fromCheckout = trim((string) ($checkoutPayload['coupon_code'] ?? ''));
+            if ($fromCheckout !== '') {
+                $payload['checkout_info']['coupon_code'] = $fromCheckout;
+            }
+        }
+
         return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $totals
+     */
+    private function discountTotalFromTotals(array $totals): float
+    {
+        return round(
+            (float) ($totals['coupon_discount'] ?? 0)
+            + (float) ($totals['scs_discount'] ?? 0)
+            + (float) ($totals['sms_discount'] ?? 0),
+            2,
+        );
     }
 
     /**

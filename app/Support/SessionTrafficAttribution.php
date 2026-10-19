@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Support\TrackerDatabase;
+
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use Carbon\Carbon;
@@ -735,7 +737,7 @@ final class SessionTrafficAttribution
         $windowStart = $paymentAt->copy()->subDays(AttributionRules::attributionWindowDays());
         $last = null;
 
-        $sessions = DB::table('activity_ecom_user')
+        $sessions = TrackerDatabase::table('activity_ecom_user')
             ->where('visitor_id', $visitorId)
             ->where('created_at', '>=', $windowStart)
             ->where('created_at', '<=', $paymentAt)
@@ -757,7 +759,7 @@ final class SessionTrafficAttribution
             $last = ['source' => $bucket['source'], 'medium' => $bucket['medium']];
         }
 
-        $rows = DB::table('activity_ecom_user_actions as a')
+        $rows = TrackerDatabase::table('activity_ecom_user_actions as a')
             ->join('activity_ecom_user as s', 's.session_id', '=', 'a.session_id')
             ->where('s.visitor_id', $visitorId)
             ->where('a.created_at', '>=', $windowStart)
@@ -799,7 +801,7 @@ final class SessionTrafficAttribution
         $orderedAt = $orderedAt->copy()->utc();
         $windowStart = $orderedAt->copy()->subDays(AttributionRules::attributionWindowDays());
 
-        $rows = DB::table('tracking_session_details as tsd')
+        $rows = TrackerDatabase::table('tracking_session_details as tsd')
             ->join('tracking_session as ts', 'ts.id', '=', 'tsd.tracking_session_id')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->where('dv.tracking_main_visitor_id', $mainVisitorId)
@@ -957,7 +959,7 @@ final class SessionTrafficAttribution
 
     private static function sessionDetailsQuery(string $sessionId): Builder
     {
-        return DB::table('tracking_session_details as tsd')
+        return TrackerDatabase::table('tracking_session_details as tsd')
             ->join('tracking_session as ts', 'ts.id', '=', 'tsd.tracking_session_id')
             ->where('ts.session_id', $sessionId);
     }
@@ -1018,7 +1020,7 @@ final class SessionTrafficAttribution
      */
     private static function applyLastTouchToSessionRow(string $sessionId, array $bucket): void
     {
-        DB::table('activity_ecom_user')
+        TrackerDatabase::table('activity_ecom_user')
             ->where('session_id', $sessionId)
             ->update([
                 'utm_source' => $bucket['source'],
@@ -1149,7 +1151,7 @@ final class SessionTrafficAttribution
         $paymentAt = $paymentAt->copy()->utc();
         $windowStart = $paymentAt->copy()->subDays(AttributionRules::attributionWindowDays());
 
-        $rows = DB::table('activity_ecom_user_actions as a')
+        $rows = TrackerDatabase::table('activity_ecom_user_actions as a')
             ->join('activity_ecom_user as s', 's.session_id', '=', 'a.session_id')
             ->where('s.visitor_id', $visitorId)
             ->where('a.created_at', '>=', $windowStart)
@@ -1693,10 +1695,10 @@ final class SessionTrafficAttribution
 
     public static function joinLatestSessionDetails(Builder $query, string $sessionIdColumn = 'ts.id', string $alias = 'sd'): void
     {
-        $latest = DB::table('tracking_session_details as tsd_latest')
+        $latest = TrackerDatabase::table('tracking_session_details as tsd_latest')
             ->select('tsd_latest.*')
             ->joinSub(
-                DB::table('tracking_session_details')
+                TrackerDatabase::table('tracking_session_details')
                     ->selectRaw('tracking_session_id, MAX(touch_sequence) as touch_sequence')
                     ->groupBy('tracking_session_id'),
                 'tsd_pick',

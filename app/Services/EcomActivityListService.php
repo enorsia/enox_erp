@@ -2,12 +2,17 @@
 
 namespace App\Services;
 
+use App\Support\TrackerDatabase;
+
 use App\Exceptions\CommerceParseException;
 use App\Models\ActivityEcomUser;
+use App\Models\ActivityEcomUserAction;
 use App\Models\TrackingCategory;
 use App\Models\TrackingDailyDuration;
 use App\Models\TrackingSession;
+use App\Support\CheckoutPayloadTotals;
 use App\Support\CommercePricingExtractor;
+use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
@@ -21,8 +26,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Ecom activity list: tracking_session rows + the latest action for each session's funnel stage
- * (used to build the Commerce column and its expandable order / checkout / cart details).
+ * Ecom activity list: tracking_session rows + commerce actions for the Commerce column.
+ * Checkout/cart use the latest action at that funnel stage; payment_success lists every order in the session.
  */
 class EcomActivityListService
 {
@@ -82,9 +87,9 @@ class EcomActivityListService
      */
     public function filterOptions(?int $departmentId = null): array
     {
-        $lookups = DB::table('tracking_device')->selectRaw("'device' as type, id, name, NULL as medium, NULL as parent_id")
-            ->unionAll(DB::table('tracking_traffic_source')->selectRaw("'source', id, name, medium, NULL"))
-            ->unionAll(DB::table('tracking_category')->selectRaw("'category', id, name, NULL, parent_id")
+        $lookups = TrackerDatabase::table('tracking_device')->selectRaw("'device' as type, id, name, NULL as medium, NULL as parent_id")
+            ->unionAll(TrackerDatabase::table('tracking_traffic_source')->selectRaw("'source', id, name, medium, NULL"))
+            ->unionAll(TrackerDatabase::table('tracking_category')->selectRaw("'category', id, name, NULL, parent_id")
                 ->whereNull('parent_id')
                 ->when($departmentId, fn (Builder $query) => $query->orWhere('parent_id', $departmentId)))
             ->get()
@@ -330,7 +335,7 @@ class EcomActivityListService
             $this->applyFilters($query, $filters, $range);
         };
 
-        $row = DB::table('tracking_session as ts')
+        $row = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->selectRaw('COUNT(*) as sessions')
             ->selectRaw('COUNT(DISTINCT ts.tracking_daily_visitor_id) as unique_visitors')
@@ -339,12 +344,12 @@ class EcomActivityListService
             ->selectRaw('COALESCE(SUM(ts.has_begin_checkout), 0) as checkouts')
             ->selectRaw('COALESCE(SUM(ts.has_proceed_checkout), 0) as proceeds')
             ->selectRaw('SUM(CASE WHEN ts.latest_funnel_stage = 3 THEN 1 ELSE 0 END) as cart_abandoned')
-            ->selectRaw('COALESCE(SUM(ts.has_order), 0) as sold')
             ->first();
 
-        $sales = DB::table('tracking_orders as o')
+        $sales = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->tap($scope)
+            ->selectRaw('COUNT(o.id) as sold')
             ->selectRaw('COALESCE(SUM(o.items_qty), 0) as sold_qty')
             ->selectRaw('COALESCE(SUM(o.amount_paid), 0) as sale_amount')
             ->first();
@@ -360,7 +365,7 @@ class EcomActivityListService
             'checkouts' => (int) ($row->checkouts ?? 0),
             'proceeds' => (int) ($row->proceeds ?? 0),
             'cart_abandoned' => (int) ($row->cart_abandoned ?? 0),
-            'sold' => (int) ($row->sold ?? 0),
+            'sold' => (int) ($sales->sold ?? 0),
             'sold_qty' => (int) ($sales->sold_qty ?? 0),
             'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),
         ];
@@ -372,7 +377,7 @@ class EcomActivityListService
      */
     public function visitorQualitySummary(array $range, array $filters): array
     {
-        $row = DB::table('tracking_session as ts')
+        $row = TrackerDatabase::table('tracking_session as ts')
             ->leftJoin('activity_ecom_user_bot_context as bc', 'bc.session_id', '=', 'ts.session_id')
             ->tap(fn (Builder $query) => $this->applySessionDateScope($query, $range))
             ->tap(fn (Builder $query) => $this->applyFilters($query, $filters, $range))
@@ -568,7 +573,7 @@ class EcomActivityListService
             $this->applyFilters($query, $filters, $range);
         };
 
-        $row = DB::table('tracking_session as ts')
+        $row = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->selectRaw('COUNT(*) as sessions')
             ->selectRaw('COUNT(DISTINCT ts.tracking_daily_visitor_id) as unique_visitors')
@@ -579,12 +584,13 @@ class EcomActivityListService
             ->selectRaw('SUM(CASE WHEN ts.latest_funnel_stage = 3 THEN 1 ELSE 0 END) as cart_drops')
             ->selectRaw('SUM(CASE WHEN ts.latest_funnel_stage = 4 THEN 1 ELSE 0 END) as checkout_drops')
             ->selectRaw('SUM(CASE WHEN ts.latest_funnel_stage = 5 THEN 1 ELSE 0 END) as proceed_drops')
-            ->selectRaw('COALESCE(SUM(ts.has_order), 0) as payments')
+            ->selectRaw('COALESCE(SUM(ts.has_order), 0) as purchase_sessions')
             ->first();
 
-        $sales = DB::table('tracking_orders as o')
+        $sales = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->tap($scope)
+            ->selectRaw('COUNT(o.id) as payments')
             ->selectRaw('COALESCE(SUM(o.items_qty), 0) as sold_qty')
             ->selectRaw('COALESCE(SUM(o.amount_paid), 0) as sale_amount')
             ->first();
@@ -602,7 +608,8 @@ class EcomActivityListService
             'cart_drops' => (int) ($row->cart_drops ?? 0),
             'checkout_drops' => (int) ($row->checkout_drops ?? 0),
             'proceed_drops' => (int) ($row->proceed_drops ?? 0),
-            'payments' => (int) ($row->payments ?? 0),
+            'purchase_sessions' => (int) ($row->purchase_sessions ?? 0),
+            'payments' => (int) ($sales->payments ?? 0),
             'items_sold' => (int) ($sales->sold_qty ?? 0),
             'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),
             'avg_stay_seconds' => $sessions > 0 ? (int) round($staySeconds / $sessions) : 0,
@@ -637,7 +644,7 @@ class EcomActivityListService
             $this->applyFilters($query, $filters, $range);
         };
 
-        $sessionIds = DB::table('tracking_session as ts')
+        $sessionIds = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->pluck('session_id')
             ->map(fn ($id) => (string) $id)
@@ -649,14 +656,14 @@ class EcomActivityListService
 
         [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
 
-        $skuToParent = DB::table('tracking_product')
+        $skuToParent = TrackerDatabase::table('tracking_product')
             ->whereIn('code', $productCodes)
             ->whereNotNull('sku')
             ->where('sku', '!=', '')
             ->pluck('code', 'sku')
             ->all();
 
-        $viewActions = DB::table('activity_ecom_user_actions')
+        $viewActions = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
             ->whereIn('action_type', ['product_view', 'product_view_popup'])
             ->whereBetween('created_at', [$fromBound, $toBound])
@@ -730,7 +737,7 @@ class EcomActivityListService
             $this->applyFilters($query, $filters, $range);
         };
 
-        $sessionIds = DB::table('tracking_session as ts')
+        $sessionIds = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->pluck('session_id')
             ->map(fn ($id) => (string) $id)
@@ -742,14 +749,14 @@ class EcomActivityListService
 
         [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
 
-        $skuToParent = DB::table('tracking_product')
+        $skuToParent = TrackerDatabase::table('tracking_product')
             ->whereIn('code', $productCodes)
             ->whereNotNull('sku')
             ->where('sku', '!=', '')
             ->pluck('code', 'sku')
             ->all();
 
-        $stepActions = DB::table('activity_ecom_user_actions')
+        $stepActions = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
             ->whereIn('action_type', ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'proceed_to_checkout', 'payment_success'])
             ->whereBetween('created_at', [$fromBound, $toBound])
@@ -1125,7 +1132,7 @@ class EcomActivityListService
             $this->applyFilters($query, $filters, $range);
         };
 
-        $counts = DB::table('tracking_session as ts')
+        $counts = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->selectRaw('COUNT(*) as total, COALESCE(SUM(ts.has_order), 0) as orders')
             ->first();
@@ -1149,6 +1156,10 @@ class EcomActivityListService
                 $this->attachProductFocusMetrics($rows, $productCode, $range);
             }
             $this->attachProductCommerceCells($rows, $productCode, $range);
+        }
+
+        if ($rows->isNotEmpty()) {
+            $this->attachPaymentSuccessActions($rows);
         }
 
         $rows = $rows->map(function (object $row) use ($focusKeys, $isProductDrill) {
@@ -1197,13 +1208,13 @@ class EcomActivityListService
         array $filters = [],
         array $range = [],
     ): Collection {
-        $rows = $this->withCommerceAction(DB::table('tracking_session as ts'))
+        $rows = $this->withCommerceAction(TrackerDatabase::table('tracking_session as ts'))
             ->tap(fn (Builder $query) => $this->withVisitorTrust($query));
 
         $sort = fn (Builder $query) => $this->applySort($query, $sortBy, $filters, $range);
 
         if ($sortBy !== 'order_value') {
-            $pageIds = DB::table('tracking_session as ts')
+            $pageIds = TrackerDatabase::table('tracking_session as ts')
                 ->select('ts.id')
                 ->tap($scope)
                 ->tap($sort)
@@ -1375,7 +1386,7 @@ class EcomActivityListService
             $this->applyFilters($query, $filters, $range);
         };
 
-        $row = DB::table('tracking_session as ts')
+        $row = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->selectRaw('COUNT(*) as sessions')
             ->selectRaw('COUNT(DISTINCT ts.tracking_daily_visitor_id) as unique_visitors')
@@ -1384,7 +1395,7 @@ class EcomActivityListService
 
         [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
 
-        $sessionIds = DB::table('tracking_session as ts')
+        $sessionIds = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->pluck('session_id')
             ->map(fn ($id) => (string) $id)
@@ -1411,7 +1422,7 @@ class EcomActivityListService
             $toBound,
         );
 
-        $salesQuery = DB::table('tracking_order_details as od')
+        $salesQuery = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
@@ -1473,7 +1484,7 @@ class EcomActivityListService
         }
 
         $matched = [];
-        $actions = DB::table('activity_ecom_user_actions')
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
             ->whereIn('action_type', $actionTypes)
             ->whereBetween('created_at', [$fromBound, $toBound])
@@ -1529,33 +1540,33 @@ class EcomActivityListService
         $prefix = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $search).'%';
         // Each UNION branch uses its own index (OR across columns cannot); UNION also de-duplicates.
         $union = fn (Builder ...$branches) => array_reduce(array_slice($branches, 1), fn (Builder $all, Builder $branch) => $all->union($branch), $branches[0]);
-        $sessionsWhere = fn (string $column) => DB::table('tracking_session')->select('id')->where($column, 'like', $prefix);
-        $productsWhere = fn (string $column) => DB::table('tracking_product')->select('id')->where($column, 'like', $prefix);
+        $sessionsWhere = fn (string $column) => TrackerDatabase::table('tracking_session')->select('id')->where($column, 'like', $prefix);
+        $productsWhere = fn (string $column) => TrackerDatabase::table('tracking_product')->select('id')->where($column, 'like', $prefix);
 
         $productBranches = [$productsWhere('code'), $productsWhere('sku')];
         $titleWords = array_filter(preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($search)), fn (string $word) => mb_strlen($word) >= 3);
 
         if ($titleWords !== []) {
-            $productBranches[] = DB::table('tracking_product')->select('id')->whereFullText('title', implode(' ', array_map(fn (string $word) => '+'.$word.'*', $titleWords)), ['mode' => 'boolean']);
+            $productBranches[] = TrackerDatabase::table('tracking_product')->select('id')->whereFullText('title', implode(' ', array_map(fn (string $word) => '+'.$word.'*', $titleWords)), ['mode' => 'boolean']);
         }
 
-        $productSessions = DB::query()
+        $productSessions = TrackerDatabase::query()
             ->fromSub($union(...$productBranches), 'search_product')
             ->join('tracking_session_p_cat as search_pc', 'search_pc.tracking_product_id', '=', 'search_product.id')
             ->select('search_pc.tracking_session_id as id');
         $matching = fn (Builder ...$branches) => $query->joinSub($union(...$branches), 'search_match', 'search_match.id', '=', 'ts.id');
 
-        $orderSessions = DB::table('tracking_orders')
+        $orderSessions = TrackerDatabase::table('tracking_orders')
             ->select('tracking_session_id as id')
             ->whereNotNull('tracking_session_id')
             ->where('order_number', 'like', $prefix);
-        $orderActionSessions = DB::table('activity_ecom_user_actions as oa')
+        $orderActionSessions = TrackerDatabase::table('activity_ecom_user_actions as oa')
             ->join('tracking_session as ts_oa', 'ts_oa.session_id', '=', 'oa.session_id')
             ->where('oa.action_type', 'payment_success')
             ->whereNotNull('oa.order_id')
             ->where('oa.order_id', 'like', $prefix)
             ->select('ts_oa.id');
-        $phoneOrSessionSessions = DB::table('tracking_session')
+        $phoneOrSessionSessions = TrackerDatabase::table('tracking_session')
             ->select('id')
             ->where(fn (Builder $q) => $q
                 ->where('phone', 'like', str_replace([' ', '(', ')'], '', $prefix))
@@ -1634,7 +1645,7 @@ class EcomActivityListService
     private function productDrillMetricSubquery(string $metric, string $productCode, $fromBound, $toBound)
     {
         if ($metric === 'views') {
-            $sub = DB::table('activity_ecom_user_actions as a')
+            $sub = TrackerDatabase::table('activity_ecom_user_actions as a')
                 ->selectRaw('CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END')
                 ->whereColumn('a.session_id', 'ts.session_id')
                 ->whereIn('a.action_type', ['product_view', 'product_view_popup'])
@@ -1645,7 +1656,7 @@ class EcomActivityListService
         }
 
         if ($metric === 'adds') {
-            $sub = DB::table('activity_ecom_user_actions as a')
+            $sub = TrackerDatabase::table('activity_ecom_user_actions as a')
                 ->selectRaw('COALESCE(SUM(GREATEST(1, COALESCE(a.item_qty, 1))), 0)')
                 ->whereColumn('a.session_id', 'ts.session_id')
                 ->where('a.action_type', 'add_to_cart')
@@ -1655,7 +1666,7 @@ class EcomActivityListService
             return $sub;
         }
 
-        $sub = DB::table('tracking_order_details as od')
+        $sub = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
             ->join('tracking_session as ts_ord', 'ts_ord.id', '=', 'o.tracking_session_id')
@@ -1679,7 +1690,7 @@ class EcomActivityListService
     private function orderValuePageIds(\Closure $scope, int $orderCount, int $offset, int $limit): array
     {
         $orderIds = $offset < $orderCount
-            ? DB::table('tracking_session as ts')
+            ? TrackerDatabase::table('tracking_session as ts')
                 ->tap($scope)
                 ->where('ts.has_order', 1)
                 ->orderByRaw("(
@@ -1698,7 +1709,7 @@ class EcomActivityListService
             return $orderIds;
         }
 
-        $otherIds = DB::table('tracking_session as ts')
+        $otherIds = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)
             ->where('ts.has_order', 0)
             ->orderByDesc('ts.last_active_at')
@@ -1862,7 +1873,7 @@ class EcomActivityListService
 
         [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
 
-        $views = DB::table('activity_ecom_user_actions')
+        $views = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
             ->whereIn('action_type', ['product_view', 'product_view_popup'])
             ->whereBetween('created_at', [$fromBound, $toBound])
@@ -1873,7 +1884,7 @@ class EcomActivityListService
 
         $adds = $this->addToCartEventCountForParentStyle($sessionIds, $productCode, $fromBound, $toBound);
 
-        $orders = DB::table('tracking_order_details as od')
+        $orders = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
@@ -1903,7 +1914,7 @@ class EcomActivityListService
     private function addToCartEventCountForParentStyle(array $sessionIds, string $parentStyleCode, $fromBound, $toBound): array
     {
         $counts = [];
-        $actions = DB::table('activity_ecom_user_actions')
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
             ->where('action_type', 'add_to_cart')
             ->whereBetween('created_at', [$fromBound, $toBound])
@@ -2061,7 +2072,7 @@ class EcomActivityListService
             return false;
         }
 
-        return DB::table('tracking_product')
+        return TrackerDatabase::table('tracking_product')
             ->where('code', $parentStyleCode)
             ->where('sku', $variantSku)
             ->exists();
@@ -2091,7 +2102,7 @@ class EcomActivityListService
 
         [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
 
-        $orderLines = DB::table('tracking_order_details as od')
+        $orderLines = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
@@ -2159,7 +2170,7 @@ class EcomActivityListService
         $priority = ['payment_success' => 3, 'proceed_checkout' => 2, 'add_to_cart' => 1];
         $picked = [];
 
-        $actions = DB::table('activity_ecom_user_actions')
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
             ->whereIn('action_type', array_keys($priority))
             ->orderByDesc('id')
@@ -2379,7 +2390,7 @@ class EcomActivityListService
     {
         $sessionIds = $rows->pluck('id')->all();
 
-        $paths = DB::table('tracking_session_p_cat as sp')
+        $paths = TrackerDatabase::table('tracking_session_p_cat as sp')
             ->join('tracking_category as cat', 'cat.id', '=', 'sp.tracking_category_id')
             ->leftJoin('tracking_category as dept', 'dept.id', '=', 'cat.parent_id')
             ->whereIn('sp.tracking_session_id', $sessionIds)
@@ -2499,6 +2510,29 @@ class EcomActivityListService
     /**
      * @return array<string, mixed>
      */
+    /**
+     * @param  Collection<int, object>  $rows
+     */
+    private function attachPaymentSuccessActions(Collection $rows): void
+    {
+        $sessionIds = $rows->pluck('session_id')->filter()->unique()->values()->all();
+
+        if ($sessionIds === []) {
+            return;
+        }
+
+        $bySession = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->where('action_type', 'payment_success')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('session_id');
+
+        foreach ($rows as $row) {
+            $row->payment_success_actions = $bySession->get($row->session_id, collect());
+        }
+    }
+
     private function commerceCell(object $row): array
     {
         $stage = (int) ($row->latest_funnel_stage ?? 0);
@@ -2509,6 +2543,24 @@ class EcomActivityListService
                 'commerce_display' => $stage > 0 ? 'View' : '—',
                 'commerce_has_order' => false,
                 'expandable_commerce_events' => [],
+            ];
+        }
+
+        $paymentActions = $row->payment_success_actions ?? collect();
+        if ($stageKey === 'payment_success' && $paymentActions instanceof Collection && $paymentActions->isNotEmpty()) {
+            $events = $paymentActions
+                ->map(fn (object $action) => $this->commerceEventFromPaymentAction($action))
+                ->values()
+                ->all();
+
+            $display = count($events) === 1
+                ? (string) ($events[0]['trigger_label'] ?? 'Order')
+                : count($events).' orders';
+
+            return [
+                'commerce_display' => $display,
+                'commerce_has_order' => true,
+                'expandable_commerce_events' => $events,
             ];
         }
 
@@ -2533,9 +2585,116 @@ class EcomActivityListService
     /**
      * @return array<string, mixed>
      */
-    private function commerceEvent(object $row, string $stageKey, string $label, string $triggerLabel, ?float $amount, string $orderId): array
+    /**
+     * Session detail timeline: same commerce breakdown as the activity list Commerce column.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function commerceEventForSessionAction(ActivityEcomUserAction $action): ?array
     {
-        $json = json_decode((string) ($row->{'commerce_'.($stageKey === 'proceed_checkout' ? 'proceed_to_checkout' : $stageKey)} ?? ''), true) ?: [];
+        $stageKey = match ((string) $action->action_type) {
+            'add_to_cart' => 'add_to_cart',
+            'begin_checkout' => 'begin_checkout',
+            'proceed_checkout' => 'proceed_checkout',
+            'payment_success' => 'payment_success',
+            default => null,
+        };
+
+        if ($stageKey === null) {
+            return null;
+        }
+
+        $label = self::STAGE_LABELS[$stageKey];
+        $isOrder = $stageKey === 'payment_success';
+        $orderId = trim((string) ($action->order_id ?? ''));
+        $amount = $this->amount($isOrder ? ($action->amount_paid ?: $action->commerce_total) : $action->commerce_total);
+        $triggerLabel = ($isOrder ? ($orderId !== '' ? '#'.$orderId : 'Order') : $label)
+            .($amount !== null ? ' · '.$this->money($amount) : '');
+
+        $json = $this->commerceJsonForSessionAction($action, $stageKey);
+        $row = $this->commerceRowFromSessionAction($action, $stageKey);
+
+        return $this->commerceEvent($row, $stageKey, $label, $triggerLabel, $amount, $orderId, $json);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function commerceJsonForSessionAction(ActivityEcomUserAction $action, string $stageKey): array
+    {
+        $payload = match ($stageKey) {
+            'payment_success' => is_array($action->payment_success) ? $action->payment_success : [],
+            'add_to_cart' => is_array($action->add_to_cart) ? $action->add_to_cart : [],
+            'begin_checkout' => is_array($action->begin_checkout) ? $action->begin_checkout : [],
+            'proceed_checkout' => is_array($action->proceed_to_checkout) ? $action->proceed_to_checkout : [],
+            default => [],
+        };
+
+        if ($stageKey === 'payment_success') {
+            $payload = app(TrackerPaymentCheckoutEnricher::class)->enrichPayloadForAction($action);
+        }
+
+        return $payload;
+    }
+
+    private function commerceRowFromSessionAction(ActivityEcomUserAction $action, string $stageKey): object
+    {
+        $jsonColumn = $stageKey === 'proceed_checkout' ? 'proceed_to_checkout' : $stageKey;
+
+        return (object) [
+            'commerce_action_id' => $action->id,
+            'commerce_at' => $action->created_at,
+            'commerce_amount_paid' => $action->amount_paid,
+            'commerce_total' => $action->commerce_total,
+            'commerce_subtotal' => $action->commerce_subtotal,
+            'commerce_shipping' => $action->commerce_shipping,
+            'commerce_discount' => $action->commerce_discount,
+            'commerce_coupon_code' => $action->coupon_code,
+            'commerce_item_qty' => $action->item_qty,
+            'commerce_line_count' => $action->line_count,
+            'commerce_'.$jsonColumn => $action->{$jsonColumn},
+        ];
+    }
+
+    private function commerceEventFromPaymentAction(object $action): array
+    {
+        $stageKey = 'payment_success';
+        $label = self::STAGE_LABELS[$stageKey];
+        $orderId = trim((string) ($action->order_id ?? ''));
+        $amount = $this->amount($action->amount_paid ?? $action->commerce_total ?? null);
+        $triggerLabel = ($orderId !== '' ? '#'.$orderId : 'Order')
+            .($amount !== null ? ' · '.$this->money($amount) : '');
+
+        $row = (object) [
+            'commerce_action_id' => $action->id,
+            'commerce_at' => $action->created_at,
+            'commerce_amount_paid' => $action->amount_paid,
+            'commerce_total' => $action->commerce_total,
+            'commerce_subtotal' => $action->commerce_subtotal ?? null,
+            'commerce_shipping' => $action->commerce_shipping ?? null,
+            'commerce_discount' => $action->commerce_discount ?? null,
+            'commerce_coupon_code' => $action->coupon_code ?? null,
+            'commerce_item_qty' => $action->item_qty ?? null,
+            'commerce_line_count' => $action->line_count ?? null,
+            'commerce_payment_success' => $action->payment_success,
+        ];
+
+        return $this->commerceEvent($row, $stageKey, $label, $triggerLabel, $amount, $orderId);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function commerceEvent(
+        object $row,
+        string $stageKey,
+        string $label,
+        string $triggerLabel,
+        ?float $amount,
+        string $orderId,
+        ?array $jsonOverride = null,
+    ): array {
+        $json = $jsonOverride ?? json_decode((string) ($row->{'commerce_'.($stageKey === 'proceed_checkout' ? 'proceed_to_checkout' : $stageKey)} ?? ''), true) ?: [];
         $items = match ($stageKey) {
             'payment_success' => $json['checkout_info']['items'] ?? [],
             'add_to_cart' => $json['items'] ?? [],
@@ -2648,6 +2807,21 @@ class EcomActivityListService
 
         $couponCode = trim((string) ($row->commerce_coupon_code ?? $extracted['coupon_code'] ?? $json['coupon_code'] ?? ''));
 
+        if ($stageKey === 'payment_success' && ($discount === null || $discount <= 0)) {
+            $inferred = $this->inferPaymentDiscountFromPayload($json);
+            if ($inferred !== null) {
+                $discount = $inferred['discount'];
+                if ($subtotal === null || $subtotal <= ($grandTotal ?? 0)) {
+                    $subtotal = $inferred['subtotal'];
+                }
+            }
+        }
+
+        $checkoutInfo = is_array($json['checkout_info'] ?? null) ? $json['checkout_info'] : [];
+        if ($couponCode === '' && filled($checkoutInfo['coupon_code'] ?? null)) {
+            $couponCode = trim((string) $checkoutInfo['coupon_code']);
+        }
+
         return [
             'subtotal' => $subtotal,
             'shipping' => $shipping,
@@ -2656,6 +2830,38 @@ class EcomActivityListService
             'extra_charges' => $extraCharges,
             'grand_total' => $grandTotal,
             'coupon_code' => $couponCode !== '' ? $couponCode : null,
+        ];
+    }
+
+    /**
+     * When payment_success totals are net-only, derive gross subtotal and discount from line items.
+     *
+     * @param  array<string, mixed>  $json
+     * @return array{subtotal: float, discount: float}|null
+     */
+    private function inferPaymentDiscountFromPayload(array $json): ?array
+    {
+        try {
+            $extracted = CommercePricingExtractor::fromPayload('payment_success', $json);
+        } catch (CommerceParseException) {
+            $extracted = [];
+        }
+
+        if (($extracted['commerce_discount'] ?? 0) > 0) {
+            return null;
+        }
+
+        $itemsSubtotal = CheckoutPayloadTotals::itemsSubtotal($json);
+        $grandTotal = CheckoutPayloadTotals::grandTotal($json)
+            ?? $this->amount($json['amount_paid'] ?? null);
+
+        if ($itemsSubtotal === null || $grandTotal === null || $itemsSubtotal <= $grandTotal + 0.009) {
+            return null;
+        }
+
+        return [
+            'subtotal' => $itemsSubtotal,
+            'discount' => round($itemsSubtotal - $grandTotal, 2),
         ];
     }
 

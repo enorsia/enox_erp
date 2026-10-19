@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TrackingOrderDetail extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $fillable = [
         'tracking_order_id',
         'tracking_product_id',

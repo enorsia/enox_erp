@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 
 class TrackingCtrDailySummary extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $table = 'tracking_ctr_daily_summaries';
 
     protected $fillable = [

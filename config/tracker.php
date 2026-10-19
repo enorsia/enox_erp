@@ -97,20 +97,17 @@ return [
     'analytics_cache_ttl_seconds' => (int) env('TRACKER_ANALYTICS_CACHE_SECONDS', 300),
 
     /*
-    | Dashboard sync → MySQL `jobs` table (database queue).
+    | Dashboard sync + CTR → MySQL `jobs` on TRACKING_DB_* (see queue.connections.tracking_database).
+    | Queue name uses DB_QUEUE (same as ERP database queue).
     */
-    'dashboard_sync_queue_connection' => env('TRACKER_DASHBOARD_SYNC_QUEUE_CONNECTION', 'database'),
+    'database_queue_connection' => env('TRACKER_DATABASE_QUEUE_CONNECTION', 'tracking_database'),
 
-    'dashboard_sync_queue_name' => env('TRACKER_DASHBOARD_SYNC_QUEUE_NAME', env('DB_QUEUE', 'default')),
+    'database_queue_name' => env('DB_QUEUE', 'default'),
 
     'dashboard_sync_batch_size' => (int) env('TRACKER_DASHBOARD_SYNC_BATCH_SIZE', 25),
 
     // Rolling window when aggregating tracking_ctr_daily_summaries → tracking_ctr_summaries.
     'ctr_rollup_days' => (int) env('TRACKER_CTR_ROLLUP_DAYS', 90),
-
-    // CTR batch jobs use MySQL `jobs` (other tracker jobs keep Redis via queue_connection).
-    'ctr_queue_connection' => env('TRACKER_CTR_QUEUE_CONNECTION', 'database'),
-    'ctr_queue_name' => env('TRACKER_CTR_QUEUE_NAME', 'default'),
 
     'analytics_windows' => [
         'hours' => [1, 3, 6, 12, 24],

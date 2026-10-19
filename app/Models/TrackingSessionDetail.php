@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 
 class TrackingSessionDetail extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $table = 'tracking_session_details';
 
     protected $fillable = [

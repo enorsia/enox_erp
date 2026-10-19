@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\TrackerDatabase;
+
 use App\Support\CheckoutPayloadTotals;
 use App\Support\CommercePricingExtractor;
 use App\Models\ActivityEcomUser;
@@ -43,7 +45,13 @@ class TrackIngestService
         }
 
         $sessionId = $sessionData['session_id'] ?? $events[0]['session_id'] ?? null;
-        $visitorId = $sessionData['visitor_id'] ?? null;
+        $visitorId = trim((string) ($sessionData['visitor_id'] ?? ''));
+
+        if ($visitorId === '') {
+            throw ValidationException::withMessages([
+                'session.visitor_id' => ['Visitor ID is required (call resolve-visit before track).'],
+            ]);
+        }
 
         if (! $sessionId) {
             $this->logError('ingest.missing_session', 'No session ID in request');
@@ -229,7 +237,7 @@ class TrackIngestService
         $this->syncSessionLastActiveFromEvents($sessionId, $events);
 
         if ($acceptedIds !== []) {
-            DB::table('activity_ecom_user')
+            TrackerDatabase::table('activity_ecom_user')
                 ->where('session_id', $sessionId)
                 ->update(['is_sync' => ActivityEcomUser::SYNC_PENDING]);
         }
@@ -260,8 +268,12 @@ class TrackIngestService
 
         $attributes = array_merge($attributes, $this->sessionIdentityUpdates($sessionData, $existing));
 
-        if (! empty($sessionData['visitor_id'])) {
-            $attributes['visitor_id'] = $sessionData['visitor_id'];
+        $attributes['visitor_id'] = trim((string) ($sessionData['visitor_id'] ?? ''));
+
+        if ($attributes['visitor_id'] === '') {
+            throw ValidationException::withMessages([
+                'session.visitor_id' => ['Visitor ID is required.'],
+            ]);
         }
 
         if (! $existing) {
@@ -988,7 +1000,7 @@ class TrackIngestService
 
     private function paymentSuccessExistsForOrder(string $orderId): bool
     {
-        return DB::table('activity_ecom_user_actions')
+        return TrackerDatabase::table('activity_ecom_user_actions')
             ->where('action_type', 'payment_success')
             ->where('order_id', $orderId)
             ->exists();
@@ -996,7 +1008,7 @@ class TrackIngestService
 
     private function findCanonicalPaymentSuccessActionId(string $orderId): ?int
     {
-        $id = DB::table('activity_ecom_user_actions')
+        $id = TrackerDatabase::table('activity_ecom_user_actions')
             ->where('action_type', 'payment_success')
             ->where('order_id', $orderId)
             ->orderBy('created_at')
@@ -1022,12 +1034,6 @@ class TrackIngestService
 
         if (! is_array($payload)) {
             return false;
-        }
-
-        $total = (float) (CheckoutPayloadTotals::commerceAmount($payload) ?? 0);
-
-        if ($total > 0) {
-            return true;
         }
 
         $items = $payload['cart_items'] ?? $payload['items'] ?? [];

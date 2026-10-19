@@ -5,6 +5,12 @@ php artisan migrate --database=tracking --path=database/migrations/tracking
 php artisan migrate:fresh --database=tracking --path=database/migrations/tracking
 ```
 
+Includes Laravel queue tables (`jobs`, `failed_jobs`) for dashboard sync and CTR workers:
+
+```bash
+php artisan queue:work tracking_database --queue=default --sleep=3 --timeout=0 --memory=0
+```
+
 New files: `php artisan make:migration ... --path=database/migrations/tracking` and extend `App\Database\Migrations\TrackingMigration`.
 
 ## Column order convention

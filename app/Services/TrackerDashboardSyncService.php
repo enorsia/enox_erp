@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\TrackerDatabase;
+
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Models\TrackingDailyAudience;
@@ -31,6 +33,10 @@ use Throwable;
  *
  * activity_ecom_user.is_sync: 0 = pending, 1 = done, 2 = failed (retry until sync_try >= MAX).
  * Action rows use the same flags; only ids loaded in the batch are marked done.
+ *
+ * Ingest safety: never DELETE or TRUNCATE activity_ecom_user / activity_ecom_user_actions /
+ * activity_ecom_user_bot_context. Invalid or missing visitor_id sessions are skipped (not pruned).
+ * Use tracker:cleanup-historical-data only when you intend to remove rows (requires --force).
  */
 class TrackerDashboardSyncService
 {
@@ -90,14 +96,16 @@ class TrackerDashboardSyncService
      */
     public function planChunks(int $chunkSize = 25): array
     {
+        $this->requeueUsersWithUnsyncedActions();
+        $this->requeueSessionsMissingTrackingRow();
         $this->finalizePendingSessionsWithoutUnsyncedActions();
 
         $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
 
-        $query = DB::table('activity_ecom_user as u');
+        $query = TrackerDatabase::table('activity_ecom_user as u');
 
         $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
-        $this->applyPendingOrRetryFilter($query, $retryAfter, 'u');
+        $this->applySyncableSessionFilter($query, 'u');
         $this->applyHasUnsyncedActionsFilter($query, 'u');
 
         return $query->orderBy('u.id')
@@ -119,7 +127,7 @@ class TrackerDashboardSyncService
      */
     public function syncPendingBySessionId(string $sessionId): void
     {
-        $activityUserId = (int) DB::table('activity_ecom_user')
+        $activityUserId = (int) TrackerDatabase::table('activity_ecom_user')
             ->where('session_id', $sessionId)
             ->value('id');
 
@@ -219,19 +227,10 @@ class TrackerDashboardSyncService
         $rawSessionId = (string) ($sessionRow['session_id'] ?? '');
         $visitorId = trim((string) ($sessionRow['visitor_id'] ?? ''));
         if ($visitorId === '') {
-            Log::warning('tracker.dashboard.sync: missing visitor_id', [
+            Log::debug('tracker.dashboard.sync: skip session without visitor_id', [
                 'activity_ecom_user_id' => $sessionPk,
                 'session_id' => $rawSessionId,
             ]);
-
-            try {
-                $this->markSessionSkippedBadData($sessionPk);
-            } catch (Throwable $inner) {
-                Log::error('tracker.dashboard.sync: could not mark bad session', [
-                    'activity_ecom_user_id' => $sessionPk,
-                    'exception' => $inner,
-                ]);
-            }
 
             return true;
         }
@@ -281,7 +280,7 @@ class TrackerDashboardSyncService
     {
         $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
 
-        $query = DB::table('activity_ecom_user as u')
+        $query = TrackerDatabase::table('activity_ecom_user as u')
             ->select('u.*')
             ->where('u.id', '>', $afterId);
 
@@ -291,24 +290,91 @@ class TrackerDashboardSyncService
         }
 
         $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
-        $this->applyPendingOrRetryFilter($query, $retryAfter, 'u');
+        $this->applySyncableSessionFilter($query, 'u');
         $this->applyHasUnsyncedActionsFilter($query, 'u');
+
+        if ($onlyIds === null) {
+            $this->applyPendingOrRetryFilter($query, $retryAfter, 'u');
+        }
 
         return $query->orderBy('u.id')->limit($limit)->get();
     }
 
+    /** Session marked done but new/changed actions still pending — put user back on the sync queue. */
+    private function requeueUsersWithUnsyncedActions(): void
+    {
+        $updated = TrackerDatabase::table('activity_ecom_user as u')
+            ->where('u.sync_try', '<', self::MAX_SYNC_TRY)
+            ->where('u.is_sync', ActivityEcomUser::SYNC_DONE)
+            ->whereNotNull('u.visitor_id')
+            ->where('u.visitor_id', '!=', '')
+            ->whereExists(function (Builder $exists): void {
+                $exists->selectRaw('1')
+                    ->from('activity_ecom_user_actions as a')
+                    ->whereColumn('a.session_id', 'u.session_id')
+                    ->whereIn('a.is_sync', [
+                        ActivityEcomUserAction::SYNC_PENDING,
+                        ActivityEcomUserAction::SYNC_FAILED,
+                    ]);
+            })
+            ->update([
+                'is_sync' => ActivityEcomUser::SYNC_PENDING,
+                'updated_at' => now(),
+            ]);
+
+        if ($updated > 0) {
+            Log::info('tracker.dashboard.sync: requeued users with unsynced actions', [
+                'count' => $updated,
+            ]);
+        }
+    }
+
     /**
-     * Pending queue flag with every action already synced (e.g. session row changed during markSessionSynced).
-     * Clear the flag so Sync does not queue no-op chunk jobs.
+     * activity_ecom_user rows that never got a tracking_session row (e.g. zero-action sessions finalized earlier).
+     */
+    private function requeueSessionsMissingTrackingRow(): void
+    {
+        $ids = TrackerDatabase::table('activity_ecom_user as u')
+            ->where('u.sync_try', '<', self::MAX_SYNC_TRY)
+            ->whereNotNull('u.visitor_id')
+            ->where('u.visitor_id', '!=', '')
+            ->whereNotExists(function (Builder $exists): void {
+                $exists->selectRaw('1')
+                    ->from('tracking_session as ts')
+                    ->whereColumn('ts.session_id', 'u.session_id');
+            })
+            ->pluck('u.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if ($ids === []) {
+            return;
+        }
+
+        TrackerDatabase::table('activity_ecom_user')
+            ->whereIn('id', $ids)
+            ->update([
+                'is_sync' => ActivityEcomUser::SYNC_PENDING,
+                'updated_at' => now(),
+            ]);
+
+        Log::info('tracker.dashboard.sync: requeued sessions missing tracking_session', [
+            'count' => count($ids),
+        ]);
+    }
+
+    /**
+     * Pending sessions with no unsynced actions still need a tracking_session row (including 0-action visits).
      */
     private function finalizePendingSessionsWithoutUnsyncedActions(): void
     {
         $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
 
-        $query = DB::table('activity_ecom_user as u')
-            ->select('u.id', 'u.session_id')
+        $query = TrackerDatabase::table('activity_ecom_user as u')
+            ->select('u.*')
             ->where('u.sync_try', '<', self::MAX_SYNC_TRY);
 
+        $this->applySyncableSessionFilter($query, 'u');
         $this->applyPendingOrRetryFilter($query, $retryAfter, 'u');
         $this->applyHasNoUnsyncedActionsFilter($query, 'u');
 
@@ -318,27 +384,28 @@ class TrackerDashboardSyncService
             return;
         }
 
-        $now = now();
-        $ids = $idle->pluck('id')->map(fn ($id) => (int) $id)->all();
-
-        DB::table('activity_ecom_user')
-            ->whereIn('id', $ids)
-            ->update([
-                'is_sync' => ActivityEcomUser::SYNC_DONE,
-                'sync_at' => $now,
-                'sync_try' => 0,
-            ]);
+        $ok = 0;
+        $failed = 0;
 
         foreach ($idle as $row) {
-            $sessionId = trim((string) ($row->session_id ?? ''));
-            if ($sessionId !== '') {
-                $this->refreshTrackingSessionActionsCount($sessionId);
+            if ($this->syncOneSession((array) $row, collect())) {
+                $ok++;
+            } else {
+                $failed++;
             }
         }
 
-        Log::info('tracker.dashboard.sync: finalized idle pending sessions', [
+        Log::info('tracker.dashboard.sync: materialized idle pending sessions', [
             'count' => $idle->count(),
+            'ok' => $ok,
+            'failed' => $failed,
         ]);
+    }
+
+    private function applySyncableSessionFilter(Builder $query, string $alias): void
+    {
+        $query->whereNotNull("{$alias}.visitor_id")
+            ->where("{$alias}.visitor_id", '!=', '');
     }
 
     private function applyHasUnsyncedActionsFilter(Builder $query, string $alias): void
@@ -400,7 +467,7 @@ class TrackerDashboardSyncService
             ? TrackerTime::storageRange($to->copy()->endOfDay(), $to->copy()->endOfDay())[1]
             : null;
 
-        $query = DB::table('activity_ecom_user as u')
+        $query = TrackerDatabase::table('activity_ecom_user as u')
             ->where('u.is_sync', ActivityEcomUser::SYNC_DONE)
             ->where('u.created_at', '>=', $fromBound)
             ->when($toBound !== null, fn (Builder $q) => $q->where('u.created_at', '<=', $toBound))
@@ -423,7 +490,7 @@ class TrackerDashboardSyncService
             return collect();
         }
 
-        return DB::table('activity_ecom_user_actions')
+        return TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
             ->whereIn('is_sync', [
                 ActivityEcomUserAction::SYNC_PENDING,
@@ -451,7 +518,7 @@ class TrackerDashboardSyncService
             return $sessionRow;
         }
 
-        $bot = DB::table('activity_ecom_user_bot_context')
+        $bot = TrackerDatabase::table('activity_ecom_user_bot_context')
             ->where('session_id', $sessionId)
             ->first(['client_ip', 'user_agent', 'ip_country']);
 
@@ -511,7 +578,7 @@ class TrackerDashboardSyncService
      */
     private function loadAllActionsForSession(string $sessionId): Collection
     {
-        return DB::table('activity_ecom_user_actions')
+        return TrackerDatabase::table('activity_ecom_user_actions')
             ->where('session_id', $sessionId)
             ->orderBy('created_at')
             ->orderBy('id')
@@ -611,7 +678,7 @@ class TrackerDashboardSyncService
         bool $replaceSessionProductLinks = false,
     ): void {
         if ($replaceSessionProductLinks) {
-            DB::table('tracking_session_p_cat')->where('tracking_session_id', $trackingSessionId)->delete();
+            TrackerDatabase::table('tracking_session_p_cat')->where('tracking_session_id', $trackingSessionId)->delete();
         }
 
         $pCatRows = [];
@@ -679,7 +746,7 @@ class TrackerDashboardSyncService
         }
 
         if ($pCatRows !== []) {
-            DB::table('tracking_session_p_cat')->insert(array_values($pCatRows));
+            TrackerDatabase::table('tracking_session_p_cat')->insert(array_values($pCatRows));
         }
 
         $this->addCounters($counters);
@@ -878,7 +945,7 @@ class TrackerDashboardSyncService
             return (int) $this->cache[$cacheKey];
         }
 
-        $existing = DB::table('tracking_main_visitor')->where('visitor_id', $visitorId)->first();
+        $existing = TrackerDatabase::table('tracking_main_visitor')->where('visitor_id', $visitorId)->first();
 
         if ($existing) {
             $this->updateMainVisitorById((int) $existing->id, $name, $email, $phone, $existing);
@@ -890,7 +957,7 @@ class TrackerDashboardSyncService
         $now = now();
 
         // Parallel chunk jobs may create the same visitor_id at once; upsert is idempotent.
-        DB::table('tracking_main_visitor')->upsert(
+        TrackerDatabase::table('tracking_main_visitor')->upsert(
             [[
                 'visitor_id' => $visitorId,
                 'name' => $name,
@@ -922,7 +989,7 @@ class TrackerDashboardSyncService
         mixed $phone,
         ?object $existing = null,
     ): void {
-        $existing ??= DB::table('tracking_main_visitor')->where('id', $mainVisitorId)->first();
+        $existing ??= TrackerDatabase::table('tracking_main_visitor')->where('id', $mainVisitorId)->first();
 
         if ($existing === null) {
             return;
@@ -973,7 +1040,7 @@ class TrackerDashboardSyncService
             $dailyVisitorId = md5($visitorId.'|'.$visitDate);
 
             // Upsert avoids duplicate-key races when parallel chunk jobs sync the same visitor/day.
-            DB::table('tracking_daily_visitor')->upsert(
+            TrackerDatabase::table('tracking_daily_visitor')->upsert(
                 [[
                     'tracking_main_visitor_id' => $mainVisitorId,
                     'daily_visitor_id' => $dailyVisitorId,
@@ -1001,7 +1068,7 @@ class TrackerDashboardSyncService
      */
     private function upsertTrackingSession(array $sessionRow, string $sessionId, int $dailyVisitorId, Collection $actions): int
     {
-        $existing = DB::table('tracking_session')->where('session_id', $sessionId)->first();
+        $existing = TrackerDatabase::table('tracking_session')->where('session_id', $sessionId)->first();
 
         $payload = array_merge([
             'tracking_daily_visitor_id' => $dailyVisitorId,
@@ -1097,7 +1164,7 @@ class TrackerDashboardSyncService
             return;
         }
 
-        $tracking = DB::table('tracking_session')
+        $tracking = TrackerDatabase::table('tracking_session')
             ->where('session_id', $sessionId)
             ->first(['id', 'created_at', 'last_active_at']);
 
@@ -1105,7 +1172,7 @@ class TrackerDashboardSyncService
             return;
         }
 
-        $activity = DB::table('activity_ecom_user')
+        $activity = TrackerDatabase::table('activity_ecom_user')
             ->where('session_id', $sessionId)
             ->first(['created_at', 'last_active_at']);
 
@@ -1119,7 +1186,7 @@ class TrackerDashboardSyncService
             $activity?->last_active_at,
         );
 
-        $actionsQuery = DB::table('activity_ecom_user_actions')
+        $actionsQuery = TrackerDatabase::table('activity_ecom_user_actions')
             ->where('session_id', $sessionId)
             ->where('created_at', '>=', $windowStart)
             ->orderBy('created_at')
@@ -1141,8 +1208,15 @@ class TrackerDashboardSyncService
             'sku',
         ]));
 
-        DB::table('tracking_session')
+        TrackerDatabase::table('tracking_session')
             ->where('id', $tracking->id)
+            ->update([
+                'actions_count' => $count,
+                'updated_at' => now(),
+            ]);
+
+        TrackerDatabase::table('activity_ecom_user')
+            ->where('session_id', $sessionId)
             ->update([
                 'actions_count' => $count,
                 'updated_at' => now(),
@@ -1188,7 +1262,7 @@ class TrackerDashboardSyncService
             }
         }
 
-        $earliestActionAt = DB::table('activity_ecom_user_actions')
+        $earliestActionAt = TrackerDatabase::table('activity_ecom_user_actions')
             ->where('session_id', $sessionId)
             ->min('created_at');
 
@@ -1271,7 +1345,7 @@ class TrackerDashboardSyncService
             ]];
         }
 
-        $existingCount = (int) DB::table('tracking_session_details')
+        $existingCount = (int) TrackerDatabase::table('tracking_session_details')
             ->where('tracking_session_id', $trackingSessionId)
             ->count();
 
@@ -1298,13 +1372,13 @@ class TrackerDashboardSyncService
             ];
 
             try {
-                DB::table('tracking_session_details')->insert($payload);
+                TrackerDatabase::table('tracking_session_details')->insert($payload);
             } catch (QueryException) {
                 // touch_sequence race — another worker inserted the same sequence.
             }
         }
 
-        $latest = DB::table('tracking_session_details')
+        $latest = TrackerDatabase::table('tracking_session_details')
             ->where('tracking_session_id', $trackingSessionId)
             ->orderByDesc('touch_sequence')
             ->first();
@@ -1374,9 +1448,9 @@ class TrackerDashboardSyncService
     {
         [$source, $medium] = $this->trafficSourceMedium($source, $medium);
 
-        $existing = DB::table('tracking_traffic_source')->where('name', $source)->first();
+        $existing = TrackerDatabase::table('tracking_traffic_source')->where('name', $source)->first();
         if ($existing !== null && (string) ($existing->medium ?? '') !== $medium) {
-            DB::table('tracking_traffic_source')->where('id', $existing->id)->update([
+            TrackerDatabase::table('tracking_traffic_source')->where('id', $existing->id)->update([
                 'medium' => $medium,
                 'updated_at' => now(),
             ]);
@@ -1417,7 +1491,7 @@ class TrackerDashboardSyncService
                 ]);
                 if ($updates !== []) {
                     $updates['updated_at'] = now();
-                    DB::table('tracking_product')->where('id', $existing->id)->update($updates);
+                    TrackerDatabase::table('tracking_product')->where('id', $existing->id)->update($updates);
                 }
 
                 return (int) $existing->id;
@@ -1454,7 +1528,7 @@ class TrackerDashboardSyncService
      */
     private function lookupRowQuery(string $table, array $where): Builder
     {
-        $query = DB::table($table);
+        $query = TrackerDatabase::table($table);
 
         foreach ($where as $column => $value) {
             if ($value === null) {
@@ -1479,9 +1553,9 @@ class TrackerDashboardSyncService
         $cacheKey = 'color:'.$nameVal;
 
         return $this->remember($cacheKey, function () use ($codeVal, $nameVal): int {
-            $existing = DB::table('tracking_color')->where('name', $nameVal)->first();
+            $existing = TrackerDatabase::table('tracking_color')->where('name', $nameVal)->first();
             if ($existing !== null && $codeVal !== null && (string) ($existing->code ?? '') !== $codeVal) {
-                DB::table('tracking_color')->where('id', $existing->id)->update([
+                TrackerDatabase::table('tracking_color')->where('id', $existing->id)->update([
                     'code' => $codeVal,
                     'updated_at' => now(),
                 ]);
@@ -1508,9 +1582,9 @@ class TrackerDashboardSyncService
         $cacheKey = 'size:'.$nameVal;
 
         return $this->remember($cacheKey, function () use ($codeVal, $nameVal): int {
-            $existing = DB::table('tracking_size')->where('name', $nameVal)->first();
+            $existing = TrackerDatabase::table('tracking_size')->where('name', $nameVal)->first();
             if ($existing !== null && $codeVal !== null && (string) ($existing->code ?? '') !== $codeVal) {
-                DB::table('tracking_size')->where('id', $existing->id)->update([
+                TrackerDatabase::table('tracking_size')->where('id', $existing->id)->update([
                     'code' => $codeVal,
                     'updated_at' => now(),
                 ]);
@@ -1539,14 +1613,14 @@ class TrackerDashboardSyncService
         $cacheKey = 'department:'.$departmentName;
 
         return $this->remember($cacheKey, function () use ($departmentName, $codeVal): int {
-            $existing = DB::table('tracking_category')
+            $existing = TrackerDatabase::table('tracking_category')
                 ->whereNull('parent_id')
                 ->where('name', $departmentName)
                 ->first();
 
             if ($existing !== null) {
                 if ($codeVal !== null && (string) ($existing->code ?? '') !== $codeVal) {
-                    DB::table('tracking_category')->where('id', $existing->id)->update([
+                    TrackerDatabase::table('tracking_category')->where('id', $existing->id)->update([
                         'code' => $codeVal,
                         'updated_at' => now(),
                     ]);
@@ -1587,14 +1661,14 @@ class TrackerDashboardSyncService
         $cacheKey = 'category:'.($parentId ?? 0).'|'.$name;
 
         return $this->remember($cacheKey, function () use ($parentId, $name, $code): int {
-            $existing = DB::table('tracking_category')
+            $existing = TrackerDatabase::table('tracking_category')
                 ->where('parent_id', $parentId)
                 ->where('name', $name)
                 ->first();
 
             if ($existing !== null) {
                 if ($code !== null && (string) ($existing->code ?? '') !== $code) {
-                    DB::table('tracking_category')->where('id', $existing->id)->update([
+                    TrackerDatabase::table('tracking_category')->where('id', $existing->id)->update([
                         'code' => $code,
                         'updated_at' => now(),
                     ]);
@@ -1666,7 +1740,7 @@ class TrackerDashboardSyncService
                 $updateColumns = ['updated_at'];
             }
 
-            DB::table($table)->upsert([$row], $uniqueBy, $updateColumns);
+            TrackerDatabase::table($table)->upsert([$row], $uniqueBy, $updateColumns);
 
             $resolvedId = $this->lookupRowId($table, $where, true);
 
@@ -1676,7 +1750,7 @@ class TrackerDashboardSyncService
         }
 
         try {
-            return (int) DB::table($table)->insertGetId($row);
+            return (int) TrackerDatabase::table($table)->insertGetId($row);
         } catch (QueryException $exception) {
             if (! $this->isUniqueConstraintViolation($exception)) {
                 throw $exception;
@@ -1749,7 +1823,7 @@ class TrackerDashboardSyncService
         }
 
         $updates['updated_at'] = now();
-        DB::table($table)->where('id', $existing->id)->update($updates);
+        TrackerDatabase::table($table)->where('id', $existing->id)->update($updates);
     }
 
     /**
@@ -2138,7 +2212,7 @@ class TrackerDashboardSyncService
                 $update[$column] = DB::raw("`{$column}` + VALUES(`{$column}`)");
             }
 
-            DB::table($table)->upsert($values, $unique, $update);
+            TrackerDatabase::table($table)->upsert($values, $unique, $update);
         }
     }
 
@@ -2209,18 +2283,18 @@ class TrackerDashboardSyncService
             'updated_at' => $now,
         ];
 
-        DB::table('tracking_orders')->upsert(
+        TrackerDatabase::table('tracking_orders')->upsert(
             [$order],
             ['order_number'],
             array_keys(Arr::except($order, ['order_number', 'created_at'])),
         );
 
-        $orderId = (int) DB::table('tracking_orders')->where('order_number', $orderNumber)->value('id');
+        $orderId = (int) TrackerDatabase::table('tracking_orders')->where('order_number', $orderNumber)->value('id');
 
-        DB::table('tracking_order_details')->where('tracking_order_id', $orderId)->delete();
+        TrackerDatabase::table('tracking_order_details')->where('tracking_order_id', $orderId)->delete();
 
         if ($lines !== []) {
-            DB::table('tracking_order_details')->insert(array_map(fn (array $line) => $line + [
+            TrackerDatabase::table('tracking_order_details')->insert(array_map(fn (array $line) => $line + [
                 'tracking_order_id' => $orderId,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -2248,7 +2322,7 @@ class TrackerDashboardSyncService
         }
 
         if ($addresses !== []) {
-            DB::table('tracking_order_addresses')->upsert(
+            TrackerDatabase::table('tracking_order_addresses')->upsert(
                 $addresses,
                 ['tracking_order_id', 'type'],
                 ['line_1', 'line_2', 'town_city', 'postcode', 'country', 'updated_at'],
@@ -2291,7 +2365,7 @@ class TrackerDashboardSyncService
             }
         }
 
-        $row = DB::table('tracking_recoverable_sales')
+        $row = TrackerDatabase::table('tracking_recoverable_sales')
             ->where('metric_date', $visitDate)
             ->where('tracking_session_id', $trackingSessionId);
 
@@ -2310,7 +2384,7 @@ class TrackerDashboardSyncService
 
         $now = now();
 
-        DB::table('tracking_recoverable_sales')->upsert([[
+        TrackerDatabase::table('tracking_recoverable_sales')->upsert([[
             'metric_date' => $visitDate,
             'type' => $stage,
             'tracking_session_id' => $trackingSessionId,
@@ -2347,7 +2421,7 @@ class TrackerDashboardSyncService
     {
         $now = now();
 
-        $sessionsQuery = DB::table('tracking_session as ts')
+        $sessionsQuery = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->where('dv.visit_date', $date);
         SessionTrafficAttribution::joinLatestSessionDetails($sessionsQuery);
@@ -2358,7 +2432,7 @@ class TrackerDashboardSyncService
         ]);
 
         // same_day: the order's session started that day too (device / traffic / payment panel need both, like master).
-        $ordersQuery = DB::table('tracking_orders as o')
+        $ordersQuery = TrackerDatabase::table('tracking_orders as o')
             ->leftJoin('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->leftJoin('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->where('o.metric_date', $date);
@@ -2402,7 +2476,6 @@ class TrackerDashboardSyncService
             $summary['cart_sessions'] += $funnel['add_to_carts'];
             $summary['checkout_sessions'] += $funnel['begin_checkouts'];
             $summary['proceed_sessions'] += $funnel['proceed_checkouts'];
-            $summary['payments'] += (int) (bool) $session->has_order;
 
             $bucket = TrackingDailyDuration::bucketFor($seconds);
             $durations[$bucket]['sessions']++;
@@ -2418,10 +2491,10 @@ class TrackerDashboardSyncService
             }
         }
 
-        $paidSessions = [];
         $paymentRows = [];
 
         foreach ($orders as $order) {
+            $summary['payments']++;
             $summary['items_sold'] += (int) $order->items_qty;
             $summary['sale_amount'] += (float) $order->amount_paid;
 
@@ -2438,16 +2511,15 @@ class TrackerDashboardSyncService
             foreach ($this->audienceKeysForOrder($order) as $key) {
                 $id = implode('|', $key);
                 $audience[$id] ??= $key + $emptyAudience;
-                $audience[$id]['payments'] += (int) ! isset($paidSessions[$id][$sessionId]);
+                $audience[$id]['payments']++;
                 $audience[$id]['sold_qty'] += (int) $order->items_qty;
                 $audience[$id]['sale_amount'] += (float) $order->amount_paid;
-                $paidSessions[$id][$sessionId] = true;
             }
         }
 
         $this->refreshPaymentRows($date, $paymentRows, $now);
 
-        $drops = DB::table('tracking_recoverable_sales')
+        $drops = TrackerDatabase::table('tracking_recoverable_sales')
             ->where('metric_date', $date)
             ->whereIn('type', [3, 4, 5])
             ->groupBy('type')
@@ -2458,7 +2530,7 @@ class TrackerDashboardSyncService
 
         $summary['sale_amount'] = round($summary['sale_amount'], 2);
 
-        DB::table('tracking_daily_summaries')->upsert(
+        TrackerDatabase::table('tracking_daily_summaries')->upsert(
             [['metric_date' => $date] + $summary + ['created_at' => $now, 'updated_at' => $now]],
             ['metric_date'],
             [...array_keys($summary), 'updated_at'],
@@ -2468,10 +2540,10 @@ class TrackerDashboardSyncService
         foreach ($durations as $bucket => $values) {
             $durationRows[] = ['metric_date' => $date, 'bucket' => $bucket] + $values + ['created_at' => $now, 'updated_at' => $now];
         }
-        DB::table('tracking_daily_durations')->upsert($durationRows, ['metric_date', 'bucket'], ['sessions', 'duration_seconds', 'updated_at']);
+        TrackerDatabase::table('tracking_daily_durations')->upsert($durationRows, ['metric_date', 'bucket'], ['sessions', 'duration_seconds', 'updated_at']);
 
         $audienceColumns = [...array_keys($emptyAudience), 'conversion_rate'];
-        DB::table('tracking_daily_audiences')
+        TrackerDatabase::table('tracking_daily_audiences')
             ->where('metric_date', $date)
             ->update(array_fill_keys($audienceColumns, 0) + ['updated_at' => $now]);
 
@@ -2484,7 +2556,7 @@ class TrackerDashboardSyncService
                 'updated_at' => $now,
             ], array_values($audience));
 
-            DB::table('tracking_daily_audiences')->upsert(
+            TrackerDatabase::table('tracking_daily_audiences')->upsert(
                 $audienceRows,
                 ['metric_date', 'type', 'dimension_id', 'source', 'medium'],
                 [...$audienceColumns, 'updated_at'],
@@ -2504,7 +2576,7 @@ class TrackerDashboardSyncService
     /** Align tracking_session.created_at with the real session start from activity (not sync time). */
     private function backfillTrackingSessionStartedAt(string $visitDate): void
     {
-        DB::table('tracking_session as ts')
+        TrackerDatabase::table('tracking_session as ts')
             ->join('activity_ecom_user as u', 'u.session_id', '=', 'ts.session_id')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->where('dv.visit_date', $visitDate)
@@ -2540,7 +2612,7 @@ class TrackerDashboardSyncService
 
         $visitorsByHour = array_fill(0, 24, []);
 
-        $sessions = DB::table('tracking_session as ts')
+        $sessions = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->join('activity_ecom_user as u', 'u.session_id', '=', 'ts.session_id')
             ->where('dv.visit_date', $date)
@@ -2561,7 +2633,7 @@ class TrackerDashboardSyncService
             $hours[$hour]['unique_visitors'] = count($visitorIds);
         }
 
-        $orders = DB::table('tracking_orders')
+        $orders = TrackerDatabase::table('tracking_orders')
             ->where('metric_date', $date)
             ->get(['tracking_session_id', 'items_qty', 'amount_paid', 'ordered_at']);
 
@@ -2581,7 +2653,7 @@ class TrackerDashboardSyncService
             $rows[] = $row + ['created_at' => $now, 'updated_at' => $now];
         }
 
-        DB::table('tracking_hourly_summaries')
+        TrackerDatabase::table('tracking_hourly_summaries')
             ->where('metric_date', $date)
             ->whereNotIn('metric_hour', array_column($rows, 'metric_hour') ?: [-1])
             ->delete();
@@ -2595,7 +2667,7 @@ class TrackerDashboardSyncService
             'cart_sessions', 'checkout_sessions', 'proceed_sessions', 'payments', 'items_sold', 'sale_amount',
         ];
 
-        DB::table('tracking_hourly_summaries')->upsert(
+        TrackerDatabase::table('tracking_hourly_summaries')->upsert(
             $rows,
             ['metric_date', 'metric_hour'],
             [...$columns, 'updated_at'],
@@ -2624,7 +2696,7 @@ class TrackerDashboardSyncService
      */
     private function applyHourlyTrendActionCounts(string $visitDate, array &$hours): void
     {
-        $sessionIds = DB::table('tracking_session as ts')
+        $sessionIds = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->where('dv.visit_date', $visitDate)
             ->pluck('ts.session_id');
@@ -2633,7 +2705,7 @@ class TrackerDashboardSyncService
             return;
         }
 
-        $actions = DB::table('activity_ecom_user_actions')
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
             ->orderBy('id')
             ->get();
@@ -2691,7 +2763,7 @@ class TrackerDashboardSyncService
      */
     private function refreshPaymentRows(string $date, array $rows, Carbon $now): void
     {
-        DB::table('tracking_recoverable_sales')
+        TrackerDatabase::table('tracking_recoverable_sales')
             ->where('metric_date', $date)
             ->where('type', 6)
             ->whereNotIn('tracking_session_id', array_keys($rows) ?: [0])
@@ -2715,7 +2787,7 @@ class TrackerDashboardSyncService
             ];
         }
 
-        DB::table('tracking_recoverable_sales')->upsert(
+        TrackerDatabase::table('tracking_recoverable_sales')->upsert(
             $values,
             ['metric_date', 'tracking_session_id'],
             ['type', 'qty', 'sale_value', 'occurred_at', 'updated_at'],
@@ -2727,14 +2799,14 @@ class TrackerDashboardSyncService
      */
     private function refreshProductFunnelCounts(string $date, Carbon $now): void
     {
-        DB::table('tracking_daily_products')->where('metric_date', $date)->update([
+        TrackerDatabase::table('tracking_daily_products')->where('metric_date', $date)->update([
             'product_views' => 0,
             'add_to_carts' => 0,
             'proceed_checkouts' => 0,
             'updated_at' => $now,
         ]);
 
-        DB::table('tracking_daily_categories')->where('metric_date', $date)->update([
+        TrackerDatabase::table('tracking_daily_categories')->where('metric_date', $date)->update([
             'category_views' => 0,
             'product_views' => 0,
             'add_to_carts' => 0,
@@ -2742,13 +2814,13 @@ class TrackerDashboardSyncService
             'updated_at' => $now,
         ]);
 
-        DB::table('tracking_daily_summaries')->where('metric_date', $date)->update([
+        TrackerDatabase::table('tracking_daily_summaries')->where('metric_date', $date)->update([
             'category_views' => 0,
             'product_views' => 0,
             'updated_at' => $now,
         ]);
 
-        $sessionIds = DB::table('tracking_session as ts')
+        $sessionIds = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->where('dv.visit_date', $date)
             ->pluck('ts.session_id');
@@ -2757,7 +2829,7 @@ class TrackerDashboardSyncService
             return;
         }
 
-        $actions = DB::table('activity_ecom_user_actions')
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
             ->orderBy('id')
             ->get();
@@ -2787,9 +2859,9 @@ class TrackerDashboardSyncService
     {
         $soldColumns = $withOrders ? ['sold_qty', 'orders', 'sale_amount'] : ['sold_qty', 'sale_amount'];
 
-        DB::table($table)->where('metric_date', $date)->update(array_fill_keys($soldColumns, 0) + ['updated_at' => $now]);
+        TrackerDatabase::table($table)->where('metric_date', $date)->update(array_fill_keys($soldColumns, 0) + ['updated_at' => $now]);
 
-        $sold = DB::table('tracking_order_details as od')
+        $sold = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
@@ -2820,7 +2892,7 @@ class TrackerDashboardSyncService
             return $values + ['created_at' => $now, 'updated_at' => $now];
         })->all();
 
-        DB::table($table)->upsert($rows, ['metric_date', $column], [...$soldColumns, 'updated_at']);
+        TrackerDatabase::table($table)->upsert($rows, ['metric_date', $column], [...$soldColumns, 'updated_at']);
     }
 
     // ===== 6. Status marks =====
@@ -2830,7 +2902,7 @@ class TrackerDashboardSyncService
      */
     private function markSessionSynced(int $sessionPk, mixed $sessionUpdatedAt, array $sessionRow): bool
     {
-        $updated = DB::table('activity_ecom_user')
+        $updated = TrackerDatabase::table('activity_ecom_user')
             ->where('id', $sessionPk)
             ->where('updated_at', $sessionUpdatedAt)
             ->update([
@@ -2850,18 +2922,9 @@ class TrackerDashboardSyncService
         return true;
     }
 
-    private function markSessionSkippedBadData(int $sessionPk): void
-    {
-        DB::table('activity_ecom_user')->where('id', $sessionPk)->update([
-            'is_sync' => ActivityEcomUser::SYNC_FAILED,
-            'sync_try' => self::MAX_SYNC_TRY,
-            'sync_at' => now(),
-        ]);
-    }
-
     private function markSessionFailed(int $sessionPk): void
     {
-        DB::table('activity_ecom_user')->where('id', $sessionPk)->update([
+        TrackerDatabase::table('activity_ecom_user')->where('id', $sessionPk)->update([
             'is_sync' => ActivityEcomUser::SYNC_FAILED,
             'sync_try' => DB::raw('sync_try + 1'),
             'sync_at' => now(),
@@ -2879,7 +2942,7 @@ class TrackerDashboardSyncService
             return;
         }
 
-        DB::table('activity_ecom_user_actions')
+        TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('id', $ids)
             ->update([
                 'is_sync' => ActivityEcomUserAction::SYNC_DONE,
@@ -2900,7 +2963,7 @@ class TrackerDashboardSyncService
             return;
         }
 
-        DB::table('activity_ecom_user_actions')
+        TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('id', $ids)
             ->update([
                 'is_sync' => ActivityEcomUserAction::SYNC_FAILED,

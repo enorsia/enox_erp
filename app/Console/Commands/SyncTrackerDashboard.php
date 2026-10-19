@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Jobs\TrackerDashboardSyncJob;
 use App\Services\TrackerDashboardSyncService;
+use App\Support\TrackerQueueSupport;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -56,8 +57,8 @@ class SyncTrackerDashboard extends Command
             return self::FAILURE;
         }
 
-        $connection = (string) config('tracker.dashboard_sync_queue_connection', 'database');
-        $queue = (string) config('tracker.dashboard_sync_queue_name', 'default');
+        $connection = TrackerQueueSupport::connection();
+        $queue = TrackerQueueSupport::queue();
 
         $this->info(sprintf(
             'Sync started: %d batch(es), %d session(s).',

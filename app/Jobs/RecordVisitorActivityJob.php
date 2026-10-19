@@ -160,12 +160,18 @@ class RecordVisitorActivityJob implements ShouldQueue
         $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
         $duration = $this->sessionDurationSeconds($createdAt, $now);
 
-        $session->update([
+        $updates = [
             'last_active_at' => $formattedNow,
             'session_duration_seconds' => $duration,
             'updated_at' => $formattedNow,
             'is_sync' => ActivityEcomUser::SYNC_PENDING,
-        ]);
+        ];
+
+        if (trim((string) $session->visitor_id) === '') {
+            $updates['visitor_id'] = $this->visitorId;
+        }
+
+        $session->update($updates);
 
         EcomTrackerLogger::frontend()->debug('job.record_visitor.update', 'Old session time updated', [
             'visitor_id' => $this->visitorId,

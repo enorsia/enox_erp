@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Support\TrackerPaymentCheckoutEnricher;
+use Illuminate\Support\Str;
 
 uses(Tests\TestCase::class);
 
@@ -80,6 +82,52 @@ test('does not overwrite existing checkout line category metadata', function () 
     ], $sessionActions);
 
     expect($line['category_name'])->toBe('Jumpsuits');
+});
+
+test('merges checkout discount totals into payment payload when payment totals are net-only', function () {
+    $sessionId = (string) Str::uuid();
+
+    ActivityEcomUser::query()->create([
+        'session_id' => $sessionId,
+        'visitor_id' => (string) Str::uuid(),
+        'device_type' => 'desktop',
+        'created_at' => '2026-10-19 05:50:00',
+        'last_active_at' => '2026-10-19 05:55:00',
+    ]);
+
+    ActivityEcomUserAction::query()->create([
+        'event_id' => (string) Str::uuid(),
+        'session_id' => $sessionId,
+        'action_type' => 'proceed_checkout',
+        'created_at' => '2026-10-19 05:55:00',
+        'proceed_to_checkout' => [
+            'cart_total' => 42,
+            'totals' => [
+                'subtotal' => 45,
+                'coupon_discount' => 3,
+                'grand_total' => 42,
+            ],
+        ],
+    ]);
+
+    $enricher = new TrackerPaymentCheckoutEnricher();
+    $payload = $enricher->enrichPayload($sessionId, [
+        'order_id' => 'ORD-1',
+        'amount_paid' => 42,
+        'checkout_info' => [
+            'items' => [
+                ['product_code' => 'WA1', 'qty' => 1, 'price' => 45],
+            ],
+            'totals' => [
+                'subtotal' => 42,
+                'grand_total' => 42,
+            ],
+        ],
+    ]);
+
+    expect($payload['checkout_info']['totals']['subtotal'])->toBe(45)
+        ->and($payload['checkout_info']['totals']['coupon_discount'])->toBe(3)
+        ->and($payload['checkout_info']['totals']['grand_total'])->toBe(42);
 });
 
 test('does not fabricate category name from department only', function () {

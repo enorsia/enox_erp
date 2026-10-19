@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\TrackerDatabase;
+
 use App\Support\TrackerCatalogSentinels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -19,7 +21,7 @@ class TrackerCatalogBackfillService
         }
 
         $updated = 0;
-        $query = DB::table('activity_ecom_commerce_line_items')
+        $query = TrackerDatabase::table('activity_ecom_commerce_line_items')
             ->orderBy('id');
 
         if ($limit !== null && $limit > 0) {
@@ -30,7 +32,7 @@ class TrackerCatalogBackfillService
             $line = (array) $row;
             $ids = $this->resolver->resolveLineSnapshotIds($line);
 
-            DB::table('activity_ecom_commerce_line_items')
+            TrackerDatabase::table('activity_ecom_commerce_line_items')
                 ->where('id', $row->id)
                 ->update([
                     'tracker_department_id' => $ids['tracker_department_id'],
@@ -52,7 +54,7 @@ class TrackerCatalogBackfillService
 
         $updated = 0;
 
-        DB::table('activity_ecom_commerce_line_items')
+        TrackerDatabase::table('activity_ecom_commerce_line_items')
             ->where(function ($query) {
                 $query->whereNull('tracker_product_id')
                     ->orWhereNull('tracker_category_id')
@@ -62,7 +64,7 @@ class TrackerCatalogBackfillService
             ->chunkById($chunkSize, function ($rows) use (&$updated) {
                 foreach ($rows as $row) {
                     $ids = $this->resolver->resolveLineSnapshotIds((array) $row);
-                    DB::table('activity_ecom_commerce_line_items')
+                    TrackerDatabase::table('activity_ecom_commerce_line_items')
                         ->where('id', $row->id)
                         ->update($ids);
                     $updated++;

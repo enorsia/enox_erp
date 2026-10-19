@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TrackingDailyProduct extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $fillable = [
         'metric_date',
         'product_code',

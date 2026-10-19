@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\TrackerDatabase;
+
 use App\Models\TrackingDailyAudience;
 use App\Models\TrackingDailyDuration;
 use App\Support\TrackerTime;
@@ -49,7 +51,7 @@ class EcomTrackerDashboardService
         $prevFrom = $range['from']->copy()->subDays($days);
         $prevTo = $range['from']->copy()->subDay();
 
-        $summaries = DB::table('tracking_daily_summaries')
+        $summaries = TrackerDatabase::table('tracking_daily_summaries')
             ->whereBetween('metric_date', [$prevFrom->toDateString(), $to])
             ->get()
             ->keyBy(fn (object $row) => (string) $row->metric_date);
@@ -139,7 +141,7 @@ class EcomTrackerDashboardService
             $currentFunnel['payment_count'],
             $previousFunnel['payment_rate'],
             $previousFunnel['payment_count'],
-            'Share of all sessions that completed a payment (one count per session with payment_success).',
+            'Share of sessions with at least one payment; count is completed orders (multiple orders in one session each count).',
             $comparisonLabel,
             ['funnel' => 6],
         );
@@ -203,6 +205,7 @@ class EcomTrackerDashboardService
         $checkoutStage = (int) ($totals['checkout_sessions'] ?? 0);
         $proceedStage = (int) ($totals['proceed_sessions'] ?? 0);
         $payments = (int) ($totals['payments'] ?? 0);
+        $purchaseSessions = (int) ($totals['purchase_sessions'] ?? $payments);
         $cartAbandoned = (int) ($totals['cart_drops'] ?? 0);
         $checkoutAbandoned = (int) ($totals['checkout_drops'] ?? 0);
         $proceedAbandoned = (int) ($totals['proceed_drops'] ?? 0);
@@ -214,7 +217,7 @@ class EcomTrackerDashboardService
             'checkout_drop_count' => $checkoutAbandoned,
             'proceed_drop_rate' => $proceedStage > 0 ? round($proceedAbandoned / $proceedStage * 100, 1) : 0.0,
             'proceed_drop_count' => $proceedAbandoned,
-            'payment_rate' => $sessions > 0 ? round($payments / $sessions * 100, 1) : 0.0,
+            'payment_rate' => $sessions > 0 ? round($purchaseSessions / $sessions * 100, 1) : 0.0,
             'payment_count' => $payments,
         ];
     }
@@ -256,7 +259,7 @@ class EcomTrackerDashboardService
      */
     private function saleTotalsFromOrders(string $from, string $to): array
     {
-        $row = DB::table('tracking_orders')
+        $row = TrackerDatabase::table('tracking_orders')
             ->whereBetween('metric_date', [$from, $to])
             ->selectRaw('COALESCE(SUM(items_qty), 0) as items_sold')
             ->selectRaw('COALESCE(SUM(amount_paid), 0) as sale_amount')
@@ -356,12 +359,12 @@ class EcomTrackerDashboardService
      */
     private function hourlyTrendFromTable(string $date, string $period, Carbon $dayLocal): array
     {
-        $rows = DB::table('tracking_hourly_summaries')
+        $rows = TrackerDatabase::table('tracking_hourly_summaries')
             ->where('metric_date', $date)
             ->get()
             ->keyBy(fn (object $row) => (int) $row->metric_hour);
 
-        $purchaseSessionsByHour = DB::table('tracking_orders')
+        $purchaseSessionsByHour = TrackerDatabase::table('tracking_orders')
             ->where('metric_date', $date)
             ->get(['tracking_session_id', 'ordered_at'])
             ->groupBy(fn (object $order) => (int) Carbon::parse($order->ordered_at)->timezone(TrackerTime::timezone())->format('G'))
@@ -449,7 +452,7 @@ class EcomTrackerDashboardService
      */
     private function prefetchTrendSupportData(array $range): array
     {
-        $visitorsByDate = DB::table('tracking_session as ts')
+        $visitorsByDate = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->select(['dv.visit_date as session_date', 'ts.tracking_daily_visitor_id'])
             ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope(
@@ -466,7 +469,7 @@ class EcomTrackerDashboardService
         $fromDate = $range['from']->toDateString();
         $toDate = $range['to']->toDateString();
 
-        $purchaseSessionIdsByDate = DB::table('tracking_orders')
+        $purchaseSessionIdsByDate = TrackerDatabase::table('tracking_orders')
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->select(['metric_date', 'tracking_session_id'])
             ->get()
@@ -646,7 +649,7 @@ class EcomTrackerDashboardService
      */
     public function summaryViewTotals(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
     {
-        $rows = DB::table('tracking_daily_summaries')
+        $rows = TrackerDatabase::table('tracking_daily_summaries')
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->get();
 
@@ -678,13 +681,13 @@ class EcomTrackerDashboardService
     {
         $fromDate = $from->toDateString();
         $toDate = $to->toDateString();
-        $totalsByDate = DB::table('tracking_daily_summaries')
+        $totalsByDate = TrackerDatabase::table('tracking_daily_summaries')
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->pluck('sessions', 'metric_date');
 
         $range = ['from' => $from, 'to' => $to, 'period' => $period];
 
-        $filteredByDate = DB::table('tracking_session as ts')
+        $filteredByDate = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->selectRaw('dv.visit_date as session_date, COUNT(*) as sessions')
             ->tap(fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters))
@@ -714,7 +717,7 @@ class EcomTrackerDashboardService
             return $this->categoriesWithSessionFilters($from, $to, $period, $sessionFilters);
         }
 
-        $rows = DB::table('tracking_daily_categories as dc')
+        $rows = TrackerDatabase::table('tracking_daily_categories as dc')
             ->join('tracking_category as c', 'c.id', '=', 'dc.tracking_category_id')
             ->leftJoin('tracking_category as d', 'd.id', '=', 'c.parent_id')
             ->whereBetween('dc.metric_date', [$fromDate, $toDate])
@@ -789,7 +792,7 @@ class EcomTrackerDashboardService
             return $this->productsWithSessionFilters($from, $to, $period, $sessionFilters, $limit);
         }
 
-        $aggregated = DB::table('tracking_daily_products')
+        $aggregated = TrackerDatabase::table('tracking_daily_products')
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->groupBy('product_code')
             ->selectRaw('product_code as code')
@@ -846,7 +849,7 @@ class EcomTrackerDashboardService
         $sorted = $this->sortProductRows($all);
         $visible = $limit === null ? $sorted : $sorted->take($limit);
 
-        $titles = DB::table('tracking_product')
+        $titles = TrackerDatabase::table('tracking_product')
             ->whereIn('code', $visible->pluck('code')->all())
             ->pluck('title', 'code');
 
@@ -904,7 +907,7 @@ class EcomTrackerDashboardService
     private function categoriesWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
     {
         $ratios = $this->sessionFilterRatiosByDate($from, $to, $period, $sessionFilters);
-        $dailyRows = DB::table('tracking_daily_categories as dc')
+        $dailyRows = TrackerDatabase::table('tracking_daily_categories as dc')
             ->join('tracking_category as c', 'c.id', '=', 'dc.tracking_category_id')
             ->leftJoin('tracking_category as d', 'd.id', '=', 'c.parent_id')
             ->whereBetween('dc.metric_date', [$from->toDateString(), $to->toDateString()])
@@ -1007,7 +1010,7 @@ class EcomTrackerDashboardService
     private function productsWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters, ?int $limit = self::PRODUCT_LIMIT): array
     {
         $ratios = $this->sessionFilterRatiosByDate($from, $to, $period, $sessionFilters);
-        $dailyRows = DB::table('tracking_daily_products')
+        $dailyRows = TrackerDatabase::table('tracking_daily_products')
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->get();
 
@@ -1045,7 +1048,7 @@ class EcomTrackerDashboardService
         [$fromBound, $toBound] = TrackerTime::storageRange($from, $to);
         $range = ['from' => $from, 'to' => $to, 'period' => $period];
 
-        $rows = DB::table('tracking_order_details as od')
+        $rows = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->whereBetween('o.ordered_at', [$fromBound, $toBound])
@@ -1082,7 +1085,7 @@ class EcomTrackerDashboardService
         [$fromBound, $toBound] = TrackerTime::storageRange($from, $to);
         $range = ['from' => $from, 'to' => $to, 'period' => $period];
 
-        $rows = DB::table('tracking_order_details as od')
+        $rows = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
@@ -1114,7 +1117,7 @@ class EcomTrackerDashboardService
      */
     private function recoverable(string $from, string $to, string $backUrl): array
     {
-        $ranked = DB::table('tracking_recoverable_sales as rs')
+        $ranked = TrackerDatabase::table('tracking_recoverable_sales as rs')
             ->join('tracking_session as ts', 'ts.id', '=', 'rs.tracking_session_id')
             ->whereBetween('rs.metric_date', [$from, $to])
             ->select('rs.type', 'rs.qty', 'rs.sale_value', 'rs.occurred_at', 'ts.session_id')
@@ -1122,7 +1125,7 @@ class EcomTrackerDashboardService
             ->selectRaw('COUNT(*) OVER (PARTITION BY rs.type) as total_count')
             ->selectRaw('SUM(rs.sale_value) OVER (PARTITION BY rs.type) as total_value');
 
-        $rows = DB::query()
+        $rows = TrackerDatabase::query()
             ->fromSub($ranked, 'r')
             ->where('row_no', '<=', self::RECOVERABLE_ROW_LIMIT)
             ->orderBy('row_no')
@@ -1158,7 +1161,7 @@ class EcomTrackerDashboardService
      */
     private function audiences(string $from, string $to): array
     {
-        $rows = DB::table('tracking_daily_audiences as a')
+        $rows = TrackerDatabase::table('tracking_daily_audiences as a')
             ->leftJoin('tracking_device as dv', fn ($join) => $join->on('dv.id', '=', 'a.dimension_id')->where('a.type', TrackingDailyAudience::TYPE_DEVICE))
             ->leftJoin('tracking_browser as br', fn ($join) => $join->on('br.id', '=', 'a.dimension_id')->where('a.type', TrackingDailyAudience::TYPE_BROWSER))
             ->whereBetween('a.metric_date', [$from, $to])
@@ -1230,7 +1233,7 @@ class EcomTrackerDashboardService
      */
     private function durations(string $from, string $to): array
     {
-        $counts = DB::table('tracking_daily_durations')
+        $counts = TrackerDatabase::table('tracking_daily_durations')
             ->whereBetween('metric_date', [$from, $to])
             ->groupBy('bucket')
             ->selectRaw('bucket, SUM(sessions) as sessions')
@@ -1248,7 +1251,7 @@ class EcomTrackerDashboardService
             ];
         }
 
-        $middle = $total === 0 ? collect() : DB::table('tracking_daily_visitor as dv')
+        $middle = $total === 0 ? collect() : TrackerDatabase::table('tracking_daily_visitor as dv')
             ->join('tracking_session as ts', 'ts.tracking_daily_visitor_id', '=', 'dv.id')
             ->whereBetween('dv.visit_date', [$from, $to])
             ->orderBy('ts.duration_seconds')

@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\TrackerDatabase;
+
 use App\Models\ActivityEcomUserAction;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -245,7 +247,7 @@ class TrackingCtrRollupService
             return;
         }
 
-        $query = DB::table('tracking_ctr_daily_summaries')
+        $query = TrackerDatabase::table('tracking_ctr_daily_summaries')
             ->where('metric_date', $delta['metric_date'])
             ->where('department_id', $delta['department_id'])
             ->where('category_id', $delta['category_id'])
@@ -274,7 +276,7 @@ class TrackingCtrRollupService
 
         $ctr = $this->ctrValue($clicks, $impressions);
 
-        DB::table('tracking_ctr_daily_summaries')->insert([
+        TrackerDatabase::table('tracking_ctr_daily_summaries')->insert([
             'metric_date' => $delta['metric_date'],
             'department_id' => $delta['department_id'],
             'category_id' => $delta['category_id'],
@@ -302,7 +304,7 @@ class TrackingCtrRollupService
             ->startOfDay()
             ->toDateString();
 
-        $aggregate = DB::table('tracking_ctr_daily_summaries')
+        $aggregate = TrackerDatabase::table('tracking_ctr_daily_summaries')
             ->where('department_id', $departmentId)
             ->where('category_id', $categoryId)
             ->where('product_code', $productCode)
@@ -318,7 +320,7 @@ class TrackingCtrRollupService
         $ctr = $this->ctrValue($totalClick, $totalImpression);
         $ctrAverage = round((float) ($aggregate->ctr_average ?? 0), 6);
 
-        DB::table('tracking_ctr_summaries')->upsert(
+        TrackerDatabase::table('tracking_ctr_summaries')->upsert(
             [[
                 'department_id' => $departmentId,
                 'category_id' => $categoryId,

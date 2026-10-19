@@ -2,12 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use App\Support\VisitorClassificationLabels;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ActivityEcomUserBotContext extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $table = 'activity_ecom_user_bot_context';
 
     protected $fillable = [

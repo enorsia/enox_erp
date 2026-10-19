@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ActivityEcomUserAction extends Model
 {
+    use UsesTrackingDatabase;
+
     public const SYNC_PENDING = 0;
 
     public const SYNC_DONE = 1;

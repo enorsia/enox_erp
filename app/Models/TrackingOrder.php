@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class TrackingOrder extends Model
 {
+    use UsesTrackingDatabase;
+
     protected $fillable = [
         'tracking_session_id',
         'order_number',

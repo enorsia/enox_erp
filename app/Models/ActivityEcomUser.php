@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use App\Support\TrackerTime;
 use App\Support\VisitorClassificationLabels;
 use Carbon\Carbon;
@@ -12,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ActivityEcomUser extends Model
 {
+    use UsesTrackingDatabase;
+
     public const SYNC_PENDING = 0;
 
     public const SYNC_DONE = 1;

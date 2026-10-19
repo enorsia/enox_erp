@@ -53,7 +53,6 @@ final class TrackerActionSequence
     public static function displayActionCount(Collection $actions): int
     {
         $sorted = $actions
-            ->filter(fn (object $action) => (string) ($action->action_type ?? '') !== 'product_click')
             ->sort(fn (object $left, object $right) => self::compareDisplayActions($left, $right))
             ->values();
 

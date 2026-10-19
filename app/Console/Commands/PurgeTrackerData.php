@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\TrackerDatabase;
 use App\Support\TrackerRedisSupport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
@@ -13,13 +14,17 @@ class PurgeTrackerData extends Command
     protected $signature = 'tracker:purge-data
                             {--dry-run : Show row counts per table without deleting}
                             {--force : Required to delete data (ignored for dry-run)}
-                            {--drop-tables : Drop tables (not just truncate) on the default database connection}
-                            {--queues : Also remove pending tracker jobs from jobs/failed_jobs/job_batches}
+                            {--drop-tables : Drop tables (not just truncate) on the default ERP database connection}
+                            {--queues : Also remove pending tracker jobs from ERP and tracking DB queue tables}
                             {--redis : Flush tracker Redis keys (prefix from TRACKER_REDIS_PREFIX)}';
 
-    protected $description = 'Clear ecom tracker tables from the default DB (truncate, or --drop-tables to remove schema).';
+    protected $description = 'Truncate legacy tracker tables on the default ERP DB only. Live ingest + tracking_* live on the tracking connection (not modified).';
 
-    /** @var list<string> Child tables first — same names as database/migrations/tracking */
+    /**
+     * ERP default connection only. Production ingest (activity_ecom_*) is on {@see TrackerDatabase}.
+     *
+     * @var list<string> Child tables first — same names as database/migrations/tracking
+     */
     private const TABLES = [
         'tracking_order_details',
         'tracking_order_addresses',
@@ -62,13 +67,15 @@ class PurgeTrackerData extends Command
             return self::FAILURE;
         }
 
+        $this->warnTrackingConnectionIngestUntouched($dryRun);
+
         if ($dropTables && $dryRun) {
             $this->line('With --drop-tables, a live run would drop each table listed below.');
         }
 
         $this->warn($dryRun
             ? 'Dry run: row counts only.'
-            : ($dropTables ? 'Dropping tracker tables on the default database…' : 'Truncating tracker tables…'));
+            : ($dropTables ? 'Dropping legacy tracker tables on the ERP database…' : 'Truncating legacy tracker tables on the ERP database…'));
 
         $counts = $this->purgeTables($dryRun, $dropTables);
         $total = array_sum($counts);
@@ -95,12 +102,38 @@ class PurgeTrackerData extends Command
         }
 
         if ($dropTables) {
-            $this->info('Tracker tables dropped on the default database. Recreate on tracking DB: php artisan migrate --database=tracking --path=database/migrations/tracking');
+            $this->info('Legacy tracker tables dropped on the ERP database. Live data is on the tracking connection (migrate:fresh there if needed).');
         } else {
-            $this->info('Tracker purge complete. Ingest and sync will repopulate from new storefront traffic.');
+            $this->info('ERP tracker table purge complete (tracking connection was not modified).');
         }
 
         return self::SUCCESS;
+    }
+
+    private function warnTrackingConnectionIngestUntouched(bool $dryRun): void
+    {
+        $schema = TrackerDatabase::connection()->getSchemaBuilder();
+
+        if (! $schema->hasTable('activity_ecom_user')) {
+            return;
+        }
+
+        $sessions = (int) TrackerDatabase::table('activity_ecom_user')->count();
+        $actions = $schema->hasTable('activity_ecom_user_actions')
+            ? (int) TrackerDatabase::table('activity_ecom_user_actions')->count()
+            : 0;
+
+        if ($sessions === 0 && $actions === 0) {
+            return;
+        }
+
+        $this->warn(sprintf(
+            '%s tracking DB (%s) still has ingest: %d session(s), %d action(s). This command does not touch that connection.',
+            $dryRun ? '[dry-run note]' : 'Note:',
+            TrackerDatabase::connectionName(),
+            $sessions,
+            $actions,
+        ));
     }
 
     /**
@@ -159,12 +192,38 @@ class PurgeTrackerData extends Command
 
     private function purgeQueues(): void
     {
+        $erp = $this->purgeTrackerQueueTables(DB::connection(), Schema::getConnection());
+        $tracking = $this->purgeTrackerQueueTables(
+            TrackerDatabase::connection(),
+            TrackerDatabase::connection()->getSchemaBuilder(),
+        );
+
+        $this->line(sprintf(
+            'Queue cleanup (ERP): jobs=%d, failed_jobs=%d, job_batches=%d',
+            $erp['jobs'],
+            $erp['failed'],
+            $erp['batches'],
+        ));
+
+        $this->line(sprintf(
+            'Queue cleanup (tracking): jobs=%d, failed_jobs=%d, job_batches=%d',
+            $tracking['jobs'],
+            $tracking['failed'],
+            $tracking['batches'],
+        ));
+    }
+
+    /**
+     * @return array{jobs: int, failed: int, batches: int}
+     */
+    private function purgeTrackerQueueTables(\Illuminate\Database\Connection $connection, \Illuminate\Database\Schema\Builder $schema): array
+    {
         $jobs = 0;
         $failed = 0;
         $batches = 0;
 
-        if (Schema::hasTable('jobs')) {
-            $jobs = DB::table('jobs')
+        if ($schema->hasTable('jobs')) {
+            $jobs = $connection->table('jobs')
                 ->where(function ($query): void {
                     $query->where('payload', 'like', '%TrackerDashboard%')
                         ->orWhere('payload', 'like', '%ProcessTrackingCtr%');
@@ -172,8 +231,8 @@ class PurgeTrackerData extends Command
                 ->delete();
         }
 
-        if (Schema::hasTable('failed_jobs')) {
-            $failed = DB::table('failed_jobs')
+        if ($schema->hasTable('failed_jobs')) {
+            $failed = $connection->table('failed_jobs')
                 ->where(function ($query): void {
                     $query->where('payload', 'like', '%TrackerDashboard%')
                         ->orWhere('payload', 'like', '%ProcessTrackingCtr%');
@@ -181,13 +240,13 @@ class PurgeTrackerData extends Command
                 ->delete();
         }
 
-        if (Schema::hasTable('job_batches')) {
-            $batches = DB::table('job_batches')
+        if ($schema->hasTable('job_batches')) {
+            $batches = $connection->table('job_batches')
                 ->where('name', 'tracker-dashboard-sync')
                 ->delete();
         }
 
-        $this->line(sprintf('Queue cleanup: jobs=%d, failed_jobs=%d, job_batches=%d', $jobs, $failed, $batches));
+        return ['jobs' => $jobs, 'failed' => $failed, 'batches' => $batches];
     }
 
     private function purgeRedis(): void

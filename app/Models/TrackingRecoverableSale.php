@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTrackingDatabase;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TrackingRecoverableSale extends Model
 {
+    use UsesTrackingDatabase;
+
     /** type code (same as TrackingSession::FUNNEL_STAGES) => panel title */
     public const TYPES = [
         3 => 'Cart abandoned',

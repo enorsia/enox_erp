@@ -3,7 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\TrackerDashboardSyncService;
-use Illuminate\Bus\Batchable;
+use App\Support\TrackerQueueSupport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -14,7 +14,7 @@ use Illuminate\Queue\InteractsWithQueue;
  */
 class TrackerDashboardSyncChunkJob implements ShouldQueue
 {
-    use Batchable, Dispatchable, InteractsWithQueue, Queueable;
+    use Dispatchable, InteractsWithQueue, Queueable;
 
     public int $tries = 2;
 
@@ -26,16 +26,12 @@ class TrackerDashboardSyncChunkJob implements ShouldQueue
      */
     public function __construct(public array $sessionIds)
     {
-        $this->onConnection((string) config('tracker.dashboard_sync_queue_connection', 'database'));
-        $this->onQueue((string) config('tracker.dashboard_sync_queue_name', 'default'));
+        $this->onConnection(TrackerQueueSupport::connection());
+        $this->onQueue(TrackerQueueSupport::queue());
     }
 
     public function handle(TrackerDashboardSyncService $syncService): void
     {
-        if ($this->batch()?->cancelled()) {
-            return;
-        }
-
         $syncService->syncSessionIds($this->sessionIds);
     }
 }

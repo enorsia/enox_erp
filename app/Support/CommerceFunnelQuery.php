@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Support\TrackerDatabase;
+
 use App\Models\ActivityEcomUser;
 use App\Support\CommerceHasOrderFilter;
 use Carbon\Carbon;
@@ -366,7 +368,7 @@ final class CommerceFunnelQuery
      */
     private static function paymentRowsFromOrdersOnLocalDates(array $localDatesYmd, ?Collection $allowedSessionIds): array
     {
-        $query = DB::table('activity_ecom_orders')
+        $query = TrackerDatabase::table('activity_ecom_orders')
             ->select('session_id', 'ordered_at', 'amount_paid', 'item_qty', 'order_id', 'event_id')
             ->orderByDesc('ordered_at');
 
@@ -414,7 +416,7 @@ final class CommerceFunnelQuery
         ?string $period,
     ): array {
         $range = TrackerTime::storageRange($from, $to);
-        $query = DB::table('activity_ecom_orders')
+        $query = TrackerDatabase::table('activity_ecom_orders')
             ->select('session_id', 'ordered_at', 'amount_paid', 'item_qty', 'order_id', 'event_id')
             ->whereBetween('ordered_at', $range)
             ->orderByDesc('ordered_at');
@@ -466,7 +468,7 @@ final class CommerceFunnelQuery
         array $localDatesYmd,
         ?Collection $allowedSessionIds,
     ): array {
-        $query = DB::table('activity_ecom_user_actions as a')
+        $query = TrackerDatabase::table('activity_ecom_user_actions as a')
             ->select(
                 'a.session_id',
                 'a.event_id',
@@ -541,7 +543,7 @@ final class CommerceFunnelQuery
         ?string $period,
     ): array {
         $range = TrackerTime::storageRange($from, $to);
-        $query = DB::table('activity_ecom_user_actions as a')
+        $query = TrackerDatabase::table('activity_ecom_user_actions as a')
             ->select(
                 'a.session_id',
                 'a.event_id',
@@ -992,7 +994,7 @@ final class CommerceFunnelQuery
             return collect();
         }
 
-        $query = DB::table('activity_ecom_user')
+        $query = TrackerDatabase::table('activity_ecom_user')
             ->select('session_id')
             ->where($flag, true);
 
@@ -1021,7 +1023,7 @@ final class CommerceFunnelQuery
         ?Collection $allowedSessionIds,
         ?string $period,
     ): Collection {
-        $query = DB::table('activity_ecom_commerce_line_items')
+        $query = TrackerDatabase::table('activity_ecom_commerce_line_items')
             ->select('session_id')
             ->where('funnel_stage', $stage)
             ->whereBetween('staged_at', TrackerTime::storageRange($from, $to))
@@ -1066,7 +1068,7 @@ final class CommerceFunnelQuery
 
         $paid = [];
         foreach ($kept->chunk(self::SESSION_ID_CHUNK) as $chunk) {
-            foreach (DB::table('activity_ecom_orders')
+            foreach (TrackerDatabase::table('activity_ecom_orders')
                 ->whereIn('session_id', $chunk->values()->all())
                 ->whereBetween('ordered_at', TrackerTime::storageRange($from, $to))
                 ->pluck('session_id') as $sessionId
@@ -1117,18 +1119,18 @@ final class CommerceFunnelQuery
 
         foreach ($sessionIds->chunk(self::SESSION_ID_CHUNK) as $chunk) {
             $ids = $chunk->values()->all();
-            $latestIdsQuery = DB::table('activity_ecom_commerce_line_items')
+            $latestIdsQuery = TrackerDatabase::table('activity_ecom_commerce_line_items')
                 ->select('session_id', DB::raw('MAX(id) as max_id'))
                 ->where('funnel_stage', $stage)
                 ->whereBetween('staged_at', $range)
                 ->whereIn('session_id', $ids)
                 ->groupBy('session_id');
 
-            $events = DB::table('activity_ecom_commerce_line_items as li')
+            $events = TrackerDatabase::table('activity_ecom_commerce_line_items as li')
                 ->joinSub($latestIdsQuery, 'latest', 'li.id', '=', 'latest.max_id')
                 ->select('li.session_id', 'li.event_id');
 
-            $rows = DB::table('activity_ecom_commerce_line_items as lines')
+            $rows = TrackerDatabase::table('activity_ecom_commerce_line_items as lines')
                 ->joinSub($events, 'ev', 'lines.event_id', '=', 'ev.event_id')
                 ->where('lines.funnel_stage', $stage)
                 ->groupBy('lines.session_id')
@@ -1167,7 +1169,7 @@ final class CommerceFunnelQuery
 
         foreach ($sessionIds->chunk(self::SESSION_ID_CHUNK) as $chunk) {
             $lines = $lines->concat(
-                DB::table('activity_ecom_commerce_line_items')
+                TrackerDatabase::table('activity_ecom_commerce_line_items')
                     ->select('session_id', 'funnel_stage', 'staged_at', 'id')
                     ->whereIn('session_id', $chunk->values()->all())
                     ->whereIn('funnel_stage', self::FUNNEL_STAGES)

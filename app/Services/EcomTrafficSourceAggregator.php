@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\TrackerDatabase;
+
 use App\Models\TrackerUtmFilter;
 use App\Support\CommerceHumanSessionFilter;
 use App\Support\TrackerTime;
@@ -31,7 +33,7 @@ class EcomTrafficSourceAggregator
         $mediumSql = TrackerUtmFilter::dashboardTrafficMediumBucketSql('s');
         $buckets = [];
 
-        $sessionQuery = DB::table('activity_ecom_user as s');
+        $sessionQuery = TrackerDatabase::table('activity_ecom_user as s');
         TrackerTime::applyEcomActivitySessionScope($sessionQuery, $from, $to, $period, 's');
         CommerceHumanSessionFilter::apply($sessionQuery, 's');
         if ($sessionIds !== null) {
@@ -63,7 +65,7 @@ class EcomTrafficSourceAggregator
 
         [$rangeStart, $rangeEnd] = TrackerTime::storageRange($from, $to);
 
-        $viewQuery = DB::table('activity_ecom_commerce_line_items as li')
+        $viewQuery = TrackerDatabase::table('activity_ecom_commerce_line_items as li')
             ->join('activity_ecom_user as s', 's.session_id', '=', 'li.session_id')
             ->whereIn('li.funnel_stage', ['product_view', 'product_view_popup'])
             ->whereBetween('li.staged_at', [$rangeStart, $rangeEnd]);
@@ -85,7 +87,7 @@ class EcomTrafficSourceAggregator
             $this->incrementBucket($buckets, $key, field: 'views', amount: (int) $row->views);
         }
 
-        $orderQuery = DB::table('activity_ecom_orders as o')
+        $orderQuery = TrackerDatabase::table('activity_ecom_orders as o')
             ->whereBetween('o.ordered_at', [$rangeStart, $rangeEnd]);
 
         $this->applyOptionalSessionScope($orderQuery, $sessionIds, $from, $to, $period, 'o.session_id');
