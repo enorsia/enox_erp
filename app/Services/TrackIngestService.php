@@ -487,7 +487,7 @@ class TrackIngestService
             $row['payment_success'] = json_encode($payload);
         }
 
-        if (($row['department_name'] ?? '') === '' && ($actionType === 'category_view' || ! empty($row['category_name']))) {
+        if (($row['department_name'] ?? '') === '' && (in_array($actionType, ['category_view', 'landing_page'], true) || ! empty($row['category_name']))) {
             $departmentName = TrackerCategoryIdentity::departmentNameFromPageUrl((string) ($event['page_url'] ?? ''));
 
             if ($departmentName !== '') {
