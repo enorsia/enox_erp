@@ -16,6 +16,8 @@ use App\Support\TrackerRedisSupport;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -185,10 +187,26 @@ class TrackIngestService
             $actionAlreadyStored = $existingAction !== null;
             $previousSessionId = $existingAction?->session_id;
 
-            ActivityEcomUserAction::query()->updateOrInsert(
-                ['event_id' => $eventId],
-                $row
-            );
+            try {
+                ActivityEcomUserAction::query()->updateOrInsert(
+                    ['event_id' => $eventId],
+                    $row
+                );
+            } catch (QueryException $exception) {
+                if ($this->isDuplicateEventIdViolation($exception)) {
+                    $acceptedIds[] = $eventId;
+
+                    $this->logInfo('ingest.duplicate_event_id', 'Duplicate event_id from concurrent request; treated as OK', [
+                        'session_id' => $sessionId,
+                        'event_id' => $eventId,
+                        'action_type' => $event['action_type'] ?? null,
+                    ]);
+
+                    continue;
+                }
+
+                throw $exception;
+            }
 
             $this->syncSessionActionCount($sessionId, $actionAlreadyStored, $previousSessionId);
 
@@ -1059,6 +1077,15 @@ class TrackIngestService
     private function isCatalogSkuActionType(string $actionType): bool
     {
         return in_array($actionType, ['grid_impression', 'product_click', 'grid_click'], true);
+    }
+
+    private function isDuplicateEventIdViolation(QueryException $exception): bool
+    {
+        if ($exception instanceof UniqueConstraintViolationException) {
+            return true;
+        }
+
+        return (int) ($exception->errorInfo[1] ?? 0) === 1062;
     }
 
     /**
