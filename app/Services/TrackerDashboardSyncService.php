@@ -914,16 +914,31 @@ class TrackerDashboardSyncService
     private function resolveCategoryIdFromLine(array $line): ?int
     {
         $categoryName = trim($line['category_name']);
-        if ($categoryName === '') {
+        $categoryCode = trim($line['category_code']);
+
+        if ($categoryName !== '') {
+            return $this->resolveCategoryId(
+                $categoryCode,
+                $categoryName,
+                $line['department_name'],
+                trim($line['department_code'] ?? ''),
+            );
+        }
+
+        if ($categoryCode === '') {
             return null;
         }
 
-        return $this->resolveCategoryId(
-            trim($line['category_code']),
-            $categoryName,
-            $line['department_name'],
-            trim($line['department_code'] ?? ''),
-        );
+        $existing = TrackerDatabase::table('tracking_category')
+            ->where(function ($query) use ($categoryCode) {
+                $query->where('code', $categoryCode);
+                if (ctype_digit($categoryCode)) {
+                    $query->orWhere('id', (int) $categoryCode);
+                }
+            })
+            ->first();
+
+        return $existing !== null ? (int) $existing->id : null;
     }
 
     /**

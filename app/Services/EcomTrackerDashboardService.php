@@ -22,6 +22,9 @@ class EcomTrackerDashboardService
 
     private const RECOVERABLE_ROW_LIMIT = 20;
 
+    /** Order lines with no resolved category roll up here so sold totals match KPI items sold. */
+    private const UNCategorized_CATEGORY_ID = 0;
+
     private const TREND_LOG_SCALE_DAYS = 31;
 
     private const TREND_WEEKLY_THRESHOLD_DAYS = 32;
@@ -755,6 +758,8 @@ class EcomTrackerDashboardService
             }
         }
 
+        $this->appendSoldOnlyCategories($departments, $soldByCategory, $metrics, $sort);
+
         foreach ($departments as &$department) {
             usort($department['categories'], $sort);
             $department['category_count'] = count($department['categories']);
@@ -939,11 +944,12 @@ class EcomTrackerDashboardService
 
         foreach ($soldByCategory as $categoryId => $sold) {
             $categoryId = (int) $categoryId;
+            [$categoryName, $departmentId, $departmentName] = $this->categoryMetaForPerformance($categoryId);
             $categoryMap[$categoryId] ??= [
                 'category_id' => $categoryId,
-                'category_name' => 'Category #'.$categoryId,
-                'department_id' => null,
-                'department_name' => 'Other',
+                'category_name' => $categoryName,
+                'department_id' => $departmentId ?: null,
+                'department_name' => $departmentName,
                 'category_views' => 0,
                 'product_views' => 0,
                 'adds' => 0,
@@ -1122,14 +1128,13 @@ class EcomTrackerDashboardService
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->whereBetween('o.ordered_at', [$fromBound, $toBound])
-            ->whereNotNull('od.tracking_category_id')
             ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, 'ts'))
             ->when(
                 EcomActivityListService::hasActiveFilters($sessionFilters),
                 fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters),
             )
-            ->groupBy('od.tracking_category_id')
-            ->selectRaw('od.tracking_category_id as category_id')
+            ->groupBy('category_id')
+            ->selectRaw('COALESCE(od.tracking_category_id, ?) as category_id', [self::UNCategorized_CATEGORY_ID])
             ->selectRaw('SUM(od.qty) as sale_items, SUM(od.line_total) as sale_amount')
             ->get();
 
@@ -1142,6 +1147,81 @@ class EcomTrackerDashboardService
         }
 
         return $map;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $departments
+     * @param  array<int, array{sale_items: int, sale_amount: float}>  $soldByCategory
+     * @param  list<string>  $metrics
+     */
+    private function appendSoldOnlyCategories(array &$departments, array $soldByCategory, array $metrics, callable $sort): void
+    {
+        $present = [];
+        foreach ($departments as $department) {
+            foreach ($department['categories'] as $category) {
+                $present[(int) ($category['category_id'] ?? 0)] = true;
+            }
+        }
+
+        foreach ($soldByCategory as $categoryId => $sold) {
+            $categoryId = (int) $categoryId;
+            if (isset($present[$categoryId])) {
+                continue;
+            }
+
+            if ((int) ($sold['sale_items'] ?? 0) === 0 && (float) ($sold['sale_amount'] ?? 0.0) === 0.0) {
+                continue;
+            }
+
+            [$categoryName, $departmentId, $departmentName] = $this->categoryMetaForPerformance($categoryId);
+            $category = [
+                'category_id' => $categoryId,
+                'category_name' => $categoryName,
+                'department_id' => $departmentId ?: null,
+                'category_views' => 0,
+                'product_views' => 0,
+                'adds' => 0,
+                'proceed_checkouts' => 0,
+                'sale_items' => (int) $sold['sale_items'],
+                'sale_amount' => (float) $sold['sale_amount'],
+            ];
+
+            $departments[$departmentId] ??= [
+                'key' => 'department-'.$departmentId,
+                'name' => $departmentName,
+                'categories' => [],
+            ] + array_fill_keys($metrics, 0);
+            $departments[$departmentId]['categories'][] = $category;
+            foreach ($metrics as $metric) {
+                $departments[$departmentId][$metric] += $category[$metric];
+            }
+            $present[$categoryId] = true;
+        }
+    }
+
+    /**
+     * @return array{0: string, 1: int, 2: string}
+     */
+    private function categoryMetaForPerformance(int $categoryId): array
+    {
+        if ($categoryId === self::UNCategorized_CATEGORY_ID) {
+            return ['Uncategorized', 0, 'Other'];
+        }
+
+        $row = TrackerDatabase::table('tracking_category as c')
+            ->leftJoin('tracking_category as d', 'd.id', '=', 'c.parent_id')
+            ->where('c.id', $categoryId)
+            ->first(['c.name as category_name', 'd.id as department_id', 'd.name as department_name']);
+
+        if ($row === null) {
+            return ['Category #'.$categoryId, 0, 'Other'];
+        }
+
+        return [
+            (string) $row->category_name,
+            (int) ($row->department_id ?? 0),
+            (string) ($row->department_name ?? 'Other'),
+        ];
     }
 
     /**

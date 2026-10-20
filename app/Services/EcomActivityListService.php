@@ -2738,7 +2738,7 @@ class EcomActivityListService
     private function commerceEventFromDrillAction(object $action, string $productCode): array
     {
         $stageKey = match ((string) ($action->action_type ?? '')) {
-            'proceed_to_checkout' => 'proceed_checkout',
+            'proceed_checkout', 'proceed_to_checkout' => 'proceed_checkout',
             'payment_success' => 'payment_success',
             'begin_checkout' => 'begin_checkout',
             'add_to_cart' => 'add_to_cart',
