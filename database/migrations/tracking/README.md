@@ -27,6 +27,13 @@ php artisan config:clear
 php artisan tracker:purge-data --force --drop-tables --queues --redis
 ```
 
+**Empty tracking DB data only (truncate — keeps tables, no migrate):**
+
+```bash
+php artisan tracker:empty-tracking --dry-run
+php artisan tracker:empty-tracking --force --queues --redis
+```
+
 **Tracking DB migrations:**
 
 ```bash
