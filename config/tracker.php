@@ -30,6 +30,7 @@ return [
     'log_channel' => env('TRACKER_LOG_CHANNEL', 'ecom_tracker'),
 
     'allowed_action_types' => [
+        'landing_page',
         'category_view',
         'product_view',
         'product_view_popup',

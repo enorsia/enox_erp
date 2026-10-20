@@ -18,6 +18,7 @@ final class TrackerActionSequence
 
     /** @var array<string, int> */
     private const FUNNEL_RANK = [
+        'landing_page' => 5,
         'category_view' => 10,
         'grid_impression' => 15,
         'grid_click' => 16,

@@ -34,6 +34,7 @@ class EcomActivityController extends Controller
     ];
 
     private const BADGE_COLORS = [
+        'landing_page' => 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200',
         'category_view' => 'badge-blue',
         'product_view' => 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
         'product_view_popup' => 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
