@@ -252,6 +252,13 @@ class TrackIngestService
 
         $this->syncSessionLastActiveFromEvents($sessionId, $events);
 
+        if (ActivityEcomUserAction::query()
+            ->where('session_id', $sessionId)
+            ->where('action_type', 'landing_page')
+            ->exists()) {
+            $this->bumpSessionDurationFloor($sessionId);
+        }
+
         if ($acceptedIds !== []) {
             TrackerDatabase::table('activity_ecom_user')
                 ->where('session_id', $sessionId)
@@ -844,6 +851,34 @@ class TrackIngestService
         ActivityEcomUser::query()
             ->where('session_id', $sessionId)
             ->increment('actions_count');
+    }
+
+    /** Avoid 0s duration when the only event landed in the same second as session create. */
+    private function bumpSessionDurationFloor(string $sessionId): void
+    {
+        $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
+
+        if ($session === null || (int) ($session->actions_count ?? 0) <= 0) {
+            return;
+        }
+
+        if ((int) ($session->session_duration_seconds ?? 0) > 0) {
+            return;
+        }
+
+        $createdAt = TrackerTime::toUtc($session->getRawOriginal('created_at'));
+        $lastActive = TrackerTime::toUtc($session->getRawOriginal('last_active_at')) ?? TrackerTime::nowUtc();
+
+        if ($createdAt === null) {
+            return;
+        }
+
+        $duration = max(1, $this->durationSecondsBetween($createdAt, $lastActive));
+
+        $session->update([
+            'session_duration_seconds' => $duration,
+            'updated_at' => TrackerTime::formatUtc(TrackerTime::nowUtc()),
+        ]);
     }
 
     private function sessionDurationSeconds(ActivityEcomUser $session): int
