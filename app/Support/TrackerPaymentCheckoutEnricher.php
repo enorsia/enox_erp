@@ -264,7 +264,7 @@ class TrackerPaymentCheckoutEnricher
     private function metaFromCartLines(array $line, Collection $sessionActions): array
     {
         foreach ($sessionActions as $action) {
-            if (! in_array($action->action_type, ['add_to_cart', 'proceed_checkout'], true)) {
+            if (! in_array($action->action_type, ['add_to_cart', 'proceed_checkout', 'begin_checkout'], true)) {
                 continue;
             }
 
@@ -327,6 +327,8 @@ class TrackerPaymentCheckoutEnricher
             $items = $action->add_to_cart['items'] ?? $action->add_to_cart['cart_items'] ?? [];
         } elseif ($action->action_type === 'proceed_checkout' && is_array($action->proceed_to_checkout)) {
             $items = $action->proceed_to_checkout['cart_items'] ?? $action->proceed_to_checkout['items'] ?? [];
+        } elseif ($action->action_type === 'begin_checkout' && is_array($action->begin_checkout)) {
+            $items = $action->begin_checkout['cart_items'] ?? $action->begin_checkout['items'] ?? [];
         } else {
             return [];
         }
@@ -385,11 +387,11 @@ class TrackerPaymentCheckoutEnricher
         $lineProductId = trim((string) ($line['product_id'] ?? ''));
         $lineProductCode = trim((string) ($line['product_code'] ?? ''));
 
-        if ($productId !== '' && $lineProductId !== '' && $productId === $lineProductId) {
-            return true;
+        if ($productCode !== '' && $lineProductCode !== '') {
+            return strcasecmp($productCode, $lineProductCode) === 0;
         }
 
-        return $productCode !== '' && $lineProductCode !== '' && strcasecmp($productCode, $lineProductCode) === 0;
+        return $productId !== '' && $lineProductId !== '' && $productId === $lineProductId;
     }
 
     /**

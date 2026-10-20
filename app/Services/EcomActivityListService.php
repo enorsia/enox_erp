@@ -71,6 +71,13 @@ class EcomActivityListService
 
     public const DEFAULT_PERIOD = '24h';
 
+    /** One dashboard view unit per parent style per session (sync + filtered product table). */
+    public const CATALOG_PRODUCT_VIEW_FUNNEL_ACTION_TYPES = [
+        'product_view',
+        'product_view_popup',
+        'product_click',
+    ];
+
     /** latest_funnel_stage => activity drill-down label (matches dashboard abandon panels) */
     private const FUNNEL_FOCUS_LABELS = [
         3 => 'Cart abandoned',
@@ -617,7 +624,7 @@ class EcomActivityListService
     }
 
     /**
-     * Distinct sessions per parent style with a catalog product_click in the period.
+     * Distinct sessions per parent style with a catalog product view signal in the period.
      * Once per session per product; repeats in the same session do not add another count.
      *
      * @param  array{from: Carbon, to: Carbon, period?: string}  $range
@@ -665,7 +672,7 @@ class EcomActivityListService
 
         $viewActions = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
-            ->where('action_type', 'product_click')
+            ->whereIn('action_type', self::CATALOG_PRODUCT_VIEW_FUNNEL_ACTION_TYPES)
             ->whereBetween('created_at', [$fromBound, $toBound])
             ->get(['session_id', 'product_code', 'sku']);
 
@@ -696,7 +703,7 @@ class EcomActivityListService
     /**
      * Product funnel units for one session (used by dashboard sync → tracking_daily_products).
      *
-     * - views: 1 per product from product_click (max once per session)
+     * - views: 1 per product from product_view / popup / click (max once per session)
      * - add_to_cart: sum of add-click qty per product in the session
      * - begin / proceed / paid: last cart snapshot qty per product in the session
      *
@@ -727,7 +734,7 @@ class EcomActivityListService
                 $type = 'proceed_checkout';
             }
 
-            if ($type === 'product_click') {
+            if (in_array($type, self::CATALOG_PRODUCT_VIEW_FUNNEL_ACTION_TYPES, true)) {
                 $code = $this->resolveProductCodeForFunnel($action, $skuToParentCode);
                 if (! $accept($code)) {
                     continue;

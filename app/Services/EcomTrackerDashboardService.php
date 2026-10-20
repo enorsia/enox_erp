@@ -1016,14 +1016,16 @@ class EcomTrackerDashboardService
 
         $actions = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
-            ->whereIn('action_type', [
-                'product_click',
-                'add_to_cart',
-                'begin_checkout',
-                'proceed_checkout',
-                'proceed_to_checkout',
-                'payment_success',
-            ])
+            ->whereIn('action_type', array_merge(
+                EcomActivityListService::CATALOG_PRODUCT_VIEW_FUNNEL_ACTION_TYPES,
+                [
+                    'add_to_cart',
+                    'begin_checkout',
+                    'proceed_checkout',
+                    'proceed_to_checkout',
+                    'payment_success',
+                ],
+            ))
             ->whereBetween('created_at', [$fromBound, $toBound])
             ->orderBy('id')
             ->get([
