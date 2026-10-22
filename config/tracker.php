@@ -64,6 +64,11 @@ return [
 
     'session_gap_minutes' => (int) env('TRACKER_SESSION_GAP_MINUTES', 30),
 
+    /*
+    | When false (default), resolve-visit only updates Redis; activity_ecom_user is created on first /track.
+    */
+    'persist_session_on_resolve' => (bool) env('TRACKER_PERSIST_SESSION_ON_RESOLVE', false),
+
     'visitor_timezone' => env('TRACKER_VISITOR_TIMEZONE', 'Europe/London'),
 
     /*
