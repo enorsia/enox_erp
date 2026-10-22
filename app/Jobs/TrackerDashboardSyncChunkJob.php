@@ -8,6 +8,8 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * CHUNK job: syncs ONLY the session ids it was created with (normally 25).
@@ -32,6 +34,25 @@ class TrackerDashboardSyncChunkJob implements ShouldQueue
 
     public function handle(TrackerDashboardSyncService $syncService): void
     {
-        $syncService->syncSessionIds($this->sessionIds);
+        try {
+            $syncService->syncSessionIds($this->sessionIds);
+        } catch (Throwable $e) {
+            Log::error('tracker.dashboard.sync: chunk job failed', [
+                'step' => 'chunk.handle',
+                'session_ids' => $this->sessionIds,
+                'exception' => $e,
+            ]);
+
+            throw $e;
+        }
+    }
+
+    public function failed(?Throwable $e): void
+    {
+        Log::error('tracker.dashboard.sync: chunk job exhausted retries', [
+            'step' => 'chunk.failed',
+            'session_ids' => $this->sessionIds,
+            'exception' => $e,
+        ]);
     }
 }
