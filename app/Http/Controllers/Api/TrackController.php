@@ -94,10 +94,26 @@ class TrackController extends Controller
 
             $acceptedIds = $this->ingestService->ingest($request, $validated);
 
+            $sentIds = collect($validated['events'])->pluck('id')->map(fn ($id) => (string) $id);
+            $acceptedSet = collect($acceptedIds)->map(fn ($id) => (string) $id);
+            $rejectedIds = $sentIds->diff($acceptedSet)->values()->all();
+
+            if ($rejectedIds !== []) {
+                EcomTrackerLogger::frontend()->error('api.track.partial_accept', 'Some events were not stored', [
+                    'session_id' => $validated['session']['session_id'] ?? ($validated['events'][0]['session_id'] ?? null),
+                    'visitor_id' => $validated['session']['visitor_id'] ?? null,
+                    'rejected_event_ids' => $rejectedIds,
+                    'accepted_ids' => $acceptedIds,
+                    'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                ]);
+            }
+
             EcomTrackerLogger::frontend()->info('api.track.success', 'User actions saved OK', [
                 'session_id' => $validated['session']['session_id'] ?? ($validated['events'][0]['session_id'] ?? null),
                 'visitor_id' => $validated['session']['visitor_id'] ?? null,
                 'accepted_count' => count($acceptedIds),
+                'sent_count' => $sentIds->count(),
+                'rejected_count' => count($rejectedIds),
                 'accepted_ids' => $acceptedIds,
                 'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
@@ -106,8 +122,12 @@ class TrackController extends Controller
                 'accepted_ids' => $acceptedIds,
             ]);
         } catch (ValidationException $e) {
-            EcomTrackerLogger::frontend()->warning('api.track.validation_failed', 'Website sent wrong data', [
+            EcomTrackerLogger::frontend()->error('api.track.validation_failed', 'Website sent invalid track payload', [
                 'session_id' => $request->input('session.session_id'),
+                'visitor_id' => $request->input('session.visitor_id'),
+                'event_count' => count($events),
+                'event_ids' => collect($events)->pluck('id')->filter()->values()->all(),
+                'action_types' => collect($events)->pluck('action_type')->filter()->values()->all(),
                 'errors' => $e->errors(),
                 'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
@@ -116,7 +136,12 @@ class TrackController extends Controller
         } catch (Throwable $e) {
             EcomTrackerLogger::frontend()->error('api.track.failed', 'Could not save user actions', [
                 'session_id' => $request->input('session.session_id'),
+                'visitor_id' => $request->input('session.visitor_id'),
+                'event_count' => count($events),
+                'event_ids' => collect($events)->pluck('id')->filter()->values()->all(),
+                'action_types' => collect($events)->pluck('action_type')->filter()->values()->all(),
                 'message' => $e->getMessage(),
+                'exception' => $e::class,
                 'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 

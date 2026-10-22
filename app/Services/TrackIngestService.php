@@ -152,9 +152,7 @@ class TrackIngestService
             }
 
             if (! $this->hasMeaningfulCheckoutPayload($event)) {
-                $acceptedIds[] = $eventId;
-
-                $this->logWarning('ingest.skip_empty_checkout', 'Skipped checkout action without cart data', [
+                $this->logError('ingest.checkout_rejected', 'Checkout action rejected (no cart data); event not accepted', [
                     'session_id' => $sessionId,
                     'event_id' => $eventId,
                     'action_type' => $event['action_type'] ?? null,
@@ -265,14 +263,34 @@ class TrackIngestService
                 ->update(['is_sync' => ActivityEcomUser::SYNC_PENDING]);
         }
 
-        $this->logInfo('ingest.complete', 'All actions saved', [
+        $sentIds = collect($events)
+            ->pluck('id')
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->values();
+        $acceptedUnique = collect($acceptedIds)->map(fn ($id) => (string) $id)->unique()->values();
+        $rejectedIds = $sentIds->diff($acceptedUnique)->values()->all();
+
+        if ($rejectedIds !== []) {
+            $this->logError('ingest.batch_rejected_events', 'Some events in the batch were not accepted', [
+                'session_id' => $sessionId,
+                'visitor_id' => $visitorId,
+                'rejected_event_ids' => $rejectedIds,
+                'accepted_count' => $acceptedUnique->count(),
+                'sent_count' => $sentIds->count(),
+            ]);
+        }
+
+        $this->logInfo('ingest.complete', 'Batch ingest finished', [
             'session_id' => $sessionId,
-            'accepted_count' => count($acceptedIds),
+            'accepted_count' => $acceptedUnique->count(),
+            'sent_count' => $sentIds->count(),
+            'rejected_count' => count($rejectedIds),
             'redis_bypass' => TrackerRedisSupport::usesMemoryBypass(),
             'redis_working' => TrackerRedisSupport::ping(),
         ]);
 
-        return $acceptedIds;
+        return $acceptedUnique->all();
     }
 
     private function upsertSession(Request $request, string $sessionId, array $sessionData, ?array $clientContext = null): void
