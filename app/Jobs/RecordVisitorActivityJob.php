@@ -62,8 +62,16 @@ class RecordVisitorActivityJob implements ShouldQueue
 
         if ($this->isNewSession) {
             if ($session === null) {
-                $session = $this->createSession($formattedNow);
-                $this->afterSessionCreated($session);
+                if ($this->shouldPersistSessionOnResolve()) {
+                    $session = $this->createSession($formattedNow);
+                    $this->afterSessionCreated($session);
+                } else {
+                    $this->persistBotContextFromContext();
+                    EcomTrackerLogger::frontend()->debug('job.record_visitor.deferred', 'Session row deferred until first track event', [
+                        'visitor_id' => $this->visitorId,
+                        'session_id' => $this->sessionId,
+                    ]);
+                }
             } else {
                 $this->updateExistingSession($session, $now, $formattedNow);
                 EcomTrackerLogger::frontend()->debug('job.record_visitor.idempotent', 'Session already exists — updated instead of insert', [
@@ -136,6 +144,16 @@ class RecordVisitorActivityJob implements ShouldQueue
             'country' => $this->context['country'] ?? null,
         ]);
 
+        $this->persistBotContextFromContext();
+    }
+
+    private function shouldPersistSessionOnResolve(): bool
+    {
+        return (bool) config('tracker.persist_session_on_resolve', false);
+    }
+
+    private function persistBotContextFromContext(): void
+    {
         $botResolved = $this->context['bot_resolved'] ?? null;
 
         if (is_array($botResolved)) {
