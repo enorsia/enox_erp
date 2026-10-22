@@ -18,4 +18,7 @@ Route::middleware('internal.api')->group(function () {
         Route::get('selling-chart/get-discount-histories', 'getDiscountHistories');
         Route::post('selling-chart/update-discount-history', 'updateDiscountHistory');
     });
+    Route::controller(TrackController::class)->group(function () {
+        Route::get('tracking/ctr-summaries', 'getTrackingCtrSummaries');
+    });
 });
