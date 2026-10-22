@@ -89,8 +89,7 @@ class TrackerDashboardSyncService
     private array $touchedDates = [];
 
     /**
-     * PLANNER: queue sync only for sessions with pending/failed rows in activity_ecom_user_actions.
-     * Does not run idle finalize (pending user rows with no unsynced actions).
+     * PLANNER: pending/failed activity_ecom_user_actions → session_id → activity_ecom_user.id chunks.
      *
      * @return list<list<int>>
      */
@@ -98,19 +97,16 @@ class TrackerDashboardSyncService
     {
         try {
             $this->requeueUsersWithUnsyncedActions();
-            $this->requeueSessionsMissingTrackingRow();
 
-            $query = TrackerDatabase::table('activity_ecom_user as u');
+            $ids = $this->pluckPlannerUserIdsFromPendingActions();
 
-            $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
-            $this->applySyncableSessionFilter($query, 'u');
-            $this->applyHasUnsyncedActionsFilter($query, 'u');
+            if ($ids === []) {
+                return [];
+            }
 
-            return $query->orderBy('u.id')
-                ->pluck('u.id')
-                ->map(fn ($id) => (int) $id)
+            return collect($ids)
                 ->chunk(max(1, $chunkSize))
-                ->map(fn ($ids) => $ids->values()->all())
+                ->map(fn ($chunk) => $chunk->values()->all())
                 ->values()
                 ->all();
         } catch (Throwable $e) {
@@ -374,7 +370,39 @@ class TrackerDashboardSyncService
     }
 
     /**
+     * Pending/failed actions → session_id → syncable activity_ecom_user.id (ordered by user id).
+     *
+     * @return list<int>
+     */
+    private function pluckPlannerUserIdsFromPendingActions(): array
+    {
+        $sessionIds = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('is_sync', [
+                ActivityEcomUserAction::SYNC_PENDING,
+                ActivityEcomUserAction::SYNC_FAILED,
+            ])
+            ->distinct()
+            ->pluck('session_id');
+
+        if ($sessionIds->isEmpty()) {
+            return [];
+        }
+
+        $query = TrackerDatabase::table('activity_ecom_user as u')
+            ->whereIn('u.session_id', $sessionIds)
+            ->where('u.sync_try', '<', self::MAX_SYNC_TRY);
+
+        $this->applySyncableSessionFilter($query, 'u');
+
+        return $query->orderBy('u.id')
+            ->pluck('u.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
      * Pending sessions with no unsynced actions still need a tracking_session row (including 0-action visits).
+     * Not used by {@see planChunks()} (action-only planner); manual/tinker only.
      */
     private function finalizePendingSessionsWithoutUnsyncedActions(): void
     {
