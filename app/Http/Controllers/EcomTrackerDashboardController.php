@@ -13,6 +13,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class EcomTrackerDashboardController extends Controller
 {
@@ -152,7 +154,20 @@ class EcomTrackerDashboardController extends Controller
     {
         Gate::authorize('ecom_tracker.dashboard.index');
 
-        $result = TrackerDashboardSyncJob::start($syncService);
+        try {
+            $result = TrackerDashboardSyncJob::start($syncService);
+        } catch (Throwable $e) {
+            Log::error('tracker.dashboard.sync: http sync request failed', [
+                'step' => 'dashboard.sync.button',
+                'user_id' => $request->user()?->id,
+                'exception' => $e,
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Sync failed. Check server log (tracker.dashboard.sync).',
+            ], 500);
+        }
 
         if ($result['status'] === TrackerDashboardSyncJob::ALREADY_RUNNING) {
             return response()->json([

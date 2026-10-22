@@ -89,31 +89,35 @@ class TrackerDashboardSyncService
     private array $touchedDates = [];
 
     /**
-     * PLANNER: find pending sessions and split their ids into groups (one group = one chunk job).
+     * PLANNER: pending/failed activity_ecom_user_actions → session_id → activity_ecom_user.id chunks.
      *
      * @return list<list<int>>
      */
     public function planChunks(int $chunkSize = 25): array
     {
-        $this->requeueUsersWithUnsyncedActions();
-        $this->requeueSessionsMissingTrackingRow();
-        $this->finalizePendingSessionsWithoutUnsyncedActions();
+        try {
+            $this->requeueUsersWithUnsyncedActions();
 
-        $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
+            $ids = $this->pluckPlannerUserIdsFromPendingActions();
 
-        $query = TrackerDatabase::table('activity_ecom_user as u');
+            if ($ids === []) {
+                return [];
+            }
 
-        $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
-        $this->applySyncableSessionFilter($query, 'u');
-        $this->applyHasUnsyncedActionsFilter($query, 'u');
+            return collect($ids)
+                ->chunk(max(1, $chunkSize))
+                ->map(fn ($chunk) => $chunk->values()->all())
+                ->values()
+                ->all();
+        } catch (Throwable $e) {
+            Log::error('tracker.dashboard.sync: planChunks failed', [
+                'step' => 'planChunks',
+                'chunk_size' => $chunkSize,
+                'exception' => $e,
+            ]);
 
-        return $query->orderBy('u.id')
-            ->pluck('u.id')
-            ->map(fn ($id) => (int) $id)
-            ->chunk(max(1, $chunkSize))
-            ->map(fn ($ids) => $ids->values()->all())
-            ->values()
-            ->all();
+            throw $e;
+        }
     }
 
     /**
@@ -254,6 +258,7 @@ class TrackerDashboardSyncService
             $this->cache = $cacheBefore;
 
             Log::error('tracker.dashboard.sync: session failed', [
+                'step' => 'syncOneSession',
                 'activity_ecom_user_id' => $sessionPk,
                 'session_id' => $rawSessionId,
                 'exception' => $e,
@@ -264,6 +269,7 @@ class TrackerDashboardSyncService
                 $this->markActionsFailed($actions);
             } catch (Throwable $inner) {
                 Log::error('tracker.dashboard.sync: could not mark session failed', [
+                    'step' => 'syncOneSession.markFailed',
                     'activity_ecom_user_id' => $sessionPk,
                     'exception' => $inner,
                 ]);
@@ -290,9 +296,10 @@ class TrackerDashboardSyncService
 
         $query->where('u.sync_try', '<', self::MAX_SYNC_TRY);
         $this->applySyncableSessionFilter($query, 'u');
-        $this->applyHasUnsyncedActionsFilter($query, 'u');
 
+        // Planner queue: only sessions with pending actions. Chunk / explicit ids: always allow (rebuild visit day, etc.).
         if ($onlyIds === null) {
+            $this->applyHasUnsyncedActionsFilter($query, 'u');
             $this->applyPendingOrRetryFilter($query, $retryAfter, 'u');
         }
 
@@ -363,7 +370,39 @@ class TrackerDashboardSyncService
     }
 
     /**
+     * Pending/failed actions → session_id → syncable activity_ecom_user.id (ordered by user id).
+     *
+     * @return list<int>
+     */
+    private function pluckPlannerUserIdsFromPendingActions(): array
+    {
+        $sessionIds = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('is_sync', [
+                ActivityEcomUserAction::SYNC_PENDING,
+                ActivityEcomUserAction::SYNC_FAILED,
+            ])
+            ->distinct()
+            ->pluck('session_id');
+
+        if ($sessionIds->isEmpty()) {
+            return [];
+        }
+
+        $query = TrackerDatabase::table('activity_ecom_user as u')
+            ->whereIn('u.session_id', $sessionIds)
+            ->where('u.sync_try', '<', self::MAX_SYNC_TRY);
+
+        $this->applySyncableSessionFilter($query, 'u');
+
+        return $query->orderBy('u.id')
+            ->pluck('u.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
      * Pending sessions with no unsynced actions still need a tracking_session row (including 0-action visits).
+     * Not used by {@see planChunks()} (action-only planner); manual/tinker only.
      */
     private function finalizePendingSessionsWithoutUnsyncedActions(): void
     {
@@ -557,7 +596,11 @@ class TrackerDashboardSyncService
         $browserId = $this->remember('browser:'.($sessionRow['browser'] ?? ''), fn () => $this->findOrCreateBrowser((string) ($sessionRow['browser'] ?? '')));
 
         $mainVisitorId = $this->findOrCreateMainVisitor($visitorId, $sessionRow);
-        $visitDate = $this->visitDateForSession($sessionRow);
+        $previousVisitDate = TrackerDatabase::table('tracking_session as ts')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('ts.session_id', $sessionId)
+            ->value('dv.visit_date');
+        $visitDate = $this->visitDateForSession($sessionRow, $allActions, $sessionId);
         $dailyVisitorRowId = $this->findOrCreateDailyVisitor($mainVisitorId, $visitorId, $visitDate);
 
         $trackingSessionId = $this->upsertTrackingSession($sessionRow, $sessionId, $dailyVisitorRowId, $allActions);
@@ -568,6 +611,9 @@ class TrackerDashboardSyncService
         $this->syncActionsForSession($trackingSessionId, $visitDate, $applyActions, $audienceKeys, $visitorId, $rebuildFromFullHistory);
         $this->upsertRecoverableSale($trackingSessionId, $visitDate, $sessionRow, $allActions);
         $this->touchedDates[$visitDate] = true;
+        if (filled($previousVisitDate) && $previousVisitDate !== $visitDate) {
+            $this->touchedDates[(string) $previousVisitDate] = true;
+        }
 
         return $sessionRow;
     }
@@ -1017,11 +1063,57 @@ class TrackerDashboardSyncService
     }
 
     /**
+     * Visit / activity-list day: earliest real activity (e.g. payment_success on 17 Oct), not a later landing_page on 21 Oct.
+     *
+     * @param  array<string, mixed>  $sessionRow
+     * @param  Collection<int, object>  $actions
+     */
+    private function visitDateForSession(array $sessionRow, Collection $actions, string $sessionId): string
+    {
+        $earliestUtc = $this->earliestStoredInstant($actions, $sessionRow, $sessionId);
+
+        if ($earliestUtc !== null) {
+            return $earliestUtc->copy()->timezone(TrackerTime::timezone())->toDateString();
+        }
+
+        return $this->localDate($sessionRow['last_active_at'] ?? $sessionRow['created_at'] ?? null);
+    }
+
+    /**
+     * @param  Collection<int, object>  $actions
      * @param  array<string, mixed>  $sessionRow
      */
-    private function visitDateForSession(array $sessionRow): string
+    private function earliestStoredInstant(Collection $actions, array $sessionRow, string $sessionId): ?Carbon
     {
-        return $this->localDate($sessionRow['created_at'] ?? $sessionRow['last_active_at'] ?? null);
+        $earliest = null;
+
+        foreach ($actions as $action) {
+            $earliest = $this->minUtcInstant($earliest, TrackerTime::toUtc($action->created_at ?? null));
+        }
+
+        foreach (['first_payment_at', 'created_at'] as $field) {
+            $earliest = $this->minUtcInstant($earliest, TrackerTime::toUtc($sessionRow[$field] ?? null));
+        }
+
+        $existingSessionStart = TrackerDatabase::table('tracking_session')
+            ->where('session_id', $sessionId)
+            ->value('created_at');
+        $earliest = $this->minUtcInstant($earliest, TrackerTime::toUtc($existingSessionStart));
+
+        return $earliest;
+    }
+
+    private function minUtcInstant(?Carbon $current, ?Carbon $candidate): ?Carbon
+    {
+        if ($candidate === null) {
+            return $current;
+        }
+
+        if ($current === null || $candidate->lessThan($current)) {
+            return $candidate;
+        }
+
+        return $current;
     }
 
     private function localDate(mixed $at): string
@@ -1387,8 +1479,12 @@ class TrackerDashboardSyncService
 
             try {
                 TrackerDatabase::table('tracking_session_details')->insert($payload);
-            } catch (QueryException) {
-                // touch_sequence race — another worker inserted the same sequence.
+            } catch (QueryException $e) {
+                Log::debug('tracker.dashboard.sync: touch_sequence insert race', [
+                    'step' => 'tracking_session_details.insert',
+                    'tracking_session_id' => $trackingSessionId,
+                    'exception' => $e,
+                ]);
             }
         }
 
@@ -2378,7 +2474,11 @@ class TrackerDashboardSyncService
             try {
                 DB::transaction(fn () => $this->refreshDay($date), 3);
             } catch (Throwable $e) {
-                Log::error('tracker.dashboard.sync: daily totals failed', ['date' => $date, 'exception' => $e]);
+                Log::error('tracker.dashboard.sync: daily totals failed', [
+                    'step' => 'refreshTouchedDays',
+                    'date' => $date,
+                    'exception' => $e,
+                ]);
             }
         }
 

@@ -11,6 +11,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * PLANNER job: runs every minute (scheduler). The Sync button calls start() directly.
@@ -39,7 +40,16 @@ class TrackerDashboardSyncJob implements ShouldQueue
 
     public function handle(TrackerDashboardSyncService $syncService): void
     {
-        $result = self::start($syncService);
+        try {
+            $result = self::start($syncService);
+        } catch (Throwable $e) {
+            Log::error('tracker.dashboard.sync: planner job failed', [
+                'step' => 'planner.job.handle',
+                'exception' => $e,
+            ]);
+
+            throw $e;
+        }
 
         Log::info('tracker.dashboard.sync: planner '.$result['status'], [
             'chunk_jobs' => $result['batches'],
@@ -79,6 +89,13 @@ class TrackerDashboardSyncJob implements ShouldQueue
                 'batches' => count($chunks),
                 'sessions' => array_sum(array_map('count', $chunks)),
             ];
+        } catch (Throwable $e) {
+            Log::error('tracker.dashboard.sync: planner start failed', [
+                'step' => 'planner.start',
+                'exception' => $e,
+            ]);
+
+            throw $e;
         } finally {
             $lock->release();
         }
