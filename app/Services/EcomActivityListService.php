@@ -592,7 +592,7 @@ class EcomActivityListService
     }
 
     /**
-     * Session-level totals in the same shape as {@see EcomTrackerDashboardService::totals()} for KPI groups.
+     * Session-level totals in the same shape as dashboard KPI groups ({@see \App\Services\EcomTrackerDashboard\Sections\DashboardKpiSectionService::groups()}).
      *
      * @param  array{from: Carbon, to: Carbon}  $range
      * @param  array<string, mixed>  $filters

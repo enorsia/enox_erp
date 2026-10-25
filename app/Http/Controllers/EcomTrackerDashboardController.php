@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\TrackerDashboardSyncJob;
 use App\Services\EcomActivityListService;
 use App\Services\EcomTrackerCompareFilteredDashboardService;
-use App\Services\EcomTrackerDashboardService;
+use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
 use App\Services\TrackerDashboardSyncService;
 use App\Support\TrackerTime;
 use Illuminate\Contracts\View\View;

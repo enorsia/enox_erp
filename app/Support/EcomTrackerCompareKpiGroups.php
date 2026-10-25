@@ -2,7 +2,7 @@
 
 namespace App\Support;
 
-use App\Services\EcomTrackerDashboardService;
+use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
 use Carbon\Carbon;
 
 /**

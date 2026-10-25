@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
 use App\Support\EcomTrackerCompareFilters;
 use App\Support\TrackerTime;
 use Carbon\Carbon;

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
 use App\Support\TrackerDatabase;
 
 use App\Models\TrackingDailyAudience;
@@ -43,7 +44,7 @@ class EcomTrackerCompareFilteredDashboardService
     ) {}
 
     /**
-     * @param  array<string, mixed>  $dashboard  unfiltered dashboard payload from {@see EcomTrackerDashboardService}
+     * @param  array<string, mixed>  $dashboard  unfiltered dashboard payload from {@see \App\Services\EcomTrackerDashboard\EcomTrackerDashboardService}
      * @param  array{from: Carbon, to: Carbon}  $range
      * @param  array<string, mixed>  $sessionFilters
      * @return array<string, mixed>
