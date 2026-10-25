@@ -28,7 +28,7 @@
                     <span class="etd-filter-period__nav-btn is-disabled" aria-disabled="true"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg></span>
                 </div>
                 <input type="hidden" name="period" id="ecom-activity-filter-period" value="{{ $data['period'] }}">
-                @foreach (['sort_by', 'back'] as $keepKey)
+                @foreach (['sort_by', 'back', 'product_code', 'focus'] as $keepKey)
                     @if (filled(request($keepKey)))
                         <input type="hidden" name="{{ $keepKey }}" value="{{ request($keepKey) }}">
                     @endif

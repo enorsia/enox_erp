@@ -317,9 +317,8 @@ class EcomActivityListService
 
         if (trim((string) $request->query('product_code', '')) !== '') {
             $params['product_code'] = $request->query('product_code');
-        }
-
-        if ($request->query('focus') === 'products') {
+            $params['focus'] = 'products';
+        } elseif ($request->query('focus') === 'products') {
             $params['focus'] = 'products';
         }
 
@@ -617,6 +616,16 @@ class EcomActivityListService
     /**
      * @param  array<string, mixed>  $filters
      */
+    /**
+     * Session filters that shrink dashboard / compare columns (product_code is a drill dimension, not a ratio filter).
+     */
+    public static function hasDashboardSessionFilters(array $filters): bool
+    {
+        $filters['product_code'] = '';
+
+        return self::hasActiveFilters($filters);
+    }
+
     public static function hasActiveFilters(array $filters): bool
     {
         if (trim((string) ($filters['search'] ?? '')) !== '') {
@@ -1121,6 +1130,12 @@ class EcomActivityListService
         }
 
         if ($scalarCode !== '' || $scalarSku !== '') {
+            foreach (array_keys($trackedCodes) as $parentStyleCode) {
+                if ($this->actionScalarMatchesStyleCode($action, $parentStyleCode)) {
+                    return $parentStyleCode;
+                }
+            }
+
             return null;
         }
 
@@ -1258,8 +1273,8 @@ class EcomActivityListService
         if (count($stages) === 1) {
             $stage = (int) $stages[0];
 
-            return self::FUNNEL_FOCUS_LABELS[$stage]
-                ?? (TrackingSession::FUNNEL_STAGES[$stage] ?? null);
+            return TrackingSession::FUNNEL_STAGES[$stage]
+                ?? (self::FUNNEL_FOCUS_LABELS[$stage] ?? null);
         }
 
         return null;
@@ -1302,8 +1317,8 @@ class EcomActivityListService
         $funnelStages = array_values(array_filter(array_map('intval', (array) $request->query('funnel', []))));
         if ($funnelStages !== []) {
             $labels = array_map(
-                fn (int $stage) => self::FUNNEL_FOCUS_LABELS[$stage]
-                    ?? ($filterOptions['funnelStages'][$stage] ?? "Stage {$stage}"),
+                fn (int $stage) => $filterOptions['funnelStages'][$stage]
+                    ?? (TrackingSession::FUNNEL_STAGES[$stage] ?? "Stage {$stage}"),
                 $funnelStages,
             );
             $addChip('Funnel: '.implode(', ', $labels), ['funnel']);
@@ -1501,21 +1516,21 @@ class EcomActivityListService
      * visitor_type → activity_ecom_user_bot_context (User activity only; not on ecom tracker dashboard);
      * search → tracking_session, tracking_session_details, tracking_orders, tracking_product + p_cat.
      */
-    private function applyFilters(Builder $query, array $filters, ?array $range = null, bool $forDashboard = false): void
+    private function applyFilters(Builder $query, array $filters, ?array $range = null, bool $forDashboard = false, bool $applyFunnel = true): void
     {
         $productCode = trim((string) ($filters['product_code'] ?? ''));
         if ($productCode !== '' && $range !== null) {
-            if ($forDashboard) {
-                $this->applyDashboardProductCodeSessionFilter($query, $productCode, $range);
-            } else {
-                $this->applyProductCodeSessionFilter($query, $productCode, $range);
-            }
+            $this->applyDashboardProductCodeSessionFilter($query, $productCode, $range);
         } else {
             $this->applySearch($query, (string) ($filters['search'] ?? ''));
         }
 
-        if (! empty($filters['funnel'])) {
-            $query->whereIn('ts.latest_funnel_stage', $filters['funnel']);
+        if ($applyFunnel && ! empty($filters['funnel'])) {
+            if ($productCode !== '' && $range !== null) {
+                $this->applyProductScopedFunnelFilter($query, $productCode, $filters['funnel'], $range, $filters);
+            } else {
+                $query->whereIn('ts.latest_funnel_stage', $filters['funnel']);
+            }
         }
 
         if (($filters['has_order'] ?? null) !== null) {
@@ -1683,6 +1698,144 @@ class EcomActivityListService
     }
 
     /**
+     * Product drill + funnel stage: same per-session product funnel units as KPIs / product performance sync.
+     *
+     * @param  list<int>  $funnelStages
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     * @param  array<string, mixed>  $filters
+     */
+    private function applyProductScopedFunnelFilter(
+        Builder $query,
+        string $productCode,
+        array $funnelStages,
+        array $range,
+        array $filters,
+    ): void {
+        $sessionIds = $this->sessionIdsForProductFunnelStages($productCode, $funnelStages, $range, $filters);
+
+        if ($sessionIds === []) {
+            $query->whereRaw('0 = 1');
+
+            return;
+        }
+
+        $query->whereIn('ts.session_id', $sessionIds);
+    }
+
+    /**
+     * @param  list<int>  $funnelStages
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     * @param  array<string, mixed>  $filters
+     * @return list<string>
+     */
+    private function sessionIdsForProductFunnelStages(
+        string $productCode,
+        array $funnelStages,
+        array $range,
+        array $filters,
+    ): array {
+        $stages = array_values(array_unique(array_intersect(
+            array_map(fn ($stage) => (int) $stage, $funnelStages),
+            TrackingSession::FILTER_FUNNEL_STAGES,
+        )));
+
+        if ($stages === []) {
+            return [];
+        }
+
+        $filtersWithoutFunnel = $filters;
+        $filtersWithoutFunnel['funnel'] = [];
+        $filtersWithoutFunnel['product_code'] = '';
+
+        $scope = function (Builder $scoped) use ($range, $filtersWithoutFunnel, $productCode): void {
+            $this->applySessionDateScope($scoped, $range);
+            $this->applyFilters($scoped, $filtersWithoutFunnel, $range, applyFunnel: false);
+            $this->applyProductCodeSessionFilter($scoped, $productCode, $range);
+        };
+
+        $sessionIds = TrackerDatabase::table('tracking_session as ts')
+            ->tap($scope)
+            ->pluck('session_id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        if ($sessionIds === []) {
+            return [];
+        }
+
+        [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
+
+        $skuToParent = TrackerDatabase::table('tracking_product')
+            ->whereNotNull('sku')
+            ->where('sku', '!=', '')
+            ->pluck('code', 'sku')
+            ->all();
+
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->whereIn('action_type', [
+                'add_to_cart',
+                'begin_checkout',
+                'proceed_checkout',
+                'proceed_to_checkout',
+                'payment_success',
+            ])
+            ->whereBetween('created_at', [$fromBound, $toBound])
+            ->orderBy('id')
+            ->get([
+                'id',
+                'session_id',
+                'action_type',
+                'product_code',
+                'sku',
+                'item_qty',
+                'add_to_cart',
+                'begin_checkout',
+                'proceed_to_checkout',
+                'payment_success',
+            ]);
+
+        $stageMetricKeys = [
+            3 => 'add_to_cart',
+            4 => 'begin_checkout',
+            5 => 'proceed_checkout',
+            6 => 'paid',
+        ];
+
+        $matched = [];
+        foreach ($actions->groupBy('session_id') as $sessionId => $sessionActions) {
+            $units = $this->productFunnelUnitsForSessionActions($sessionActions, $skuToParent, [$productCode]);
+            $steps = $units[$productCode] ?? [];
+
+            foreach ($stages as $stage) {
+                $metricKey = $stageMetricKeys[$stage] ?? null;
+                if ($metricKey !== null && (int) ($steps[$metricKey] ?? 0) > 0) {
+                    $matched[(string) $sessionId] = true;
+                    break;
+                }
+            }
+        }
+
+        if (in_array(6, $stages, true)) {
+            $paidSessionIds = TrackerDatabase::table('tracking_order_details as od')
+                ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
+                ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
+                ->join('tracking_session as ts_paid', 'ts_paid.id', '=', 'o.tracking_session_id')
+                ->whereIn('ts_paid.session_id', $sessionIds)
+                ->whereBetween('o.ordered_at', [$fromBound, $toBound])
+                ->where(fn (Builder $product) => $this->whereProductCodeOrSku($product, 'p', $productCode))
+                ->distinct()
+                ->pluck('ts_paid.session_id');
+
+            foreach ($paidSessionIds as $sessionId) {
+                $matched[(string) $sessionId] = true;
+            }
+        }
+
+        return array_keys($matched);
+    }
+
+    /**
      * @param  list<string>  $actionTypes
      */
     private function applyProductDrillEngagementExists(
@@ -1763,9 +1916,8 @@ class EcomActivityListService
     }
 
     /**
-     * Product drill-down KPIs: same session scope as {@see applyProductCodeSessionFilter};
-     * funnel steps use {@see productFunnelUnitsForSessionActions()} (product performance / sync parity);
-     * sold amount from order lines in range.
+     * Product drill-down KPIs: session scope matches dashboard product filter ({@see applyDashboardProductCodeSessionFilter});
+     * funnel totals match {@see \App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService::products()}.
      *
      * @param  array{from: Carbon, to: Carbon, period?: string}  $range
      * @param  array<string, mixed>  $filters
@@ -1786,14 +1938,15 @@ class EcomActivityListService
             ->first();
 
         [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
+        $period = self::normalizePeriod($range['period'] ?? self::DEFAULT_PERIOD);
 
-        $funnelSteps = $this->productFunnelStepUnitsByCode($range, $filters, [$productCode]);
-        $steps = $funnelSteps[$productCode] ?? [
-            'add_to_cart' => 0,
-            'begin_checkout' => 0,
-            'proceed_checkout' => 0,
-            'paid' => 0,
-        ];
+        $performance = $this->productPerformanceTotalsForDrill(
+            $range['from'],
+            $range['to'],
+            $period,
+            $filters,
+            $productCode,
+        );
 
         $sales = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
@@ -1814,13 +1967,57 @@ class EcomActivityListService
             'sessions' => $sessions,
             'unique_visitors' => (int) ($row->unique_visitors ?? 0),
             'avg_stay_seconds' => $sessions > 0 ? (int) round($staySeconds / $sessions) : 0,
-            'adds' => (int) ($steps['add_to_cart'] ?? 0),
-            'checkouts' => (int) ($steps['begin_checkout'] ?? 0),
-            'proceeds' => (int) ($steps['proceed_checkout'] ?? 0),
+            'adds' => (int) ($performance['adds'] ?? 0),
+            'checkouts' => (int) ($performance['begin_checkouts'] ?? 0),
+            'proceeds' => (int) ($performance['proceed_checkouts'] ?? 0),
             'cart_abandoned' => 0,
             'sold' => (int) ($sales->sold ?? 0),
-            'sold_qty' => (int) ($steps['paid'] ?? 0),
-            'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),
+            'sold_qty' => (int) ($performance['sold_qty'] ?? 0),
+            'sale_amount' => round((float) ($performance['sale_amount'] ?? 0), 2),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{adds: int, begin_checkouts: int, proceed_checkouts: int, sold_qty: int, sale_amount: float}
+     */
+    private function productPerformanceTotalsForDrill(
+        Carbon $from,
+        Carbon $to,
+        string $period,
+        array $filters,
+        string $productCode,
+    ): array {
+        if (! self::hasDashboardSessionFilters($filters)) {
+            $row = TrackerDatabase::table('tracking_daily_products')
+                ->where('product_code', $productCode)
+                ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                ->selectRaw('COALESCE(SUM(add_to_carts), 0) as adds')
+                ->selectRaw('COALESCE(SUM(begin_checkouts), 0) as begin_checkouts')
+                ->selectRaw('COALESCE(SUM(proceed_checkouts), 0) as proceed_checkouts')
+                ->selectRaw('COALESCE(SUM(sold_qty), 0) as sold_qty')
+                ->selectRaw('COALESCE(SUM(sale_amount), 0) as sale_amount')
+                ->first();
+
+            return [
+                'adds' => (int) ($row->adds ?? 0),
+                'begin_checkouts' => (int) ($row->begin_checkouts ?? 0),
+                'proceed_checkouts' => (int) ($row->proceed_checkouts ?? 0),
+                'sold_qty' => (int) ($row->sold_qty ?? 0),
+                'sale_amount' => round((float) ($row->sale_amount ?? 0), 2),
+            ];
+        }
+
+        $packaged = app(\App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService::class)
+            ->products($from, $to, $period, $filters, null);
+        $row = collect($packaged['rows'] ?? [])->firstWhere('code', $productCode);
+
+        return [
+            'adds' => (int) ($row['add_to_cart'] ?? 0),
+            'begin_checkouts' => (int) ($row['begin_checkout'] ?? 0),
+            'proceed_checkouts' => (int) ($row['proceed_checkout'] ?? 0),
+            'sold_qty' => (int) ($row['paid'] ?? 0),
+            'sale_amount' => round((float) ($row['revenue'] ?? 0), 2),
         ];
     }
 

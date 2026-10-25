@@ -19,7 +19,7 @@ class ProductPerformanceSectionService
         $fromDate = $from->toDateString();
         $toDate = $to->toDateString();
 
-        if (EcomActivityListService::hasActiveFilters($sessionFilters)) {
+        if (EcomActivityListService::hasDashboardSessionFilters($sessionFilters)) {
             return $this->productsWithSessionFilters($from, $to, $period, $sessionFilters, $limit);
         }
 

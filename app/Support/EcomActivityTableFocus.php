@@ -59,6 +59,10 @@ final class EcomActivityTableFocus
     {
         $keys = [];
         $focus = $request->input('focus');
+        if (! self::isValidFocus(is_string($focus) ? $focus : null)
+            && filled(trim((string) $request->input('product_code', '')))) {
+            $focus = 'products';
+        }
 
         if (self::isValidFocus(is_string($focus) ? $focus : null)) {
             $keys = self::FOCUS_COLUMN_KEYS[$focus];
@@ -96,8 +100,7 @@ final class EcomActivityTableFocus
      */
     public static function usesProductDrillTableLayout(Request $request): bool
     {
-        return $request->input('focus') === 'products'
-            && filled(trim((string) $request->input('product_code', '')));
+        return filled(trim((string) $request->input('product_code', '')));
     }
 
     /**
