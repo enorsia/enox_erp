@@ -84,6 +84,7 @@
 <div class="etd-panel etd-print-unit etd-product-performance-list" id="products-all">
     @include('ecom_tracker.partials.product-performance-table', [
         'products' => $productRows,
+        'serialOffset' => ($paginator->currentPage() - 1) * $paginator->perPage(),
         'productActivityLink' => fn (array $query) => $activityLink(array_filter([
             'focus' => 'products',
             'product_code' => (string) ($query['product_code'] ?? ''),

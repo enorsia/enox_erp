@@ -11,7 +11,7 @@
             </span>
             <div>
                 <p class="etd-filter-panel__title">Filters</p>
-                <p class="etd-filter-panel__subtitle">Filter by parent product code</p>
+                <p class="etd-filter-panel__subtitle">Product code and order status</p>
             </div>
         </div>
         <button type="button" class="etd-filter-panel__close js-ecom-dashboard-filter-close" aria-label="Close filters">
@@ -37,6 +37,14 @@
                            class="etd-filter-input etd-filter-input--sm w-full"
                            autocomplete="off"
                            spellcheck="false">
+                </label>
+                <label class="etd-filter-compact-field block mt-3">
+                    <span class="etd-filter-compact-label">Has order</span>
+                    <select name="has_order" class="tom-select etd-tom-select w-full" data-placeholder="All">
+                        <option value="" @selected(request('has_order', '') === '')>All</option>
+                        <option value="1" @selected(request('has_order') === '1')>With order</option>
+                        <option value="0" @selected(request('has_order') === '0')>Without order</option>
+                    </select>
                 </label>
             </section>
         </div>

@@ -373,10 +373,11 @@ class EcomActivityListService
     {
         $filters = self::ecomTrackerFiltersFromRequest($request);
         $productCode = trim((string) ($filters['product_code'] ?? ''));
+        $hasOrder = $filters['has_order'] ?? null;
         $filters['search'] = '';
         $filters['product_code'] = $productCode;
         $filters['funnel'] = [];
-        $filters['has_order'] = null;
+        $filters['has_order'] = $hasOrder;
         $filters['devices'] = [];
         $filters['logged_in'] = null;
         $filters['durations'] = [];
@@ -395,9 +396,16 @@ class EcomActivityListService
      */
     public static function ecomTrackerProductListFilterQueryParams(Request $request): array
     {
+        $params = [];
         $code = trim((string) $request->query('product_code', ''));
+        if ($code !== '') {
+            $params['product_code'] = $code;
+        }
+        if (in_array($request->query('has_order'), ['0', '1'], true)) {
+            $params['has_order'] = $request->query('has_order');
+        }
 
-        return $code !== '' ? ['product_code' => $code] : [];
+        return $params;
     }
 
     /**
@@ -573,22 +581,17 @@ class EcomActivityListService
             [
                 'label' => 'Add to cart',
                 'formatted' => number_format((int) $summary['adds']),
-                'tip' => "Total units added to cart for {$style} in those sessions (quantity on each add click).",
+                'tip' => "Total units of {$style} added to cart (per session: max qty per purchase cycle, same rules as product performance).",
             ],
             [
                 'label' => 'Begin checkout',
                 'formatted' => number_format((int) $summary['checkouts']),
-                'tip' => "Sessions that started checkout while {$style} was in the shopping cart.",
+                'tip' => "Units of {$style} at checkout begin (per session: max cart qty in that cycle, same as product performance).",
             ],
             [
                 'label' => 'Proceed checkout',
                 'formatted' => number_format((int) $summary['proceeds']),
-                'tip' => "Sessions that reached the payment step with {$style} still in the cart.",
-            ],
-            [
-                'label' => 'Left in cart',
-                'formatted' => number_format((int) $summary['cart_abandoned']),
-                'tip' => "Sessions that added {$style} to the cart but did not purchase it in this period.",
+                'tip' => "Units of {$style} at proceed-to-payment (per session: max in that cycle, same as product performance).",
             ],
             [
                 'label' => 'Orders',
@@ -599,11 +602,11 @@ class EcomActivityListService
             [
                 'label' => 'Units sold',
                 'formatted' => number_format((int) $summary['sold_qty']),
-                'tip' => "Total quantity of {$style} sold on order lines in this period.",
+                'tip' => "Paid units of {$style} (per session: qty on payment_success in each cycle, same as product performance Paid).",
                 'value_class' => (int) ($summary['sold_qty'] ?? 0) > 0 ? 'etd-kpi-value--success' : '',
             ],
             [
-                'label' => 'Revenue',
+                'label' => 'Sold amount',
                 'formatted' => '£'.number_format((float) $summary['sale_amount'], 2),
                 'tip' => "Sales value for {$style} only (order line totals). Other items in the same order are not included.",
                 'value_class' => (float) ($summary['sale_amount'] ?? 0) > 0 ? 'etd-kpi-value--success' : '',
@@ -1760,7 +1763,9 @@ class EcomActivityListService
     }
 
     /**
-     * Product drill-down KPIs: same session scope as {@see applyProductCodeSessionFilter}; adds from tracking_daily_products; sold from order lines.
+     * Product drill-down KPIs: same session scope as {@see applyProductCodeSessionFilter};
+     * funnel steps use {@see productFunnelUnitsForSessionActions()} (product performance / sync parity);
+     * sold amount from order lines in range.
      *
      * @param  array{from: Carbon, to: Carbon, period?: string}  $range
      * @param  array<string, mixed>  $filters
@@ -1782,58 +1787,25 @@ class EcomActivityListService
 
         [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
 
-        $sessionIds = TrackerDatabase::table('tracking_session as ts')
-            ->tap($scope)
-            ->pluck('session_id')
-            ->map(fn ($id) => (string) $id)
-            ->all();
+        $funnelSteps = $this->productFunnelStepUnitsByCode($range, $filters, [$productCode]);
+        $steps = $funnelSteps[$productCode] ?? [
+            'add_to_cart' => 0,
+            'begin_checkout' => 0,
+            'proceed_checkout' => 0,
+            'paid' => 0,
+        ];
 
-        $addCounts = $this->addToCartEventCountForParentStyle($sessionIds, $productCode, $fromBound, $toBound);
-        $adds = array_sum($addCounts);
-
-        $checkouts = $this->countSessionsWithCartPayloadForParentStyle(
-            $sessionIds,
-            $productCode,
-            ['begin_checkout'],
-            'begin_checkout',
-            $fromBound,
-            $toBound,
-        );
-
-        $proceeds = $this->countSessionsWithCartPayloadForParentStyle(
-            $sessionIds,
-            $productCode,
-            ['proceed_checkout', 'proceed_to_checkout'],
-            'proceed_to_checkout',
-            $fromBound,
-            $toBound,
-        );
-
-        $salesQuery = TrackerDatabase::table('tracking_order_details as od')
+        $sales = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->tap($scope)
             ->where(fn (Builder $product) => $this->whereProductCodeOrSku($product, 'p', $productCode))
-            ->whereBetween('o.ordered_at', [$fromBound, $toBound]);
-
-        $sales = (clone $salesQuery)
+            ->whereBetween('o.ordered_at', [$fromBound, $toBound])
             ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as sold')
             ->selectRaw('COALESCE(SUM(od.qty), 0) as sold_qty')
             ->selectRaw('COALESCE(SUM(od.line_total), 0) as sale_amount')
             ->first();
-
-        $soldSessionIds = array_fill_keys(
-            $salesQuery->distinct()->pluck('ts.session_id')->map(fn ($id) => (string) $id)->all(),
-            true,
-        );
-
-        $cartAbandoned = 0;
-        foreach ($addCounts as $sessionId => $addCount) {
-            if ($addCount > 0 && ! isset($soldSessionIds[$sessionId])) {
-                $cartAbandoned++;
-            }
-        }
 
         $sessions = (int) ($row->sessions ?? 0);
         $staySeconds = (int) ($row->stay_seconds ?? 0);
@@ -1842,12 +1814,12 @@ class EcomActivityListService
             'sessions' => $sessions,
             'unique_visitors' => (int) ($row->unique_visitors ?? 0),
             'avg_stay_seconds' => $sessions > 0 ? (int) round($staySeconds / $sessions) : 0,
-            'adds' => $adds,
-            'checkouts' => $checkouts,
-            'proceeds' => $proceeds,
-            'cart_abandoned' => $cartAbandoned,
+            'adds' => (int) ($steps['add_to_cart'] ?? 0),
+            'checkouts' => (int) ($steps['begin_checkout'] ?? 0),
+            'proceeds' => (int) ($steps['proceed_checkout'] ?? 0),
+            'cart_abandoned' => 0,
             'sold' => (int) ($sales->sold ?? 0),
-            'sold_qty' => (int) ($sales->sold_qty ?? 0),
+            'sold_qty' => (int) ($steps['paid'] ?? 0),
             'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),
         ];
     }

@@ -30,13 +30,18 @@
             'tip' => 'Total units sold in the period (sold_qty on tracking_daily_products, summed across days after dashboard sync).',
         ],
     ];
-    $metricColspan = count($funnelColumns) + 2;
+    $serialOffset = isset($serialOffset) ? max(0, (int) $serialOffset) : null;
+    $showSerial = $serialOffset !== null;
+    $metricColspan = count($funnelColumns) + 2 + ($showSerial ? 1 : 0);
 @endphp
 
 <div @class(['etd-product-catalog', 'etd-product-catalog--compare-inline' => $showInlineCompareDelta])>
     <table class="etd-table etd-table--product-catalog etd-table--performance-metrics etd-table--product-funnel w-full">
         <thead>
             <tr>
+                @if ($showSerial)
+                    <th class="etd-num etd-col-sl">SL</th>
+                @endif
                 <th class="etd-col-product">Product</th>
                 @foreach ($funnelColumns as $column)
                     <th class="etd-num etd-col-metric">
@@ -51,7 +56,7 @@
             </tr>
         </thead>
         <tbody>
-            @forelse ($products as $product)
+            @forelse ($products as $rowIndex => $product)
                 @php
                     $productCode = trim((string) ($product['code'] ?? $product['product_code'] ?? ''));
                     $productTitle = trim((string) ($product['name'] ?? ''));
@@ -69,6 +74,9 @@
                             : null);
                 @endphp
                 <tr>
+                    @if ($showSerial)
+                        <td class="etd-num etd-col-sl">{{ $serialOffset + $rowIndex + 1 }}</td>
+                    @endif
                     <td class="etd-col-product">
                         @if ($productLink)
                             <a href="{{ $productLink }}" class="etd-row-drilldown-link no-underline text-inherit hover:text-accent-500">

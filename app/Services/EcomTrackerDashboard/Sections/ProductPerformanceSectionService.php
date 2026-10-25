@@ -120,9 +120,17 @@ class ProductPerformanceSectionService
      */
     private function productsWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters, ?int $limit = self::PRODUCT_LIMIT): array
     {
+        $withOrderOnly = ($sessionFilters['has_order'] ?? null) === true;
+        $soldByCode = $this->filteredProductSoldTotalsByCode($from, $to, $period, $sessionFilters);
+
+        if ($withOrderOnly && $soldByCode === []) {
+            return $this->packageProductRows(collect(), $limit, $from, $to, $period, $sessionFilters);
+        }
+
         $ratios = $this->sessionFilterRatiosByDate($from, $to, $period, $sessionFilters);
         $dailyRows = TrackerDatabase::table('tracking_daily_products')
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->when($withOrderOnly, fn ($query) => $query->whereIn('product_code', array_keys($soldByCode)))
             ->get([
                 'metric_date',
                 'product_code',
@@ -144,6 +152,10 @@ class ProductPerformanceSectionService
                 continue;
             }
 
+            if ($withOrderOnly && ! isset($soldByCode[$code])) {
+                continue;
+            }
+
             $byCode[$code] ??= [
                 'code' => $code,
                 'views' => 0,
@@ -159,7 +171,7 @@ class ProductPerformanceSectionService
             $byCode[$code]['proceed_checkouts'] += (int) round((int) $row->proceed_checkouts * $ratio);
         }
 
-        foreach ($this->filteredProductSoldTotalsByCode($from, $to, $period, $sessionFilters) as $code => $sold) {
+        foreach ($soldByCode as $code => $sold) {
             $byCode[$code] ??= [
                 'code' => $code,
                 'views' => 0,
@@ -171,6 +183,10 @@ class ProductPerformanceSectionService
             ];
             $byCode[$code]['qty'] = (int) $sold['qty'];
             $byCode[$code]['revenue'] = (float) $sold['revenue'];
+        }
+
+        if ($withOrderOnly) {
+            $byCode = array_intersect_key($byCode, $soldByCode);
         }
 
         $productCode = trim((string) ($sessionFilters['product_code'] ?? ''));
