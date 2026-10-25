@@ -2867,7 +2867,8 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Rebuild product/category funnel columns for one visit day (same rules as {@see recordFunnelAction}).
+     * Rebuild product/category funnel columns for one visit day.
+     * Product commerce units: {@see EcomActivityListService::productFunnelUnitsForSessionActions()}.
      */
     private function refreshProductFunnelCounts(string $date, Carbon $now): void
     {

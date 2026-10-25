@@ -241,6 +241,31 @@ class EcomActivityListService
         return is_string($back) && str_starts_with($back, url('/').'/') ? $back : $fallback;
     }
 
+    /**
+     * Product drill filter from the request or from a same-site `back` URL (session detail links).
+     */
+    public static function activeProductCodeFilter(Request $request): string
+    {
+        $direct = mb_substr(trim((string) $request->query('product_code', '')), 0, 100);
+        if ($direct !== '') {
+            return $direct;
+        }
+
+        $back = $request->query('back');
+        if (! is_string($back) || ! str_starts_with($back, url('/').'/')) {
+            return '';
+        }
+
+        $queryString = parse_url($back, PHP_URL_QUERY);
+        if (! is_string($queryString) || $queryString === '') {
+            return '';
+        }
+
+        parse_str($queryString, $params);
+
+        return mb_substr(trim((string) ($params['product_code'] ?? '')), 0, 100);
+    }
+
     private static function parseLocalDate(string $value): ?Carbon
     {
         try {
@@ -701,13 +726,21 @@ class EcomActivityListService
     }
 
     /**
-     * Product funnel units for one session (used by dashboard sync → tracking_daily_products).
+     * Product funnel units for one session (dashboard sync → tracking_daily_products).
      *
-     * - views: 1 per product from product_view / popup / click (max once per session)
-     * - add_to_cart: sum of add-click qty per product in the session
-     * - begin / proceed / paid: last cart snapshot qty per product in the session
+     * Views: one unit per parent style per session ({@see CATALOG_PRODUCT_VIEW_FUNNEL_ACTION_TYPES}).
      *
-     * @param  iterable<object>  $actions  chronological
+     * Commerce (add / begin / proceed / paid) — per parent style, per session, in purchase cycles:
+     * - A cycle runs until payment_success includes that product; the same product in the same
+     *   session after pay starts a new cycle (open cycle state resets for that code).
+     * - Each stage contributes once per committed cycle; value = max line qty on events of that
+     *   stage in the cycle (add_to_cart, begin_checkout, proceed_checkout snapshots; paid = order
+     *   line qty when the cycle closes). Not a sum of every click; each event uses its own payload
+     *   at fire time (proceed max may be lower than an earlier begin in the same cycle).
+     * - Unpaid open cycles are committed at end of this pass (add/begin/proceed maxes only).
+     * - Session totals sum all committed cycles; sync sums sessions onto tracking_daily_products.
+     *
+     * @param  iterable<object>  $actions  chronological (order by id)
      * @param  array<string, string>  $skuToParentCode
      * @param  list<string>|null  $trackedProductCodes  null = count every resolved parent code
      * @return array<string, array{views: int, add_to_cart: int, begin_checkout: int, proceed_checkout: int, paid: int}>
@@ -725,8 +758,9 @@ class EcomActivityListService
             return $this->funnelMetricTracksCode(trim((string) $code), $trackedFilter);
         };
 
-        $metrics = [];
-        $sessionAdd = [];
+        $totals = [];
+        /** @var array<string, array{add_max: int, begin_max: int, proceed_max: int}> */
+        $openCycles = [];
 
         foreach ($actions as $action) {
             $type = (string) ($action->action_type ?? '');
@@ -740,7 +774,7 @@ class EcomActivityListService
                     continue;
                 }
 
-                $metrics[$code]['views'] = 1;
+                $totals[$code]['views'] = 1;
 
                 continue;
             }
@@ -756,41 +790,48 @@ class EcomActivityListService
                     continue;
                 }
 
-                $sessionAdd[$code] = ($sessionAdd[$code] ?? 0) + $qty;
+                $this->bumpProductFunnelCycleMax($openCycles, $code, 'add_max', $qty);
 
                 continue;
             }
 
-            [$jsonColumn, $metricKey] = match ($type) {
-                'begin_checkout' => ['begin_checkout', 'begin_checkout'],
-                'proceed_checkout' => ['proceed_to_checkout', 'proceed_checkout'],
-                'payment_success' => ['payment_success', 'paid'],
-                default => [null, null],
-            };
-
-            if ($jsonColumn === null || $metricKey === null) {
-                continue;
-            }
-
-            foreach ($this->parentStyleUnitsInCartAction($action, $jsonColumn, $trackedFilter, $skuToParentCode) as $code => $qty) {
-                if (! $accept($code) || $qty <= 0) {
-                    continue;
+            if ($type === 'begin_checkout') {
+                foreach ($this->parentStyleUnitsInCartAction($action, 'begin_checkout', $trackedFilter, $skuToParentCode) as $code => $qty) {
+                    if ($accept($code) && $qty > 0) {
+                        $this->bumpProductFunnelCycleMax($openCycles, $code, 'begin_max', $qty);
+                    }
                 }
 
-                $metrics[$code][$metricKey] = $qty;
-            }
-        }
-
-        foreach ($sessionAdd as $code => $qty) {
-            if (! $accept($code)) {
                 continue;
             }
 
-            $metrics[$code]['add_to_cart'] = (int) $qty;
+            if ($type === 'proceed_checkout') {
+                foreach ($this->parentStyleUnitsInCartAction($action, 'proceed_to_checkout', $trackedFilter, $skuToParentCode) as $code => $qty) {
+                    if ($accept($code) && $qty > 0) {
+                        $this->bumpProductFunnelCycleMax($openCycles, $code, 'proceed_max', $qty);
+                    }
+                }
+
+                continue;
+            }
+
+            if ($type === 'payment_success') {
+                foreach ($this->parentStyleUnitsInCartAction($action, 'payment_success', $trackedFilter, $skuToParentCode) as $code => $qty) {
+                    if ($accept($code) && $qty > 0) {
+                        $this->commitProductFunnelCycle($totals, $openCycles, $code, $qty);
+                    }
+                }
+            }
         }
 
-        foreach ($metrics as $code => $steps) {
-            $metrics[$code] = [
+        foreach (array_keys($openCycles) as $code) {
+            if ($accept($code)) {
+                $this->commitProductFunnelCycle($totals, $openCycles, $code, 0);
+            }
+        }
+
+        foreach ($totals as $code => $steps) {
+            $totals[$code] = [
                 'views' => (int) ($steps['views'] ?? 0),
                 'add_to_cart' => (int) ($steps['add_to_cart'] ?? 0),
                 'begin_checkout' => (int) ($steps['begin_checkout'] ?? 0),
@@ -799,7 +840,35 @@ class EcomActivityListService
             ];
         }
 
-        return $metrics;
+        return $totals;
+    }
+
+    /**
+     * @param  array<string, array{add_max: int, begin_max: int, proceed_max: int}>  $openCycles
+     */
+    private function bumpProductFunnelCycleMax(array &$openCycles, string $code, string $field, int $qty): void
+    {
+        $openCycles[$code] ??= ['add_max' => 0, 'begin_max' => 0, 'proceed_max' => 0];
+        $openCycles[$code][$field] = max($openCycles[$code][$field], $qty);
+    }
+
+    /**
+     * @param  array<string, array<string, int>>  $totals
+     * @param  array<string, array{add_max: int, begin_max: int, proceed_max: int}>  $openCycles
+     */
+    private function commitProductFunnelCycle(array &$totals, array &$openCycles, string $code, int $paidQty): void
+    {
+        $cycle = $openCycles[$code] ?? ['add_max' => 0, 'begin_max' => 0, 'proceed_max' => 0];
+
+        $totals[$code]['add_to_cart'] = (int) ($totals[$code]['add_to_cart'] ?? 0) + $cycle['add_max'];
+        $totals[$code]['begin_checkout'] = (int) ($totals[$code]['begin_checkout'] ?? 0) + $cycle['begin_max'];
+        $totals[$code]['proceed_checkout'] = (int) ($totals[$code]['proceed_checkout'] ?? 0) + $cycle['proceed_max'];
+
+        if ($paidQty > 0) {
+            $totals[$code]['paid'] = (int) ($totals[$code]['paid'] ?? 0) + $paidQty;
+        }
+
+        unset($openCycles[$code]);
     }
 
     /**
@@ -1448,14 +1517,105 @@ class EcomActivityListService
     }
 
     /**
-     * Product drill / product_code filter: sessions linked to this parent style in tracking_session_p_cat
-     * (filled on sync from commerce actions; avoids scanning activity_ecom_user_actions for session lists).
+     * Product drill / product_code filter: sessions with a real view, cart, checkout, or order for this
+     * parent style in the period (grid-only impressions are excluded — same as KPI copy).
      *
      * @param  array{from: Carbon, to: Carbon, period?: string}  $range
      */
     private function applyProductCodeSessionFilter(Builder $query, string $productCode, array $range): void
     {
-        $this->whereSessionLinkedToParentStyleCode($query, $productCode, 'ts');
+        [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
+
+        $query->where(function (Builder $engaged) use ($productCode, $fromBound, $toBound) {
+            $engaged
+                ->whereExists(fn (Builder $exists) => $this->applyProductDrillEngagementExists(
+                    $exists,
+                    $productCode,
+                    $fromBound,
+                    $toBound,
+                    self::CATALOG_PRODUCT_VIEW_FUNNEL_ACTION_TYPES,
+                    null,
+                ))
+                ->orWhereExists(fn (Builder $exists) => $this->applyProductDrillEngagementExists(
+                    $exists,
+                    $productCode,
+                    $fromBound,
+                    $toBound,
+                    ['add_to_cart'],
+                    'add_to_cart',
+                ))
+                ->orWhereExists(fn (Builder $exists) => $this->applyProductDrillEngagementExists(
+                    $exists,
+                    $productCode,
+                    $fromBound,
+                    $toBound,
+                    ['begin_checkout'],
+                    'begin_checkout',
+                ))
+                ->orWhereExists(fn (Builder $exists) => $this->applyProductDrillEngagementExists(
+                    $exists,
+                    $productCode,
+                    $fromBound,
+                    $toBound,
+                    ['proceed_checkout', 'proceed_to_checkout'],
+                    'proceed_to_checkout',
+                ))
+                ->orWhereExists(fn (Builder $exists) => $this->applyProductDrillEngagementExists(
+                    $exists,
+                    $productCode,
+                    $fromBound,
+                    $toBound,
+                    ['payment_success'],
+                    'payment_success',
+                ))
+                ->orWhereExists(fn (Builder $exists) => $this->applyProductDrillOrderLineExists(
+                    $exists,
+                    $productCode,
+                    $fromBound,
+                    $toBound,
+                ));
+        });
+    }
+
+    /**
+     * @param  list<string>  $actionTypes
+     */
+    private function applyProductDrillEngagementExists(
+        Builder $exists,
+        string $productCode,
+        $fromBound,
+        $toBound,
+        array $actionTypes,
+        ?string $jsonColumn,
+    ): void {
+        $exists->selectRaw('1')
+            ->from('activity_ecom_user_actions as a_eng')
+            ->whereColumn('a_eng.session_id', 'ts.session_id')
+            ->whereIn('a_eng.action_type', $actionTypes)
+            ->whereBetween('a_eng.created_at', [$fromBound, $toBound])
+            ->where(function (Builder $match) use ($productCode, $jsonColumn) {
+                $match->where(fn (Builder $scalar) => $this->whereActionMatchesParentStyleCode($scalar, $productCode, 'a_eng'));
+
+                if ($jsonColumn !== null) {
+                    $match->orWhere('a_eng.'.$jsonColumn, 'like', '%'.$productCode.'%');
+                }
+            });
+    }
+
+    private function applyProductDrillOrderLineExists(
+        Builder $exists,
+        string $productCode,
+        $fromBound,
+        $toBound,
+    ): void {
+        $exists->selectRaw('1')
+            ->from('tracking_orders as o_drill')
+            ->join('tracking_order_details as od_drill', 'od_drill.tracking_order_id', '=', 'o_drill.id')
+            ->join('tracking_product as p_drill', 'p_drill.id', '=', 'od_drill.tracking_product_id')
+            ->join('tracking_session as ts_ord', 'ts_ord.id', '=', 'o_drill.tracking_session_id')
+            ->whereColumn('ts_ord.session_id', 'ts.session_id')
+            ->whereBetween('o_drill.ordered_at', [$fromBound, $toBound])
+            ->where(fn (Builder $product) => $this->whereProductCodeOrSku($product, 'p_drill', $productCode));
     }
 
     /**
@@ -1803,8 +1963,9 @@ class EcomActivityListService
         }
 
         if ($metric === 'adds') {
+            // Approximate sort key only; activity Adds column uses productFunnelUnitsForSessionActions().
             $sub = TrackerDatabase::table('activity_ecom_user_actions as a')
-                ->selectRaw('COALESCE(SUM(GREATEST(1, COALESCE(a.item_qty, 1))), 0)')
+                ->selectRaw('COALESCE(MAX(GREATEST(1, COALESCE(a.item_qty, 1))), 0)')
                 ->whereColumn('a.session_id', 'ts.session_id')
                 ->where('a.action_type', 'add_to_cart')
                 ->whereBetween('a.created_at', [$fromBound, $toBound])
@@ -2055,19 +2216,49 @@ class EcomActivityListService
      */
     private function addToCartEventCountForParentStyle(array $sessionIds, string $parentStyleCode, $fromBound, $toBound): array
     {
-        $counts = [];
+        if ($sessionIds === [] || $parentStyleCode === '') {
+            return [];
+        }
+
+        $skuToParent = TrackerDatabase::table('tracking_product')
+            ->where('code', $parentStyleCode)
+            ->whereNotNull('sku')
+            ->where('sku', '!=', '')
+            ->pluck('code', 'sku')
+            ->all();
+
         $actions = TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
-            ->where('action_type', 'add_to_cart')
+            ->whereIn('action_type', [
+                'add_to_cart',
+                'begin_checkout',
+                'proceed_checkout',
+                'proceed_to_checkout',
+                'payment_success',
+            ])
             ->whereBetween('created_at', [$fromBound, $toBound])
-            ->get(['session_id', 'product_code', 'sku', 'add_to_cart']);
+            ->orderBy('id')
+            ->get([
+                'id',
+                'session_id',
+                'action_type',
+                'product_code',
+                'sku',
+                'item_qty',
+                'add_to_cart',
+                'begin_checkout',
+                'proceed_to_checkout',
+                'payment_success',
+            ]);
 
-        foreach ($actions as $action) {
-            if (! $this->addToCartActionIncludesParentStyle($action, $parentStyleCode)) {
-                continue;
-            }
-
-            $counts[$action->session_id] = ($counts[$action->session_id] ?? 0) + $this->addToCartQtyForAction($action);
+        $counts = [];
+        foreach ($actions->groupBy('session_id') as $sessionId => $sessionActions) {
+            $units = $this->productFunnelUnitsForSessionActions(
+                $sessionActions,
+                $skuToParent,
+                [$parentStyleCode],
+            );
+            $counts[(string) $sessionId] = (int) ($units[$parentStyleCode]['add_to_cart'] ?? 0);
         }
 
         return $counts;

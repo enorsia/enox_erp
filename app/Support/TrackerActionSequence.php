@@ -16,6 +16,12 @@ final class TrackerActionSequence
         'product_click',
     ];
 
+    /** Hidden on session detail when drilling down from a product filter (admin ecom-activity). */
+    private const TIMELINE_GRID_ACTION_TYPES = [
+        'grid_impression',
+        'grid_click',
+    ];
+
     /** @var array<string, int> */
     private const FUNNEL_RANK = [
         'landing_page' => 5,
@@ -36,19 +42,29 @@ final class TrackerActionSequence
         return self::FUNNEL_RANK[$actionType] ?? 0;
     }
 
-    public static function isVisibleInSessionTimeline(?string $actionType): bool
+    public static function isVisibleInSessionTimeline(?string $actionType, bool $hideGridActions = false): bool
     {
-        return ! in_array((string) $actionType, self::TIMELINE_HIDDEN_ACTION_TYPES, true);
+        $type = (string) $actionType;
+
+        if (in_array($type, self::TIMELINE_HIDDEN_ACTION_TYPES, true)) {
+            return false;
+        }
+
+        if ($hideGridActions && in_array($type, self::TIMELINE_GRID_ACTION_TYPES, true)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
      * @param  Collection<int, object>  $actions
      * @return Collection<int, object>
      */
-    public static function filterForSessionTimeline(Collection $actions): Collection
+    public static function filterForSessionTimeline(Collection $actions, bool $hideGridActions = false): Collection
     {
         return $actions
-            ->filter(fn (object $action) => self::isVisibleInSessionTimeline($action->action_type ?? null))
+            ->filter(fn (object $action) => self::isVisibleInSessionTimeline($action->action_type ?? null, $hideGridActions))
             ->values();
     }
 

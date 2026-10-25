@@ -7104,7 +7104,27 @@ a.etd-pager__btn:hover {
 
 #ecom-activity-page-content .etd-table--activity-product-drill thead th.etd-num,
 #ecom-activity-page-content .etd-table--activity-product-drill tbody td.etd-num {
+    min-width: 3.5rem;
+    width: 3.5rem;
     text-align: center;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+#ecom-activity-page-content .etd-table-scroll--activity-wide .etd-table--activity-product-drill {
+    min-width: max(100%, 52rem);
+}
+
+#ecom-activity-page-content .etd-table--activity-product-drill th.etd-col-last-active,
+#ecom-activity-page-content .etd-table--activity-product-drill td.etd-col-last-active,
+#ecom-activity-page-content .etd-table--activity-product-drill th.etd-col-action,
+#ecom-activity-page-content .etd-table--activity-product-drill td.etd-col-action,
+#ecom-activity-page-content .etd-table--activity-product-drill th.etd-col-commerce,
+#ecom-activity-page-content .etd-table--activity-product-drill td.etd-col-commerce {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
 }
 
 #ecom-activity-page-content .etd-product-commerce-cell {
@@ -7606,14 +7626,9 @@ main:has(> #ecom-activity-page-content.etd-page--activity-product-drill) {
 .etd-page--activity-product-drill .etd-activity-table-shell .etd-table-scroll--activity.etd-table-scroll--fixed {
     flex: 0 0 auto;
     min-height: auto;
-    --etd-activity-visible-rows: 15;
-    --etd-activity-row-estimate: 3.375rem;
-    --etd-activity-thead-estimate: 2.85rem;
-    --etd-table-scroll-height: calc(
-        var(--etd-activity-thead-estimate) + var(--etd-activity-visible-rows) * var(--etd-activity-row-estimate)
-    );
-    max-height: var(--etd-table-scroll-height);
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
+    overflow-x: auto;
 }
 
 .etd-activity-table-shell.is-loading .etd-table-scroll--activity {
