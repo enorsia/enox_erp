@@ -535,10 +535,7 @@ class EcomTrackerCompareService
                 $filters['utm_medium'] ?? '',
             ),
             'loggedInOptions' => $this->selectOptions($filters['logged_in'] ?? '', ['' => 'All', '1' => 'Logged in', '0' => 'Guest']),
-            'hasOrderOptions' => $this->selectOptions($filters['has_order'] ?? '', ['' => 'All', '1' => 'With order', '0' => 'No order']),
-            'visitorTypeOptions' => $this->selectOptions($filters['visitor_type'] ?? '', [
-                '' => 'All', 'human' => 'Real visitors', 'bot' => 'Automated traffic', 'unclassified' => 'Not classified',
-            ]),
+            'hasOrderOptions' => $this->selectOptions($filters['has_order'] ?? '', ['' => 'All', '1' => 'With order', '0' => 'Without order']),
             'activeCount' => EcomTrackerCompareFilters::activeCount($filters),
             'resetUrl' => $this->compareUrl(
                 $request,

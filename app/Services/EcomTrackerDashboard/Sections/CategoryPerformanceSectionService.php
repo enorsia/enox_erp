@@ -194,7 +194,7 @@ class CategoryPerformanceSectionService
             ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, 'ts'))
             ->when(
                 EcomActivityListService::hasActiveFilters($sessionFilters),
-                fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters),
+                fn ($query) => $this->activityList->constrainDashboardSessionsInRange($query, $range, $sessionFilters),
             )
             ->groupBy('category_id')
             ->selectRaw('COALESCE(od.tracking_category_id, ?) as category_id', [self::UNCategorized_CATEGORY_ID])

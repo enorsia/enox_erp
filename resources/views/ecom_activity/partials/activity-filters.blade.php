@@ -88,7 +88,7 @@
                 <select name="has_order" class="{{ $tomSelectClass }}" data-placeholder="All">
                     <option value="" @selected(request('has_order', '') === '')>All</option>
                     <option value="1" @selected(request('has_order') === '1')>{{ $countLabel('1', 'With order', $filterOptionCounts['has_order'] ?? []) }}</option>
-                    <option value="0" @selected(request('has_order') === '0')>{{ $countLabel('0', 'No order', $filterOptionCounts['has_order'] ?? []) }}</option>
+                    <option value="0" @selected(request('has_order') === '0')>{{ $countLabel('0', 'Without order', $filterOptionCounts['has_order'] ?? []) }}</option>
                 </select>
             </label>
         </div>

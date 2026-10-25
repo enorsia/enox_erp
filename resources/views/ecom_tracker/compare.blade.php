@@ -203,14 +203,6 @@
                                             </select>
                                         </label>
                                         <label class="etd-filter-compact-field">
-                                            <span class="etd-filter-compact-label">Visitor type</span>
-                                            <select name="{{ $column['filter']['prefix'] }}visitor_type" class="f-input w-full">
-                                                @foreach ($column['filter']['visitorTypeOptions'] as $option)
-                                                    <option value="{{ $option['value'] }}" @selected($option['selected'])>{{ $option['label'] }}</option>
-                                                @endforeach
-                                            </select>
-                                        </label>
-                                        <label class="etd-filter-compact-field">
                                             <span class="etd-filter-compact-label">UTM source</span>
                                             <select name="{{ $column['filter']['prefix'] }}utm_source" class="f-input w-full">
                                                 @foreach ($column['filter']['utmSourceOptions'] as $option)

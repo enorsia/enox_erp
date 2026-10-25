@@ -95,7 +95,7 @@
                             <select name="has_order" class="tom-select etd-tom-select w-full" data-placeholder="All">
                                 <option value="" selected>All</option>
                                 <option value="1">With order</option>
-                                <option value="0">No order</option>
+                                <option value="0">Without order</option>
                             </select>
                         </label>
                     </div>

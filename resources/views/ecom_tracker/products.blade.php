@@ -13,7 +13,7 @@
 
 <div id="ecom-tracker-dashboard-content" class="etd-page etd-page--product-performance-list">
 
-@include('ecom_tracker.filter-drawer')
+@include('ecom_tracker.filter-drawer-products')
 
 <header class="etd-page-header">
     <div class="etd-page-header-bar">

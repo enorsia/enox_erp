@@ -114,78 +114,49 @@ class ProductPerformanceSectionService
     }
 
     /**
-
+     * Scale tracking_daily_products by filtered-session ratio per day (same pattern as categories).
+     *
+     * @param  array<string, mixed>  $sessionFilters
+     */
     private function productsWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters, ?int $limit = self::PRODUCT_LIMIT): array
     {
-        $range = ['from' => $from, 'to' => $to, 'period' => $period];
-        [$fromBound, $toBound] = TrackerTime::storageRange($from, $to);
-
-        $sessionIds = TrackerDatabase::table('tracking_session as ts')
-            ->tap(fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters))
-            ->pluck('session_id')
-            ->map(fn ($id) => (string) $id)
-            ->all();
-
-        if ($sessionIds === []) {
-            return $this->packageProductRows(collect(), $limit, $from, $to, $period, $sessionFilters);
-        }
-
-        $skuToParent = TrackerDatabase::table('tracking_product')
-            ->whereNotNull('sku')
-            ->where('sku', '!=', '')
-            ->pluck('code', 'sku')
-            ->all();
-
-        $actions = TrackerDatabase::table('activity_ecom_user_actions')
-            ->whereIn('session_id', $sessionIds)
-            ->whereIn('action_type', array_merge(
-                EcomActivityListService::CATALOG_PRODUCT_VIEW_FUNNEL_ACTION_TYPES,
-                [
-                    'add_to_cart',
-                    'begin_checkout',
-                    'proceed_checkout',
-                    'proceed_to_checkout',
-                    'payment_success',
-                ],
-            ))
-            ->whereBetween('created_at', [$fromBound, $toBound])
-            ->orderBy('id')
+        $ratios = $this->sessionFilterRatiosByDate($from, $to, $period, $sessionFilters);
+        $dailyRows = TrackerDatabase::table('tracking_daily_products')
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->get([
-                'id',
-                'session_id',
-                'action_type',
+                'metric_date',
                 'product_code',
-                'sku',
-                'item_qty',
-                'add_to_cart',
-                'begin_checkout',
-                'proceed_to_checkout',
-                'payment_success',
+                'product_views',
+                'add_to_carts',
+                'begin_checkouts',
+                'proceed_checkouts',
             ]);
 
         $byCode = [];
-        foreach ($actions->groupBy('session_id') as $sessionActions) {
-            $units = $this->activityList->productFunnelUnitsForSessionActions($sessionActions, $skuToParent);
-            foreach ($units as $code => $steps) {
-                $code = trim((string) $code);
-                if ($code === '') {
-                    continue;
-                }
-
-                $byCode[$code] ??= [
-                    'code' => $code,
-                    'views' => 0,
-                    'adds' => 0,
-                    'begin_checkouts' => 0,
-                    'proceed_checkouts' => 0,
-                    'qty' => 0,
-                    'revenue' => 0.0,
-                ];
-                $byCode[$code]['views'] += (int) ($steps['views'] ?? 0);
-                $byCode[$code]['adds'] += (int) ($steps['add_to_cart'] ?? 0);
-                $byCode[$code]['begin_checkouts'] += (int) ($steps['begin_checkout'] ?? 0);
-                $byCode[$code]['proceed_checkouts'] += (int) ($steps['proceed_checkout'] ?? 0);
+        foreach ($dailyRows as $row) {
+            $ratio = $ratios[(string) $row->metric_date] ?? 0.0;
+            if ($ratio <= 0) {
+                continue;
             }
+
+            $code = trim((string) $row->product_code);
+            if ($code === '') {
+                continue;
+            }
+
+            $byCode[$code] ??= [
+                'code' => $code,
+                'views' => 0,
+                'adds' => 0,
+                'begin_checkouts' => 0,
+                'proceed_checkouts' => 0,
+                'qty' => 0,
+                'revenue' => 0.0,
+            ];
+            $byCode[$code]['views'] += (int) round((int) $row->product_views * $ratio);
+            $byCode[$code]['adds'] += (int) round((int) $row->add_to_carts * $ratio);
+            $byCode[$code]['begin_checkouts'] += (int) round((int) $row->begin_checkouts * $ratio);
+            $byCode[$code]['proceed_checkouts'] += (int) round((int) $row->proceed_checkouts * $ratio);
         }
 
         foreach ($this->filteredProductSoldTotalsByCode($from, $to, $period, $sessionFilters) as $code => $sold) {
@@ -202,9 +173,12 @@ class ProductPerformanceSectionService
             $byCode[$code]['revenue'] = (float) $sold['revenue'];
         }
 
-        $all = collect($byCode)->values();
+        $productCode = trim((string) ($sessionFilters['product_code'] ?? ''));
+        if ($productCode !== '') {
+            $byCode = isset($byCode[$productCode]) ? [$productCode => $byCode[$productCode]] : [];
+        }
 
-        return $this->packageProductRows($all, $limit, $from, $to, $period, $sessionFilters);
+        return $this->packageProductRows(collect(array_values($byCode)), $limit, $from, $to, $period, $sessionFilters);
     }
 
     /**
@@ -224,7 +198,7 @@ class ProductPerformanceSectionService
             ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
             ->whereBetween('o.ordered_at', [$fromBound, $toBound])
             ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, 'ts'))
-            ->tap(fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters))
+            ->tap(fn ($query) => $this->activityList->constrainDashboardSessionsInRange($query, $range, $sessionFilters))
             ->groupBy('p.code')
             ->selectRaw('p.code as product_code, SUM(od.qty) as qty, SUM(od.line_total) as revenue')
             ->get();

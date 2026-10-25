@@ -341,6 +341,66 @@ class EcomActivityListService
     }
 
     /**
+     * Ecom tracker dashboard / products / compare: same as {@see filtersFromRequest()} but visitor_type is not supported (no UI).
+     *
+     * @return array<string, mixed>
+     */
+    public static function ecomTrackerFiltersFromRequest(Request $request): array
+    {
+        $filters = self::filtersFromRequest($request);
+        $filters['visitor_type'] = null;
+
+        return $filters;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function ecomTrackerFilterQueryParams(Request $request): array
+    {
+        $params = self::filterQueryParams($request);
+        unset($params['visitor_type']);
+
+        return $params;
+    }
+
+    /**
+     * Product performance list: only parent style code filter (period lives in the page header).
+     *
+     * @return array<string, mixed>
+     */
+    public static function ecomTrackerProductListFiltersFromRequest(Request $request): array
+    {
+        $filters = self::ecomTrackerFiltersFromRequest($request);
+        $productCode = trim((string) ($filters['product_code'] ?? ''));
+        $filters['search'] = '';
+        $filters['product_code'] = $productCode;
+        $filters['funnel'] = [];
+        $filters['has_order'] = null;
+        $filters['devices'] = [];
+        $filters['logged_in'] = null;
+        $filters['durations'] = [];
+        $filters['duration'] = null;
+        $filters['utm_sources'] = [];
+        $filters['utm_mediums'] = [];
+        $filters['department'] = null;
+        $filters['categories'] = [];
+        $filters['visitor_type'] = null;
+
+        return $filters;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function ecomTrackerProductListFilterQueryParams(Request $request): array
+    {
+        $code = trim((string) $request->query('product_code', ''));
+
+        return $code !== '' ? ['product_code' => $code] : [];
+    }
+
+    /**
      * @param  array<string, mixed>  $filters
      * @return array{
      *     sessions: int,
@@ -592,17 +652,34 @@ class EcomActivityListService
     }
 
     /**
+     * Dashboard / compare filtered columns: same session rules as {@see constrainSessionsInRange()}
+     * but only {@code tracking_*} tables (no activity_ecom_user_actions or activity_ecom_user_bot_context).
+     *
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     * @param  array<string, mixed>  $filters
+     */
+    public function constrainDashboardSessionsInRange(Builder $query, array $range, array $filters): void
+    {
+        $this->applySessionDateScope($query, $range);
+        $this->applyFilters($query, $filters, $range, forDashboard: true);
+    }
+
+    /**
      * Session-level totals in the same shape as dashboard KPI groups ({@see \App\Services\EcomTrackerDashboard\Sections\DashboardKpiSectionService::groups()}).
      *
      * @param  array{from: Carbon, to: Carbon}  $range
      * @param  array<string, mixed>  $filters
      * @return array<string, float|int>
      */
-    public function dashboardTotals(array $range, array $filters): array
+    public function dashboardTotals(array $range, array $filters, bool $forDashboard = false): array
     {
-        $scope = function (Builder $query) use ($range, $filters): void {
-            $this->applySessionDateScope($query, $range);
-            $this->applyFilters($query, $filters, $range);
+        $scope = function (Builder $query) use ($range, $filters, $forDashboard): void {
+            if ($forDashboard) {
+                $this->constrainDashboardSessionsInRange($query, $range, $filters);
+            } else {
+                $this->applySessionDateScope($query, $range);
+                $this->applyFilters($query, $filters, $range);
+            }
         };
 
         $row = TrackerDatabase::table('tracking_session as ts')
@@ -1232,7 +1309,7 @@ class EcomActivityListService
         if ($request->query('has_order') === '1') {
             $addChip('Has order: With order', ['has_order']);
         } elseif ($request->query('has_order') === '0') {
-            $addChip('Has order: No order', ['has_order']);
+            $addChip('Has order: Without order', ['has_order']);
         }
 
         if ($request->query('logged_in') === '1') {
@@ -1418,14 +1495,18 @@ class EcomActivityListService
      * funnel/has_order/logged_in/duration → tracking_session;
      * device/utm → tracking_session_details (last touch);
      * category/department/product_code → tracking_session_p_cat (+ tracking_product for code);
-     * visitor_type → activity_ecom_user_bot_context (one row per session);
+     * visitor_type → activity_ecom_user_bot_context (User activity only; not on ecom tracker dashboard);
      * search → tracking_session, tracking_session_details, tracking_orders, tracking_product + p_cat.
      */
-    private function applyFilters(Builder $query, array $filters, ?array $range = null): void
+    private function applyFilters(Builder $query, array $filters, ?array $range = null, bool $forDashboard = false): void
     {
         $productCode = trim((string) ($filters['product_code'] ?? ''));
         if ($productCode !== '' && $range !== null) {
-            $this->applyProductCodeSessionFilter($query, $productCode, $range);
+            if ($forDashboard) {
+                $this->applyDashboardProductCodeSessionFilter($query, $productCode, $range);
+            } else {
+                $this->applyProductCodeSessionFilter($query, $productCode, $range);
+            }
         } else {
             $this->applySearch($query, (string) ($filters['search'] ?? ''));
         }
@@ -1496,24 +1577,45 @@ class EcomActivityListService
         }
 
         $visitorType = $filters['visitor_type'] ?? null;
-        if ($visitorType === 'bot') {
+        if (! $forDashboard && $visitorType === 'bot') {
             $query->whereExists(fn (Builder $exists) => $exists
                 ->selectRaw('1')
                 ->from('activity_ecom_user_bot_context as bc_filter')
                 ->whereColumn('bc_filter.session_id', 'ts.session_id')
                 ->where('bc_filter.is_bot', true));
-        } elseif ($visitorType === 'human') {
+        } elseif (! $forDashboard && $visitorType === 'human') {
             $query->whereExists(fn (Builder $exists) => $exists
                 ->selectRaw('1')
                 ->from('activity_ecom_user_bot_context as bc_filter')
                 ->whereColumn('bc_filter.session_id', 'ts.session_id')
                 ->where('bc_filter.is_bot', false));
-        } elseif ($visitorType === 'unclassified') {
+        } elseif (! $forDashboard && $visitorType === 'unclassified') {
             $query->whereNotExists(fn (Builder $exists) => $exists
                 ->selectRaw('1')
                 ->from('activity_ecom_user_bot_context as bc_filter')
                 ->whereColumn('bc_filter.session_id', 'ts.session_id'));
         }
+    }
+
+    /**
+     * Product filter for dashboard: catalog link on tracking_session_p_cat or order line (no action scan).
+     *
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     */
+    private function applyDashboardProductCodeSessionFilter(Builder $query, string $productCode, array $range): void
+    {
+        [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
+
+        $query->where(function (Builder $engaged) use ($productCode, $fromBound, $toBound) {
+            $engaged
+                ->where(fn (Builder $linked) => $this->whereSessionLinkedToParentStyleCode($linked, $productCode))
+                ->orWhereExists(fn (Builder $exists) => $this->applyProductDrillOrderLineExists(
+                    $exists,
+                    $productCode,
+                    $fromBound,
+                    $toBound,
+                ));
+        });
     }
 
     /**

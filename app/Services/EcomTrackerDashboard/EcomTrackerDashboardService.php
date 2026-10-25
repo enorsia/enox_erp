@@ -58,8 +58,8 @@ class EcomTrackerDashboardService
         ];
         $rangeWithPeriod = $range + ['period' => $period];
 
-        $current = $this->activityList->dashboardTotals($rangeWithPeriod, []);
-        $previous = $this->activityList->dashboardTotals($prevRange, []);
+        $current = $this->activityList->dashboardTotals($rangeWithPeriod, [], forDashboard: true);
+        $previous = $this->activityList->dashboardTotals($prevRange, [], forDashboard: true);
 
         $uniqueReturning = $this->uniqueReturningSection->snapshot(
             (int) $current['unique_visitors'],

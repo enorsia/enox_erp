@@ -29,7 +29,7 @@ trait InteractsWithSessionFilterRatios
         $filteredByDate = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->selectRaw('dv.visit_date as session_date, COUNT(*) as sessions')
-            ->tap(fn ($query) => $this->activityList->constrainSessionsInRange($query, $range, $sessionFilters))
+            ->tap(fn ($query) => $this->activityList->constrainDashboardSessionsInRange($query, $range, $sessionFilters))
             ->groupBy('dv.visit_date')
             ->pluck('sessions', 'session_date');
 
