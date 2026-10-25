@@ -102,7 +102,14 @@
 <div class="etd-print-lead mb-3 etd-print-unit">
     <div class="etd-panel" id="trend">
         <div class="etd-panel-head">
-            <h2 class="etd-panel-title">Shopper journey over time</h2>
+            <div>
+                <h2 class="etd-panel-title">Shopper journey over time</h2>
+                @if (!empty($dashboard['charts']['trend']['range_label']))
+                    <p class="etd-panel-subtitle text-slate-500 dark:text-slate-400 text-sm mt-1 mb-0">
+                        {{ $dashboard['charts']['trend']['range_label'] }}
+                    </p>
+                @endif
+            </div>
         </div>
         <div class="etd-trend-chart">
             <div class="etd-trend-legend" id="etdTrendLegend" hidden></div>

@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\TrackerDashboardSyncJob;
 use App\Services\EcomActivityListService;
 use App\Services\EcomTrackerCompareFilteredDashboardService;
-use App\Services\EcomTrackerDashboardService;
+use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
 use App\Services\TrackerDashboardSyncService;
 use App\Support\TrackerTime;
 use Illuminate\Contracts\View\View;
@@ -54,11 +54,10 @@ class EcomTrackerDashboardController extends Controller
     public function products(
         Request $request,
         EcomTrackerDashboardService $dashboardService,
-        EcomActivityListService $activityList,
     ): View {
         Gate::authorize('ecom_tracker.dashboard.index');
 
-        $context = $this->trackerPageContext($request, 'admin.ecom-tracker.dashboard.products');
+        $context = $this->trackerPageContext($request, 'admin.ecom-tracker.dashboard.products', productListFiltersOnly: true);
         $data = $context['data'];
         $filters = $context['filters'];
         $range = $context['range'];
@@ -91,9 +90,7 @@ class EcomTrackerDashboardController extends Controller
             'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
         ]) + $filterQuery);
 
-        $filterOptions = $activityList->filterOptions($filters['department'] ?? null);
-
-        return view('ecom_tracker.products', compact('data', 'products', 'paginator', 'filterOptions'));
+        return view('ecom_tracker.products', compact('data', 'products', 'paginator'));
     }
 
     /**
@@ -105,7 +102,7 @@ class EcomTrackerDashboardController extends Controller
      *     data: array<string, mixed>
      * }
      */
-    private function trackerPageContext(Request $request, string $routeName): array
+    private function trackerPageContext(Request $request, string $routeName, bool $productListFiltersOnly = false): array
     {
         $period = EcomActivityListService::normalizePeriod($request->query('period'));
         $range = EcomActivityListService::periodRange(
@@ -113,8 +110,12 @@ class EcomTrackerDashboardController extends Controller
             (string) $request->query('date_from', ''),
             (string) $request->query('date_to', ''),
         );
-        $filters = EcomActivityListService::filtersFromRequest($request);
-        $filterQuery = EcomActivityListService::filterQueryParams($request);
+        $filters = $productListFiltersOnly
+            ? EcomActivityListService::ecomTrackerProductListFiltersFromRequest($request)
+            : EcomActivityListService::ecomTrackerFiltersFromRequest($request);
+        $filterQuery = $productListFiltersOnly
+            ? EcomActivityListService::ecomTrackerProductListFilterQueryParams($request)
+            : EcomActivityListService::ecomTrackerFilterQueryParams($request);
         $prevQuery = EcomActivityListService::shiftedPeriodQuery($range, -1);
         $nextQuery = EcomActivityListService::shiftedPeriodQuery($range, 1);
         $periodQuery = array_filter([

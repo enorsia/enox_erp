@@ -74,16 +74,7 @@
                             <select name="has_order" class="tom-select etd-tom-select w-full" data-placeholder="All">
                                 <option value="" @selected(request('has_order', '') === '')>All</option>
                                 <option value="1" @selected(request('has_order') === '1')>With order</option>
-                                <option value="0" @selected(request('has_order') === '0')>No order</option>
-                            </select>
-                        </label>
-                        <label class="etd-filter-compact-field">
-                            <span class="etd-filter-compact-label">Visitor type</span>
-                            <select name="visitor_type" class="tom-select etd-tom-select w-full" data-placeholder="All">
-                                <option value="" @selected(request('visitor_type', '') === '')>All</option>
-                                <option value="human" @selected(request('visitor_type') === 'human')>Real visitors</option>
-                                <option value="bot" @selected(request('visitor_type') === 'bot')>Automated traffic</option>
-                                <option value="unclassified" @selected(request('visitor_type') === 'unclassified')>Not classified</option>
+                                <option value="0" @selected(request('has_order') === '0')>Without order</option>
                             </select>
                         </label>
                     </div>

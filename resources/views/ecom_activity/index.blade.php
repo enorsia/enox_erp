@@ -284,7 +284,7 @@
                                 </td>
                                 <td class="etd-col-action" data-label="View">
                                     @can('ecom_tracker.activity.show')
-                                        <a href="{{ route('admin.ecom-activity.show', ['session' => $row->session_id, 'back' => request()->fullUrl()]) }}" class="etd-link">View session</a>
+                                        <a href="{{ route('admin.ecom-activity.show', array_filter(['session' => $row->session_id, 'back' => request()->fullUrl(), 'product_code' => request()->query('product_code')])) }}" class="etd-link">View session</a>
                                     @endcan
                                 </td>
                             </tr>

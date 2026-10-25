@@ -422,7 +422,7 @@ function trendTickLimit(labelCount, useHorizontalScroll = false) {
 }
 
 function trendUsesHorizontalScroll(labelCount) {
-    if (labelCount <= 12) {
+    if (labelCount <= 24) {
         return false;
     }
 

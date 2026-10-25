@@ -229,8 +229,11 @@ function initDashboardPeriodControls(page) {
     syncDashboardCustomFlatpickr(customPanel, drawerCustom, from, to);
 }
 
-/** Chart data printed by dashboard.blade.php (EcomTrackerDashboardService::dashboard()['charts']). */
-const D = window.ecomTrackerDashboardData || { trend: null, new_returning: null };
+/** Chart data printed by dashboard.blade.php (`$dashboard['charts']`). */
+function dashboardChartData() {
+    return window.ecomTrackerDashboardData || { trend: null, new_returning: null };
+}
+
 const dashboardRoot = document.getElementById('ecom-tracker-dashboard-content');
 
 const TREND_SERIES_COLORS = {
@@ -311,7 +314,9 @@ function trendTickLimit(labelCount, useHorizontalScroll = false) {
 }
 
 function trendUsesHorizontalScroll(labelCount) {
-    if (labelCount <= 12) {
+    // Hourly (24h) and weekly daily buckets fit without scroll; scrolling below
+    // mis-sizes the canvas and leaves the chart drawn on the left edge only.
+    if (labelCount <= 24) {
         return false;
     }
 
@@ -380,6 +385,12 @@ function initDashboardTrendChart(trend) {
 
     if (!canvas || !trend) {
         return;
+    }
+
+    const existingChart = Chart.getChart(canvas);
+
+    if (existingChart) {
+        existingChart.destroy();
     }
 
     const chartCtx = canvas.getContext('2d');
@@ -507,6 +518,10 @@ function initDashboardTrendChart(trend) {
         },
     });
 
+    requestAnimationFrame(() => {
+        trendChart.resize();
+    });
+
     let resizeFrame = null;
 
     window.addEventListener('resize', () => {
@@ -528,10 +543,10 @@ function initDashboardTrendChart(trend) {
     });
 }
 
-function initDashboardNewReturningChart() {
+function initDashboardNewReturningChart(newReturning) {
     const canvas = document.getElementById('etdNewReturningChart');
 
-    if (!canvas || !D.new_returning) {
+    if (!canvas || !newReturning) {
         return;
     }
 
@@ -540,9 +555,9 @@ function initDashboardNewReturningChart() {
     new Chart(chartCtx, {
         type: 'doughnut',
         data: {
-            labels: D.new_returning.labels || [],
+            labels: newReturning.labels || [],
             datasets: [{
-                data: D.new_returning.values || [],
+                data: newReturning.values || [],
                 backgroundColor: [accent(), '#64748b'],
                 borderWidth: 0,
             }],
@@ -706,7 +721,7 @@ function restoreCategoryDepartmentsAfterPrint() {
 function resetTrendChartForPrint() {
     const wrap = document.getElementById('etdTrendChartWrap');
     const hint = document.getElementById('etdTrendChartScrollHint');
-    const labels = D.trend?.labels || [];
+    const labels = dashboardChartData().trend?.labels || [];
     const chart = Chart.getChart('etdTrendChart');
 
     if (wrap) {
@@ -733,7 +748,7 @@ function resetTrendChartForPrint() {
 
 function restoreTrendChartAfterPrint() {
     const wrap = document.getElementById('etdTrendChartWrap');
-    const labels = D.trend?.labels || [];
+    const labels = dashboardChartData().trend?.labels || [];
     const chart = Chart.getChart('etdTrendChart');
 
     if (wrap) {
@@ -961,8 +976,10 @@ function bootDashboardPage() {
     initDashboardFilterDrawer(page);
     initDashboardPeriodControls(page);
     initDashboardSyncButton(page);
-    initDashboardTrendChart(D.trend);
-    initDashboardNewReturningChart();
+
+    const charts = dashboardChartData();
+    initDashboardTrendChart(charts.trend);
+    initDashboardNewReturningChart(charts.new_returning);
 }
 
 window.printEcomTrackerDashboard = printEcomTrackerDashboard;
@@ -978,6 +995,11 @@ function bindDashboardPrintControls() {
     document.getElementById('etdDashboardPrintBtn')?.addEventListener('click', printEcomTrackerDashboard);
 }
 
-// Loaded via dynamic import() from app.js — DOM is already ready.
+// Loaded via dynamic import() from app.js — wait for layout (sidebar/fonts) before sizing charts.
 bindDashboardPrintControls();
-bootDashboardPage();
+
+if (document.readyState === 'complete') {
+    bootDashboardPage();
+} else {
+    window.addEventListener('load', bootDashboardPage, { once: true });
+}

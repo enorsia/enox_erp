@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
 use App\Support\TrackerDatabase;
 
 use App\Models\TrackingDailyAudience;
@@ -43,7 +44,7 @@ class EcomTrackerCompareFilteredDashboardService
     ) {}
 
     /**
-     * @param  array<string, mixed>  $dashboard  unfiltered dashboard payload from {@see EcomTrackerDashboardService}
+     * @param  array<string, mixed>  $dashboard  unfiltered dashboard payload from {@see \App\Services\EcomTrackerDashboard\EcomTrackerDashboardService}
      * @param  array{from: Carbon, to: Carbon}  $range
      * @param  array<string, mixed>  $sessionFilters
      * @return array<string, mixed>
@@ -57,8 +58,8 @@ class EcomTrackerCompareFilteredDashboardService
         $prevTo = $range['from']->copy()->subDay();
         $prevRange = ['from' => $prevFrom->copy()->startOfDay(), 'to' => $prevTo->copy()->endOfDay()];
 
-        $current = $this->activityList->dashboardTotals($range, $sessionFilters);
-        $previous = $this->activityList->dashboardTotals($prevRange, $sessionFilters);
+        $current = $this->activityList->dashboardTotals($range, $sessionFilters, forDashboard: true);
+        $previous = $this->activityList->dashboardTotals($prevRange, $sessionFilters, forDashboard: true);
         $returning = max(0, $current['sessions'] - $current['unique_visitors']);
 
         $dashboard['kpiGroups'] = EcomTrackerCompareKpiGroups::build($current, $previous, $period, $prevFrom, $prevTo);
@@ -132,8 +133,8 @@ class EcomTrackerCompareFilteredDashboardService
     private function trendMetrics(array $range, array $filters, string $period): array
     {
         $rangeWithPeriod = $range + ['period' => $period];
-        $totals = $this->activityList->dashboardTotals($rangeWithPeriod, $filters);
-        $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $rangeWithPeriod, $filters);
+        $totals = $this->activityList->dashboardTotals($rangeWithPeriod, $filters, forDashboard: true);
+        $scope = fn (Builder $query) => $this->activityList->constrainDashboardSessionsInRange($query, $rangeWithPeriod, $filters);
         $orderBounds = TrackerTime::storageRange($range['from'], $range['to']);
 
         $views = $this->dashboardService->summaryViewTotals($range['from'], $range['to'], $period, $filters);
@@ -167,7 +168,7 @@ class EcomTrackerCompareFilteredDashboardService
     {
         $tz = TrackerTime::timezone();
         $bounds = TrackerTime::storageRange($range['from'], $range['to']);
-        $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $range, $filters);
+        $scope = fn (Builder $query) => $this->activityList->constrainDashboardSessionsInRange($query, $range, $filters);
         $hourExpr = "HOUR(CONVERT_TZ(ts.last_active_at, '+00:00', '".str_replace("'", "''", $tz)."'))";
 
         $sessionRows = TrackerDatabase::table('tracking_session as ts')
@@ -254,7 +255,7 @@ class EcomTrackerCompareFilteredDashboardService
             'from' => Carbon::createFromFormat('Y-m-d', $from, TrackerTime::timezone())->startOfDay(),
             'to' => Carbon::createFromFormat('Y-m-d', $to, TrackerTime::timezone())->endOfDay(),
         ];
-        $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $range, $filters);
+        $scope = fn (Builder $query) => $this->activityList->constrainDashboardSessionsInRange($query, $range, $filters);
 
         $ranked = TrackerDatabase::table('tracking_recoverable_sales as rs')
             ->join('tracking_session as ts', 'ts.id', '=', 'rs.tracking_session_id')
@@ -301,7 +302,7 @@ class EcomTrackerCompareFilteredDashboardService
      */
     private function audiences(array $range, array $filters): array
     {
-        $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $range, $filters);
+        $scope = fn (Builder $query) => $this->activityList->constrainDashboardSessionsInRange($query, $range, $filters);
         $deviceIds = array_values(array_filter(array_map('intval', $filters['devices'] ?? [])));
         $utmSourceIds = array_values(array_filter(array_map('intval', $filters['utm_sources'] ?? [])));
         $utmMediums = array_values(array_filter(array_map('strval', $filters['utm_mediums'] ?? []), 'filled'));
@@ -491,7 +492,7 @@ class EcomTrackerCompareFilteredDashboardService
      */
     private function durations(array $range, array $filters): array
     {
-        $scope = fn (Builder $query) => $this->activityList->constrainSessionsInRange($query, $range, $filters);
+        $scope = fn (Builder $query) => $this->activityList->constrainDashboardSessionsInRange($query, $range, $filters);
 
         $durations = TrackerDatabase::table('tracking_session as ts')
             ->tap($scope)

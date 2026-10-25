@@ -78,7 +78,7 @@ class TrackerDashboardSyncService
         ],
         'tracking_daily_audiences' => [
             'unique' => ['metric_date', 'type', 'dimension_id', 'source', 'medium'],
-            'counters' => ['views'],
+            'counters' => ['views', 'add_to_carts', 'begin_checkouts', 'proceed_checkouts'],
         ],
     ];
 
@@ -2133,25 +2133,6 @@ class TrackerDashboardSyncService
             return $contributions;
         }
 
-        if ($type === 'product_view') {
-            $contributions = [];
-            foreach ($this->actionCommerceLines($action) as $line) {
-                $categoryId = $this->resolveCategoryIdFromLine($line);
-                if ($categoryId === null) {
-                    continue;
-                }
-                $contributions[] = [
-                    'column' => 'product_views',
-                    'product_code' => null,
-                    'category_id' => $categoryId,
-                    'amount' => 1,
-                    'dedupe' => 'category_product_view|'.$categoryId,
-                ];
-            }
-
-            return $contributions;
-        }
-
         return [];
     }
 
@@ -2557,9 +2538,6 @@ class TrackerDashboardSyncService
                 $id = implode('|', $key);
                 $audience[$id] ??= $key + $emptyAudience;
                 $audience[$id]['sessions']++;
-                foreach ($funnel as $column => $value) {
-                    $audience[$id][$column] += $value;
-                }
             }
         }
 
@@ -2867,7 +2845,9 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Rebuild product/category funnel columns for one visit day (same rules as {@see recordFunnelAction}).
+     * Rebuild product / category / audience funnel columns for one visit day.
+     * Commerce units: {@see EcomActivityListService::productFunnelUnitsForSessionActions()}
+     * (catalog product_click views; add / begin / proceed / paid cycle rules).
      */
     private function refreshProductFunnelCounts(string $date, Carbon $now): void
     {
@@ -2893,6 +2873,17 @@ class TrackerDashboardSyncService
             'updated_at' => $now,
         ]);
 
+        TrackerDatabase::table('tracking_daily_audiences')->where('metric_date', $date)->update([
+            'views' => 0,
+            'add_to_carts' => 0,
+            'begin_checkouts' => 0,
+            'proceed_checkouts' => 0,
+            'updated_at' => $now,
+        ]);
+
+        $sessionAudienceKeys = $this->sessionAudienceKeysForVisitDate($date);
+        $productCategoryByCode = $this->productCategoryIdsByCodeForVisitDate($date);
+
         $sessionIds = TrackerDatabase::table('tracking_session as ts')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->where('dv.visit_date', $date)
@@ -2917,7 +2908,8 @@ class TrackerDashboardSyncService
         $counters = [];
         $funnelDedupe = [];
 
-        foreach ($actions->groupBy('session_id') as $sessionActions) {
+        foreach ($actions->groupBy('session_id') as $rawSessionId => $sessionActions) {
+            $sessionId = $this->normalizeSessionId((string) $rawSessionId);
             $dayActions = $sessionActions->filter(
                 fn (object $action) => $this->localDate($action->created_at ?? null) === $date,
             );
@@ -2928,11 +2920,16 @@ class TrackerDashboardSyncService
 
             foreach ($dayActions as $action) {
                 $type = $this->metricActionType($action);
-                $sessionId = $this->normalizeSessionId((string) ($action->session_id ?? ''));
                 $this->recordFunnelAction($counters, $action, $type, $date, $sessionId, $funnelDedupe);
             }
 
             $units = $activityList->productFunnelUnitsForSessionActions($dayActions, $skuToParent);
+
+            $sessionViews = 0;
+            $sessionAdds = 0;
+            $sessionBegins = 0;
+            $sessionProceeds = 0;
+
             foreach ($units as $productCode => $steps) {
                 $productCode = $this->productCode($productCode);
                 if ($productCode === '') {
@@ -2952,10 +2949,125 @@ class TrackerDashboardSyncService
                 if (($steps['proceed_checkout'] ?? 0) > 0) {
                     $this->bump($counters, 'tracking_daily_products', $key, 'proceed_checkouts', (int) $steps['proceed_checkout']);
                 }
+
+                $categoryId = $productCategoryByCode[$productCode] ?? null;
+                if ($categoryId !== null) {
+                    $this->bumpCategoryFunnelSteps($counters, $date, (int) $categoryId, $steps);
+                }
+
+                $sessionViews += (int) ($steps['views'] ?? 0);
+                $sessionAdds += (int) ($steps['add_to_cart'] ?? 0);
+                $sessionBegins += (int) ($steps['begin_checkout'] ?? 0);
+                $sessionProceeds += (int) ($steps['proceed_checkout'] ?? 0);
+            }
+
+            $audienceKeys = $sessionAudienceKeys[$sessionId] ?? [];
+            foreach ($audienceKeys as $audienceKey) {
+                $this->bumpAudienceFunnelSteps($counters, $date, $audienceKey, $sessionViews, $sessionAdds, $sessionBegins, $sessionProceeds);
             }
         }
 
         $this->addCounters($counters);
+    }
+
+    /**
+     * @return array<string, list<array{type: int, dimension_id: int, source: string, medium: string}>>
+     */
+    private function sessionAudienceKeysForVisitDate(string $visitDate): array
+    {
+        $query = TrackerDatabase::table('tracking_session as ts')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $visitDate);
+        SessionTrafficAttribution::joinLatestSessionDetails($query);
+
+        $map = [];
+        foreach ($query->get(['ts.session_id', 'sd.tracking_device_id', 'sd.tracking_browser_id', 'sd.tracking_traffic_source_id', 'sd.utm_source', 'sd.utm_medium']) as $row) {
+            $sessionId = $this->normalizeSessionId((string) $row->session_id);
+            $map[$sessionId] = $this->audienceKeysFromDetails($row);
+        }
+
+        return $map;
+    }
+
+    /**
+     * @return array<string, int> product code => tracking_category_id
+     */
+    private function productCategoryIdsByCodeForVisitDate(string $visitDate): array
+    {
+        $rows = TrackerDatabase::table('tracking_session_p_cat as sp')
+            ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
+            ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $visitDate)
+            ->whereNotNull('sp.tracking_category_id')
+            ->groupBy('p.code', 'sp.tracking_category_id')
+            ->selectRaw('p.code, sp.tracking_category_id as category_id, COUNT(*) as link_count')
+            ->get();
+
+        $best = [];
+        foreach ($rows as $row) {
+            $code = $this->productCode((string) $row->code);
+            if ($code === '') {
+                continue;
+            }
+
+            $count = (int) $row->link_count;
+            if (! isset($best[$code]) || $count > $best[$code]['count']) {
+                $best[$code] = ['category_id' => (int) $row->category_id, 'count' => $count];
+            }
+        }
+
+        return array_map(fn (array $entry): int => $entry['category_id'], $best);
+    }
+
+    /**
+     * @param  array<string, array<string, array<string, mixed>>>  $counters
+     * @param  array{views?: int, add_to_cart?: int, begin_checkout?: int, proceed_checkout?: int}  $steps
+     */
+    private function bumpCategoryFunnelSteps(array &$counters, string $date, int $categoryId, array $steps): void
+    {
+        $key = ['metric_date' => $date, 'tracking_category_id' => $categoryId];
+
+        if (($steps['views'] ?? 0) > 0) {
+            $amount = (int) $steps['views'];
+            $this->bump($counters, 'tracking_daily_categories', $key, 'product_views', $amount);
+            $this->bump($counters, 'tracking_daily_summaries', ['metric_date' => $date], 'product_views', $amount);
+        }
+        if (($steps['add_to_cart'] ?? 0) > 0) {
+            $this->bump($counters, 'tracking_daily_categories', $key, 'add_to_carts', (int) $steps['add_to_cart']);
+        }
+        if (($steps['proceed_checkout'] ?? 0) > 0) {
+            $this->bump($counters, 'tracking_daily_categories', $key, 'proceed_checkouts', (int) $steps['proceed_checkout']);
+        }
+    }
+
+    /**
+     * @param  array<string, array<string, array<string, mixed>>>  $counters
+     * @param  array{type: int, dimension_id: int, source: string, medium: string}  $audienceKey
+     */
+    private function bumpAudienceFunnelSteps(
+        array &$counters,
+        string $date,
+        array $audienceKey,
+        int $views,
+        int $adds,
+        int $begins,
+        int $proceeds,
+    ): void {
+        $key = ['metric_date' => $date] + $audienceKey;
+
+        if ($views > 0) {
+            $this->bump($counters, 'tracking_daily_audiences', $key, 'views', $views);
+        }
+        if ($adds > 0) {
+            $this->bump($counters, 'tracking_daily_audiences', $key, 'add_to_carts', $adds);
+        }
+        if ($begins > 0) {
+            $this->bump($counters, 'tracking_daily_audiences', $key, 'begin_checkouts', $begins);
+        }
+        if ($proceeds > 0) {
+            $this->bump($counters, 'tracking_daily_audiences', $key, 'proceed_checkouts', $proceeds);
+        }
     }
 
     /**

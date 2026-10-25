@@ -4526,6 +4526,18 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     font-variant-numeric: tabular-nums;
 }
 
+.etd-table--product-catalog th.etd-col-sl,
+.etd-table--product-catalog td.etd-col-sl {
+    width: 2.75rem;
+    min-width: 2.75rem;
+    max-width: 3rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    text-align: center;
+    color: var(--etd-muted, #64748b);
+    font-variant-numeric: tabular-nums;
+}
+
 .etd-table--product-catalog th.etd-col-product,
 .etd-table--product-catalog td.etd-col-product,
 .etd-table--catalog th.etd-col-product,
@@ -7104,7 +7116,27 @@ a.etd-pager__btn:hover {
 
 #ecom-activity-page-content .etd-table--activity-product-drill thead th.etd-num,
 #ecom-activity-page-content .etd-table--activity-product-drill tbody td.etd-num {
+    min-width: 3.5rem;
+    width: 3.5rem;
     text-align: center;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+#ecom-activity-page-content .etd-table-scroll--activity-wide .etd-table--activity-product-drill {
+    min-width: max(100%, 52rem);
+}
+
+#ecom-activity-page-content .etd-table--activity-product-drill th.etd-col-last-active,
+#ecom-activity-page-content .etd-table--activity-product-drill td.etd-col-last-active,
+#ecom-activity-page-content .etd-table--activity-product-drill th.etd-col-action,
+#ecom-activity-page-content .etd-table--activity-product-drill td.etd-col-action,
+#ecom-activity-page-content .etd-table--activity-product-drill th.etd-col-commerce,
+#ecom-activity-page-content .etd-table--activity-product-drill td.etd-col-commerce {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
 }
 
 #ecom-activity-page-content .etd-product-commerce-cell {
@@ -7562,24 +7594,22 @@ a.etd-pager__btn:hover {
     min-height: 0;
 }
 
-/* Product drill: KPI header is tall — do not shrink table to ~0; page scrolls in main */
-main:has(> #ecom-activity-page-content.etd-page--activity-product-drill) {
-    overflow-y: auto;
-    overflow-x: hidden;
+/* Product drill: tall KPI header — keep nested table scroll (same as activity list). */
+.etd-page--activity.etd-page--activity-product-drill .etd-activity-table-block {
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
-.etd-page--activity-product-drill {
-    height: auto;
-    max-height: none;
-    overflow: visible;
+.etd-page--activity.etd-page--activity-product-drill .etd-activity-table-block .etd-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
 }
 
-.etd-page--activity-product-drill .etd-activity-table-block,
-.etd-page--activity-product-drill .etd-activity-table-block .etd-panel,
-.etd-page--activity-product-drill .etd-activity-table-shell {
-    flex: 0 0 auto;
-    min-height: auto;
-    overflow: visible;
+.etd-page--activity.etd-page--activity-product-drill .etd-activity-table-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* Product performance list: page scroll, no nested table viewport */
@@ -7593,6 +7623,23 @@ main:has(> #ecom-activity-page-content.etd-page--activity-product-drill) {
     overflow: visible;
 }
 
+/* Product funnel table: very soft zebra (odd rows default, even rows slight shade) */
+.etd-product-catalog .etd-table--product-funnel tbody tr:nth-child(even) td {
+    background-color: rgb(248 250 252 / 0.72);
+}
+
+.dark .etd-product-catalog .etd-table--product-funnel tbody tr:nth-child(even) td {
+    background-color: rgb(51 65 85 / 0.22);
+}
+
+.etd-product-catalog .etd-table--product-funnel tbody tr:hover td {
+    background-color: rgb(29 158 117 / 0.05);
+}
+
+.dark .etd-product-catalog .etd-table--product-funnel tbody tr:hover td {
+    background-color: rgb(29 158 117 / 0.1);
+}
+
 .etd-product-performance-list__pager {
     margin-top: 0.75rem;
     padding-top: 0.65rem;
@@ -7604,16 +7651,13 @@ main:has(> #ecom-activity-page-content.etd-page--activity-product-drill) {
 }
 
 .etd-page--activity-product-drill .etd-activity-table-shell .etd-table-scroll--activity.etd-table-scroll--fixed {
-    flex: 0 0 auto;
-    min-height: auto;
-    --etd-activity-visible-rows: 15;
-    --etd-activity-row-estimate: 3.375rem;
-    --etd-activity-thead-estimate: 2.85rem;
-    --etd-table-scroll-height: calc(
-        var(--etd-activity-thead-estimate) + var(--etd-activity-visible-rows) * var(--etd-activity-row-estimate)
-    );
+    --etd-table-scroll-height: clamp(12rem, calc(100dvh - 28rem), 46rem);
+    flex: 1 1 auto;
+    min-height: 12rem;
     max-height: var(--etd-table-scroll-height);
     overflow-y: auto;
+    overflow-x: auto;
+    overscroll-behavior: contain;
 }
 
 .etd-activity-table-shell.is-loading .etd-table-scroll--activity {

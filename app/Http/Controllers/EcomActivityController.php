@@ -142,7 +142,8 @@ class EcomActivityController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        $actions = TrackerActionSequence::filterForSessionTimeline($actions);
+        $hideGridTimelineActions = EcomActivityListService::activeProductCodeFilter($request) !== '';
+        $actions = TrackerActionSequence::filterForSessionTimeline($actions, $hideGridTimelineActions);
 
         app(TrackerDashboardSyncService::class)->reconcileActionCountsForSessions([$session]);
 

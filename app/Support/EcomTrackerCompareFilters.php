@@ -11,7 +11,7 @@ final class EcomTrackerCompareFilters
 {
     /** @var list<string> */
     public const FILTER_KEYS = [
-        'device_type', 'logged_in', 'has_order', 'visitor_type', 'utm_source', 'utm_medium',
+        'device_type', 'logged_in', 'has_order', 'utm_source', 'utm_medium',
     ];
 
     /**
@@ -53,9 +53,6 @@ final class EcomTrackerCompareFilters
         $hasOrder = in_array($side['has_order'] ?? null, ['0', '1'], true)
             ? ($side['has_order'] === '1')
             : null;
-        $visitorType = $side['visitor_type'] ?? null;
-        $visitorType = in_array($visitorType, ['human', 'bot', 'unclassified'], true) ? $visitorType : null;
-
         return [
             'search' => '',
             'funnel' => [],
@@ -68,7 +65,7 @@ final class EcomTrackerCompareFilters
             'utm_mediums' => $utmMedium !== '' ? [$utmMedium] : [],
             'department' => null,
             'categories' => [],
-            'visitor_type' => $visitorType,
+            'visitor_type' => null,
         ];
     }
 
@@ -94,7 +91,6 @@ final class EcomTrackerCompareFilters
             'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
             'logged_in' => ($activity['logged_in'] ?? null) === null ? null : ($activity['logged_in'] ? '1' : '0'),
             'has_order' => ($activity['has_order'] ?? null) === null ? null : ($activity['has_order'] ? '1' : '0'),
-            'visitor_type' => $activity['visitor_type'] ?? null,
             'back' => $backUrl,
         ], fn ($value) => $value !== null && $value !== '');
 

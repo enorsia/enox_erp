@@ -16,28 +16,28 @@
                     <th class="etd-num">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Views',
-                            'tip' => 'Product view events (product_view / product_view_popup)',
+                            'tip' => 'Catalog product clicks (product_click) in sessions on this device/browser — once per parent style per session (Product performance View rules).',
                             'align' => 'right',
                         ])
                     </th>
                     <th class="etd-num">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Cart',
-                            'tip' => 'Sessions with add to cart',
+                            'tip' => 'Add-to-cart units summed across products in sessions on this device/browser (Product performance Add rules).',
                             'align' => 'right',
                         ])
                     </th>
                     <th class="etd-num">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Begin',
-                            'tip' => 'Sessions that reached begin checkout',
+                            'tip' => 'Begin-checkout units summed across products in sessions on this device/browser (Product performance Begin rules).',
                             'align' => 'right',
                         ])
                     </th>
                     <th class="etd-num">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Proceed',
-                            'tip' => 'Sessions that reached proceed checkout',
+                            'tip' => 'Proceed-checkout units summed across products in sessions on this device/browser (Product performance Proceed rules).',
                             'align' => 'right',
                         ])
                     </th>

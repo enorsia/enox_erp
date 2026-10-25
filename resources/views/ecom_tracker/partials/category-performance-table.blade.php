@@ -24,21 +24,21 @@
                     <th class="etd-num etd-col-metric">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'P view',
-                            'tip' => 'Product view actions in this category',
+                            'tip' => 'Catalog product clicks (product_click) in this category — once per parent style per session, same rules as Product performance View.',
                             'align' => 'center',
                         ])
                     </th>
                     <th class="etd-num etd-col-metric">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Adds',
-                            'tip' => 'Add to cart',
+                            'tip' => 'Add-to-cart units (purchase-cycle max qty per style per session), rolled up to category — same as Product performance Add.',
                             'align' => 'center',
                         ])
                     </th>
                     <th class="etd-num etd-col-metric">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Proceed',
-                            'tip' => 'Proceed to checkout',
+                            'tip' => 'Proceed-checkout units (cycle max qty per style per session), rolled up to category — same as Product performance Proceed.',
                             'align' => 'center',
                         ])
                     </th>
