@@ -84,7 +84,12 @@ class ShopperJourneyTrendSectionService
         $labels = [];
         $data = $this->emptyTrendBucketData();
 
-        for ($hour = 0; $hour < 24; $hour++) {
+        $endHour = 23;
+        if ($period === '24h' && $dayLocal->isSameDay(TrackerTime::localNow()->startOfDay())) {
+            $endHour = (int) TrackerTime::localNow()->format('G');
+        }
+
+        for ($hour = 0; $hour <= $endHour; $hour++) {
             $row = $rows->get($hour);
             $labels[] = sprintf('%02d:00', $hour);
             $this->pushTrendBucket($data, [
