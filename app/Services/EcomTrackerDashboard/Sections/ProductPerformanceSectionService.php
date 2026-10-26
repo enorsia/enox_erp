@@ -72,9 +72,15 @@ class ProductPerformanceSectionService
         $sorted = $this->sortProductRows($all);
         $visible = $limit === null ? $sorted : $sorted->take($limit);
 
-        $titles = TrackerDatabase::table('tracking_product')
-            ->whereIn('code', $visible->pluck('code')->all())
-            ->pluck('title', 'code');
+        $titles = collect();
+        $codes = $visible->pluck('code')->filter()->unique()->values()->all();
+        foreach (array_chunk($codes, 400) as $codeChunk) {
+            $titles = $titles->merge(
+                TrackerDatabase::table('tracking_product')
+                    ->whereIn('code', $codeChunk)
+                    ->pluck('title', 'code'),
+            );
+        }
 
         $maxRevenue = max(1.0, (float) $visible->max('revenue'));
 
