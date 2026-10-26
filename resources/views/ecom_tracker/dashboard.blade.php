@@ -240,6 +240,10 @@
         @include('ecom_tracker.partials.device-browser-breakdown', [
             'devices' => $dashboard['devices'],
             'deviceActivityLink' => fn (array $row) => $activityLink(['device_type' => $row['id']]),
+            'browserActivityLink' => fn (array $row) => $activityLink(array_filter([
+                'browser_type' => $row['id'] ?? null,
+                'focus' => filled($row['id'] ?? null) ? 'devices' : null,
+            ], fn ($value) => $value !== null && $value !== '')),
         ])
     </div>
 
