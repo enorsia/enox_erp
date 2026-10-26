@@ -131,7 +131,7 @@
                 </section>
                 <section class="etd-activity-filter-section">
                     <p class="etd-activity-filter-section-title">Traffic source</p>
-                    <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Counts sessions by last marketing touch in that session (Direct after a 30‑minute gap with no new campaign).</p>
+                    <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Last marketing touch in that visit (synced). Return visits within {{ (int) config('tracker.attribution_carry_hours', 24) }}h keep the same source when the new visit has no campaign URL; after that → Direct.</p>
                     <div class="etd-activity-filter-grid">
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">UTM source</span>

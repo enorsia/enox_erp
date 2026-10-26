@@ -632,7 +632,7 @@ class TrackerDashboardSyncService
         $dailyVisitorRowId = $this->findOrCreateDailyVisitor($mainVisitorId, $visitorId, $visitDate);
 
         $trackingSessionId = $this->upsertTrackingSession($sessionRow, $sessionId, $dailyVisitorRowId, $allActions);
-        [$trafficId, $source, $medium] = $this->upsertSessionDetails($trackingSessionId, $sessionRow, $applyActions, $deviceId, $browserId);
+        [$trafficId, $source, $medium] = $this->upsertSessionDetails($trackingSessionId, $sessionRow, $allActions, $deviceId, $browserId);
 
         $this->syncActionsForSession($trackingSessionId, $visitDate, $applyActions, $visitorId, $rebuildFromFullHistory);
         $this->upsertRecoverableSale($trackingSessionId, $visitDate, $sessionRow, $allActions);
@@ -1473,40 +1473,62 @@ class TrackerDashboardSyncService
             ]];
         }
 
-        $existingCount = (int) TrackerDatabase::table('tracking_session_details')
+        $touches = SessionTrafficAttribution::normalizeTouchesForAttributionStorage($touches);
+        $touches = SessionTrafficAttribution::applySessionAttributionCarry($sessionRow, $touches);
+
+        $touchSignature = static function (array $touch): string {
+            $source = (string) ($touch['source'] ?? '');
+            $medium = (string) ($touch['medium'] ?? '');
+            $capturedAt = (string) ($touch['captured_at'] ?? '');
+
+            return "{$source}|{$medium}|{$capturedAt}";
+        };
+
+        $existingTouches = TrackerDatabase::table('tracking_session_details')
             ->where('tracking_session_id', $trackingSessionId)
-            ->count();
+            ->orderBy('touch_sequence')
+            ->get(['utm_source', 'utm_medium', 'captured_at']);
 
-        for ($index = $existingCount; $index < count($touches); $index++) {
-            $touch = $touches[$index];
-            [$source, $medium] = $this->trafficSourceMedium($touch['source'], $touch['medium']);
-            $trafficId = $this->remember("traffic:{$source}|{$medium}", fn () => $this->findOrCreateTrafficSource($source, $medium));
-            $payload = [
-                'tracking_session_id' => $trackingSessionId,
-                'touch_sequence' => $index + 1,
-                'captured_at' => $touch['captured_at'],
-                'ip' => $sessionRow['ip'] ?? null,
-                'tracking_device_id' => $deviceId,
-                'tracking_browser_id' => $browserId,
-                'tracking_traffic_source_id' => $trafficId,
-                'utm_source' => $source,
-                'utm_medium' => $medium,
-                'utm_campaign' => $touch['campaign'] ?? null,
-                'landing_page' => $touch['landing_page'] ?? null,
-                'referer' => $touch['referer'] ?? $referer,
-                'user_agent' => $sessionRow['user_agent'] ?? null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
+        $existingSignature = $existingTouches
+            ->map(fn (object $row) => "{$row->utm_source}|{$row->utm_medium}|{$row->captured_at}")
+            ->values()
+            ->all();
+        $newSignature = array_map($touchSignature, $touches);
 
-            try {
-                TrackerDatabase::table('tracking_session_details')->insert($payload);
-            } catch (QueryException $e) {
-                Log::debug('tracker.dashboard.sync: touch_sequence insert race', [
-                    'step' => 'tracking_session_details.insert',
-                    'tracking_session_id' => $trackingSessionId,
-                    'exception' => $e,
-                ]);
+        if ($existingSignature !== $newSignature) {
+            TrackerDatabase::table('tracking_session_details')
+                ->where('tracking_session_id', $trackingSessionId)
+                ->delete();
+
+            foreach ($touches as $index => $touch) {
+                [$source, $medium] = $this->trafficSourceMedium($touch['source'], $touch['medium']);
+                $trafficId = $this->remember("traffic:{$source}|{$medium}", fn () => $this->findOrCreateTrafficSource($source, $medium));
+
+                try {
+                    TrackerDatabase::table('tracking_session_details')->insert([
+                        'tracking_session_id' => $trackingSessionId,
+                        'touch_sequence' => $index + 1,
+                        'captured_at' => $touch['captured_at'],
+                        'ip' => $sessionRow['ip'] ?? null,
+                        'tracking_device_id' => $deviceId,
+                        'tracking_browser_id' => $browserId,
+                        'tracking_traffic_source_id' => $trafficId,
+                        'utm_source' => $source,
+                        'utm_medium' => $medium,
+                        'utm_campaign' => $touch['campaign'] ?? null,
+                        'landing_page' => $touch['landing_page'] ?? null,
+                        'referer' => $touch['referer'] ?? $referer,
+                        'user_agent' => $sessionRow['user_agent'] ?? null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                } catch (QueryException $e) {
+                    Log::debug('tracker.dashboard.sync: touch_sequence insert race', [
+                        'step' => 'tracking_session_details.insert',
+                        'tracking_session_id' => $trackingSessionId,
+                        'exception' => $e,
+                    ]);
+                }
             }
         }
 

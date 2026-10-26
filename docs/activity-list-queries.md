@@ -7,6 +7,8 @@
 | `24h` | `created_at` **or** `last_active_at` in range | `created_at`, `idx_last_active` (OR is harder to optimize) |
 | Other presets | `created_at` between start/end of calendar days (local TZ) | `created_at`, composites below |
 
+**Attribution rules (source of truth):** [traffic-attribution-rules.md](./traffic-attribution-rules.md)
+
 ## Precomputed traffic (preferred)
 
 Columns on `activity_ecom_user`:

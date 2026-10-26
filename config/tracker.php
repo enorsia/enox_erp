@@ -125,6 +125,12 @@ return [
 
     'conversion_window_days' => (int) env('TRACKER_CONVERSION_WINDOW_DAYS', 7),
 
+    /*
+    | When a session has no marketing URL (Direct), reuse the visitor's last qualifying touch
+    | from this many hours ago (affiliate / paid return visits). After the window → Direct.
+    */
+    'attribution_carry_hours' => (int) env('TRACKER_ATTRIBUTION_CARRY_HOURS', 24),
+
     'attribution_touch_log_retention_days' => (int) env('TRACKER_ATTRIBUTION_TOUCH_LOG_RETENTION_DAYS', 90),
 
     /*
