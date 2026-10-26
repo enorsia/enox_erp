@@ -490,13 +490,33 @@ class TrackerDashboardSyncService
     /**
      * Mark already-synced sessions as pending again so dashboard sync can rebuild tracking_* from actions.
      * Only sessions with at least one row in activity_ecom_user_actions in the optional created_at window.
+     * Action rows are reset too — {@see planChunks()} only queues sessions with pending/failed actions.
      */
     public function requeueSyncedSessionsForDashboard(Carbon $from, ?Carbon $to = null): int
     {
-        return $this->syncedSessionsForDashboardRequeueQuery($from, $to)->update([
+        $query = $this->syncedSessionsForDashboardRequeueQuery($from, $to);
+        $sessionIds = $query->pluck('u.session_id')
+            ->map(fn ($id) => (string) $id)
+            ->filter()
+            ->values()
+            ->all();
+
+        if ($sessionIds === []) {
+            return 0;
+        }
+
+        $now = now();
+        $count = $this->syncedSessionsForDashboardRequeueQuery($from, $to)->update([
             'is_sync' => ActivityEcomUser::SYNC_PENDING,
-            'updated_at' => now(),
+            'updated_at' => $now,
         ]);
+
+        TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->where('is_sync', ActivityEcomUserAction::SYNC_DONE)
+            ->update(['is_sync' => ActivityEcomUserAction::SYNC_PENDING]);
+
+        return $count;
     }
 
     private function syncedSessionsForDashboardRequeueQuery(Carbon $from, ?Carbon $to): Builder
