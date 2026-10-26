@@ -488,13 +488,14 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Mark already-synced sessions as pending again so dashboard sync can rebuild tracking_* from actions.
-     * Only sessions with at least one row in activity_ecom_user_actions in the optional created_at window.
-     * Action rows are reset too — {@see planChunks()} only queues sessions with pending/failed actions.
+     * --force: in the date window, find sessions whose actions are all dashboard-synced, mark them pending again, and replay.
+     * Window = session started or was last active in range ({@see TrackerTime::applySessionActivityWindow()}).
+     * Includes stuck rows (user pending but every action still SYNC_DONE after an old --force).
+     * {@see planChunks()} only queues sessions with pending/failed actions.
      */
     public function requeueSyncedSessionsForDashboard(Carbon $from, ?Carbon $to = null): int
     {
-        $query = $this->syncedSessionsForDashboardRequeueQuery($from, $to);
+        $query = $this->sessionsForDashboardForceRequeueQuery($from, $to);
         $sessionIds = $query->pluck('u.session_id')
             ->map(fn ($id) => (string) $id)
             ->filter()
@@ -506,10 +507,12 @@ class TrackerDashboardSyncService
         }
 
         $now = now();
-        $count = $this->syncedSessionsForDashboardRequeueQuery($from, $to)->update([
-            'is_sync' => ActivityEcomUser::SYNC_PENDING,
-            'updated_at' => $now,
-        ]);
+        $count = TrackerDatabase::table('activity_ecom_user')
+            ->whereIn('session_id', $sessionIds)
+            ->update([
+                'is_sync' => ActivityEcomUser::SYNC_PENDING,
+                'updated_at' => $now,
+            ]);
 
         TrackerDatabase::table('activity_ecom_user_actions')
             ->whereIn('session_id', $sessionIds)
@@ -519,24 +522,28 @@ class TrackerDashboardSyncService
         return $count;
     }
 
-    private function syncedSessionsForDashboardRequeueQuery(Carbon $from, ?Carbon $to): Builder
+    private function sessionsForDashboardForceRequeueQuery(Carbon $from, ?Carbon $to): Builder
     {
-        [$fromBound] = TrackerTime::storageRange($from->copy()->startOfDay(), $from->copy()->startOfDay());
-        $toBound = $to !== null
-            ? TrackerTime::storageRange($to->copy()->endOfDay(), $to->copy()->endOfDay())[1]
-            : null;
+        $fromDay = $from->copy()->startOfDay();
+        $toDay = ($to ?? $from)->copy()->endOfDay();
 
-        $query = TrackerDatabase::table('activity_ecom_user as u')
-            ->where('u.is_sync', ActivityEcomUser::SYNC_DONE)
-            ->where('u.created_at', '>=', $fromBound)
-            ->when($toBound !== null, fn (Builder $q) => $q->where('u.created_at', '<=', $toBound))
-            ->whereExists(function (Builder $exists): void {
-                $exists->selectRaw('1')
-                    ->from('activity_ecom_user_actions as a')
-                    ->whereColumn('a.session_id', 'u.session_id');
-            });
+        $query = TrackerDatabase::table('activity_ecom_user as u');
+
+        $this->applyHasAtLeastOneActionFilter($query, 'u');
+        $this->applyHasNoUnsyncedActionsFilter($query, 'u');
+
+        TrackerTime::applySessionActivityWindow($query, $fromDay, $toDay, 'u');
 
         return $query;
+    }
+
+    private function applyHasAtLeastOneActionFilter(Builder $query, string $alias): void
+    {
+        $query->whereExists(function (Builder $exists) use ($alias): void {
+            $exists->selectRaw('1')
+                ->from('activity_ecom_user_actions as a')
+                ->whereColumn('a.session_id', "{$alias}.session_id");
+        });
     }
 
     /**
