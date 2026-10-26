@@ -47,8 +47,9 @@ class EcomTrackerDashboardController extends Controller
         ]) + $filterQuery);
 
         $filterOptions = $activityList->filterOptions($filters['department'] ?? null);
+        $dashboardSyncRunning = TrackerDashboardSyncJob::isRunning();
 
-        return view('ecom_tracker.dashboard', compact('data', 'dashboard', 'filterOptions'));
+        return view('ecom_tracker.dashboard', compact('data', 'dashboard', 'filterOptions', 'dashboardSyncRunning'));
     }
 
     public function products(
