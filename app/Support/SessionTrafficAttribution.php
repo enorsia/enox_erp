@@ -666,30 +666,25 @@ final class SessionTrafficAttribution
     /** @return list<array<string, mixed>> */
     public static function touchesForSessionDisplay(ActivityEcomUser $session, ?Collection $actions = null): array
     {
-        // Activity session page has full action rows — use event times from ingest, not synced dashboard copies.
-        if ($actions !== null) {
-            return self::formatTouchesForDisplay(self::collectSessionTrafficTouches($session, $actions));
-        }
-
         $sessionId = (string) $session->session_id;
         $rows = self::sessionDetailsQuery($sessionId)
             ->orderBy('tsd.touch_sequence')
             ->get(['tsd.touch_sequence', 'tsd.utm_source', 'tsd.utm_medium', 'tsd.utm_campaign', 'tsd.captured_at']);
 
-        if ($rows->isEmpty()) {
-            return self::formatTouchesForDisplay(self::collectSessionTrafficTouches($session, null));
+        if ($rows->isNotEmpty()) {
+            $last = $rows->count() - 1;
+
+            return $rows->values()->map(
+                fn (object $row, int $index) => self::formatSessionTouch([
+                    'source' => $row->utm_source,
+                    'medium' => $row->utm_medium,
+                    'campaign' => $row->utm_campaign,
+                    'captured_at' => $row->captured_at,
+                ], (int) $row->touch_sequence, $index === $last),
+            )->all();
         }
 
-        $last = $rows->count() - 1;
-
-        return $rows->values()->map(
-            fn (object $row, int $index) => self::formatSessionTouch([
-                'source' => $row->utm_source,
-                'medium' => $row->utm_medium,
-                'campaign' => $row->utm_campaign,
-                'captured_at' => $row->captured_at,
-            ], (int) $row->touch_sequence, $index === $last),
-        )->all();
+        return self::formatTouchesForDisplay(self::collectSessionTrafficTouches($session, $actions));
     }
 
     /**
@@ -926,6 +921,98 @@ final class SessionTrafficAttribution
         return $touches;
     }
 
+    public static function attributionCarryHours(): int
+    {
+        return max(1, (int) config('tracker.attribution_carry_hours', 24));
+    }
+
+    /**
+     * Drop trailing Direct/none touches so a visit that started on a campaign and ended
+     * browsing without UTMs still attributes to the last in-session marketing source.
+     *
+     * @param  list<array<string, mixed>>  $touches
+     * @return list<array<string, mixed>>
+     */
+    public static function normalizeTouchesForAttributionStorage(array $touches): array
+    {
+        $touches = array_values($touches);
+
+        while (count($touches) > 1 && self::touchBucketIsDirect($touches[array_key_last($touches)])) {
+            array_pop($touches);
+        }
+
+        return $touches;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $touches
+     * @return list<array<string, mixed>>
+     */
+    public static function applySessionAttributionCarry(array|ActivityEcomUser $session, array $touches): array
+    {
+        $needsCarry = $touches === [];
+
+        if (! $needsCarry) {
+            $last = $touches[array_key_last($touches)];
+            $needsCarry = is_array($last) && self::touchBucketIsDirect($last);
+        }
+
+        if (! $needsCarry) {
+            return $touches;
+        }
+
+        $visitorId = trim((string) (is_array($session) ? ($session['visitor_id'] ?? '') : ($session->visitor_id ?? '')));
+
+        if ($visitorId === '') {
+            return $touches;
+        }
+
+        $referenceAt = TrackerTime::toUtc(is_array($session)
+            ? ($session['last_active_at'] ?? $session['created_at'] ?? null)
+            : ($session->last_active_at ?? $session->created_at));
+
+        if ($referenceAt === null) {
+            return $touches;
+        }
+
+        $windowStart = $referenceAt->copy()->subHours(self::attributionCarryHours());
+        $carried = self::lastMarketingTouchForVisitorBefore($visitorId, $referenceAt, $windowStart);
+
+        if ($carried === null || ! filled($carried['utm_source'] ?? null)) {
+            return $touches;
+        }
+
+        if (self::orderTrafficSourceSkippable((string) $carried['utm_source'], (string) ($carried['utm_medium'] ?? null))) {
+            return $touches;
+        }
+
+        $sessionCreated = is_array($session) ? ($session['created_at'] ?? now()) : ($session->created_at ?? now());
+
+        return [[
+            'source' => (string) $carried['utm_source'],
+            'medium' => filled($carried['utm_medium'] ?? null) ? trim((string) $carried['utm_medium']) : 'none',
+            'campaign' => $carried['utm_campaign'] ?? null,
+            'landing_page' => $carried['landing_page'] ?? null,
+            'referer' => null,
+            'captured_at' => TrackerTime::formatUtc($sessionCreated) ?? now()->toDateTimeString(),
+        ]];
+    }
+
+    /**
+     * @param  array<string, mixed>  $touch
+     */
+    public static function touchBucketIsDirect(array $touch): bool
+    {
+        $source = (string) ($touch['source'] ?? '');
+        $medium = (string) ($touch['medium'] ?? '');
+
+        if ($source === '(direct)') {
+            return true;
+        }
+
+        return self::orderTrafficSourceSkippable($source, $medium);
+    }
+
     public static function applySessionTouchFromEvent(string $sessionId, ?string $pageUrl, ?string $referer): void
     {
         $bucket = self::trafficBucketFromMarketingUrl($pageUrl, null);
@@ -1142,14 +1229,17 @@ final class SessionTrafficAttribution
      *
      * @return array{utm_source: ?string, utm_medium: ?string, utm_campaign: ?string, landing_page: ?string, captured_at: Carbon}|null
      */
-    public static function lastMarketingTouchForVisitorBefore(string $visitorId, Carbon $paymentAt): ?array
-    {
+    public static function lastMarketingTouchForVisitorBefore(
+        string $visitorId,
+        Carbon $paymentAt,
+        ?Carbon $windowStart = null,
+    ): ?array {
         if ($visitorId === '') {
             return null;
         }
 
         $paymentAt = $paymentAt->copy()->utc();
-        $windowStart = $paymentAt->copy()->subDays(AttributionRules::attributionWindowDays());
+        $windowStart = ($windowStart ?? $paymentAt->copy()->subDays(AttributionRules::attributionWindowDays()))->copy()->utc();
 
         $rows = TrackerDatabase::table('activity_ecom_user_actions as a')
             ->join('activity_ecom_user as s', 's.session_id', '=', 'a.session_id')
