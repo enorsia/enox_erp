@@ -67,14 +67,16 @@
                     @endif
                 </div>
                 <div class="etd-header-toolbar-icon-group etd-header-toolbar-icon-group--actions">
-                    <a href="{{ $data['exportUrl'] }}"
-                       class="etd-header-btn etd-topbar-btn--export etd-print-hide no-underline"
-                       title="Export all products in this view to Excel">
-                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                        <span class="etd-header-btn-text">Export Excel</span>
-                    </a>
+                    @if (filled($data['exportUrl'] ?? null))
+                        <a href="{{ $data['exportUrl'] }}"
+                           class="etd-header-btn etd-topbar-btn--export etd-print-hide no-underline"
+                           title="Export all products in this view to Excel">
+                            <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            <span class="etd-header-btn-text">Export Excel</span>
+                        </a>
+                    @endif
                     @include('ecom_tracker.partials.header-reset-button', [
                         'url' => route($productsRoute),
                         'active' => $data['period'] !== '24h',

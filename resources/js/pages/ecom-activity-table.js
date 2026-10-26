@@ -1,5 +1,6 @@
 const ACTIVITY_TABLE_LOADER_MIN_MS = 250;
 const ACTIVITY_LIST_RESTORE_KEY = 'etd_activity_list_restore';
+const ACTIVITY_SORT_CHANGE_EVENT = 'etd:activity-sort-change';
 const ACTIVITY_SHOW_PATH_PATTERN = /\/admin\/ecom-activity\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/i;
 
 function getActivityPage() {
@@ -238,10 +239,22 @@ function bindActivityShowLinkCapture(page) {
     }, true);
 }
 
+function normalizeActivitySortValue(value) {
+    if (typeof value === 'string') {
+        return value;
+    }
+
+    const select = document.querySelector('[data-etd-activity-sort-select]');
+
+    return select?.tomselect?.getValue() ?? select?.value ?? '';
+}
+
 function applySortSelection(value) {
     if (isActivityTableLoading()) {
         return;
     }
+
+    value = normalizeActivitySortValue(value);
 
     const url = cleanActivityUrl(window.location.href);
 
@@ -262,6 +275,17 @@ function onSortSelectChange(event) {
     applySortSelection(event.target.value);
 }
 
+function bindActivitySortChangeListener() {
+    if (window._etdActivitySortChangeListenerBound) {
+        return;
+    }
+
+    window._etdActivitySortChangeListenerBound = true;
+    window.addEventListener(ACTIVITY_SORT_CHANGE_EVENT, (event) => {
+        applySortSelection(event.detail?.value);
+    });
+}
+
 function bindSortSelect(select) {
     if (!select || select._etdActivitySortBound) {
         return;
@@ -269,26 +293,37 @@ function bindSortSelect(select) {
 
     select._etdActivitySortBound = true;
 
-    if (select.tomselect) {
-        select.tomselect.on('change', applySortSelection);
+    const attachTomSelectFallback = () => {
+        if (!select.tomselect || select._etdActivitySortTomBound) {
+            return Boolean(select.tomselect);
+        }
 
+        select._etdActivitySortTomBound = true;
+
+        if (!select.tomselect.settings?.onChange) {
+            select.tomselect.on('change', (value) => applySortSelection(value));
+        }
+
+        return true;
+    };
+
+    if (attachTomSelectFallback()) {
         return;
     }
 
     select.addEventListener('change', onSortSelectChange);
 
     const waitForTomSelect = window.setInterval(() => {
-        if (!select.tomselect) {
+        if (!attachTomSelectFallback()) {
             return;
         }
 
         window.clearInterval(waitForTomSelect);
         select.removeEventListener('change', onSortSelectChange);
-        select.tomselect.on('change', applySortSelection);
     }, 50);
-
-    window.setTimeout(() => window.clearInterval(waitForTomSelect), 3000);
 }
+
+bindActivitySortChangeListener();
 
 function bindActivityTableNavigation(page) {
     page.querySelectorAll('[data-etd-activity-sort]').forEach((link) => {
@@ -645,6 +680,11 @@ function bootActivityTableNavigation() {
     bindActivityShowLinkCapture(page);
     restoreActivityListRestoreState();
     initActivityFilterDrawer(page);
+
+    const filterDrawer = document.getElementById('ecom-activity-filter-drawer');
+    if (filterDrawer && typeof window.refreshEtdFilterControls === 'function') {
+        window.refreshEtdFilterControls(filterDrawer);
+    }
     initActivityPeriodControls(page);
     initActivityDepartmentCategories(page);
     initActivityCopyButtons(page);

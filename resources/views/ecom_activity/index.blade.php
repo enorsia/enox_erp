@@ -218,7 +218,14 @@
                             @unless ($productDrillTableLayout)
                                 <th class="etd-col-duration etd-activity-col--optional"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Duration</span></a></th>
                             @endunless
-                            <th class="etd-col-last-active etd-activity-col--optional"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Last active</span></a></th>
+                            <th class="etd-col-last-active etd-activity-col--optional">
+                                <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'last_active', 'sort_dir' => 'desc', 'page' => null]) }}" data-etd-activity-sort class="etd-sort-th-link @if ($sortBy === 'last_active') etd-sort-th-link--active @endif">
+                                    <span class="etd-sort-th-label">Last active</span>
+                                    @if ($sortBy === 'last_active')
+                                        <span class="etd-sort-arrow" aria-hidden="true">↓</span>
+                                    @endif
+                                </a>
+                            </th>
                             <th class="etd-col-action">View</th>
                         </tr>
                     </thead>

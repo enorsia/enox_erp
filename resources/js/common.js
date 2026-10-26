@@ -193,6 +193,17 @@ window.initTomSelectElements = function (root) {
             options.dropdownParent = 'body';
         }
 
+        if (element.matches('[data-etd-activity-sort-select]')) {
+            const previousOnChange = options.onChange;
+            options.onChange = function (value) {
+                if (typeof previousOnChange === 'function') {
+                    previousOnChange.call(this, value);
+                }
+
+                window.dispatchEvent(new CustomEvent('etd:activity-sort-change', { detail: { value } }));
+            };
+        }
+
         new TomSelect(element, options);
     });
 };

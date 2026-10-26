@@ -16,6 +16,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 use Throwable;
 
 class EcomTrackerDashboardController extends Controller
@@ -93,11 +94,14 @@ class EcomTrackerDashboardController extends Controller
             'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
         ]) + $filterQuery);
 
-        $data['exportUrl'] = route('admin.ecom-tracker.dashboard.products.export', array_filter([
+        $exportQuery = array_filter([
             'period' => $period,
             'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
             'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
-        ]) + $filterQuery);
+        ]) + $filterQuery;
+        $data['exportUrl'] = Route::has('admin.ecom-tracker.dashboard.products.export')
+            ? route('admin.ecom-tracker.dashboard.products.export', $exportQuery)
+            : null;
 
         return view('ecom_tracker.products', compact('data', 'products', 'paginator'));
     }

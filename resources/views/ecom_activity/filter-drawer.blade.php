@@ -28,7 +28,7 @@
                     <span class="etd-filter-period__nav-btn is-disabled" aria-disabled="true"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg></span>
                 </div>
                 <input type="hidden" name="period" id="ecom-activity-filter-period" value="{{ $data['period'] }}">
-                @foreach (['sort_by', 'back', 'product_code', 'focus'] as $keepKey)
+                @foreach (['sort_by', 'sort_dir', 'back', 'product_code', 'focus'] as $keepKey)
                     @if (filled(request($keepKey)))
                         <input type="hidden" name="{{ $keepKey }}" value="{{ request($keepKey) }}">
                     @endif
@@ -93,9 +93,9 @@
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">Has order</span>
                             <select name="has_order" class="tom-select etd-tom-select w-full" data-placeholder="All">
-                                <option value="" selected>All</option>
-                                <option value="1">With order</option>
-                                <option value="0">Without order</option>
+                                <option value="" @selected(request('has_order', '') === '')>All</option>
+                                <option value="1" @selected(request('has_order') === '1')>With order</option>
+                                <option value="0" @selected(request('has_order') === '0')>Without order</option>
                             </select>
                         </label>
                     </div>
@@ -114,9 +114,9 @@
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">Logged in</span>
                             <select name="logged_in" class="tom-select etd-tom-select w-full" data-placeholder="All">
-                                <option value="" selected>All</option>
-                                <option value="1">Logged in</option>
-                                <option value="0">Guest</option>
+                                <option value="" @selected(request('logged_in', '') === '')>All</option>
+                                <option value="1" @selected(request('logged_in') === '1')>Logged in</option>
+                                <option value="0" @selected(request('logged_in') === '0')>Guest</option>
                             </select>
                         </label>
                         <label class="etd-filter-compact-field">

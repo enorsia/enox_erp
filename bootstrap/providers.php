@@ -1,6 +1,11 @@
 <?php
 
-return [
+$providers = [
     App\Providers\AppServiceProvider::class,
-    App\Providers\DebugbarServiceProvider::class,
 ];
+
+if (class_exists(\Fruitcake\LaravelDebugbar\LaravelDebugbar::class)) {
+    $providers[] = App\Providers\DebugbarServiceProvider::class;
+}
+
+return $providers;
