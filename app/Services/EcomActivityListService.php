@@ -408,6 +408,29 @@ class EcomActivityListService
     }
 
     /**
+     * Human-readable filter line for product performance Excel exports.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public static function ecomTrackerProductListFilterSummary(array $filters): string
+    {
+        $parts = [];
+        $code = trim((string) ($filters['product_code'] ?? ''));
+        if ($code !== '') {
+            $parts[] = 'Product code: '.$code;
+        }
+
+        $hasOrder = $filters['has_order'] ?? null;
+        if ($hasOrder === '1' || $hasOrder === 1) {
+            $parts[] = 'Has order: With order';
+        } elseif ($hasOrder === '0' || $hasOrder === 0) {
+            $parts[] = 'Has order: Without order';
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    /**
      * @param  array<string, mixed>  $filters
      * @return array{
      *     sessions: int,

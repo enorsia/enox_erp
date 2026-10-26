@@ -23,8 +23,12 @@ class ProductPerformanceSectionService
             return $this->productsWithSessionFilters($from, $to, $period, $sessionFilters, $limit);
         }
 
-        $aggregated = TrackerDatabase::table('tracking_daily_products')
+        $productCode = trim((string) ($sessionFilters['product_code'] ?? ''));
+        $dailyProducts = TrackerDatabase::table('tracking_daily_products')
             ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->when($productCode !== '', fn ($query) => $query->where('product_code', $productCode));
+
+        $aggregated = $dailyProducts
             ->groupBy('product_code')
             ->selectRaw('product_code as code')
             ->selectRaw('SUM(product_views) as views, SUM(add_to_carts) as adds, SUM(begin_checkouts) as begin_checkouts')
@@ -46,6 +50,8 @@ class ProductPerformanceSectionService
                 'revenue' => round((float) $row->revenue, 2),
             ];
         });
+
+        $all = $this->applyProductListHasOrderFilter($all, $sessionFilters);
 
         return $this->packageProductRows($all, $limit, $from, $to, $period, []);
     }
@@ -93,6 +99,24 @@ class ProductPerformanceSectionService
                 'product_count' => $all->count(),
             ],
         ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $all
+     * @param  array<string, mixed>  $sessionFilters
+     */
+    private function applyProductListHasOrderFilter(Collection $all, array $sessionFilters): Collection
+    {
+        $hasOrder = $sessionFilters['has_order'] ?? null;
+        if ($hasOrder === true) {
+            return $all->filter(fn (array $row) => (int) ($row['qty'] ?? 0) > 0)->values();
+        }
+
+        if ($hasOrder === false) {
+            return $all->filter(fn (array $row) => (int) ($row['qty'] ?? 0) === 0)->values();
+        }
+
+        return $all;
     }
 
     /**
