@@ -1520,7 +1520,11 @@ class EcomActivityListService
     {
         $productCode = trim((string) ($filters['product_code'] ?? ''));
         if ($productCode !== '' && $range !== null) {
-            $this->applyDashboardProductCodeSessionFilter($query, $productCode, $range);
+            if ($forDashboard) {
+                $this->applyDashboardProductCodeSessionFilter($query, $productCode, $range);
+            } else {
+                $this->applyProductCodeSessionFilter($query, $productCode, $range);
+            }
         } else {
             $this->applySearch($query, (string) ($filters['search'] ?? ''));
         }
@@ -1916,7 +1920,7 @@ class EcomActivityListService
     }
 
     /**
-     * Product drill-down KPIs: session scope matches dashboard product filter ({@see applyDashboardProductCodeSessionFilter});
+     * Product drill-down KPIs: session scope matches activity product filter ({@see applyProductCodeSessionFilter});
      * funnel totals match {@see \App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService::products()}.
      *
      * @param  array{from: Carbon, to: Carbon, period?: string}  $range
