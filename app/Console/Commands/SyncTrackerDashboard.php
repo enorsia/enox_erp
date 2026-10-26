@@ -12,9 +12,9 @@ use Illuminate\Console\Command;
 class SyncTrackerDashboard extends Command
 {
     protected $signature = 'tracker:sync-dashboard
-                            {--force : Re-queue already-synced sessions in the date range, then sync}
-                            {--from= : Required with --force: session created on/after this date}
-                            {--to= : Optional with --force: session created on/before this date}';
+                            {--force : Re-sync sessions in the date range that are already fully synced to the dashboard}
+                            {--from= : Required with --force: range start (visitor timezone calendar day)}
+                            {--to= : Optional with --force: range end day (defaults to --from)}';
 
     protected $description = 'Queue ecom activity → tracking dashboard sync (same as the Ecom Tracker dashboard Sync button).';
 
@@ -35,11 +35,13 @@ class SyncTrackerDashboard extends Command
 
             $requeued = $syncService->requeueSyncedSessionsForDashboard($from, $to);
 
+            $endDay = $to ?? $from;
+
             $this->info(sprintf(
-                'Force requeue: %d session(s) with actions (%s%s).',
+                'Force requeue: %d already-synced session(s) (%s to %s; started or last active in range).',
                 $requeued,
                 $from->toDateString(),
-                $to !== null ? ' to '.$to->toDateString() : ' onward',
+                $endDay->toDateString(),
             ));
         }
 
