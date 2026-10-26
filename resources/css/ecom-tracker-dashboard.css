@@ -1229,6 +1229,22 @@ body.etd-filter-panel-open {
     cursor: not-allowed;
 }
 
+.etd-sync-status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgb(15 23 42 / 0.08);
+}
+
+.etd-sync-status-dot--idle {
+    background: #22c55e;
+}
+
+.etd-sync-status-dot--running {
+    background: #eab308;
+}
+
 #ecom-tracker-dashboard-content .etd-page-header-bar {
     gap: 0.55rem;
 }

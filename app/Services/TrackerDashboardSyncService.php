@@ -62,6 +62,7 @@ class TrackerDashboardSyncService
      * Action counters added per synced action (table => unique key columns + counter columns).
      * Only actions on the session's own visit day count (the master dashboard needs both in the range).
      * Session totals, funnel sessions, durations and sold figures are recalculated per day instead (refreshDay).
+     * Audience views / cart funnel columns are only written in refreshProductFunnelCounts (not per synced action).
      */
     private const ACTION_COUNTERS = [
         'tracking_daily_summaries' => [
@@ -606,9 +607,7 @@ class TrackerDashboardSyncService
         $trackingSessionId = $this->upsertTrackingSession($sessionRow, $sessionId, $dailyVisitorRowId, $allActions);
         [$trafficId, $source, $medium] = $this->upsertSessionDetails($trackingSessionId, $sessionRow, $applyActions, $deviceId, $browserId);
 
-        $audienceKeys = $this->audienceKeys($deviceId, $browserId, $trafficId, $source, $medium);
-
-        $this->syncActionsForSession($trackingSessionId, $visitDate, $applyActions, $audienceKeys, $visitorId, $rebuildFromFullHistory);
+        $this->syncActionsForSession($trackingSessionId, $visitDate, $applyActions, $visitorId, $rebuildFromFullHistory);
         $this->upsertRecoverableSale($trackingSessionId, $visitDate, $sessionRow, $allActions);
         $this->touchedDates[$visitDate] = true;
         if (filled($previousVisitDate) && $previousVisitDate !== $visitDate) {
@@ -712,13 +711,11 @@ class TrackerDashboardSyncService
 
     /**
      * @param  Collection<int, object>  $actions
-     * @param  list<array{type: int, dimension_id: int, source: string, medium: string}>  $audienceKeys
      */
     private function syncActionsForSession(
         int $trackingSessionId,
         string $visitDate,
         Collection $actions,
-        array $audienceKeys,
         string $visitorId,
         bool $replaceSessionProductLinks = false,
     ): void {
@@ -735,8 +732,6 @@ class TrackerDashboardSyncService
             $actionDate = $this->localDate($action->created_at ?? null);
             $metricHour = $this->localHour($action->created_at ?? null);
             $orderLines = [];
-
-            $this->countAction($counters, $type, $actionDate, $audienceKeys);
 
             $sessionId = $this->normalizeSessionId((string) ($action->session_id ?? ''));
             $this->recordFunnelAction($counters, $action, $type, $actionDate, $sessionId, $funnelDedupe);
@@ -2055,24 +2050,6 @@ class TrackerDashboardSyncService
             $source,
             $medium,
         );
-    }
-
-    /**
-     * Once per action: device / browser / traffic source product views
-     * (their funnel columns count sessions, see refreshDay).
-     *
-     * @param  array<string, array<string, array<string, mixed>>>  $counters
-     * @param  list<array{type: int, dimension_id: int, source: string, medium: string}>  $audienceKeys
-     */
-    private function countAction(array &$counters, string $type, string $date, array $audienceKeys): void
-    {
-        if ($type !== 'product_view') {
-            return;
-        }
-
-        foreach ($audienceKeys as $key) {
-            $this->bump($counters, 'tracking_daily_audiences', ['metric_date' => $date] + $key, 'views');
-        }
     }
 
     /**
