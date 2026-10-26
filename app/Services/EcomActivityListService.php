@@ -90,11 +90,12 @@ class EcomActivityListService
      * Option lists for the filter drawer: devices, traffic sources, departments and the selected
      * department's categories, read from the small lookup tables in one UNION ALL query.
      *
-     * @return array{funnelStages: array<int, string>, durationBuckets: array<string, string>, devices: array<int, string>, utmSources: array<int, string>, utmMediums: list<string>, departments: array<int, string>, categories: array<int, string>}
+     * @return array{funnelStages: array<int, string>, durationBuckets: array<string, string>, devices: array<int, string>, browsers: array<int, string>, utmSources: array<int, string>, utmMediums: list<string>, departments: array<int, string>, categories: array<int, string>}
      */
     public function filterOptions(?int $departmentId = null): array
     {
         $lookups = TrackerDatabase::table('tracking_device')->selectRaw("'device' as type, id, name, NULL as medium, NULL as parent_id")
+            ->unionAll(TrackerDatabase::table('tracking_browser')->selectRaw("'browser', id, name, NULL, NULL"))
             ->unionAll(TrackerDatabase::table('tracking_traffic_source')->selectRaw("'source', id, name, medium, NULL"))
             ->unionAll(TrackerDatabase::table('tracking_category')->selectRaw("'category', id, name, NULL, parent_id")
                 ->whereNull('parent_id')
@@ -117,6 +118,7 @@ class EcomActivityListService
             'funnelStages' => array_intersect_key(TrackingSession::FUNNEL_STAGES, array_flip(TrackingSession::FILTER_FUNNEL_STAGES)),
             'durationBuckets' => array_map(fn (array $bucket) => $bucket['label'], TrackingSession::DURATION_BUCKETS),
             'devices' => $lookups->get('device', collect())->pluck('name', 'id')->all(),
+            'browsers' => $lookups->get('browser', collect())->pluck('name', 'id')->all(),
             'utmSources' => $sources->pluck('name', 'id')->all(),
             'utmMediums' => $utmMediums,
             'departments' => $categories->whereNull('parent_id')->pluck('name', 'id')->all(),
@@ -276,7 +278,7 @@ class EcomActivityListService
     }
 
     /**
-     * @return array{search: string, product_code: string, funnel: list<int>, has_order: ?bool, devices: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
+     * @return array{search: string, product_code: string, funnel: list<int>, has_order: ?bool, devices: list<int>, browsers: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
      */
     public static function filtersFromRequest(Request $request): array
     {
@@ -293,6 +295,7 @@ class EcomActivityListService
             'funnel' => array_values(array_intersect($ints('funnel'), TrackingSession::FILTER_FUNNEL_STAGES)),
             'has_order' => $bool('has_order'),
             'devices' => $ints('device_type'),
+            'browsers' => $ints('browser_type'),
             'logged_in' => $bool('logged_in'),
             'durations' => array_values(array_intersect($strings('duration_bucket'), array_keys(TrackingSession::DURATION_BUCKETS))),
             'duration' => isset(TrackingDailyDuration::BUCKETS[$request->integer('duration')]) ? $request->integer('duration') : null,
@@ -322,7 +325,7 @@ class EcomActivityListService
             $params['focus'] = 'products';
         }
 
-        foreach (['device_type', 'utm_source', 'utm_medium', 'funnel', 'category', 'duration_bucket'] as $key) {
+        foreach (['device_type', 'browser_type', 'utm_source', 'utm_medium', 'funnel', 'category', 'duration_bucket'] as $key) {
             $values = array_values(array_filter((array) $request->query($key, []), fn ($value) => $value !== null && $value !== ''));
             if ($values !== []) {
                 $params[$key] = $values;
@@ -378,6 +381,7 @@ class EcomActivityListService
         $filters['funnel'] = [];
         $filters['has_order'] = $hasOrder;
         $filters['devices'] = [];
+        $filters['browsers'] = [];
         $filters['logged_in'] = null;
         $filters['durations'] = [];
         $filters['duration'] = null;
@@ -405,6 +409,29 @@ class EcomActivityListService
         }
 
         return $params;
+    }
+
+    /**
+     * Human-readable filter line for product performance Excel exports.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public static function ecomTrackerProductListFilterSummary(array $filters): string
+    {
+        $parts = [];
+        $code = trim((string) ($filters['product_code'] ?? ''));
+        if ($code !== '') {
+            $parts[] = 'Product code: '.$code;
+        }
+
+        $hasOrder = $filters['has_order'] ?? null;
+        if ($hasOrder === '1' || $hasOrder === 1) {
+            $parts[] = 'Has order: With order';
+        } elseif ($hasOrder === '0' || $hasOrder === 0) {
+            $parts[] = 'Has order: Without order';
+        }
+
+        return implode(' · ', $parts);
     }
 
     /**
@@ -636,7 +663,7 @@ class EcomActivityListService
             return true;
         }
 
-        foreach (['funnel', 'devices', 'durations', 'utm_sources', 'utm_mediums', 'categories'] as $key) {
+        foreach (['funnel', 'devices', 'browsers', 'durations', 'utm_sources', 'utm_mediums', 'categories'] as $key) {
             if (! empty($filters[$key])) {
                 return true;
             }
@@ -1341,6 +1368,11 @@ class EcomActivityListService
             $addChip('Device: '.ucfirst((string) $name), ['device_type']);
         }
 
+        foreach ((array) $request->query('browser_type', []) as $browserId) {
+            $name = $filterOptions['browsers'][(int) $browserId] ?? $browserId;
+            $addChip('Browser: '.ucfirst((string) $name), ['browser_type', 'focus']);
+        }
+
         foreach ((array) $request->query('utm_source', []) as $sourceId) {
             $name = $filterOptions['utmSources'][(int) $sourceId] ?? $sourceId;
             $addChip('Source: '.$name, ['utm_source']);
@@ -1562,7 +1594,7 @@ class EcomActivityListService
                 ->when($bucket['max'] !== null, fn (Builder $q) => $q->where('ts.duration_seconds', '<=', $bucket['max']));
         }
 
-        if (! empty($filters['devices']) || ! empty($filters['utm_sources']) || ! empty($filters['utm_mediums'])) {
+        if (! empty($filters['devices']) || ! empty($filters['browsers']) || ! empty($filters['utm_sources']) || ! empty($filters['utm_mediums'])) {
             $query->whereExists(function (Builder $exists) use ($filters) {
                 $exists->selectRaw('1')
                     ->from('tracking_session_details as fd')
@@ -1573,6 +1605,7 @@ class EcomActivityListService
                         WHERE fd_last.tracking_session_id = ts.id
                     )')
                     ->when(! empty($filters['devices']), fn (Builder $q) => $q->whereIn('fd.tracking_device_id', $filters['devices']))
+                    ->when(! empty($filters['browsers']), fn (Builder $q) => $q->whereIn('fd.tracking_browser_id', $filters['browsers']))
                     ->when(! empty($filters['utm_sources']), fn (Builder $q) => $q->whereIn('fd.tracking_traffic_source_id', $filters['utm_sources']))
                     ->when(! empty($filters['utm_mediums']), fn (Builder $q) => SessionTrafficAttribution::applySessionTouchMediumFilter($q, $filters['utm_mediums']));
             });

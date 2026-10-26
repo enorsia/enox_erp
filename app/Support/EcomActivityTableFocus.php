@@ -124,7 +124,7 @@ final class EcomActivityTableFocus
             return false;
         }
 
-        return filled($request->input('device_type'));
+        return filled($request->input('device_type')) || filled($request->input('browser_type'));
     }
 
     private static function hasTrafficScope(Request $request): bool

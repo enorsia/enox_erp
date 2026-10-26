@@ -6,11 +6,13 @@ use App\Jobs\TrackerDashboardSyncJob;
 use App\Services\EcomActivityListService;
 use App\Services\EcomTrackerCompareFilteredDashboardService;
 use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
+use App\Services\EcomTrackerProductPerformanceExportService;
 use App\Services\TrackerDashboardSyncService;
 use App\Support\TrackerTime;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
@@ -91,7 +93,40 @@ class EcomTrackerDashboardController extends Controller
             'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
         ]) + $filterQuery);
 
+        $data['exportUrl'] = route('admin.ecom-tracker.dashboard.products.export', array_filter([
+            'period' => $period,
+            'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
+            'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
+        ]) + $filterQuery);
+
         return view('ecom_tracker.products', compact('data', 'products', 'paginator'));
+    }
+
+    public function exportProducts(
+        Request $request,
+        EcomTrackerDashboardService $dashboardService,
+        EcomTrackerProductPerformanceExportService $exportService,
+    ): BinaryFileResponse {
+        Gate::authorize('ecom_tracker.dashboard.index');
+
+        $context = $this->trackerPageContext($request, 'admin.ecom-tracker.dashboard.products', productListFiltersOnly: true);
+        $filters = $context['filters'];
+        $range = $context['range'];
+
+        $products = $dashboardService->products(
+            $range['from'],
+            $range['to'],
+            $context['period'],
+            $filters,
+            null,
+        );
+
+        return $exportService->download(
+            $products['rows'],
+            $range['from'],
+            $range['to'],
+            EcomActivityListService::ecomTrackerProductListFilterSummary($filters),
+        );
     }
 
     /**

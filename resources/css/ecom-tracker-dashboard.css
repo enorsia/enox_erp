@@ -7451,6 +7451,146 @@ a.etd-pager__btn:hover {
     .etd-commerce-event-detail__footer-note {
         text-align: left;
     }
+
+    /* Activity sessions: card rows instead of clipped multi-column table */
+    main:has(> .etd-page--activity) {
+        overflow: auto;
+    }
+
+    .etd-page--activity {
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    #ecom-activity-page-content .etd-activity-table-shell {
+        overflow: visible;
+    }
+
+    #ecom-activity-page-content .etd-table-scroll--activity.etd-table-scroll--fixed {
+        --etd-table-scroll-height: none;
+        min-height: 0;
+        max-height: none;
+        overflow: visible;
+        border: none;
+        background: transparent;
+        border-radius: 0;
+    }
+
+    #ecom-activity-page-content .etd-table--activity {
+        display: block;
+        width: 100%;
+        min-width: 0;
+    }
+
+    #ecom-activity-page-content .etd-table--activity thead {
+        display: none;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        padding: 0.65rem 0.75rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.625rem;
+        background: #fff;
+    }
+
+    .dark #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row {
+        border-color: #334155;
+        background: #0f172a;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td {
+        display: grid;
+        grid-template-columns: minmax(5.25rem, 32%) minmax(0, 1fr);
+        gap: 0.25rem 0.65rem;
+        align-items: start;
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        padding: 0;
+        border: none;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td::before {
+        content: attr(data-label);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #94a3b8;
+        line-height: 1.35;
+        padding-top: 0.1rem;
+    }
+
+    .dark #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td::before {
+        color: #64748b;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-num {
+        text-align: left;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-col-session {
+        min-width: 0;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-col-user,
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-col-user .etd-user-cell {
+        max-width: none;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-col-user .etd-user-cell__name,
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-col-user .etd-user-cell__line {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-col-commerce,
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-col-commerce .etd-commerce-cell,
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-col-commerce .etd-commerce-cell__line,
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-col-commerce .etd-commerce-event-trigger,
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-session-row td.etd-col-commerce .etd-commerce-event-trigger__label {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-commerce-event-row,
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-empty-row {
+        display: block;
+        border: none;
+        background: transparent;
+        padding: 0;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-commerce-event-row td,
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-empty-row td {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: none;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-commerce-event-row td::before,
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-empty-row td::before {
+        display: none;
+    }
+
+    #ecom-activity-page-content .etd-table--activity tbody tr.etd-activity-empty-row td {
+        text-align: center;
+        padding: 2rem 0.5rem;
+    }
 }
 
 @media (max-width: 639px) {

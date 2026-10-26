@@ -53,6 +53,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     });
     Route::get('ecom-tracker/dashboard', [EcomTrackerDashboardController::class, 'index'])->name('ecom-tracker.dashboard');
     Route::get('ecom-tracker/dashboard/products', [EcomTrackerDashboardController::class, 'products'])->name('ecom-tracker.dashboard.products');
+    Route::get('ecom-tracker/dashboard/products/export', [EcomTrackerDashboardController::class, 'exportProducts'])->name('ecom-tracker.dashboard.products.export');
     Route::post('ecom-tracker/dashboard/sync', [EcomTrackerDashboardController::class, 'sync'])->name('ecom-tracker.dashboard.sync');
     Route::get('ecom-tracker/dashboard/compare', [EcomTrackerDashboardCompareController::class, 'index'])->name('ecom-tracker.dashboard.compare');
 

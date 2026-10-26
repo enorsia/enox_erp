@@ -989,6 +989,10 @@ function bindDashboardPrintControls() {
         return;
     }
 
+    if (dashboardRoot.classList.contains('etd-page--product-performance-list')) {
+        return;
+    }
+
     dashboardRoot.dataset.etdPrintBound = '1';
     window.addEventListener('beforeprint', prepareDashboardForPrint);
     window.addEventListener('afterprint', restoreDashboardAfterPrint);

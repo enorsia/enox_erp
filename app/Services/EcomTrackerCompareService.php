@@ -351,8 +351,14 @@ class EcomTrackerCompareService
 
         $byBrowser = [];
         foreach ($dashboard['devices']['by_browser'] ?? [] as $row) {
+            $browserId = $row['id'] ?? null;
+            $browserQuery = $baseQuery;
+            if ($browserId !== null && $browserId !== '') {
+                $browserQuery['browser_type'] = [(int) $browserId];
+                $browserQuery['focus'] = 'devices';
+            }
             $byBrowser[] = array_merge($row, [
-                'activity_url' => $activityIndexUrl,
+                'activity_url' => route('admin.ecom-activity.index', $browserQuery),
             ]);
         }
 

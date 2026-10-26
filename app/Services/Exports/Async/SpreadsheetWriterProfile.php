@@ -231,6 +231,35 @@ final class SpreadsheetWriterProfile
         );
     }
 
+    public static function ecomProductPerformance(array $headings): self
+    {
+        $columnCount = max(1, count($headings));
+        $saleColumn = 0;
+
+        foreach ($headings as $index => $heading) {
+            if ($heading === 'Sale') {
+                $saleColumn = $index;
+            }
+        }
+
+        return new self(
+            layoutKey: 'ecom_product_performance',
+            columnCount: $columnCount,
+            mergeEndColumn: min(max(1, $columnCount - 1), 6),
+            phoneColumn: 0,
+            orderNumberColumn: 0,
+            sizeColumn: 0,
+            quantityColumn: 0,
+            moneyColumnStart: $saleColumn,
+            moneyColumnEnd: $saleColumn,
+            couponPercentColumn: 0,
+            totalLabelColumn: 0,
+            reportTitle: 'PRODUCT PERFORMANCE REPORT',
+            overflowSheetPrefix: 'Product Data',
+            autoSizeColumnsFromContent: true,
+        );
+    }
+
     public static function ecomActivity(array $headings): self
     {
         $columnCount = max(1, count($headings));
@@ -241,6 +270,7 @@ final class SpreadsheetWriterProfile
             'Order value',
             'Cart value',
             'Value',
+            'Sale',
         ];
         $moneyIndices = [];
         $phoneColumn = 0;
