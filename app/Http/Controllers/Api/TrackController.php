@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\TrackerClientContextResolver;
+use App\Models\TrackingCtrSummary;
 use App\Services\TrackIngestService;
 use App\Support\EcomTrackerLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -146,6 +148,29 @@ class TrackController extends Controller
             ]);
 
             throw $e;
+        }
+    }
+
+    public function getTrackingCtrSummaries(Request $request)
+    {
+        try {
+            $summaries = TrackingCtrSummary::select(
+                'product_code',
+                'ctr',
+                'ctr_average',
+            )->get()->keyBy('product_code');
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Tracking CTR summaries updated successfully',
+                'data' => $summaries
+            ], 200);
+        } catch (Throwable $th) {
+            Log::error('Tracking CTR summaries update failed', ['error' => $th->getMessage()]);
+            return response()->json([
+                'status' => false,
+                'message' => $th->getMessage()
+            ], 500);
         }
     }
 }
