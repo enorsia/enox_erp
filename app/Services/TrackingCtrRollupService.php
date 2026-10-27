@@ -83,7 +83,7 @@ class TrackingCtrRollupService
 
                     if ($action->action_type === 'grid_impression') {
                         $dailyDeltas[$deltaKey]['impressions']++;
-                    } elseif ($this->isCtrClickAction((string) $action->action_type)) {
+                    } elseif ($action->action_type === 'product_click') {
                         $dailyDeltas[$deltaKey]['clicks']++;
                     }
 
@@ -150,12 +150,7 @@ class TrackingCtrRollupService
      */
     public function ctrActionTypes(): array
     {
-        return ['grid_impression', 'product_click', 'grid_click'];
-    }
-
-    private function isCtrClickAction(string $actionType): bool
-    {
-        return in_array($actionType, ['product_click', 'grid_click'], true);
+        return ['grid_impression', 'product_click'];
     }
 
     /**
