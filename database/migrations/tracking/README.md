@@ -52,10 +52,17 @@ php artisan config:cache
 php artisan tracker:sync-dashboard
 ```
 
-**CTR rollup** (`activity_ecom_user_actions` → `tracking_ctr_daily_summaries` / `tracking_ctr_summaries`):
+**CTR rollup** (`tracking_ctr_categories_impression` + legacy `activity_ecom_user_actions` → `tracking_ctr_daily_summaries` / `tracking_ctr_summaries`):
 
 ```bash
 php artisan tracker:sync-ctr
+```
+
+Force re-rollup for a calendar-day range (visitor timezone; clears `tracking_ctr_daily_summaries` for those days first):
+
+```bash
+php artisan tracker:sync-ctr --force --from=2026-10-27
+php artisan tracker:sync-ctr --force --from=2026-10-01 --to=2026-10-07
 ```
 
 4. Workers:

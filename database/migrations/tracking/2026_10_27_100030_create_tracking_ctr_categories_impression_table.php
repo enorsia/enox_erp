@@ -14,8 +14,10 @@ return new class extends TrackingMigration
             $table->unsignedBigInteger('tracking_ctr_category_id');
             $table->unsignedTinyInteger('type')->comment('0=impression, 1=grid-product-click');
             $table->string('product_code', 100);
+            $table->boolean('ctr_rollup_status')->nullable();
             $table->timestamps();
 
+            $table->index(['ctr_rollup_status', 'id'], 'idx_tcci_ctr_rollup_pending');
             $table->index('tracking_session_id', 'idx_tracking_ctr_cat_impression_session');
             $table->index('tracking_ctr_category_id', 'idx_tracking_ctr_cat_impression_category');
             $table->index('type', 'idx_tracking_ctr_cat_impression_type');

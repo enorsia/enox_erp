@@ -20,12 +20,19 @@ class TrackingCtrCategoryImpression extends Model
         'tracking_ctr_category_id',
         'type',
         'product_code',
+        'ctr_rollup_status',
     ];
 
     protected function casts(): array
     {
         return [
             'type' => 'integer',
+            'ctr_rollup_status' => 'boolean',
         ];
+    }
+
+    public function ctrCategory()
+    {
+        return $this->belongsTo(TrackingCtrCategory::class, 'tracking_ctr_category_id');
     }
 }
