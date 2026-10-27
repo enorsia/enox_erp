@@ -12,7 +12,7 @@ return new class extends TrackingMigration
             $table->id();
             $table->unsignedBigInteger('tracking_session_id');
             $table->unsignedBigInteger('tracking_ctr_category_id');
-            $table->unsignedTinyInteger('type')->comment('0=impression, 1=click');
+            $table->unsignedTinyInteger('type')->comment('0=impression, 1=grid-product-click');
             $table->string('product_code', 100);
             $table->timestamps();
 

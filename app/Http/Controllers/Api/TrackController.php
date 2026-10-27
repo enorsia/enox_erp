@@ -25,6 +25,36 @@ class TrackController extends Controller
         $startedAt = microtime(true);
 
         $events = $request->input('events', []);
+        $legacyGridTypes = ['grid_impression', 'grid_click'];
+        $discardedLegacyIds = [];
+
+        $events = array_values(array_filter($events, function ($event) use ($legacyGridTypes, &$discardedLegacyIds) {
+            $actionType = (string) ($event['action_type'] ?? '');
+
+            if (! in_array($actionType, $legacyGridTypes, true)) {
+                return true;
+            }
+
+            if (! empty($event['id'])) {
+                $discardedLegacyIds[] = (string) $event['id'];
+            }
+
+            return false;
+        }));
+
+        if ($discardedLegacyIds !== []) {
+            $request->merge(['events' => $events]);
+            EcomTrackerLogger::frontend()->info('api.track.legacy_grid_stripped', 'Dropped legacy grid events from /track batch', [
+                'discarded_count' => count($discardedLegacyIds),
+                'discarded_event_ids' => $discardedLegacyIds,
+            ]);
+        }
+
+        if ($events === []) {
+            return response()->json([
+                'accepted_ids' => $discardedLegacyIds,
+            ]);
+        }
 
         EcomTrackerLogger::frontend()->info('api.track.request', 'Website sent user actions', [
             'ip' => $request->ip(),
@@ -32,9 +62,6 @@ class TrackController extends Controller
             'visitor_id' => $request->input('session.visitor_id'),
             'event_count' => count($events),
             'action_types' => collect($events)->pluck('action_type')->filter()->values()->all(),
-            'grid_event_count' => collect($events)
-                ->whereIn('action_type', ['grid_impression', 'product_click'])
-                ->count(),
         ]);
 
         try {
@@ -121,7 +148,7 @@ class TrackController extends Controller
             ]);
 
             return response()->json([
-                'accepted_ids' => $acceptedIds,
+                'accepted_ids' => array_values(array_unique(array_merge($acceptedIds, $discardedLegacyIds))),
             ]);
         } catch (ValidationException $e) {
             EcomTrackerLogger::frontend()->error('api.track.validation_failed', 'Website sent invalid track payload', [

@@ -38,7 +38,6 @@ return [
         'begin_checkout',
         'proceed_checkout',
         'payment_success',
-        'grid_impression',
         'product_click',
     ],
 

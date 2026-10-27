@@ -21,6 +21,7 @@ class TrackingCtrCategory extends Model
 
     protected $fillable = [
         'department_id',
+        'department_slug',
         'type',
         'category_id',
         'category_slug',
