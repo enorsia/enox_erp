@@ -29,10 +29,6 @@ return new class extends TrackingMigration
                 ->references('id')
                 ->on('tracking_session')
                 ->cascadeOnDelete();
-            $table->foreign('tracking_ctr_category_id', 'fk_tcci_tracking_ctr_category_id')
-                ->references('id')
-                ->on('tracking_ctr_categories')
-                ->cascadeOnDelete();
         });
     }
 

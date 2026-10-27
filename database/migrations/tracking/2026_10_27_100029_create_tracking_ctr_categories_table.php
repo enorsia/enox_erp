@@ -10,10 +10,11 @@ return new class extends TrackingMigration
     {
         Schema::create('tracking_ctr_categories', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('department_id')->comment('1=mens, 2=womens, 3=boys, 4=girls');
+            $table->unsignedBigInteger('department_id')->nullable();
+            $table->string('department_slug')->nullable();
+            $table->unsignedBigInteger('category_id');
+            $table->string('category_slug', 255);
             $table->string('type', 32)->comment('static, dynamic_custom_link, category, micro_category');
-            $table->unsignedBigInteger('category_id')->nullable();
-            $table->string('category_slug', 255)->nullable();
             $table->timestamps();
 
             $table->index('department_id', 'idx_tracking_ctr_categories_department');
