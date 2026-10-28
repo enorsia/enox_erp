@@ -203,7 +203,6 @@ class TrackController extends Controller
                     $rollupSettings,
                 );
             }
-            dd($this->buildCtrSummariesResponseData());
 
             return response()->json([
                 'status' => true,
