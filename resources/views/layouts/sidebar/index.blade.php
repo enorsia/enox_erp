@@ -251,9 +251,9 @@
                     avaiablePermissionsMap()['prefix']['ecommerce_'] ?? [],
                     config('tracker.enabled') ? (avaiablePermissionsMap()['prefix']['ecom_tracker_'] ?? []) : []
                 ))
-                    <div x-data="{ open: {{ Request::is('admin/style/stock*') || (config('tracker.enabled') && $isTrackingRoute) ? 'true' : 'false' }} }">
+                    <div x-data="{ open: {{ Request::is('admin/style/stock*', 'admin/ecommerce/ctr-summary*') || (config('tracker.enabled') && $isTrackingRoute) ? 'true' : 'false' }} }">
                         <button @click="open = !open"
-                            class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/style/stock*') || (config('tracker.enabled') && $isTrackingRoute) ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
+                            class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/style/stock*', 'admin/ecommerce/ctr-summary*') || (config('tracker.enabled') && $isTrackingRoute) ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
                             <svg class="w-4 h-4 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5"
                                 viewBox="0 0 24 24">
                                 <path stroke-linecap="round"
@@ -273,6 +273,13 @@
                                     <a href="{{ route('admin.style.stock.index') }}"
                                         class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/style/stock*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
                                         Stock Performance
+                                    </a>
+                                @endcan
+
+                                @can('ecommerce.ctr_summary.index')
+                                    <a href="{{ route('admin.ecommerce.ctr-summary.index') }}"
+                                        class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecommerce/ctr-summary*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                        CTR Summary
                                     </a>
                                 @endcan
 

@@ -20,6 +20,7 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\EcomActivityController;
 use App\Http\Controllers\EcomTrackerDashboardController;
 use App\Http\Controllers\EcomTrackerDashboardCompareController;
+use App\Http\Controllers\EcommerceCtrSummaryController;
 use App\Http\Controllers\Exports\UserExportController;
 use App\Http\Controllers\SaleTrackingController;
 use App\Http\Controllers\StyleStockReportController;
@@ -56,6 +57,8 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::get('ecom-tracker/dashboard/products/export', [EcomTrackerDashboardController::class, 'exportProducts'])->name('ecom-tracker.dashboard.products.export');
     Route::post('ecom-tracker/dashboard/sync', [EcomTrackerDashboardController::class, 'sync'])->name('ecom-tracker.dashboard.sync');
     Route::get('ecom-tracker/dashboard/compare', [EcomTrackerDashboardCompareController::class, 'index'])->name('ecom-tracker.dashboard.compare');
+    Route::get('ecommerce/ctr-summary', [EcommerceCtrSummaryController::class, 'index'])->name('ecommerce.ctr-summary.index');
+    Route::get('ecommerce/ctr-summary/export', [EcommerceCtrSummaryController::class, 'export'])->name('ecommerce.ctr-summary.export');
 
     Route::controller(SalesChartController::class)->group(function () {
         Route::get('selling-chart/manage', 'index')->name('selling_chart.index');

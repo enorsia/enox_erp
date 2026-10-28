@@ -260,6 +260,28 @@ final class SpreadsheetWriterProfile
         );
     }
 
+    public static function ecomCtrSummary(array $headings): self
+    {
+        $columnCount = max(1, count($headings));
+
+        return new self(
+            layoutKey: 'ecom_ctr_summary',
+            columnCount: $columnCount,
+            mergeEndColumn: min(max(1, $columnCount - 1), 6),
+            phoneColumn: 0,
+            orderNumberColumn: 0,
+            sizeColumn: 0,
+            quantityColumn: 0,
+            moneyColumnStart: 0,
+            moneyColumnEnd: 0,
+            couponPercentColumn: 0,
+            totalLabelColumn: 0,
+            reportTitle: 'CTR SUMMARY REPORT',
+            overflowSheetPrefix: 'CTR Data',
+            autoSizeColumnsFromContent: true,
+        );
+    }
+
     public static function ecomActivity(array $headings): self
     {
         $columnCount = max(1, count($headings));

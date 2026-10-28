@@ -16,6 +16,7 @@ return [
         'resources' => [
             'ecommerce' => [
                 'wh_stock_in_out' => 'WH Stock In/Out',
+                'ctr_summary' => 'CTR Summary',
             ],
             'ecom_tracker' => [
                 'dashboard' => 'Store Performance',
@@ -99,6 +100,10 @@ return [
         // ECOMMERCE MODULE
         'ecommerce' => [
             'wh_stock_in_out' => [
+                'guard' => 'web',
+                'actions' => ['index', 'export'],
+            ],
+            'ctr_summary' => [
                 'guard' => 'web',
                 'actions' => ['index', 'export'],
             ],

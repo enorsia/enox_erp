@@ -187,6 +187,16 @@ window.initTomSelectElements = function (root) {
             options.plugins = ['remove_button'];
             options.persist = false;
             options.hidePlaceholder = true;
+
+            if (element.dataset.etdFilterAllValue || element.dataset.clearable === 'true') {
+                options.plugins.push('clear_button');
+            }
+        }
+
+        if (element.dataset.etdFilterAllValue) {
+            options.closeAfterSelect = false;
+            options.hideSelected = false;
+            options.dropdownParent = 'body';
         }
 
         if (element.dataset.dropdownParent === 'body') {
@@ -224,6 +234,10 @@ window.refreshTomSelectIn = function (root) {
             }
 
             element.tomselect.sync();
+
+            if (typeof window.patchEtdFilterTomSelect === 'function') {
+                window.patchEtdFilterTomSelect(element);
+            }
         }
     });
 };
