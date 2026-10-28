@@ -14,7 +14,10 @@ class TrackingCtrSummary extends Model
 
     protected $fillable = [
         'department_id',
+        'department_slug',
         'category_id',
+        'category_slug',
+        'type',
         'product_code',
         'total_click',
         'total_impression',
@@ -26,7 +29,10 @@ class TrackingCtrSummary extends Model
     {
         return [
             'department_id' => 'integer',
+            'department_slug' => 'string',
             'category_id' => 'integer',
+            'category_slug' => 'string',
+            'type' => 'string',
             'product_code' => 'string',
             'total_click' => 'integer',
             'total_impression' => 'integer',

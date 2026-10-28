@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\TrackingCtrCategory;
 use App\Models\TrackingCtrCategoryImpression;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
@@ -14,7 +15,7 @@ class TrackingCtrRollupService
 {
     /**
      * @param  array<int, int>  $impressionIds
-     * @return array{processed: int, skipped: int, touched_keys: array<int, array{department_id: int, category_id: int, product_code: string}>}
+     * @return array{processed: int, skipped: int, touched_keys: array<int, array{department_id: int, category_id: int, product_code: string, department_slug: ?string, category_slug: ?string, type: ?string}>}
      */
     public function processCategoryImpressionIds(
         array $impressionIds,
@@ -62,7 +63,10 @@ class TrackingCtrRollupService
                         $dailyDeltas[$deltaKey] = [
                             'metric_date' => $dimension['metric_date'],
                             'department_id' => $dimension['department_id'],
+                            'department_slug' => $dimension['department_slug'],
                             'category_id' => $dimension['category_id'],
+                            'category_slug' => $dimension['category_slug'],
+                            'type' => $dimension['type'],
                             'product_code' => $dimension['product_code'],
                             'impressions' => 0,
                             'clicks' => 0,
@@ -80,7 +84,10 @@ class TrackingCtrRollupService
                     $summaryKey = $dimension['department_id'] . '|' . $dimension['category_id'] . '|' . $dimension['product_code'];
                     $touchedKeys[$summaryKey] = [
                         'department_id' => $dimension['department_id'],
+                        'department_slug' => $dimension['department_slug'],
                         'category_id' => $dimension['category_id'],
+                        'category_slug' => $dimension['category_slug'],
+                        'type' => $dimension['type'],
                         'product_code' => $dimension['product_code'],
                     ];
                 }
@@ -110,6 +117,9 @@ class TrackingCtrRollupService
                         $key['product_code'],
                         $ctrRollupDays,
                         $minClicks,
+                        $key['department_slug'],
+                        $key['category_slug'],
+                        $key['type'],
                     );
                 }
 
@@ -130,7 +140,15 @@ class TrackingCtrRollupService
     }
 
     /**
-     * @return array{metric_date: string, department_id: int, category_id: int, product_code: string}|null
+     * @return array{
+     *     metric_date: string,
+     *     department_id: int,
+     *     department_slug: ?string,
+     *     category_id: int,
+     *     category_slug: ?string,
+     *     type: ?string,
+     *     product_code: string,
+     * }|null
      */
     private function dimensionForCategoryImpression(TrackingCtrCategoryImpression $row): ?array
     {
@@ -156,7 +174,11 @@ class TrackingCtrRollupService
         return [
             'metric_date' => $this->metricDateForTimestamp($row->created_at),
             'department_id' => $departmentId,
+            'department_slug' => $this->nullableTrimmedString($category->department_slug),
             'category_id' => $categoryId,
+            'category_slug' => $this->nullableTrimmedString($category->category_slug),
+            'type' => $this->nullableTrimmedString($category->type)
+                ?? TrackingCtrCategory::TYPE_CATEGORY,
             'product_code' => $productCode,
         ];
     }
@@ -173,7 +195,17 @@ class TrackingCtrRollupService
     }
 
     /**
-     * @param  array{metric_date: string, department_id: int, category_id: int, product_code: string, impressions: int, clicks: int}  $delta
+     * @param  array{
+     *     metric_date: string,
+     *     department_id: int,
+     *     department_slug: ?string,
+     *     category_id: int,
+     *     category_slug: ?string,
+     *     type: ?string,
+     *     product_code: string,
+     *     impressions: int,
+     *     clicks: int,
+     * }  $delta
      */
     private function applyDailyDeltaAtomic(array $delta): void
     {
@@ -191,6 +223,9 @@ class TrackingCtrRollupService
             ->where('product_code', $delta['product_code']);
 
         $updated = (clone $query)->update([
+            'department_slug' => $delta['department_slug'],
+            'category_slug' => $delta['category_slug'],
+            'type' => $delta['type'],
             'total_impression' => DB::raw('total_impression + ' . $impressions),
             'total_click' => DB::raw('total_click + ' . $clicks),
             'ctr' => DB::raw(
@@ -215,7 +250,10 @@ class TrackingCtrRollupService
         TrackerDatabase::table('tracking_ctr_daily_summaries')->insert([
             'metric_date' => $delta['metric_date'],
             'department_id' => $delta['department_id'],
+            'department_slug' => $delta['department_slug'],
             'category_id' => $delta['category_id'],
+            'category_slug' => $delta['category_slug'],
+            'type' => $delta['type'],
             'product_code' => $delta['product_code'],
             'total_click' => $clicks,
             'total_impression' => $impressions,
@@ -232,6 +270,9 @@ class TrackingCtrRollupService
         string $productCode,
         int $ctrRollupDays,
         int $minClicks,
+        ?string $departmentSlug = null,
+        ?string $categorySlug = null,
+        ?string $type = null,
     ): void {
         $rollupDays = max(1, $ctrRollupDays);
         $minClicks = max(1, $minClicks);
@@ -263,7 +304,10 @@ class TrackingCtrRollupService
         TrackerDatabase::table('tracking_ctr_summaries')->upsert(
             [[
                 'department_id' => $departmentId,
+                'department_slug' => $departmentSlug,
                 'category_id' => $categoryId,
+                'category_slug' => $categorySlug,
+                'type' => $type ?? TrackingCtrCategory::TYPE_CATEGORY,
                 'product_code' => $productCode,
                 'total_click' => $totalClick,
                 'total_impression' => $totalImpression,
@@ -273,7 +317,16 @@ class TrackingCtrRollupService
                 'updated_at' => now(),
             ]],
             ['department_id', 'category_id', 'product_code'],
-            ['total_click', 'total_impression', 'ctr', 'ctr_average', 'updated_at'],
+            [
+                'department_slug',
+                'category_slug',
+                'type',
+                'total_click',
+                'total_impression',
+                'ctr',
+                'ctr_average',
+                'updated_at',
+            ],
         );
     }
 
@@ -297,6 +350,17 @@ class TrackingCtrRollupService
             $dimension['category_id'],
             $dimension['product_code'],
         ]);
+    }
+
+    private function nullableTrimmedString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $trimmed = trim((string) $value);
+
+        return $trimmed === '' ? null : $trimmed;
     }
 
     /**

@@ -10,8 +10,11 @@ return new class extends TrackingMigration
     {
         Schema::create('tracking_ctr_summaries', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('department_id')->comment('1=mens, 2=womens, 3=boys, 4=girls');
+            $table->unsignedBigInteger('department_id')->nullable();
+            $table->string('department_slug')->nullable();
             $table->unsignedBigInteger('category_id');
+            $table->string('category_slug', 255)->nullable();
+            $table->string('type', 32)->nullable()->comment('static, dynamic_custom_link, category, micro_category');
             $table->string('product_code', 100);
             $table->decimal('ctr', 10, 6)->default(0);
             $table->decimal('ctr_average', 10, 6)->default(0);

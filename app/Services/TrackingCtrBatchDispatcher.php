@@ -12,8 +12,6 @@ class TrackingCtrBatchDispatcher
 {
     private const BATCH_SIZE = 50;
 
-    private const MAX_BATCHES_PER_RUN = 20;
-
     /**
      * @return array{
      *     queued_jobs: int,
