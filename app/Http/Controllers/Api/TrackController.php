@@ -240,17 +240,26 @@ class TrackController extends Controller
     {
         $data = [];
 
-        foreach (TrackingCtrSummary::query()->select('type', 'department_id', 'category_id', 'product_code', 'ctr', 'ctr_average')->get() as $row) {
+        foreach (TrackingCtrSummary::query()->select(
+            'type',
+            'department_id',
+            'category_id',
+            'micro_category_id',
+            'product_code',
+            'ctr',
+            'ctr_average',
+        )->get() as $row) {
             $type = (string) ($row->type ?? TrackingCtrCategory::TYPE_CATEGORY);
             $departmentId = max(0, (int) ($row->department_id ?? 0));
             $categoryId = max(0, (int) ($row->category_id ?? 0));
+            $microCategoryId = max(0, (int) ($row->micro_category_id ?? 0));
             $productCode = (string) ($row->product_code ?? '');
 
             if ($productCode === '') {
                 continue;
             }
 
-            $key = $type . '_' . $departmentId . '_' . $categoryId . '_' . $productCode;
+            $key = $type . '_' . $departmentId . '_' . $categoryId . '_' . $microCategoryId . '_' . $productCode;
             $data[$key] = $row->toArray();
         }
 

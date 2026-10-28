@@ -15,6 +15,8 @@ return new class extends TrackingMigration
             $table->string('department_slug')->nullable();
             $table->unsignedBigInteger('category_id');
             $table->string('category_slug', 255)->nullable();
+            $table->unsignedBigInteger('micro_category_id')->nullable();
+            $table->string('micro_category_slug', 255)->nullable();
             $table->string('type', 32)->nullable()->comment('static, dynamic_custom_link, category, micro_category');
             $table->string('product_code', 100);
             $table->decimal('ctr', 10, 6)->default(0);
@@ -24,12 +26,13 @@ return new class extends TrackingMigration
             $table->timestamps();
 
             $table->unique(
-                ['metric_date', 'department_id', 'category_id', 'product_code'],
+                ['metric_date', 'department_id', 'category_id', 'micro_category_id', 'product_code'],
                 'uq_tracking_ctr_daily_date_dept_category_code',
             );
             $table->index('metric_date', 'idx_tracking_ctr_daily_date');
             $table->index('department_id', 'idx_tracking_ctr_daily_department');
             $table->index('category_id', 'idx_tracking_ctr_daily_category');
+            $table->index('micro_category_id', 'idx_tracking_ctr_daily_micro_category');
             $table->index('product_code', 'idx_tracking_ctr_daily_product_code');
             $table->index(['metric_date', 'department_id', 'category_id'], 'idx_tracking_ctr_daily_date_dept_category');
             $table->index(['department_id', 'category_id', 'product_code'], 'idx_tracking_ctr_daily_dept_category_code');

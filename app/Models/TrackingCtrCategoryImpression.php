@@ -18,6 +18,8 @@ class TrackingCtrCategoryImpression extends Model
     protected $fillable = [
         'tracking_session_id',
         'tracking_ctr_category_id',
+        'micro_category_id',
+        'micro_category_slug',
         'type',
         'product_code',
         'ctr_rollup_status',

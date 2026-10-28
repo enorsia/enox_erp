@@ -38,6 +38,8 @@ class TrackCtrCategoryController extends Controller
                 'category.department_slug' => ['nullable', 'string', 'max:255'],
                 'category.category_id' => ['required'],
                 'category.category_slug' => ['required', 'string', 'max:255'],
+                'category.micro_category_id' => ['nullable'],
+                'category.micro_category_slug' => ['nullable', 'string', 'max:255'],
                 'category.type' => ['required', 'string', 'max:32'],
                 'events' => ['required', 'array', 'min:1', 'max:' . max(1, (int) config('tracker.ingest_max_events', 50))],
                 'events.*.id' => ['required', 'uuid'],

@@ -14,6 +14,8 @@ return new class extends TrackingMigration
             $table->string('department_slug')->nullable();
             $table->unsignedBigInteger('category_id');
             $table->string('category_slug', 255);
+            $table->unsignedBigInteger('micro_category_id')->nullable();
+            $table->string('micro_category_slug', 255)->nullable();
             $table->string('type', 32)->comment('static, dynamic_custom_link, category, micro_category');
             $table->timestamps();
 
@@ -21,6 +23,8 @@ return new class extends TrackingMigration
             $table->index('type', 'idx_tracking_ctr_categories_type');
             $table->index('category_id', 'idx_tracking_ctr_categories_category');
             $table->index('category_slug', 'idx_tracking_ctr_categories_category_slug');
+            $table->index('micro_category_id', 'idx_tracking_ctr_categories_micro_category');
+            $table->index('micro_category_slug', 'idx_tracking_ctr_categories_micro_category_slug');
         });
     }
 

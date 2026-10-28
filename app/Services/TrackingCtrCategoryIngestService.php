@@ -88,7 +88,7 @@ class TrackingCtrCategoryIngestService
             try {
                 $inserted = $this->storeImpressionRow(
                     $trackingSessionId,
-                    (int) $categoryRow->id,
+                    $categoryRow,
                     $type,
                     $productCode,
                 );
@@ -159,16 +159,24 @@ class TrackingCtrCategoryIngestService
             : (int) $departmentId;
         $departmentSlug = trim((string) ($categoryData['department_slug'] ?? ''));
         $departmentSlug = $departmentSlug !== '' ? $departmentSlug : null;
+        $microCategoryId = $categoryData['micro_category_id'] ?? null;
+        $microCategoryId = $microCategoryId === null || $microCategoryId === ''
+            ? null
+            : (int) $microCategoryId;
+        $microCategorySlug = trim((string) ($categoryData['micro_category_slug'] ?? ''));
+        $microCategorySlug = $microCategorySlug !== '' ? $microCategorySlug : null;
 
         return TrackingCtrCategory::query()->firstOrCreate(
             [
                 'category_id' => $categoryId,
                 'category_slug' => $categorySlug,
+                'micro_category_id' => $microCategoryId,
                 'type' => $type,
                 'department_id' => $departmentId,
             ],
             [
                 'department_slug' => $departmentSlug,
+                'micro_category_slug' => $microCategorySlug,
             ],
         );
     }
@@ -184,13 +192,15 @@ class TrackingCtrCategoryIngestService
 
     private function storeImpressionRow(
         int $trackingSessionId,
-        int $trackingCtrCategoryId,
+        TrackingCtrCategory $categoryRow,
         int $type,
         string $productCode,
     ): bool {
         TrackingCtrCategoryImpression::query()->create([
             'tracking_session_id' => $trackingSessionId,
-            'tracking_ctr_category_id' => $trackingCtrCategoryId,
+            'tracking_ctr_category_id' => (int) $categoryRow->id,
+            'micro_category_id' => $categoryRow->micro_category_id,
+            'micro_category_slug' => $categoryRow->micro_category_slug,
             'type' => $type,
             'product_code' => $productCode,
         ]);

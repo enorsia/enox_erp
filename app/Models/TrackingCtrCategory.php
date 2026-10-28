@@ -25,5 +25,7 @@ class TrackingCtrCategory extends Model
         'type',
         'category_id',
         'category_slug',
+        'micro_category_id',
+        'micro_category_slug',
     ];
 }

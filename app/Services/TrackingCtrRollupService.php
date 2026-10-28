@@ -15,7 +15,7 @@ class TrackingCtrRollupService
 {
     /**
      * @param  array<int, int>  $impressionIds
-     * @return array{processed: int, skipped: int, touched_keys: array<int, array{department_id: int, category_id: int, product_code: string, department_slug: ?string, category_slug: ?string, type: ?string}>}
+     * @return array{processed: int, skipped: int, touched_keys: array<int, array{department_id: int, category_id: int, micro_category_id: ?int, product_code: string, department_slug: ?string, category_slug: ?string, micro_category_slug: ?string, type: ?string}>}
      */
     public function processCategoryImpressionIds(
         array $impressionIds,
@@ -66,6 +66,8 @@ class TrackingCtrRollupService
                             'department_slug' => $dimension['department_slug'],
                             'category_id' => $dimension['category_id'],
                             'category_slug' => $dimension['category_slug'],
+                            'micro_category_id' => $dimension['micro_category_id'],
+                            'micro_category_slug' => $dimension['micro_category_slug'],
                             'type' => $dimension['type'],
                             'product_code' => $dimension['product_code'],
                             'impressions' => 0,
@@ -81,12 +83,14 @@ class TrackingCtrRollupService
 
                     $processedIds[] = (int) $row->id;
 
-                    $summaryKey = $dimension['department_id'] . '|' . $dimension['category_id'] . '|' . $dimension['product_code'];
+                    $summaryKey = $dimension['department_id'] . '|' . $dimension['category_id'] . '|' . ($dimension['micro_category_id'] ?? '') . '|' . $dimension['product_code'];
                     $touchedKeys[$summaryKey] = [
                         'department_id' => $dimension['department_id'],
                         'department_slug' => $dimension['department_slug'],
                         'category_id' => $dimension['category_id'],
                         'category_slug' => $dimension['category_slug'],
+                        'micro_category_id' => $dimension['micro_category_id'],
+                        'micro_category_slug' => $dimension['micro_category_slug'],
                         'type' => $dimension['type'],
                         'product_code' => $dimension['product_code'],
                     ];
@@ -120,6 +124,8 @@ class TrackingCtrRollupService
                         $key['department_slug'],
                         $key['category_slug'],
                         $key['type'],
+                        $key['micro_category_id'],
+                        $key['micro_category_slug'],
                     );
                 }
 
@@ -146,6 +152,8 @@ class TrackingCtrRollupService
      *     department_slug: ?string,
      *     category_id: int,
      *     category_slug: ?string,
+     *     micro_category_id: ?int,
+     *     micro_category_slug: ?string,
      *     type: ?string,
      *     product_code: string,
      * }|null
@@ -171,12 +179,19 @@ class TrackingCtrRollupService
             return null;
         }
 
+        $microCategoryId = $category->micro_category_id ?? $row->micro_category_id;
+        $microCategoryId = $microCategoryId === null || $microCategoryId === ''
+            ? null
+            : (int) $microCategoryId;
+
         return [
             'metric_date' => $this->metricDateForTimestamp($row->created_at),
             'department_id' => $departmentId,
             'department_slug' => $this->nullableTrimmedString($category->department_slug),
             'category_id' => $categoryId,
             'category_slug' => $this->nullableTrimmedString($category->category_slug),
+            'micro_category_id' => $microCategoryId,
+            'micro_category_slug' => $this->nullableTrimmedString($category->micro_category_slug ?? $row->micro_category_slug),
             'type' => $this->nullableTrimmedString($category->type)
                 ?? TrackingCtrCategory::TYPE_CATEGORY,
             'product_code' => $productCode,
@@ -201,6 +216,8 @@ class TrackingCtrRollupService
      *     department_slug: ?string,
      *     category_id: int,
      *     category_slug: ?string,
+     *     micro_category_id: ?int,
+     *     micro_category_slug: ?string,
      *     type: ?string,
      *     product_code: string,
      *     impressions: int,
@@ -220,11 +237,13 @@ class TrackingCtrRollupService
             ->where('metric_date', $delta['metric_date'])
             ->where('department_id', $delta['department_id'])
             ->where('category_id', $delta['category_id'])
+            ->where('micro_category_id', $delta['micro_category_id'])
             ->where('product_code', $delta['product_code']);
 
         $updated = (clone $query)->update([
             'department_slug' => $delta['department_slug'],
             'category_slug' => $delta['category_slug'],
+            'micro_category_slug' => $delta['micro_category_slug'],
             'type' => $delta['type'],
             'total_impression' => DB::raw('total_impression + ' . $impressions),
             'total_click' => DB::raw('total_click + ' . $clicks),
@@ -253,6 +272,8 @@ class TrackingCtrRollupService
             'department_slug' => $delta['department_slug'],
             'category_id' => $delta['category_id'],
             'category_slug' => $delta['category_slug'],
+            'micro_category_id' => $delta['micro_category_id'],
+            'micro_category_slug' => $delta['micro_category_slug'],
             'type' => $delta['type'],
             'product_code' => $delta['product_code'],
             'total_click' => $clicks,
@@ -273,6 +294,8 @@ class TrackingCtrRollupService
         ?string $departmentSlug = null,
         ?string $categorySlug = null,
         ?string $type = null,
+        ?int $microCategoryId = null,
+        ?string $microCategorySlug = null,
     ): void {
         $rollupDays = max(1, $ctrRollupDays);
         $minClicks = max(1, $minClicks);
@@ -284,6 +307,7 @@ class TrackingCtrRollupService
         $aggregate = TrackerDatabase::table('tracking_ctr_daily_summaries')
             ->where('department_id', $departmentId)
             ->where('category_id', $categoryId)
+            ->where('micro_category_id', $microCategoryId)
             ->where('product_code', $productCode)
             ->where('metric_date', '>=', $fromDate)
             ->selectRaw('COALESCE(SUM(total_click), 0) as total_click')
@@ -307,6 +331,8 @@ class TrackingCtrRollupService
                 'department_slug' => $departmentSlug,
                 'category_id' => $categoryId,
                 'category_slug' => $categorySlug,
+                'micro_category_id' => $microCategoryId,
+                'micro_category_slug' => $microCategorySlug,
                 'type' => $type ?? TrackingCtrCategory::TYPE_CATEGORY,
                 'product_code' => $productCode,
                 'total_click' => $totalClick,
@@ -316,10 +342,11 @@ class TrackingCtrRollupService
                 'created_at' => now(),
                 'updated_at' => now(),
             ]],
-            ['department_id', 'category_id', 'product_code'],
+            ['department_id', 'category_id', 'micro_category_id', 'product_code'],
             [
                 'department_slug',
                 'category_slug',
+                'micro_category_slug',
                 'type',
                 'total_click',
                 'total_impression',
@@ -340,7 +367,7 @@ class TrackingCtrRollupService
     }
 
     /**
-     * @param  array{metric_date: string, department_id: int, category_id: int, product_code: string}  $dimension
+     * @param  array{metric_date: string, department_id: int, category_id: int, micro_category_id: ?int, product_code: string}  $dimension
      */
     private function dailyDeltaKey(array $dimension): string
     {
@@ -348,6 +375,7 @@ class TrackingCtrRollupService
             $dimension['metric_date'],
             $dimension['department_id'],
             $dimension['category_id'],
+            $dimension['micro_category_id'] ?? '',
             $dimension['product_code'],
         ]);
     }
