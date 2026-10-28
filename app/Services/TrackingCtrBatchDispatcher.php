@@ -89,6 +89,134 @@ class TrackingCtrBatchDispatcher
     }
 
     /**
+     * Same pending CTR rows as {@see dispatchPendingBatches}, but runs each batch job inline (no queue worker).
+     *
+     * @return array{
+     *     processed_batches: int,
+     *     category_impression_count: int,
+     *     force_reset_impressions: int,
+     *     force_daily_rows_deleted: int,
+     * }
+     */
+    public function processPendingBatchesSynchronously(
+        bool $force = false,
+        ?Carbon $from = null,
+        ?Carbon $to = null,
+        array $rollupSettings = [],
+    ): array {
+        $ctrRollupDays = max(
+            1,
+            (int) ($rollupSettings['ctr_days']
+                ?? config('tracker.ctr_rollup_days', 90))
+        );
+
+        $minClicks = max(
+            1,
+            (int) ($rollupSettings['min_clicks']
+                ?? config('tracker.ctr_min_clicks_fallback', 1))
+        );
+
+        $forceStats = [
+            'force_reset_impressions' => 0,
+            'force_daily_rows_deleted' => 0,
+        ];
+
+        if ($force && $from !== null) {
+            $forceStats = $this->prepareForceResync($from, $to);
+        }
+
+        $processedBatches = 0;
+        $categoryImpressionCount = 0;
+
+        TrackingCtrCategoryImpression::query()
+            ->whereNull('ctr_rollup_status')
+            ->select('id')
+            ->chunkById(
+                self::BATCH_SIZE,
+                function ($records) use (
+                    $ctrRollupDays,
+                    $minClicks,
+                    &$processedBatches,
+                    &$categoryImpressionCount
+                ): void {
+                    $impressionIds = $records
+                        ->pluck('id')
+                        ->map(fn ($id) => (int) $id)
+                        ->all();
+
+                    if ($impressionIds === []) {
+                        return;
+                    }
+
+                    ProcessTrackingCtrBatchJob::dispatchSync(
+                        $impressionIds,
+                        $ctrRollupDays,
+                        $minClicks,
+                    );
+
+                    $processedBatches++;
+                    $categoryImpressionCount += count($impressionIds);
+                },
+                'id'
+            );
+
+        return array_merge([
+            'processed_batches' => $processedBatches,
+            'category_impression_count' => $categoryImpressionCount,
+        ], $forceStats);
+    }
+
+    /**
+     * Run {@see processPendingBatchesSynchronously} until no pending impression rows remain.
+     *
+     * @return array{
+     *     processed_batches: int,
+     *     category_impression_count: int,
+     *     force_reset_impressions: int,
+     *     force_daily_rows_deleted: int,
+     * }
+     */
+    public function processAllPendingSynchronously(
+        bool $force = false,
+        ?Carbon $from = null,
+        ?Carbon $to = null,
+        array $rollupSettings = [],
+    ): array {
+        $totals = [
+            'processed_batches' => 0,
+            'category_impression_count' => 0,
+            'force_reset_impressions' => 0,
+            'force_daily_rows_deleted' => 0,
+        ];
+
+        $maxPasses = 500;
+        $pass = 0;
+
+        while (
+            $pass < $maxPasses
+            && TrackingCtrCategoryImpression::query()->whereNull('ctr_rollup_status')->exists()
+        ) {
+            $pass++;
+            $result = $this->processPendingBatchesSynchronously($force, $from, $to, $rollupSettings);
+
+            $totals['processed_batches'] += (int) $result['processed_batches'];
+            $totals['category_impression_count'] += (int) $result['category_impression_count'];
+            $totals['force_reset_impressions'] += (int) $result['force_reset_impressions'];
+            $totals['force_daily_rows_deleted'] += (int) $result['force_daily_rows_deleted'];
+
+            if ((int) $result['category_impression_count'] === 0) {
+                break;
+            }
+
+            $force = false;
+            $from = null;
+            $to = null;
+        }
+
+        return $totals;
+    }
+
+    /**
      * @return array{force_reset_impressions: int, force_daily_rows_deleted: int}
      */
     private function prepareForceResync(Carbon $from, ?Carbon $to): array

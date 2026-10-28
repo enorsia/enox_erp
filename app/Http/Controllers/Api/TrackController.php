@@ -3,12 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\TrackingCtrCategory;
 use App\Services\TrackerClientContextResolver;
+use App\Models\TrackingCtrCategoryImpression;
 use App\Models\TrackingCtrSummary;
 use App\Services\TrackIngestService;
+use App\Services\TrackingCtrBatchDispatcher;
+use App\Services\TrackingCtrSyncSiteSettingsService;
 use App\Support\EcomTrackerLogger;
+use App\Support\TrackerTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -178,26 +184,77 @@ class TrackController extends Controller
         }
     }
 
-    public function getTrackingCtrSummaries(Request $request)
-    {
+    public function getTrackingCtrSummaries(
+        Request $request,
+        TrackingCtrBatchDispatcher $ctrBatchDispatcher,
+        TrackingCtrSyncSiteSettingsService $ctrSyncSiteSettings,
+    ): JsonResponse {
         try {
-            $summaries = TrackingCtrSummary::select(
-                'product_code',
-                'ctr',
-                'ctr_average',
-            )->get()->keyBy('product_code');
+            $rollupSettings = $ctrSyncSiteSettings->fetchForSync();
+
+            if (
+                ! $this->ctrSummariesRefreshedForToday()
+                || TrackingCtrCategoryImpression::query()->whereNull('ctr_rollup_status')->exists()
+            ) {
+                $ctrBatchDispatcher->processAllPendingSynchronously(
+                    false,
+                    null,
+                    null,
+                    $rollupSettings,
+                );
+            }
+            dd($this->buildCtrSummariesResponseData());
 
             return response()->json([
                 'status' => true,
                 'message' => 'Tracking CTR summaries updated successfully',
-                'data' => $summaries
+                'data' => $this->buildCtrSummariesResponseData(),
             ], 200);
         } catch (Throwable $th) {
             Log::error('Tracking CTR summaries update failed', ['error' => $th->getMessage()]);
+
             return response()->json([
                 'status' => false,
-                'message' => $th->getMessage()
+                'message' => $th->getMessage(),
             ], 500);
         }
+    }
+
+    private function ctrSummariesRefreshedForToday(): bool
+    {
+        $latestUpdatedAt = TrackingCtrSummary::query()->max('updated_at');
+
+        if ($latestUpdatedAt === null) {
+            return false;
+        }
+
+        $updatedDay = TrackerTime::toUtc($latestUpdatedAt)?->timezone(TrackerTime::timezone())->toDateString()
+            ?? Carbon::parse((string) $latestUpdatedAt, TrackerTime::timezone())->toDateString();
+
+        return $updatedDay === TrackerTime::localNow()->toDateString();
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function buildCtrSummariesResponseData(): array
+    {
+        $data = [];
+
+        foreach (TrackingCtrSummary::query()->select('type', 'department_id', 'category_id', 'product_code', 'ctr', 'ctr_average')->get() as $row) {
+            $type = (string) ($row->type ?? TrackingCtrCategory::TYPE_CATEGORY);
+            $departmentId = max(0, (int) ($row->department_id ?? 0));
+            $categoryId = max(0, (int) ($row->category_id ?? 0));
+            $productCode = (string) ($row->product_code ?? '');
+
+            if ($productCode === '') {
+                continue;
+            }
+
+            $key = $type . '_' . $departmentId . '_' . $categoryId . '_' . $productCode;
+            $data[$key] = $row->toArray();
+        }
+
+        return $data;
     }
 }
