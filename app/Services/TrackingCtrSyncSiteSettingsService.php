@@ -64,7 +64,7 @@ class TrackingCtrSyncSiteSettingsService
             $payload = $response->json();
 
             if (! ($payload['status'] ?? false)) {
-                Log::warning('CTR sync: tracking/site-settings returned status=false');
+                Log::warning('CTR sync: tracking/site-settings returned status=false using [config fallback]');
 
                 return null;
             }
@@ -73,7 +73,7 @@ class TrackingCtrSyncSiteSettingsService
 
             return $this->normalizeFromExtra($extra);
         } catch (\Throwable $exception) {
-            Log::warning('CTR sync: tracking/site-settings fetch failed', [
+            Log::warning('CTR sync: tracking/site-settings fetch failed using [config fallback]', [
                 'error' => $exception->getMessage(),
                 'base_url' => $baseUrl,
             ]);
