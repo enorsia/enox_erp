@@ -52,7 +52,7 @@ php artisan config:cache
 php artisan tracker:sync-dashboard
 ```
 
-**CTR rollup** (`tracking_ctr_categories_impression` + legacy `activity_ecom_user_actions` → `tracking_ctr_daily_summaries` / `tracking_ctr_summaries`):
+**CTR rollup** (`tracking_ctr_categories_impression` → `tracking_ctr_daily_summaries` / `tracking_ctr_summaries`):
 
 ```bash
 php artisan tracker:sync-ctr

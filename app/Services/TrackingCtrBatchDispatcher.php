@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Jobs\ProcessTrackingCtrBatchJob;
-use App\Models\ActivityEcomUserAction;
 use App\Models\TrackingCtrCategoryImpression;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
@@ -15,25 +14,25 @@ class TrackingCtrBatchDispatcher
 
     private const MAX_BATCHES_PER_RUN = 20;
 
-    public function __construct(
-        private readonly TrackingCtrRollupService $rollupService,
-    ) {}
-
     /**
      * @return array{
      *     queued_jobs: int,
-     *     action_count: int,
      *     category_impression_count: int,
      *     force_reset_impressions: int,
-     *     force_reset_actions: int,
      *     force_daily_rows_deleted: int,
      * }
      */
-    public function dispatchPendingBatches(bool $force = false, ?Carbon $from = null, ?Carbon $to = null): array
-    {
+    public function dispatchPendingBatches(
+        bool $force = false,
+        ?Carbon $from = null,
+        ?Carbon $to = null,
+        array $rollupSettings = [],
+    ): array {
+        $ctrRollupDays = max(1, (int) ($rollupSettings['ctr_days'] ?? config('tracker.ctr_rollup_days', 90)));
+        $minClicks = max(1, (int) ($rollupSettings['min_clicks'] ?? config('tracker.ctr_min_clicks_fallback', 1)));
+
         $forceStats = [
             'force_reset_impressions' => 0,
-            'force_reset_actions' => 0,
             'force_daily_rows_deleted' => 0,
         ];
 
@@ -45,15 +44,6 @@ class TrackingCtrBatchDispatcher
         $maxBatches = self::MAX_BATCHES_PER_RUN;
         $maxRows = $batchSize * $maxBatches;
 
-        $pendingActionIds = ActivityEcomUserAction::query()
-            ->whereNull('ctr_tracking_status')
-            ->whereIn('action_type', $this->rollupService->ctrActionTypes())
-            ->orderBy('id')
-            ->limit($maxRows)
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
-
         $pendingCategoryImpressionIds = TrackingCtrCategoryImpression::query()
             ->whereNull('ctr_rollup_status')
             ->orderBy('id')
@@ -62,35 +52,28 @@ class TrackingCtrBatchDispatcher
             ->map(fn ($id) => (int) $id)
             ->all();
 
-        if ($pendingActionIds === [] && $pendingCategoryImpressionIds === []) {
+        if ($pendingCategoryImpressionIds === []) {
             return array_merge([
                 'queued_jobs' => 0,
-                'action_count' => 0,
                 'category_impression_count' => 0,
             ], $forceStats);
         }
 
         $queuedJobs = 0;
 
-        foreach (array_chunk($pendingActionIds, $batchSize) as $actionIds) {
-            ProcessTrackingCtrBatchJob::dispatch($actionIds, []);
-            $queuedJobs++;
-        }
-
         foreach (array_chunk($pendingCategoryImpressionIds, $batchSize) as $impressionIds) {
-            ProcessTrackingCtrBatchJob::dispatch([], $impressionIds);
+            ProcessTrackingCtrBatchJob::dispatch($impressionIds, $ctrRollupDays, $minClicks);
             $queuedJobs++;
         }
 
         return array_merge([
             'queued_jobs' => $queuedJobs,
-            'action_count' => count($pendingActionIds),
             'category_impression_count' => count($pendingCategoryImpressionIds),
         ], $forceStats);
     }
 
     /**
-     * @return array{force_reset_impressions: int, force_reset_actions: int, force_daily_rows_deleted: int}
+     * @return array{force_reset_impressions: int, force_daily_rows_deleted: int}
      */
     private function prepareForceResync(Carbon $from, ?Carbon $to): array
     {
@@ -112,18 +95,12 @@ class TrackingCtrBatchDispatcher
             ->whereBetween('created_at', [$utcStart, $utcEnd])
             ->update(['ctr_rollup_status' => null]);
 
-        $resetActions = ActivityEcomUserAction::query()
-            ->whereIn('action_type', $this->rollupService->ctrActionTypes())
-            ->whereBetween('created_at', [$utcStart, $utcEnd])
-            ->update(['ctr_tracking_status' => null]);
-
         $deletedDaily = TrackerDatabase::table('tracking_ctr_daily_summaries')
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->delete();
 
         return [
             'force_reset_impressions' => (int) $resetImpressions,
-            'force_reset_actions' => (int) $resetActions,
             'force_daily_rows_deleted' => (int) $deletedDaily,
         ];
     }

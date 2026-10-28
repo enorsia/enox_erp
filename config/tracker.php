@@ -114,6 +114,9 @@ return [
     // Rolling window when aggregating tracking_ctr_daily_summaries → tracking_ctr_summaries.
     'ctr_rollup_days' => (int) env('TRACKER_CTR_ROLLUP_DAYS', 90),
 
+    /** Used when ecom tracking/site-settings API is unreachable at sync time. */
+    'ctr_min_clicks_fallback' => (int) env('TRACKER_CTR_MIN_CLICKS_FALLBACK', 1),
+
     'analytics_windows' => [
         'hours' => [1, 3, 6, 12, 24],
         'days' => [1, 7, 14, 30, 90],

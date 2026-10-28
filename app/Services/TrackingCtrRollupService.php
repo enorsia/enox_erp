@@ -2,10 +2,8 @@
 
 namespace App\Services;
 
-use App\Support\TrackerDatabase;
-
-use App\Models\ActivityEcomUserAction;
 use App\Models\TrackingCtrCategoryImpression;
+use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -15,23 +13,25 @@ use Throwable;
 class TrackingCtrRollupService
 {
     /**
-     * @param  array<int, int>  $actionIds
-     * @return array{processed: int, skipped: int, touched_keys: array<int, array{department_id: int, category_id: int, product_code: string}>}
-     */
-    /**
      * @param  array<int, int>  $impressionIds
      * @return array{processed: int, skipped: int, touched_keys: array<int, array{department_id: int, category_id: int, product_code: string}>}
      */
-    public function processCategoryImpressionIds(array $impressionIds): array
-    {
+    public function processCategoryImpressionIds(
+        array $impressionIds,
+        int $ctrRollupDays = 90,
+        int $minClicks = 1,
+    ): array {
         $ids = array_values(array_unique(array_filter(array_map('intval', $impressionIds))));
 
         if ($ids === []) {
             return ['processed' => 0, 'skipped' => 0, 'touched_keys' => []];
         }
 
+        $ctrRollupDays = max(1, $ctrRollupDays);
+        $minClicks = max(1, $minClicks);
+
         try {
-            return TrackerDatabase::connection()->transaction(function () use ($ids) {
+            return TrackerDatabase::connection()->transaction(function () use ($ids, $ctrRollupDays, $minClicks) {
                 $rows = TrackingCtrCategoryImpression::query()
                     ->whereIn('id', $ids)
                     ->whereNull('ctr_rollup_status')
@@ -108,6 +108,8 @@ class TrackingCtrRollupService
                         $key['department_id'],
                         $key['category_id'],
                         $key['product_code'],
+                        $ctrRollupDays,
+                        $minClicks,
                     );
                 }
 
@@ -125,142 +127,6 @@ class TrackingCtrRollupService
 
             throw $exception;
         }
-    }
-
-    public function processActionIds(array $actionIds): array
-    {
-        $ids = array_values(array_unique(array_filter(array_map('intval', $actionIds))));
-
-        if ($ids === []) {
-            return ['processed' => 0, 'skipped' => 0, 'touched_keys' => []];
-        }
-
-        try {
-            return TrackerDatabase::connection()->transaction(function () use ($ids) {
-                $actions = ActivityEcomUserAction::query()
-                    ->whereIn('id', $ids)
-                    ->whereNull('ctr_tracking_status')
-                    ->whereIn('action_type', $this->ctrActionTypes())
-                    ->orderBy('id')
-                    ->lockForUpdate()
-                    ->get();
-
-                $processedIds = [];
-                $skipped = 0;
-                $skippedUnprocessableIds = [];
-                $skipSamples = [];
-                $touchedKeys = [];
-                $dailyDeltas = [];
-
-                foreach ($actions as $action) {
-                    $dimension = $this->dimensionForAction($action);
-
-                    if ($dimension === null) {
-                        $skipped++;
-                        $skipReason = $this->skipReasonForAction($action);
-
-                        if (count($skipSamples) < 5) {
-                            $skipSamples[] = [
-                                'action_id' => (int) $action->id,
-                                'action_type' => (string) $action->action_type,
-                                'reason' => $skipReason,
-                                'product_code' => trim((string) ($action->product_code ?? '')),
-                                'sku' => trim((string) ($action->sku ?? '')),
-                                'created_at' => $action->created_at,
-                                'start_time' => $action->start_time,
-                            ];
-                        }
-
-                        if ($skipReason === 'missing_catalog_identity') {
-                            $skippedUnprocessableIds[] = (int) $action->id;
-                        }
-
-                        continue;
-                    }
-
-                    $deltaKey = $this->dailyDeltaKey($dimension);
-
-                    if (! isset($dailyDeltas[$deltaKey])) {
-                        $dailyDeltas[$deltaKey] = [
-                            'metric_date' => $dimension['metric_date'],
-                            'department_id' => $dimension['department_id'],
-                            'category_id' => $dimension['category_id'],
-                            'product_code' => $dimension['product_code'],
-                            'impressions' => 0,
-                            'clicks' => 0,
-                        ];
-                    }
-
-                    if ($action->action_type === 'grid_impression') {
-                        $dailyDeltas[$deltaKey]['impressions']++;
-                    } elseif ($action->action_type === 'product_click') {
-                        $dailyDeltas[$deltaKey]['clicks']++;
-                    }
-
-                    $processedIds[] = (int) $action->id;
-
-                    $summaryKey = $dimension['department_id'] . '|' . $dimension['category_id'] . '|' . $dimension['product_code'];
-                    $touchedKeys[$summaryKey] = [
-                        'department_id' => $dimension['department_id'],
-                        'category_id' => $dimension['category_id'],
-                        'product_code' => $dimension['product_code'],
-                    ];
-                }
-
-                foreach ($dailyDeltas as $delta) {
-                    $this->applyDailyDeltaAtomic($delta);
-                }
-
-                if ($processedIds !== []) {
-                    ActivityEcomUserAction::query()
-                        ->whereIn('id', $processedIds)
-                        ->whereNull('ctr_tracking_status')
-                        ->update(['ctr_tracking_status' => true]);
-                }
-
-                if ($skippedUnprocessableIds !== []) {
-                    ActivityEcomUserAction::query()
-                        ->whereIn('id', $skippedUnprocessableIds)
-                        ->whereNull('ctr_tracking_status')
-                        ->update(['ctr_tracking_status' => false]);
-                }
-
-                foreach ($touchedKeys as $key) {
-                    $this->refreshSummaryForProductCode(
-                        $key['department_id'],
-                        $key['category_id'],
-                        $key['product_code'],
-                    );
-                }
-
-                $result = [
-                    'processed' => count($processedIds),
-                    'skipped' => $skipped,
-                    'touched_keys' => array_values($touchedKeys),
-                ];
-
-                if ($skipSamples !== []) {
-                    $result['skip_samples'] = $skipSamples;
-                }
-
-                return $result;
-            });
-        } catch (Throwable $exception) {
-            $this->logError('batch transaction rolled back', [
-                'action_ids' => $ids,
-                'error' => $exception->getMessage(),
-            ]);
-
-            throw $exception;
-        }
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    public function ctrActionTypes(): array
-    {
-        return ['grid_impression', 'product_click'];
     }
 
     /**
@@ -295,54 +161,6 @@ class TrackingCtrRollupService
         ];
     }
 
-    private function dimensionForAction(ActivityEcomUserAction $action): ?array
-    {
-        $productCode = $this->resolveProductCode($action);
-
-        if ($productCode === null) {
-            return null;
-        }
-
-        $departmentId = max(0, (int) trim((string) ($action->department_id ?? '')));
-        $categoryId = max(0, (int) trim((string) ($action->category_id ?? '')));
-
-        return [
-            'metric_date' => $this->metricDateForAction($action),
-            'department_id' => $departmentId,
-            'category_id' => $categoryId,
-            'product_code' => $productCode,
-        ];
-    }
-
-    private function resolveProductCode(ActivityEcomUserAction $action): ?string
-    {
-        $productCode = trim((string) ($action->product_code ?? ''));
-        $legacySku = trim((string) ($action->sku ?? ''));
-
-        if ($productCode === '' && $legacySku === '') {
-            return null;
-        }
-
-        if ($productCode === '') {
-            $productCode = $legacySku;
-        }
-
-        return $productCode;
-    }
-
-    private function metricDateForAction(ActivityEcomUserAction $action): string
-    {
-        foreach ([$action->created_at, $action->start_time, $action->end_time] as $candidate) {
-            $utc = TrackerTime::toUtc($candidate);
-
-            if ($utc !== null) {
-                return $utc->timezone(TrackerTime::timezone())->toDateString();
-            }
-        }
-
-        return TrackerTime::localNow()->toDateString();
-    }
-
     private function metricDateForTimestamp(mixed $candidate): string
     {
         $utc = TrackerTime::toUtc($candidate);
@@ -352,13 +170,6 @@ class TrackingCtrRollupService
         }
 
         return TrackerTime::localNow()->toDateString();
-    }
-
-    private function skipReasonForAction(ActivityEcomUserAction $action): string
-    {
-        return $this->resolveProductCode($action) === null
-            ? 'missing_catalog_identity'
-            : 'unknown';
     }
 
     /**
@@ -419,8 +230,11 @@ class TrackingCtrRollupService
         int $departmentId,
         int $categoryId,
         string $productCode,
+        int $ctrRollupDays,
+        int $minClicks,
     ): void {
-        $rollupDays = max(1, (int) config('tracker.ctr_rollup_days', 90));
+        $rollupDays = max(1, $ctrRollupDays);
+        $minClicks = max(1, $minClicks);
         $fromDate = Carbon::now(TrackerTime::timezone())
             ->subDays($rollupDays - 1)
             ->startOfDay()
@@ -440,6 +254,11 @@ class TrackingCtrRollupService
         $totalImpression = (int) ($aggregate->total_impression ?? 0);
         $ctr = $this->ctrValue($totalClick, $totalImpression);
         $ctrAverage = round((float) ($aggregate->ctr_average ?? 0), 6);
+
+        if ($totalClick < $minClicks) {
+            $ctr = 0.0;
+            $ctrAverage = 0.0;
+        }
 
         TrackerDatabase::table('tracking_ctr_summaries')->upsert(
             [[

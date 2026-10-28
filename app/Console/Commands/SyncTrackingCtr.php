@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\TrackingCtrBatchDispatcher;
+use App\Services\TrackingCtrSyncSiteSettingsService;
 use App\Support\TrackerQueueSupport;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -16,10 +17,12 @@ class SyncTrackingCtr extends Command
                             {--from= : Required with --force: range start (visitor timezone calendar day)}
                             {--to= : Optional with --force: range end day (defaults to --from)}';
 
-    protected $description = 'Queue CTR rollup jobs for pending category grid events (tracking_ctr_categories_impression) and legacy product_click actions.';
+    protected $description = 'Queue CTR rollup jobs for pending rows in tracking_ctr_categories_impression (ctr_rollup_status null).';
 
-    public function handle(TrackingCtrBatchDispatcher $dispatcher): int
-    {
+    public function handle(
+        TrackingCtrBatchDispatcher $dispatcher,
+        TrackingCtrSyncSiteSettingsService $syncSiteSettings,
+    ): int {
         $force = (bool) $this->option('force');
         $from = null;
         $to = null;
@@ -47,19 +50,26 @@ class SyncTrackingCtr extends Command
             ));
         }
 
-        $result = $dispatcher->dispatchPendingBatches($force, $from, $to);
+        $rollupSettings = $syncSiteSettings->fetchForSync();
+        $this->info(sprintf(
+            'CTR sync: product sorting (%s) — ctr_days=%d, min_clicks=%d.',
+            $rollupSettings['source'],
+            $rollupSettings['ctr_days'],
+            $rollupSettings['min_clicks'],
+        ));
+
+        $result = $dispatcher->dispatchPendingBatches($force, $from, $to, $rollupSettings);
 
         if ($force) {
             $this->info(sprintf(
-                'CTR force: reset %d impression row(s), %d legacy action(s); removed %d daily summary row(s).',
+                'CTR force: reset %d impression row(s); removed %d daily summary row(s).',
                 $result['force_reset_impressions'],
-                $result['force_reset_actions'],
                 $result['force_daily_rows_deleted'],
             ));
         }
 
-        if ($result['action_count'] === 0 && $result['category_impression_count'] === 0) {
-            $this->info('CTR sync: nothing pending (category impressions ctr_rollup_status null, legacy actions ctr_tracking_status null).');
+        if ($result['category_impression_count'] === 0) {
+            $this->info('CTR sync: nothing pending (tracking_ctr_categories_impression.ctr_rollup_status null).');
 
             return self::SUCCESS;
         }
@@ -70,10 +80,9 @@ class SyncTrackingCtr extends Command
         $jobsTable = (string) config("queue.connections.{$connection}.table", 'jobs');
 
         $this->info(sprintf(
-            'CTR sync: queued %d job(s) — %d category impression row(s), %d legacy action(s) → connection [%s], queue [%s].',
+            'CTR sync: queued %d job(s) — %d category impression row(s) → connection [%s], queue [%s].',
             $result['queued_jobs'],
             $result['category_impression_count'],
-            $result['action_count'],
             $connection,
             $queue,
         ));
