@@ -197,17 +197,17 @@
                     </thead>
                     <tbody>
                         @forelse ($summaries as $row)
-                            <tr>
-                                <td class="whitespace-nowrap">{{ $row['department'] }}</td>
-                                <td class="whitespace-nowrap">{{ $row['category_display'] }}</td>
-                                <td class="font-mono text-[12px] whitespace-nowrap">{{ $row['product_code'] }}</td>
-                                <td class="text-right tabular-nums">{{ number_format((float) $row['ctr'], 2, '.', '') }}</td>
-                                <td class="text-right tabular-nums">{{ number_format((float) $row['ctr_average'], 2, '.', '') }}</td>
-                                <td class="text-right tabular-nums">{{ number_format($row['click']) }}</td>
-                                <td class="text-right tabular-nums">{{ number_format($row['impression']) }}</td>
+                            <tr class="etd-ctr-summary-row">
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--dept" data-label="Department">{{ $row['department'] }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--category" data-label="Category">{{ $row['category_display'] }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--product font-mono text-[12px]" data-label="Product code">{{ $row['product_code'] }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="CTR">{{ number_format((float) $row['ctr'], 2, '.', '') }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="CTR average">{{ number_format((float) $row['ctr_average'], 2, '.', '') }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="Click">{{ number_format($row['click']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="Impression">{{ number_format($row['impression']) }}</td>
                             </tr>
                         @empty
-                            <tr>
+                            <tr class="etd-ctr-summary-empty">
                                 <td colspan="7" class="py-10 text-center text-slate-500 dark:text-slate-400">
                                     No CTR summary rows match your filters.
                                 </td>
