@@ -15,6 +15,7 @@ use App\Support\TrackerTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -219,6 +220,30 @@ class TrackController extends Controller
         }
     }
 
+    public function ctrSummariesSettings(Request $request): JsonResponse
+    {
+        try {
+            $settings = $request->only(TrackingCtrSyncSiteSettingsService::extraSettingKeys());
+
+            Cache::forever(
+                TrackingCtrSyncSiteSettingsService::CTR_SUMMARIES_SETTINGS_CACHE_KEY,
+                $settings,
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Tracking CTR summaries settings updated successfully',
+            ], 200);
+        } catch (Throwable $th) {
+            Log::error('Tracking CTR summaries settings update failed', ['error' => $th->getMessage()]);
+
+            return response()->json([
+                'status' => false,
+                'message' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
     private function ctrSummariesRefreshedForToday(): bool
     {
         $latestUpdatedAt = TrackingCtrSummary::query()->max('updated_at');
@@ -248,6 +273,8 @@ class TrackController extends Controller
             'product_code',
             'ctr',
             'ctr_average',
+            'total_click',
+            'total_impression',
         )->get() as $row) {
             $type = (string) ($row->type ?? TrackingCtrCategory::TYPE_CATEGORY);
             $departmentId = max(0, (int) ($row->department_id ?? 0));

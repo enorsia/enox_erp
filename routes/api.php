@@ -24,5 +24,6 @@ Route::middleware('internal.api')->group(function () {
     });
     Route::controller(TrackController::class)->group(function () {
         Route::get('tracking/ctr-summaries', 'getTrackingCtrSummaries');
+        Route::post('tracking/ctr-summaries/settings', 'ctrSummariesSettings');
     });
 });
