@@ -14,6 +14,7 @@ class TrackingCtrDailySummary extends Model
 
     protected $fillable = [
         'metric_date',
+        'tracking_ctr_category_id',
         'department_id',
         'department_slug',
         'category_id',
@@ -32,6 +33,7 @@ class TrackingCtrDailySummary extends Model
     {
         return [
             'metric_date' => 'date',
+            'tracking_ctr_category_id' => 'integer',
             'department_id' => 'integer',
             'department_slug' => 'string',
             'category_id' => 'integer',

@@ -203,7 +203,6 @@ class TrackController extends Controller
                     $rollupSettings,
                 );
             }
-
             return response()->json([
                 'status' => true,
                 'message' => 'Tracking CTR summaries updated successfully',
@@ -248,6 +247,8 @@ class TrackController extends Controller
             'product_code',
             'ctr',
             'ctr_average',
+            'total_click',
+            'total_impression',
         )->get() as $row) {
             $type = (string) ($row->type ?? TrackingCtrCategory::TYPE_CATEGORY);
             $departmentId = max(0, (int) ($row->department_id ?? 0));

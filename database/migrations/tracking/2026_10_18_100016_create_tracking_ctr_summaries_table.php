@@ -10,6 +10,7 @@ return new class extends TrackingMigration
     {
         Schema::create('tracking_ctr_summaries', function (Blueprint $table) {
             $table->id();
+            $table->unsignedBigInteger('tracking_ctr_category_id');
             $table->unsignedBigInteger('department_id')->nullable();
             $table->string('department_slug')->nullable();
             $table->unsignedBigInteger('category_id');
@@ -25,9 +26,10 @@ return new class extends TrackingMigration
             $table->timestamps();
 
             $table->unique(
-                ['department_id', 'category_id', 'micro_category_id', 'product_code'],
-                'uq_tracking_ctr_summary_dept_category_code',
+                ['tracking_ctr_category_id', 'product_code'],
+                'uq_tracking_ctr_summary_category_product',
             );
+            $table->index('tracking_ctr_category_id', 'idx_tracking_ctr_summary_ctr_category');
             $table->index('department_id', 'idx_tracking_ctr_summary_department');
             $table->index('category_id', 'idx_tracking_ctr_summary_category');
             $table->index('micro_category_id', 'idx_tracking_ctr_summary_micro_category');

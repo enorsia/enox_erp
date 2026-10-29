@@ -15,7 +15,7 @@ class TrackingCtrRollupService
 {
     /**
      * @param  array<int, int>  $impressionIds
-     * @return array{processed: int, skipped: int, touched_keys: array<int, array{department_id: int, category_id: int, micro_category_id: ?int, product_code: string, department_slug: ?string, category_slug: ?string, micro_category_slug: ?string, type: ?string}>}
+     * @return array{processed: int, skipped: int, touched_keys: array<int, array{tracking_ctr_category_id: int, product_code: string, department_id: int, category_id: int, micro_category_id: ?int, department_slug: ?string, category_slug: ?string, micro_category_slug: ?string, type: ?string}>}
      */
     public function processCategoryImpressionIds(
         array $impressionIds,
@@ -62,6 +62,7 @@ class TrackingCtrRollupService
                     if (! isset($dailyDeltas[$deltaKey])) {
                         $dailyDeltas[$deltaKey] = [
                             'metric_date' => $dimension['metric_date'],
+                            'tracking_ctr_category_id' => $dimension['tracking_ctr_category_id'],
                             'department_id' => $dimension['department_id'],
                             'department_slug' => $dimension['department_slug'],
                             'category_id' => $dimension['category_id'],
@@ -83,8 +84,9 @@ class TrackingCtrRollupService
 
                     $processedIds[] = (int) $row->id;
 
-                    $summaryKey = $dimension['department_id'] . '|' . $dimension['category_id'] . '|' . ($dimension['micro_category_id'] ?? '') . '|' . $dimension['product_code'];
+                    $summaryKey = $dimension['tracking_ctr_category_id'].'|'.$dimension['product_code'];
                     $touchedKeys[$summaryKey] = [
+                        'tracking_ctr_category_id' => $dimension['tracking_ctr_category_id'],
                         'department_id' => $dimension['department_id'],
                         'department_slug' => $dimension['department_slug'],
                         'category_id' => $dimension['category_id'],
@@ -96,8 +98,21 @@ class TrackingCtrRollupService
                     ];
                 }
 
+                $dailyCategoryDates = [];
+
                 foreach ($dailyDeltas as $delta) {
                     $this->applyDailyDeltaAtomic($delta);
+                    $dailyCategoryDates[$delta['tracking_ctr_category_id'].'|'.$delta['metric_date']] = [
+                        'tracking_ctr_category_id' => (int) $delta['tracking_ctr_category_id'],
+                        'metric_date' => $delta['metric_date'],
+                    ];
+                }
+
+                foreach ($dailyCategoryDates as $categoryDate) {
+                    $this->refreshDailyCtrAverageForCategory(
+                        $categoryDate['tracking_ctr_category_id'],
+                        $categoryDate['metric_date'],
+                    );
                 }
 
                 if ($processedIds !== []) {
@@ -114,19 +129,32 @@ class TrackingCtrRollupService
                         ->update(['ctr_rollup_status' => false]);
                 }
 
+                $summaryCategoryIds = [];
+
                 foreach ($touchedKeys as $key) {
                     $this->refreshSummaryForProductCode(
-                        $key['department_id'],
-                        $key['category_id'],
+                        (int) $key['tracking_ctr_category_id'],
                         $key['product_code'],
                         $ctrRollupDays,
                         $minClicks,
+                        $key['department_id'],
+                        $key['category_id'],
                         $key['department_slug'],
                         $key['category_slug'],
                         $key['type'],
                         $key['micro_category_id'],
                         $key['micro_category_slug'],
                     );
+                    $summaryCategoryIds[(int) $key['tracking_ctr_category_id']] = true;
+                }
+
+                $fromDate = Carbon::now(TrackerTime::timezone())
+                    ->subDays(max(1, $ctrRollupDays) - 1)
+                    ->startOfDay()
+                    ->toDateString();
+
+                foreach (array_keys($summaryCategoryIds) as $trackingCtrCategoryId) {
+                    $this->refreshSummaryCtrAverageForCategory((int) $trackingCtrCategoryId, $fromDate);
                 }
 
                 return [
@@ -148,6 +176,7 @@ class TrackingCtrRollupService
     /**
      * @return array{
      *     metric_date: string,
+     *     tracking_ctr_category_id: int,
      *     department_id: int,
      *     department_slug: ?string,
      *     category_id: int,
@@ -179,6 +208,11 @@ class TrackingCtrRollupService
             return null;
         }
 
+        $trackingCtrCategoryId = (int) ($row->tracking_ctr_category_id ?? $category->id);
+        if ($trackingCtrCategoryId <= 0) {
+            return null;
+        }
+
         $microCategoryId = $category->micro_category_id ?? $row->micro_category_id;
         $microCategoryId = $microCategoryId === null || $microCategoryId === ''
             ? null
@@ -186,6 +220,7 @@ class TrackingCtrRollupService
 
         return [
             'metric_date' => $this->metricDateForTimestamp($row->created_at),
+            'tracking_ctr_category_id' => $trackingCtrCategoryId,
             'department_id' => $departmentId,
             'department_slug' => $this->nullableTrimmedString($category->department_slug),
             'category_id' => $categoryId,
@@ -212,6 +247,7 @@ class TrackingCtrRollupService
     /**
      * @param  array{
      *     metric_date: string,
+     *     tracking_ctr_category_id: int,
      *     department_id: int,
      *     department_slug: ?string,
      *     category_id: int,
@@ -235,9 +271,7 @@ class TrackingCtrRollupService
 
         $query = TrackerDatabase::table('tracking_ctr_daily_summaries')
             ->where('metric_date', $delta['metric_date'])
-            ->where('department_id', $delta['department_id'])
-            ->where('category_id', $delta['category_id'])
-            ->where('micro_category_id', $delta['micro_category_id'])
+            ->where('tracking_ctr_category_id', $delta['tracking_ctr_category_id'])
             ->where('product_code', $delta['product_code']);
 
         $updated = (clone $query)->update([
@@ -252,15 +286,12 @@ class TrackingCtrRollupService
                 . 'THEN ROUND((total_click + ' . $clicks . ') / (total_impression + ' . $impressions . '), 6) '
                 . 'ELSE 0 END',
             ),
-            'ctr_average' => DB::raw(
-                'CASE WHEN (total_impression + ' . $impressions . ') > 0 '
-                . 'THEN ROUND((total_click + ' . $clicks . ') / (total_impression + ' . $impressions . '), 6) '
-                . 'ELSE 0 END',
-            ),
             'updated_at' => now(),
         ]);
 
         if ($updated > 0) {
+            $this->reconcileDailyProductCtr($delta);
+
             return;
         }
 
@@ -268,6 +299,7 @@ class TrackingCtrRollupService
 
         TrackerDatabase::table('tracking_ctr_daily_summaries')->insert([
             'metric_date' => $delta['metric_date'],
+            'tracking_ctr_category_id' => $delta['tracking_ctr_category_id'],
             'department_id' => $delta['department_id'],
             'department_slug' => $delta['department_slug'],
             'category_id' => $delta['category_id'],
@@ -279,18 +311,38 @@ class TrackingCtrRollupService
             'total_click' => $clicks,
             'total_impression' => $impressions,
             'ctr' => $ctr,
-            'ctr_average' => $ctr,
+            'ctr_average' => 0,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        $this->reconcileDailyProductCtr($delta);
+    }
+
+    /**
+     * @param  array{metric_date: string, tracking_ctr_category_id: int, product_code: string}  $delta
+     */
+    private function reconcileDailyProductCtr(array $delta): void
+    {
+        TrackerDatabase::table('tracking_ctr_daily_summaries')
+            ->where('metric_date', $delta['metric_date'])
+            ->where('tracking_ctr_category_id', $delta['tracking_ctr_category_id'])
+            ->where('product_code', $delta['product_code'])
+            ->update([
+                'ctr' => DB::raw(
+                    'CASE WHEN total_impression > 0 THEN ROUND(total_click / total_impression, 6) ELSE 0 END',
+                ),
+                'updated_at' => now(),
+            ]);
     }
 
     private function refreshSummaryForProductCode(
-        int $departmentId,
-        int $categoryId,
+        int $trackingCtrCategoryId,
         string $productCode,
         int $ctrRollupDays,
         int $minClicks,
+        int $departmentId,
+        int $categoryId,
         ?string $departmentSlug = null,
         ?string $categorySlug = null,
         ?string $type = null,
@@ -305,28 +357,24 @@ class TrackingCtrRollupService
             ->toDateString();
 
         $aggregate = TrackerDatabase::table('tracking_ctr_daily_summaries')
-            ->where('department_id', $departmentId)
-            ->where('category_id', $categoryId)
-            ->where('micro_category_id', $microCategoryId)
+            ->where('tracking_ctr_category_id', $trackingCtrCategoryId)
             ->where('product_code', $productCode)
             ->where('metric_date', '>=', $fromDate)
             ->selectRaw('COALESCE(SUM(total_click), 0) as total_click')
             ->selectRaw('COALESCE(SUM(total_impression), 0) as total_impression')
-            ->selectRaw('COALESCE(AVG(ctr), 0) as ctr_average')
             ->first();
 
         $totalClick = (int) ($aggregate->total_click ?? 0);
         $totalImpression = (int) ($aggregate->total_impression ?? 0);
         $ctr = $this->ctrValue($totalClick, $totalImpression);
-        $ctrAverage = round((float) ($aggregate->ctr_average ?? 0), 6);
 
         if ($totalClick < $minClicks) {
             $ctr = 0.0;
-            $ctrAverage = 0.0;
         }
 
         TrackerDatabase::table('tracking_ctr_summaries')->upsert(
             [[
+                'tracking_ctr_category_id' => $trackingCtrCategoryId,
                 'department_id' => $departmentId,
                 'department_slug' => $departmentSlug,
                 'category_id' => $categoryId,
@@ -338,11 +386,11 @@ class TrackingCtrRollupService
                 'total_click' => $totalClick,
                 'total_impression' => $totalImpression,
                 'ctr' => $ctr,
-                'ctr_average' => $ctrAverage,
+                'ctr_average' => 0,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]],
-            ['department_id', 'category_id', 'micro_category_id', 'product_code'],
+            ['tracking_ctr_category_id', 'product_code'],
             [
                 'department_slug',
                 'category_slug',
@@ -357,6 +405,51 @@ class TrackingCtrRollupService
         );
     }
 
+    private function refreshDailyCtrAverageForCategory(int $trackingCtrCategoryId, string $metricDate): void
+    {
+        $aggregate = TrackerDatabase::table('tracking_ctr_daily_summaries')
+            ->where('tracking_ctr_category_id', $trackingCtrCategoryId)
+            ->where('metric_date', $metricDate)
+            ->selectRaw('COALESCE(SUM(total_click), 0) as total_click')
+            ->selectRaw('COALESCE(SUM(total_impression), 0) as total_impression')
+            ->first();
+
+        $ctrAverage = $this->ctrValue(
+            (int) ($aggregate->total_click ?? 0),
+            (int) ($aggregate->total_impression ?? 0),
+        );
+
+        TrackerDatabase::table('tracking_ctr_daily_summaries')
+            ->where('tracking_ctr_category_id', $trackingCtrCategoryId)
+            ->where('metric_date', $metricDate)
+            ->update([
+                'ctr_average' => $ctrAverage,
+                'updated_at' => now(),
+            ]);
+    }
+
+    private function refreshSummaryCtrAverageForCategory(int $trackingCtrCategoryId, string $fromDate): void
+    {
+        $aggregate = TrackerDatabase::table('tracking_ctr_daily_summaries')
+            ->where('tracking_ctr_category_id', $trackingCtrCategoryId)
+            ->where('metric_date', '>=', $fromDate)
+            ->selectRaw('COALESCE(SUM(total_click), 0) as total_click')
+            ->selectRaw('COALESCE(SUM(total_impression), 0) as total_impression')
+            ->first();
+
+        $ctrAverage = $this->ctrValue(
+            (int) ($aggregate->total_click ?? 0),
+            (int) ($aggregate->total_impression ?? 0),
+        );
+
+        TrackerDatabase::table('tracking_ctr_summaries')
+            ->where('tracking_ctr_category_id', $trackingCtrCategoryId)
+            ->update([
+                'ctr_average' => $ctrAverage,
+                'updated_at' => now(),
+            ]);
+    }
+
     private function ctrValue(int $clicks, int $impressions): float
     {
         if ($impressions <= 0) {
@@ -367,15 +460,13 @@ class TrackingCtrRollupService
     }
 
     /**
-     * @param  array{metric_date: string, department_id: int, category_id: int, micro_category_id: ?int, product_code: string}  $dimension
+     * @param  array{metric_date: string, tracking_ctr_category_id: int, product_code: string}  $dimension
      */
     private function dailyDeltaKey(array $dimension): string
     {
         return implode('|', [
             $dimension['metric_date'],
-            $dimension['department_id'],
-            $dimension['category_id'],
-            $dimension['micro_category_id'] ?? '',
+            $dimension['tracking_ctr_category_id'],
             $dimension['product_code'],
         ]);
     }
