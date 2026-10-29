@@ -423,7 +423,9 @@ class TrackingCtrRollupService
             ->where('tracking_ctr_category_id', $trackingCtrCategoryId)
             ->where('metric_date', $metricDate)
             ->update([
-                'ctr_average' => $ctrAverage,
+                'ctr_average' => DB::raw(
+                    'CASE WHEN total_click > 0 THEN '.sprintf('%.6F', $ctrAverage).' ELSE 0 END',
+                ),
                 'updated_at' => now(),
             ]);
     }
@@ -445,7 +447,9 @@ class TrackingCtrRollupService
         TrackerDatabase::table('tracking_ctr_summaries')
             ->where('tracking_ctr_category_id', $trackingCtrCategoryId)
             ->update([
-                'ctr_average' => $ctrAverage,
+                'ctr_average' => DB::raw(
+                    'CASE WHEN total_click > 0 THEN '.sprintf('%.6F', $ctrAverage).' ELSE 0 END',
+                ),
                 'updated_at' => now(),
             ]);
     }

@@ -480,8 +480,7 @@ class EcommerceCtrSummaryController extends Controller
     ): Builder {
         $search = trim((string) $request->query('search', ''));
 
-        $inner = TrackerDatabase::table('tracking_ctr_daily_summaries')
-            ->whereBetween('metric_date', [$fromDate, $toDate])
+        $inner = $this->filteredDailySummariesQuery($request, $fromDate, $toDate, $search)
             ->select([
                 'department_id',
                 DB::raw('MAX(department_slug) as department_slug'),
@@ -491,24 +490,39 @@ class EcommerceCtrSummaryController extends Controller
                 DB::raw('MAX(micro_category_slug) as micro_category_slug'),
                 DB::raw('MAX(type) as type'),
                 'product_code',
-                DB::raw('SUM(total_click) as total_click'),
-                DB::raw('SUM(total_impression) as total_impression'),
-                DB::raw('CASE WHEN SUM(total_impression) > 0 THEN ROUND(SUM(total_click) / SUM(total_impression), 6) ELSE 0 END as ctr'),
-                DB::raw('ROUND(COALESCE(AVG(ctr), 0), 6) as ctr_average'),
+                DB::raw('COALESCE(SUM(total_click), 0) as total_click'),
+                DB::raw('COALESCE(SUM(total_impression), 0) as total_impression'),
+                DB::raw(
+                    'CASE WHEN SUM(total_impression) > 0 '
+                    .'THEN ROUND(SUM(total_click) / SUM(total_impression), 6) ELSE 0 END as ctr'
+                ),
+                DB::raw('ROUND(COALESCE(MAX(ctr_average), 0), 6) as ctr_average'),
             ])
             ->groupBy('department_id', 'category_id', 'micro_category_id', 'product_code');
-
-        if ($search !== '') {
-            $this->applySearchFilter($inner, $search);
-        }
-
-        $this->applyCatalogFilters($inner, $request);
 
         $query = TrackerDatabase::query()
             ->fromSub($inner, 'tracking_ctr_summaries')
             ->select('tracking_ctr_summaries.*');
 
         $this->applySortOrder($query, $sortKey, $sortDir);
+
+        return $query;
+    }
+
+    private function filteredDailySummariesQuery(
+        Request $request,
+        string $fromDate,
+        string $toDate,
+        string $search,
+    ): Builder {
+        $query = TrackerDatabase::table('tracking_ctr_daily_summaries')
+            ->whereBetween('metric_date', [$fromDate, $toDate]);
+
+        if ($search !== '') {
+            $this->applySearchFilter($query, $search);
+        }
+
+        $this->applyCatalogFilters($query, $request);
 
         return $query;
     }
