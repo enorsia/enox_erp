@@ -13,6 +13,7 @@ class EcommerceCtrSummaryExportService
     private const HEADINGS = [
         'Department',
         'Category',
+        'Micro category',
         'Product code',
         'CTR',
         'CTR average',
@@ -43,6 +44,7 @@ class EcommerceCtrSummaryExportService
             $spreadsheetRows[] = [
                 (string) ($row['department'] ?? ''),
                 (string) ($row['category'] ?? ''),
+                (string) ($row['micro_category'] ?? '—'),
                 (string) ($row['product_code'] ?? ''),
                 round((float) ($row['ctr'] ?? 0) * 100, 2),
                 round((float) ($row['ctr_average'] ?? 0) * 100, 2),

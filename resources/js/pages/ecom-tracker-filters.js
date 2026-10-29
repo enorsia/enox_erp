@@ -372,16 +372,18 @@ registerEtdFilterPeriodAlpine();
 
 function setSelectValue(select, value) {
     if (select.tomselect) {
+        select._etdSilentTomUpdate = true;
+
         if (select.multiple) {
             const nextValues = Array.isArray(value)
                 ? value
                 : (value === '' || value === null || value === undefined ? [] : [value]);
             select.tomselect.setValue(nextValues, true);
-
-            return;
+        } else {
+            select.tomselect.setValue(value ?? '', true);
         }
 
-        select.tomselect.setValue(value ?? '', true);
+        select._etdSilentTomUpdate = false;
 
         return;
     }
@@ -546,12 +548,17 @@ function syncNativeCategoryOptions(categorySelect, options, department, selected
         ? selectedValues
         : (selectedValues ? [selectedValues] : []);
     const allValue = categoryAllOptionValue(categorySelect);
+    const showAllOption = allValue && (departmentKeys.length > 0 || showAllWhenNoDepartment);
     let nextValues = values.filter((value) => (
         Array.from(categorySelect.options).some((option) => option.value === value)
     ));
 
     if (allValue && (departmentKeys.length > 0 || showAllWhenNoDepartment)) {
         nextValues = resolveFilterTomSelectValues(nextValues, allValue);
+    }
+
+    if (nextValues.length === 0 && showAllOption) {
+        nextValues = [allValue];
     }
 
     Array.from(categorySelect.options).forEach((option) => {
@@ -562,6 +569,10 @@ function syncNativeCategoryOptions(categorySelect, options, department, selected
 function resolveFilterTomSelectValues(values, allValue) {
     if (!allValue) {
         return values;
+    }
+
+    if (values.includes(allValue)) {
+        return [allValue];
     }
 
     return values.filter((value) => value !== allValue);
@@ -618,29 +629,13 @@ function patchEtdFilterTomSelect(select) {
         ts.on('dropdown_open', () => {
             const container = select.closest('[data-etd-department-category]');
 
-            container?.querySelectorAll('.tom-select').forEach((peer) => {
+            container?.querySelectorAll('select.tom-select').forEach((peer) => {
                 if (peer !== select && peer.tomselect?.isOpen) {
                     peer.tomselect.close();
                 }
             });
         });
-
-        ts.on('item_add', () => {
-            window.requestAnimationFrame(() => {
-                if (select.disabled || ts.isDisabled) {
-                    return;
-                }
-
-                ts.focus();
-
-                if (!ts.isOpen) {
-                    ts.open();
-                }
-            });
-        });
     }
-
-    ts.inputState();
 
     return true;
 }
@@ -655,7 +650,11 @@ function syncTomSelectCategoryOptions(categorySelect, options, department, selec
     const departmentKeys = departmentKeysFromFilter(department);
     const showAllOption = allValue && (departmentKeys.length > 0 || showAllWhenNoDepartment);
 
-    writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment);
+    if (!ts) {
+        writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment);
+
+        return;
+    }
 
     ts.clearOptions();
 
@@ -686,7 +685,13 @@ function syncTomSelectCategoryOptions(categorySelect, options, department, selec
         nextValues = resolveFilterTomSelectValues(nextValues, allValue);
     }
 
+    if (nextValues.length === 0 && showAllOption) {
+        nextValues = [allValue];
+    }
+
+    categorySelect._etdSilentTomUpdate = true;
     ts.setValue(nextValues, true);
+    categorySelect._etdSilentTomUpdate = false;
     patchEtdFilterTomSelect(categorySelect);
 }
 
@@ -730,7 +735,20 @@ function bindFilterAllOption(select) {
             const allWasAdded = !previousList.includes(allValue);
 
             select._etdApplyingAllRules = true;
-            setSelectValue(select, allWasAdded ? [] : specifics);
+            if (allWasAdded || specifics.length === 0) {
+                setSelectValue(select, [allValue]);
+            } else {
+                setSelectValue(select, specifics);
+            }
+            select._etdApplyingAllRules = false;
+            previousList = selectValues(select);
+
+            return;
+        }
+
+        if (specifics.length === 0) {
+            select._etdApplyingAllRules = true;
+            setSelectValue(select, [allValue]);
             select._etdApplyingAllRules = false;
             previousList = selectValues(select);
 
@@ -750,6 +768,13 @@ function bindFilterAllOption(select) {
         previousList = selectValues(select);
         select.tomselect.on('change', applyAllRules);
         patchEtdFilterTomSelect(select);
+
+        if (select.multiple && previousList.length === 0) {
+            select._etdApplyingAllRules = true;
+            setSelectValue(select, [allValue]);
+            select._etdApplyingAllRules = false;
+            previousList = selectValues(select);
+        }
 
         return true;
     };
@@ -849,6 +874,10 @@ function initDepartmentCategoryFilters(root) {
             container._etdDepartmentCategoryBound = true;
 
             departmentSelect.addEventListener('change', () => {
+                if (departmentSelect._etdSilentTomUpdate || departmentSelect._etdApplyingAllRules) {
+                    return;
+                }
+
                 container._etdCategoryDeptKey = null;
 
                 if (!departmentSelect.multiple) {
@@ -856,21 +885,21 @@ function initDepartmentCategoryFilters(root) {
                 }
                 syncCategoryOptions(!departmentSelect.multiple);
             });
-        }
 
-        syncCategoryOptions();
+            syncCategoryOptions();
 
-        if (categorySelect.classList.contains('tom-select') && !categorySelect.tomselect) {
-            const startedAt = Date.now();
-            const waitForTomSelect = window.setInterval(() => {
-                if (categorySelect.tomselect || Date.now() - startedAt > 2000) {
-                    window.clearInterval(waitForTomSelect);
+            if (categorySelect.classList.contains('tom-select') && !categorySelect.tomselect) {
+                const startedAt = Date.now();
+                const waitForTomSelect = window.setInterval(() => {
+                    if (categorySelect.tomselect || Date.now() - startedAt > 2000) {
+                        window.clearInterval(waitForTomSelect);
 
-                    if (categorySelect.tomselect) {
-                        syncCategoryOptions();
+                        if (categorySelect.tomselect) {
+                            syncCategoryOptions();
+                        }
                     }
-                }
-            }, 50);
+                }, 50);
+            }
         }
     });
 }
@@ -878,12 +907,12 @@ function initDepartmentCategoryFilters(root) {
 window.initDepartmentCategoryFilters = initDepartmentCategoryFilters;
 
 window.refreshEtdFilterControls = function (root) {
+    initEtdFlatpickr(root);
+    initDepartmentCategoryFilters(root);
+
     if (typeof window.refreshTomSelectIn === 'function') {
         window.refreshTomSelectIn(root);
     }
-
-    initEtdFlatpickr(root);
-    initDepartmentCategoryFilters(root);
 
     if (typeof window.initEtdTipPositioning === 'function') {
         window.initEtdTipPositioning(root);

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\TrackingCtrCategory;
 use App\Models\TrackingCtrSummary;
 use App\Services\EcommerceCtrSummaryExportService;
 use App\Support\TrackerDatabase;
@@ -297,8 +298,10 @@ class EcommerceCtrSummaryController extends Controller
         $code = trim((string) $row->product_code);
 
         return [
-            'department' => $this->formatLabel($row->department_slug, $row->department_id, true),
+            'department' => $this->formatDepartmentColumn($row),
+            'category_display' => $this->formatCategoryColumn($row),
             'category' => $this->formatLabel($row->category_slug, $row->category_id),
+            'micro_category' => $this->formatMicroCategoryColumn($row),
             'product_code' => $code,
             'ctr' => (float) $row->ctr,
             'ctr_average' => (float) $row->ctr_average,
@@ -389,6 +392,55 @@ class EcommerceCtrSummaryController extends Controller
         }
 
         $query->orderBy('tracking_ctr_summaries.id');
+    }
+
+    private function formatDepartmentColumn(TrackingCtrSummary $row): string
+    {
+        $label = $this->formatLabel($row->department_slug, $row->department_id, true);
+
+        if ($label !== '—') {
+            return $label;
+        }
+
+        return $this->formatCtrTypeLabel($row->type);
+    }
+
+    private function formatCategoryColumn(TrackingCtrSummary $row): string
+    {
+        $categoryLabel = $this->formatLabel($row->category_slug, $row->category_id);
+        $microLabel = $this->formatMicroCategoryColumn($row);
+
+        if ($microLabel === '—') {
+            return $categoryLabel;
+        }
+
+        return $categoryLabel.' -> '.$microLabel;
+    }
+
+    private function formatMicroCategoryColumn(TrackingCtrSummary $row): string
+    {
+        $microId = (int) ($row->micro_category_id ?? 0);
+        $microSlug = trim((string) ($row->micro_category_slug ?? ''));
+
+        if ($microId <= 0 && $microSlug === '') {
+            return '—';
+        }
+
+        $microLabel = $this->formatLabel(
+            $microSlug !== '' ? $microSlug : null,
+            $microId > 0 ? $microId : null,
+        );
+
+        return $microLabel === '—' ? '—' : $microLabel;
+    }
+
+    private function formatCtrTypeLabel(?string $type): string
+    {
+        return match (trim((string) ($type ?? ''))) {
+            TrackingCtrCategory::TYPE_STATIC => 'Static',
+            TrackingCtrCategory::TYPE_DYNAMIC_CUSTOM_LINK => 'Custom link',
+            default => '—',
+        };
     }
 
     private function formatLabel(?string $slug, mixed $id, bool $treatZeroAsEmpty = false): string

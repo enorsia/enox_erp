@@ -126,7 +126,7 @@
                         @forelse ($summaries as $row)
                             <tr>
                                 <td class="whitespace-nowrap">{{ $row['department'] }}</td>
-                                <td class="whitespace-nowrap">{{ $row['category'] }}</td>
+                                <td class="whitespace-nowrap">{{ $row['category_display'] }}</td>
                                 <td class="font-mono text-[12px] whitespace-nowrap">{{ $row['product_code'] }}</td>
                                 <td class="text-right tabular-nums">{{ number_format($row['ctr'] * 100, 2) }}%</td>
                                 <td class="text-right tabular-nums">{{ number_format($row['ctr_average'] * 100, 2) }}%</td>

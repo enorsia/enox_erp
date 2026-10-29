@@ -79,7 +79,7 @@
                                 data-clearable="true"
                                 data-etd-filter-all-value="__all__"
                                 data-etd-department-select>
-                            <option value="__all__">All</option>
+                            <option value="__all__" @selected($departmentAllSelected)>All</option>
                             @foreach ($filterCatalog['departments'] as $departmentId => $departmentName)
                                 <option value="{{ $departmentId }}" @selected(in_array((string) $departmentId, $selectedDepartments, true))>
                                     {{ $departmentName }}
@@ -99,7 +99,7 @@
                                 data-max-options="500"
                                 data-etd-filter-all-value="__all__"
                                 data-etd-category-select>
-                            <option value="__all__">All</option>
+                            <option value="__all__" @selected($categoryAllSelected)>All</option>
                             @foreach ($filterCatalog['categories'] as $category)
                                 <option value="{{ $category['value'] }}"
                                         data-department="{{ $category['department'] }}"
