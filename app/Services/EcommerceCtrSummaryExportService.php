@@ -19,8 +19,6 @@ class EcommerceCtrSummaryExportService
         'CTR average',
         'Click',
         'Impression',
-        '7 days sold',
-        'Total sold',
     ];
 
     /**
@@ -43,15 +41,13 @@ class EcommerceCtrSummaryExportService
         foreach ($rows as $row) {
             $spreadsheetRows[] = [
                 (string) ($row['department'] ?? ''),
-                (string) ($row['category'] ?? ''),
+                (string) ($row['category_display'] ?? $row['category'] ?? ''),
                 (string) ($row['micro_category'] ?? '—'),
                 (string) ($row['product_code'] ?? ''),
                 round((float) ($row['ctr'] ?? 0) * 100, 2),
                 round((float) ($row['ctr_average'] ?? 0) * 100, 2),
                 (int) ($row['click'] ?? 0),
                 (int) ($row['impression'] ?? 0),
-                (int) ($row['sold_7_days'] ?? 0),
-                (int) ($row['total_sold'] ?? 0),
             ];
         }
 

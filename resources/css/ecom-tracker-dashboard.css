@@ -7940,6 +7940,127 @@ a.etd-pager__btn:hover {
     max-width: 100%;
 }
 
+.etd-ctr-summary-header {
+    gap: 0.25rem;
+}
+
+.etd-ctr-summary-sort-rules {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem 0.5rem;
+    margin: 0;
+    padding: 0.4rem 0.75rem;
+    max-width: min(100%, 22rem);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    font-weight: 700;
+    color: #0f172a;
+    background: color-mix(in srgb, var(--etd-accent, #1d9e75) 10%, #fff);
+    border: 1px solid color-mix(in srgb, var(--etd-accent, #1d9e75) 28%, transparent);
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    outline: none;
+}
+
+.etd-ctr-summary-sort-rules:focus-visible {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--etd-accent, #1d9e75);
+}
+
+.dark .etd-ctr-summary-sort-rules {
+    color: #f1f5f9;
+    background: color-mix(in srgb, var(--etd-accent, #1d9e75) 16%, #0f172a);
+    border-color: color-mix(in srgb, var(--etd-accent, #1d9e75) 35%, transparent);
+}
+
+.dark .etd-ctr-summary-sort-rules:focus-visible {
+    box-shadow: 0 0 0 2px #0f172a, 0 0 0 4px var(--etd-accent, #1d9e75);
+}
+
+.etd-ctr-summary-sort-rules__label {
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--etd-accent, #1d9e75);
+}
+
+.dark .etd-ctr-summary-sort-rules__label {
+    color: color-mix(in srgb, var(--etd-accent, #1d9e75) 85%, #fff);
+}
+
+.etd-ctr-summary-sort-rules__values {
+    font-weight: 700;
+}
+
+.etd-ctr-summary-sort-rules__sep {
+    font-weight: 600;
+    color: #94a3b8;
+    padding-inline: 0.1rem;
+}
+
+.etd-ctr-summary-sort-rules__fallback {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #64748b;
+    font-style: italic;
+}
+
+.dark .etd-ctr-summary-sort-rules__fallback {
+    color: #94a3b8;
+}
+
+.etd-page--ctr-summary .etd-page-header {
+    padding: 0.65rem 0.85rem;
+}
+
+.etd-page--ctr-summary .etd-page-header-bar {
+    gap: 0.45rem;
+    align-items: center;
+}
+
+.etd-ctr-summary-header-center {
+    display: flex;
+    flex: 1 1 auto;
+    justify-content: center;
+    align-items: center;
+    min-width: 0;
+    padding-inline: 0.35rem;
+}
+
+@media (min-width: 1024px) {
+    .etd-page--ctr-summary .etd-page-header-bar {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .etd-page--ctr-summary .etd-page-header-main {
+        flex: 0 1 auto;
+        min-width: 0;
+    }
+
+    .etd-page--ctr-summary .etd-page-header-toolbar {
+        flex: 0 0 auto;
+    }
+}
+
+.etd-page--ctr-summary .etd-page-header-left-stack {
+    gap: 0.1rem;
+}
+
+.etd-page--ctr-summary .etd-header-toolbar-row {
+    padding-top: 0;
+    margin-top: 0;
+}
+
+.etd-ctr-summary-page-title {
+    font-size: 1.25rem;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
 .etd-ctr-summary-list {
     min-width: 0;
 }
@@ -7964,14 +8085,19 @@ a.etd-pager__btn:hover {
         align-items: stretch;
     }
 
+    .etd-ctr-summary-header-center {
+        width: 100%;
+        justify-content: center;
+    }
+
     .etd-page--ctr-summary .etd-page-header-main,
     .etd-page--ctr-summary .etd-page-header-toolbar {
         width: 100%;
     }
 
     .etd-page--ctr-summary .etd-page-meta,
-    .etd-page--ctr-summary .etd-page-range,
-    .etd-page--ctr-summary .etd-meta-item {
+    .etd-page--ctr-summary .etd-meta-item,
+    .etd-ctr-summary-page-caption {
         white-space: normal;
     }
 
@@ -7986,13 +8112,30 @@ a.etd-pager__btn:hover {
         padding: 0.55rem 0.65rem;
     }
 
-    .etd-page--ctr-summary .etd-page-title {
-        font-size: clamp(1rem, 4.8vw, 1.125rem);
+    .etd-ctr-summary-page-caption {
+        padding-left: 0;
+        font-size: 11px;
     }
 
-    .etd-page--ctr-summary .etd-page-range {
-        font-size: 0.8125rem;
-        line-height: 1.35;
+    .etd-ctr-summary-header-center {
+        width: 100%;
+        order: 2;
+        padding-inline: 0;
+    }
+
+    .etd-ctr-summary-sort-rules {
+        font-size: 0.75rem;
+        max-width: 100%;
+    }
+
+    .etd-page--ctr-summary .etd-page-header-toolbar {
+        order: 3;
+        width: 100%;
+    }
+
+    .etd-page--ctr-summary .etd-page-header-main {
+        order: 1;
+        width: 100%;
     }
 
     .etd-page--ctr-summary .etd-header-toolbar-row {

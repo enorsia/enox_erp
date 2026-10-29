@@ -478,7 +478,17 @@ function containerShowsAllCategories(container) {
     return value === '1' || value === 'true';
 }
 
-function matchingCategoryOptions(options, department, showAllWhenNoDepartment = false) {
+function alwaysVisibleCategoryDepartments(container) {
+    const raw = container?.dataset?.etdAlwaysVisibleCategoryDepartments?.trim();
+
+    if (!raw) {
+        return [];
+    }
+
+    return raw.split(',').map((entry) => entry.trim()).filter(Boolean);
+}
+
+function matchingCategoryOptions(options, department, showAllWhenNoDepartment = false, alwaysVisibleDepartments = []) {
     const departmentKeys = Array.isArray(department)
         ? department.filter((value) => value !== '')
         : (department === '' ? [] : [department]);
@@ -487,7 +497,10 @@ function matchingCategoryOptions(options, department, showAllWhenNoDepartment = 
         return showAllWhenNoDepartment ? options : [];
     }
 
-    return options.filter((option) => departmentKeys.includes(option.department));
+    return options.filter((option) => (
+        departmentKeys.includes(option.department)
+        || alwaysVisibleDepartments.includes(option.department)
+    ));
 }
 
 function selectedDepartmentKeys(departmentSelect) {
@@ -519,8 +532,8 @@ function departmentKeysFromFilter(department) {
         : (department === '' ? [] : [department]);
 }
 
-function writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment = false) {
-    const matching = matchingCategoryOptions(options, department, showAllWhenNoDepartment);
+function writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment = false, alwaysVisibleDepartments = []) {
+    const matching = matchingCategoryOptions(options, department, showAllWhenNoDepartment, alwaysVisibleDepartments);
     const departmentKeys = departmentKeysFromFilter(department);
     const allValue = categoryAllOptionValue(categorySelect);
     const allLabel = emptyLabel || 'All';
@@ -539,8 +552,8 @@ function writeCategorySelectOptions(categorySelect, options, department, emptyLa
     categorySelect.innerHTML = html;
 }
 
-function syncNativeCategoryOptions(categorySelect, options, department, selectedValues, emptyLabel, showAllWhenNoDepartment = false) {
-    writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment);
+function syncNativeCategoryOptions(categorySelect, options, department, selectedValues, emptyLabel, showAllWhenNoDepartment = false, alwaysVisibleDepartments = []) {
+    writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment, alwaysVisibleDepartments);
     const departmentKeys = departmentKeysFromFilter(department);
     categorySelect.disabled = !showAllWhenNoDepartment && departmentKeys.length === 0;
 
@@ -642,16 +655,16 @@ function patchEtdFilterTomSelect(select) {
 
 window.patchEtdFilterTomSelect = patchEtdFilterTomSelect;
 
-function syncTomSelectCategoryOptions(categorySelect, options, department, selectedValues, emptyLabel, showAllWhenNoDepartment = false) {
+function syncTomSelectCategoryOptions(categorySelect, options, department, selectedValues, emptyLabel, showAllWhenNoDepartment = false, alwaysVisibleDepartments = []) {
     const ts = categorySelect.tomselect;
-    const matching = matchingCategoryOptions(options, department, showAllWhenNoDepartment);
+    const matching = matchingCategoryOptions(options, department, showAllWhenNoDepartment, alwaysVisibleDepartments);
     const allValue = categoryAllOptionValue(categorySelect);
     const allLabel = emptyLabel || 'All';
     const departmentKeys = departmentKeysFromFilter(department);
     const showAllOption = allValue && (departmentKeys.length > 0 || showAllWhenNoDepartment);
 
     if (!ts) {
-        writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment);
+        writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment, alwaysVisibleDepartments);
 
         return;
     }
@@ -824,6 +837,7 @@ function initDepartmentCategoryFilters(root) {
         const categoryOptions = container._etdCategoryOptions || snapshot;
         const emptyLabel = container._etdCategoryEmptyLabel;
         const showAllCategories = containerShowsAllCategories(container);
+        const alwaysVisibleDepartments = alwaysVisibleCategoryDepartments(container);
 
         const syncCategoryOptions = (resetCategory = false) => {
             const departmentKeys = selectedDepartmentKeys(departmentSelect);
@@ -845,7 +859,12 @@ function initDepartmentCategoryFilters(root) {
 
             const previousValues = resetCategory ? [] : selectValues(categorySelect);
             const filteredPrevious = previousValues.filter((value) => value !== filterAllOptionValue(categorySelect));
-            const selectedValues = matchingCategoryOptions(categoryOptions, departmentKeys, showAllCategories)
+            const selectedValues = matchingCategoryOptions(
+                categoryOptions,
+                departmentKeys,
+                showAllCategories,
+                alwaysVisibleDepartments,
+            )
                 .filter((option) => filteredPrevious.includes(option.value))
                 .map((option) => option.value);
 
@@ -857,6 +876,7 @@ function initDepartmentCategoryFilters(root) {
                     selectedValues,
                     emptyLabel,
                     showAllCategories,
+                    alwaysVisibleDepartments,
                 );
             } else {
                 syncNativeCategoryOptions(
@@ -866,6 +886,7 @@ function initDepartmentCategoryFilters(root) {
                     selectedValues,
                     emptyLabel,
                     showAllCategories,
+                    alwaysVisibleDepartments,
                 );
             }
         };

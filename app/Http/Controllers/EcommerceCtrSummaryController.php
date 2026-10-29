@@ -3,13 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\TrackingCtrCategory;
-use App\Models\TrackingCtrSummary;
+use App\Services\EcomActivityListService;
 use App\Services\EcommerceCtrSummaryExportService;
+use App\Services\TrackingCtrSyncSiteSettingsService;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -18,14 +20,19 @@ class EcommerceCtrSummaryController extends Controller
 {
     private const PER_PAGE = 20;
 
+    private const CATEGORY_FILTER_DEPARTMENT_CUSTOM_LINK = '__custom_link__';
+
+    private const CATEGORY_FILTER_DEPARTMENT_STATIC = '__static__';
+
+    /** @var list<string> Category filter group order (store department labels). */
+    private const CATEGORY_FILTER_DEPARTMENT_ORDER = ['Women', 'Men', 'Girls', 'Boys'];
+
     /** @var list<string> Tie-break order after the column the user clicked */
     private const SORT_SEQUENCE = [
         'ctr',
         'ctr_average',
         'click',
         'impression',
-        'sold_7_days',
-        'total_sold',
     ];
 
     /** @var array<string, string> Sort key => SQL order expression */
@@ -34,22 +41,20 @@ class EcommerceCtrSummaryController extends Controller
         'ctr_average' => 'ctr_average',
         'click' => 'total_click',
         'impression' => 'total_impression',
-        'sold_7_days' => 'sort_sold_7_days',
-        'total_sold' => 'sort_total_sold',
     ];
 
-    public function index(Request $request): View
+    public function index(Request $request, TrackingCtrSyncSiteSettingsService $syncSiteSettings): View
     {
         Gate::authorize('ecommerce.ctr_summary.index');
 
-        $context = $this->listContext($request);
+        $context = $this->listContext($request, $syncSiteSettings);
 
         $summaries = (clone $context['query'])
             ->paginate(self::PER_PAGE)
             ->withQueryString();
 
         $summaries->setCollection(
-            $summaries->getCollection()->map(fn (TrackingCtrSummary $row) => $this->mapRow($row)),
+            $summaries->getCollection()->map(fn (object $row) => $this->mapRow($row)),
         );
 
         return view('ecommerce.ctr_summary.index', [
@@ -62,15 +67,15 @@ class EcommerceCtrSummaryController extends Controller
         ]);
     }
 
-    public function export(Request $request, EcommerceCtrSummaryExportService $exportService): BinaryFileResponse
+    public function export(Request $request, EcommerceCtrSummaryExportService $exportService, TrackingCtrSyncSiteSettingsService $syncSiteSettings): BinaryFileResponse
     {
         Gate::authorize('ecommerce.ctr_summary.export');
 
-        $context = $this->listContext($request);
+        $context = $this->listContext($request, $syncSiteSettings);
 
         $rows = (clone $context['query'])
             ->get()
-            ->map(fn (TrackingCtrSummary $row) => $this->mapRow($row))
+            ->map(fn (object $row) => $this->mapRow($row))
             ->all();
 
         return $exportService->download($rows, $context['filterSummary']);
@@ -78,37 +83,66 @@ class EcommerceCtrSummaryController extends Controller
 
     /**
      * @return array{
-     *     query: Builder<TrackingCtrSummary>,
+     *     query: Builder,
      *     sortKey: string,
      *     sortDir: 'asc'|'desc',
      *     search: string,
+     *     period: string,
      *     filterSummary: string,
      *     filterCatalog: array{departments: array<string, string>, categories: list<array{value: string, label: string, department: string}>},
      *     data: array<string, mixed>
      * }
      */
-    private function listContext(Request $request): array
+    private function listContext(Request $request, TrackingCtrSyncSiteSettingsService $syncSiteSettings): array
     {
         [$sortKey, $sortDir] = $this->resolveSort($request);
         $search = trim((string) $request->query('search', ''));
         $catalogFilters = $this->catalogFiltersFromRequest($request);
+        $period = EcomActivityListService::normalizePeriod($request->query('period'));
+        $range = EcomActivityListService::periodRange(
+            $period,
+            (string) $request->query('date_from', ''),
+            (string) $request->query('date_to', ''),
+        );
+        $fromDate = $range['from']->toDateString();
+        $toDate = $range['to']->toDateString();
+        $productSorting = $syncSiteSettings->fetchForSync();
 
-        $query = $this->summariesQuery($request, $sortKey, $sortDir);
+        $query = $this->summariesQuery($request, $sortKey, $sortDir, $fromDate, $toDate);
 
-        $filterQuery = array_filter([
-            'sort' => $sortKey,
-            'dir' => $sortDir,
-            'search' => $search !== '' ? $search : null,
-            'department' => $catalogFilters['departments'] !== [] ? $catalogFilters['departments'] : null,
-            'category' => $catalogFilters['categories'] !== [] ? $catalogFilters['categories'] : null,
-        ]);
+        $filterQuery = $this->ctrFilterQueryParams($sortKey, $sortDir, $search, $catalogFilters, $period, $range);
+        $catalogQuery = array_diff_key($filterQuery, array_flip(['period', 'date_from', 'date_to']));
+        $prevQuery = EcomActivityListService::shiftedPeriodQuery($range, -1);
+        $nextQuery = EcomActivityListService::shiftedPeriodQuery($range, 1);
 
         $resetUrl = route('admin.ecommerce.ctr-summary.index');
+        $drawerResetUrl = route('admin.ecommerce.ctr-summary.index', array_filter([
+            'period' => $period !== EcomActivityListService::DEFAULT_PERIOD ? $period : null,
+            'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
+            'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
+        ], fn ($value) => $value !== null && $value !== []));
 
         $data = [
+            'period' => $period,
+            'dateFrom' => $fromDate,
+            'dateTo' => $toDate,
+            'rangeLabel' => TrackerTime::formatLocalDateRangeLabel($range['from'], $range['to']),
+            'filterQuery' => $filterQuery,
             'filterFormAction' => route('admin.ecommerce.ctr-summary.index'),
             'resetUrl' => $resetUrl,
+            'drawerResetUrl' => $drawerResetUrl,
+            'prevUrl' => $prevQuery ? route('admin.ecommerce.ctr-summary.index', $prevQuery + $catalogQuery) : null,
+            'nextUrl' => $nextQuery ? route('admin.ecommerce.ctr-summary.index', $nextQuery + $catalogQuery) : null,
             'exportUrl' => route('admin.ecommerce.ctr-summary.export', $filterQuery),
+            'periodPresetUrl' => fn (string $periodKey) => route(
+                'admin.ecommerce.ctr-summary.index',
+                ['period' => $periodKey] + $catalogQuery,
+            ),
+            'productSorting' => [
+                'ctrDays' => $productSorting['ctr_days'],
+                'minClicks' => $productSorting['min_clicks'],
+                'fromStoreApi' => $productSorting['source'] === 'ecom_api',
+            ],
         ];
 
         return [
@@ -116,10 +150,36 @@ class EcommerceCtrSummaryController extends Controller
             'sortKey' => $sortKey,
             'sortDir' => $sortDir,
             'search' => $search,
-            'filterCatalog' => $this->filterCatalog(),
-            'filterSummary' => $this->buildFilterSummary($search, $catalogFilters),
+            'period' => $period,
+            'filterCatalog' => $this->filterCatalog($fromDate, $toDate),
+            'filterSummary' => $this->buildFilterSummary($search, $catalogFilters, $range),
             'data' => $data,
         ];
+    }
+
+    /**
+     * @param  array{departments: list<string>, categories: list<string>}  $catalogFilters
+     * @param  array{from: \Carbon\Carbon, to: \Carbon\Carbon, period: string}  $range
+     * @return array<string, mixed>
+     */
+    private function ctrFilterQueryParams(
+        string $sortKey,
+        string $sortDir,
+        string $search,
+        array $catalogFilters,
+        string $period,
+        array $range,
+    ): array {
+        return array_filter([
+            'sort' => $sortKey !== 'ctr' ? $sortKey : null,
+            'dir' => $sortDir !== 'desc' ? $sortDir : null,
+            'search' => $search !== '' ? $search : null,
+            'department' => $catalogFilters['departments'] !== [] ? $catalogFilters['departments'] : null,
+            'category' => $catalogFilters['categories'] !== [] ? $catalogFilters['categories'] : null,
+            'period' => $period !== EcomActivityListService::DEFAULT_PERIOD ? $period : null,
+            'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
+            'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
+        ], fn ($value) => $value !== null && $value !== []);
     }
 
     /**
@@ -141,9 +201,32 @@ class EcommerceCtrSummaryController extends Controller
         $categories = [];
         foreach ((array) $request->query('category', []) as $value) {
             $value = trim((string) $value);
-            if ($value === '' || $value === '__all__' || ! str_contains($value, ':')) {
+            if ($value === '' || $value === '__all__') {
                 continue;
             }
+
+            if (str_starts_with($value, 'custom:')) {
+                $rest = substr($value, 7);
+                if ($rest !== '' && preg_match('/^\d+(:\d+)?$/', $rest)) {
+                    $categories[] = 'custom:'.$rest;
+                }
+
+                continue;
+            }
+
+            if (str_starts_with($value, 'static:')) {
+                $rest = substr($value, 7);
+                if ($rest !== '' && preg_match('/^\d+(:\d+)?$/', $rest)) {
+                    $categories[] = 'static:'.$rest;
+                }
+
+                continue;
+            }
+
+            if (! str_contains($value, ':')) {
+                continue;
+            }
+
             [$departmentId, $categoryId] = explode(':', $value, 2);
             if (ctype_digit($departmentId) && ctype_digit($categoryId)) {
                 $categories[] = $departmentId.':'.$categoryId;
@@ -160,10 +243,11 @@ class EcommerceCtrSummaryController extends Controller
     /**
      * @return array{departments: array<string, string>, categories: list<array{value: string, label: string, department: string}>}
      */
-    private function filterCatalog(): array
+    private function filterCatalog(string $fromDate, string $toDate): array
     {
-        $rows = TrackingCtrSummary::query()
-            ->select('department_id', 'department_slug', 'category_id', 'category_slug')
+        $rows = TrackerDatabase::table('tracking_ctr_daily_summaries')
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->select('department_id', 'department_slug', 'category_id', 'category_slug', 'type')
             ->distinct()
             ->orderBy('department_slug')
             ->orderBy('category_slug')
@@ -171,14 +255,101 @@ class EcommerceCtrSummaryController extends Controller
 
         $departments = [];
         $categories = [];
+        $seenCategoryValues = [];
 
         foreach ($rows as $row) {
+            $type = trim((string) ($row->type ?? ''));
+            $categoryId = (int) $row->category_id;
+
+            if ($categoryId <= 0) {
+                continue;
+            }
+
+            if ($type === TrackingCtrCategory::TYPE_DYNAMIC_CUSTOM_LINK) {
+                $categoryLabel = $this->formatLabel($row->category_slug, $categoryId);
+                $departmentId = (int) ($row->department_id ?? 0);
+
+                if ($departmentId > 0) {
+                    $departmentKey = (string) $departmentId;
+                    $departmentLabel = $this->formatLabel($row->department_slug, $departmentId, true);
+                    if ($departmentLabel === '—') {
+                        continue;
+                    }
+
+                    $value = 'custom:'.$departmentKey.':'.$categoryId;
+                    if (isset($seenCategoryValues[$value])) {
+                        continue;
+                    }
+                    $seenCategoryValues[$value] = true;
+                    $departments[$departmentKey] = $departmentLabel;
+                    $categories[] = [
+                        'value' => $value,
+                        'label' => $departmentLabel.' -> Custom link -> '.$categoryLabel,
+                        'department' => $departmentKey,
+                    ];
+
+                    continue;
+                }
+
+                $value = 'custom:'.$categoryId;
+                if (isset($seenCategoryValues[$value])) {
+                    continue;
+                }
+                $seenCategoryValues[$value] = true;
+                $categories[] = [
+                    'value' => $value,
+                    'label' => 'Custom link -> '.$categoryLabel,
+                    'department' => self::CATEGORY_FILTER_DEPARTMENT_CUSTOM_LINK,
+                ];
+
+                continue;
+            }
+
+            if ($type === TrackingCtrCategory::TYPE_STATIC) {
+                $categoryLabel = $this->formatLabel($row->category_slug, $categoryId);
+                $departmentId = (int) ($row->department_id ?? 0);
+
+                if ($departmentId > 0) {
+                    $departmentKey = (string) $departmentId;
+                    $departmentLabel = $this->formatLabel($row->department_slug, $departmentId, true);
+                    if ($departmentLabel === '—') {
+                        continue;
+                    }
+
+                    $value = 'static:'.$departmentKey.':'.$categoryId;
+                    if (isset($seenCategoryValues[$value])) {
+                        continue;
+                    }
+                    $seenCategoryValues[$value] = true;
+                    $departments[$departmentKey] = $departmentLabel;
+                    $categories[] = [
+                        'value' => $value,
+                        'label' => $departmentLabel.' -> Static -> '.$categoryLabel,
+                        'department' => $departmentKey,
+                    ];
+
+                    continue;
+                }
+
+                $value = 'static:'.$categoryId;
+                if (isset($seenCategoryValues[$value])) {
+                    continue;
+                }
+                $seenCategoryValues[$value] = true;
+                $categories[] = [
+                    'value' => $value,
+                    'label' => 'Static -> '.$categoryLabel,
+                    'department' => self::CATEGORY_FILTER_DEPARTMENT_STATIC,
+                ];
+
+                continue;
+            }
+
             $departmentId = (int) ($row->department_id ?? 0);
             if ($departmentId <= 0) {
                 continue;
             }
 
-            $categoryId = (int) $row->category_id;
             $departmentKey = (string) $departmentId;
             $departmentLabel = $this->formatLabel($row->department_slug, $departmentId, true);
             if ($departmentLabel === '—') {
@@ -186,10 +357,15 @@ class EcommerceCtrSummaryController extends Controller
             }
 
             $categoryLabel = $this->formatLabel($row->category_slug, $categoryId);
+            $value = $departmentKey.':'.$categoryId;
+            if (isset($seenCategoryValues[$value])) {
+                continue;
+            }
+            $seenCategoryValues[$value] = true;
 
             $departments[$departmentKey] = $departmentLabel;
             $categories[] = [
-                'value' => $departmentKey.':'.$categoryId,
+                'value' => $value,
                 'label' => $departmentLabel.' -> '.$categoryLabel,
                 'department' => $departmentKey,
             ];
@@ -197,7 +373,10 @@ class EcommerceCtrSummaryController extends Controller
 
         natcasesort($departments);
 
-        usort($categories, fn (array $a, array $b) => strnatcasecmp($a['label'], $b['label']));
+        usort(
+            $categories,
+            fn (array $a, array $b): int => $this->compareCategoryFilterOptions($a, $b, $departments),
+        );
 
         return [
             'departments' => $departments,
@@ -206,18 +385,69 @@ class EcommerceCtrSummaryController extends Controller
     }
 
     /**
-     * @param  array{departments: list<string>, categories: list<string>}  $catalogFilters
+     * @param  array{value: string, label: string, department: string}  $a
+     * @param  array{value: string, label: string, department: string}  $b
+     * @param  array<string, string>  $departments
      */
-    private function buildFilterSummary(string $search, array $catalogFilters): string
+    private function compareCategoryFilterOptions(array $a, array $b, array $departments): int
     {
-        $parts = [];
+        return $this->categoryFilterOptionSortTuple($a, $departments)
+            <=> $this->categoryFilterOptionSortTuple($b, $departments);
+    }
+
+    /**
+     * @param  array{value: string, label: string, department: string}  $option
+     * @param  array<string, string>  $departments
+     * @return array{int, int, string}
+     */
+    private function categoryFilterOptionSortTuple(array $option, array $departments): array
+    {
+        $departmentKey = $option['department'];
+        $label = $option['label'];
+
+        if ($departmentKey === self::CATEGORY_FILTER_DEPARTMENT_CUSTOM_LINK) {
+            return [100, 0, $label];
+        }
+
+        if ($departmentKey === self::CATEGORY_FILTER_DEPARTMENT_STATIC) {
+            return [101, 0, $label];
+        }
+
+        $departmentLabel = $departments[$departmentKey] ?? (string) $departmentKey;
+
+        return [$this->categoryFilterDepartmentGroupRank($departmentLabel), 0, $label];
+    }
+
+    private function categoryFilterDepartmentGroupRank(string $departmentLabel): int
+    {
+        foreach (self::CATEGORY_FILTER_DEPARTMENT_ORDER as $index => $name) {
+            if (strcasecmp($departmentLabel, $name) === 0) {
+                return $index;
+            }
+        }
+
+        return 50;
+    }
+
+    /**
+     * @param  array{departments: list<string>, categories: list<string>}  $catalogFilters
+     * @param  array{from: \Carbon\Carbon, to: \Carbon\Carbon, period: string}  $range
+     */
+    private function buildFilterSummary(string $search, array $catalogFilters, array $range): string
+    {
+        $parts = [
+            'Dates: '.TrackerTime::formatLocalDateRangeLabel($range['from'], $range['to']),
+        ];
 
         if ($search !== '') {
             $parts[] = 'Search: '.$search;
         }
 
         if ($catalogFilters['departments'] !== []) {
-            $catalog = $this->filterCatalog();
+            $catalog = $this->filterCatalog(
+                $range['from']->toDateString(),
+                $range['to']->toDateString(),
+            );
             $labels = [];
             foreach ($catalogFilters['departments'] as $departmentId) {
                 $labels[] = $catalog['departments'][$departmentId] ?? $departmentId;
@@ -226,7 +456,10 @@ class EcommerceCtrSummaryController extends Controller
         }
 
         if ($catalogFilters['categories'] !== []) {
-            $catalog ??= $this->filterCatalog();
+            $catalog ??= $this->filterCatalog(
+                $range['from']->toDateString(),
+                $range['to']->toDateString(),
+            );
             $labelsByValue = collect($catalog['categories'])->pluck('label', 'value');
             $labels = [];
             foreach ($catalogFilters['categories'] as $value) {
@@ -235,65 +468,229 @@ class EcommerceCtrSummaryController extends Controller
             $parts[] = 'Categories: '.implode(', ', $labels);
         }
 
-        return $parts === [] ? 'All rows' : implode(' · ', $parts);
+        return implode(' · ', $parts);
     }
 
-    /**
-     * @return Builder<TrackingCtrSummary>
-     */
-    private function summariesQuery(Request $request, string $sortKey, string $sortDir): Builder
-    {
+    private function summariesQuery(
+        Request $request,
+        string $sortKey,
+        string $sortDir,
+        string $fromDate,
+        string $toDate,
+    ): Builder {
         $search = trim((string) $request->query('search', ''));
-        $sevenDayFrom = TrackerTime::localNow()->subDays(6)->startOfDay()->toDateString();
 
-        return TrackingCtrSummary::query()
-            ->select('tracking_ctr_summaries.*')
-            ->addSelect([
-                'sort_total_sold' => TrackerDatabase::table('tracking_daily_products')
-                    ->selectRaw('COALESCE(SUM(sold_qty), 0)')
-                    ->whereColumn('tracking_daily_products.product_code', 'tracking_ctr_summaries.product_code'),
-                'sort_sold_7_days' => TrackerDatabase::table('tracking_daily_products')
-                    ->selectRaw('COALESCE(SUM(CASE WHEN metric_date >= ? THEN sold_qty ELSE 0 END), 0)', [$sevenDayFrom])
-                    ->whereColumn('tracking_daily_products.product_code', 'tracking_ctr_summaries.product_code'),
+        $inner = TrackerDatabase::table('tracking_ctr_daily_summaries')
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->select([
+                'department_id',
+                DB::raw('MAX(department_slug) as department_slug'),
+                'category_id',
+                DB::raw('MAX(category_slug) as category_slug'),
+                'micro_category_id',
+                DB::raw('MAX(micro_category_slug) as micro_category_slug'),
+                DB::raw('MAX(type) as type'),
+                'product_code',
+                DB::raw('SUM(total_click) as total_click'),
+                DB::raw('SUM(total_impression) as total_impression'),
+                DB::raw('CASE WHEN SUM(total_impression) > 0 THEN ROUND(SUM(total_click) / SUM(total_impression), 6) ELSE 0 END as ctr'),
+                DB::raw('ROUND(COALESCE(AVG(ctr), 0), 6) as ctr_average'),
             ])
-            ->when($search !== '', fn ($query) => $this->applySearchFilter($query, $search))
-            ->tap(fn ($query) => $this->applyCatalogFilters($query, $request))
-            ->tap(fn ($query) => $this->applySortOrder($query, $sortKey, $sortDir));
+            ->groupBy('department_id', 'category_id', 'micro_category_id', 'product_code');
+
+        if ($search !== '') {
+            $this->applySearchFilter($inner, $search);
+        }
+
+        $this->applyCatalogFilters($inner, $request);
+
+        $query = TrackerDatabase::query()
+            ->fromSub($inner, 'tracking_ctr_summaries')
+            ->select('tracking_ctr_summaries.*');
+
+        $this->applySortOrder($query, $sortKey, $sortDir);
+
+        return $query;
     }
 
     /**
-     * @param  Builder<TrackingCtrSummary>  $query
+     * @param  Builder  $query
      */
     private function applyCatalogFilters($query, Request $request): void
     {
         $catalogFilters = $this->catalogFiltersFromRequest($request);
+        [$departmentCategoryPairs, $customOrphanCategoryIds, $customDepartmentCategoryPairs, $staticOrphanCategoryIds, $staticDepartmentCategoryPairs] = $this->parseCategoryFilterTokens($catalogFilters['categories']);
 
-        if ($catalogFilters['departments'] !== []) {
-            $query->whereIn(
-                'department_id',
-                array_map(intval(...), $catalogFilters['departments']),
-            );
-        }
+        $departments = $catalogFilters['departments'];
+        $hasCategoryFilter = $departmentCategoryPairs !== []
+            || $customOrphanCategoryIds !== []
+            || $customDepartmentCategoryPairs !== []
+            || $staticOrphanCategoryIds !== []
+            || $staticDepartmentCategoryPairs !== [];
 
-        if ($catalogFilters['categories'] === []) {
+        if ($departments === [] && ! $hasCategoryFilter) {
             return;
         }
 
-        $query->where(function ($inner) use ($catalogFilters) {
-            foreach ($catalogFilters['categories'] as $token) {
-                [$departmentId, $categoryId] = explode(':', $token, 2);
-                $inner->orWhere(function ($pair) use ($departmentId, $categoryId) {
-                    $pair->where('department_id', (int) $departmentId)
-                        ->where('category_id', (int) $categoryId);
-                });
-            }
+        if (! $hasCategoryFilter) {
+            $query->whereIn('department_id', array_map(intval(...), $departments));
+
+            return;
+        }
+
+        $query->where(function ($root) use ($departments, $departmentCategoryPairs, $customOrphanCategoryIds, $customDepartmentCategoryPairs, $staticOrphanCategoryIds, $staticDepartmentCategoryPairs) {
+            $root->where(function ($inner) use ($departments, $departmentCategoryPairs, $customOrphanCategoryIds, $customDepartmentCategoryPairs, $staticOrphanCategoryIds, $staticDepartmentCategoryPairs) {
+                $departmentIds = $departments !== [] ? array_map(intval(...), $departments) : [];
+
+                foreach ($departmentCategoryPairs as [$departmentId, $categoryId]) {
+                    $inner->orWhere(function ($pair) use ($departmentId, $categoryId, $departmentIds) {
+                        $pair->where('department_id', $departmentId)
+                            ->where('category_id', $categoryId);
+
+                        if ($departmentIds !== []) {
+                            $pair->whereIn('department_id', $departmentIds);
+                        }
+                    });
+                }
+
+                foreach ($customOrphanCategoryIds as $categoryId) {
+                    $inner->orWhere(function ($custom) use ($categoryId) {
+                        $custom->where('type', TrackingCtrCategory::TYPE_DYNAMIC_CUSTOM_LINK)
+                            ->where('category_id', $categoryId)
+                            ->where('department_id', 0);
+                    });
+                }
+
+                foreach ($customDepartmentCategoryPairs as [$departmentId, $categoryId]) {
+                    $inner->orWhere(function ($custom) use ($departmentId, $categoryId, $departmentIds) {
+                        $custom->where('type', TrackingCtrCategory::TYPE_DYNAMIC_CUSTOM_LINK)
+                            ->where('department_id', $departmentId)
+                            ->where('category_id', $categoryId);
+
+                        if ($departmentIds !== []) {
+                            $custom->whereIn('department_id', $departmentIds);
+                        }
+                    });
+                }
+
+                foreach ($staticOrphanCategoryIds as $categoryId) {
+                    $inner->orWhere(function ($static) use ($categoryId) {
+                        $static->where('type', TrackingCtrCategory::TYPE_STATIC)
+                            ->where('category_id', $categoryId)
+                            ->where('department_id', 0);
+                    });
+                }
+
+                foreach ($staticDepartmentCategoryPairs as [$departmentId, $categoryId]) {
+                    $inner->orWhere(function ($static) use ($departmentId, $categoryId, $departmentIds) {
+                        $static->where('type', TrackingCtrCategory::TYPE_STATIC)
+                            ->where('department_id', $departmentId)
+                            ->where('category_id', $categoryId);
+
+                        if ($departmentIds !== []) {
+                            $static->whereIn('department_id', $departmentIds);
+                        }
+                    });
+                }
+            });
         });
+    }
+
+    /**
+     * @param  list<string>  $tokens
+     * @return array{0: list<array{0: int, 1: int}>, 1: list<int>, 2: list<array{0: int, 1: int}>, 3: list<int>, 4: list<array{0: int, 1: int}>}
+     */
+    private function parseCategoryFilterTokens(array $tokens): array
+    {
+        $pairs = [];
+        $customOrphanCategoryIds = [];
+        $customDepartmentCategoryPairs = [];
+        $staticOrphanCategoryIds = [];
+        $staticDepartmentCategoryPairs = [];
+
+        foreach ($tokens as $token) {
+            if (str_starts_with($token, 'custom:')) {
+                $rest = substr($token, 7);
+                if (str_contains($rest, ':')) {
+                    [$departmentId, $categoryId] = explode(':', $rest, 2);
+                    if (ctype_digit($departmentId) && ctype_digit($categoryId)) {
+                        $customDepartmentCategoryPairs[] = [(int) $departmentId, (int) $categoryId];
+                    }
+
+                    continue;
+                }
+
+                $categoryId = (int) $rest;
+                if ($categoryId > 0) {
+                    $customOrphanCategoryIds[] = $categoryId;
+                }
+
+                continue;
+            }
+
+            if (str_starts_with($token, 'static:')) {
+                $rest = substr($token, 7);
+                if (str_contains($rest, ':')) {
+                    [$departmentId, $categoryId] = explode(':', $rest, 2);
+                    if (ctype_digit($departmentId) && ctype_digit($categoryId)) {
+                        $staticDepartmentCategoryPairs[] = [(int) $departmentId, (int) $categoryId];
+                    }
+
+                    continue;
+                }
+
+                $categoryId = (int) $rest;
+                if ($categoryId > 0) {
+                    $staticOrphanCategoryIds[] = $categoryId;
+                }
+
+                continue;
+            }
+
+            if (! str_contains($token, ':')) {
+                continue;
+            }
+
+            [$departmentId, $categoryId] = explode(':', $token, 2);
+            if (ctype_digit($departmentId) && ctype_digit($categoryId)) {
+                $pairs[] = [(int) $departmentId, (int) $categoryId];
+            }
+        }
+
+        return [
+            $pairs,
+            array_values(array_unique($customOrphanCategoryIds)),
+            $this->uniqueDepartmentCategoryPairs($customDepartmentCategoryPairs),
+            array_values(array_unique($staticOrphanCategoryIds)),
+            $this->uniqueDepartmentCategoryPairs($staticDepartmentCategoryPairs),
+        ];
+    }
+
+    /**
+     * @param  list<array{0: int, 1: int}>  $pairs
+     * @return list<array{0: int, 1: int}>
+     */
+    private function uniqueDepartmentCategoryPairs(array $pairs): array
+    {
+        $seen = [];
+        $unique = [];
+
+        foreach ($pairs as [$departmentId, $categoryId]) {
+            $key = $departmentId.':'.$categoryId;
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $unique[] = [$departmentId, $categoryId];
+        }
+
+        return $unique;
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function mapRow(TrackingCtrSummary $row): array
+    private function mapRow(object $row): array
     {
         $code = trim((string) $row->product_code);
 
@@ -307,13 +704,11 @@ class EcommerceCtrSummaryController extends Controller
             'ctr_average' => (float) $row->ctr_average,
             'click' => (int) $row->total_click,
             'impression' => (int) $row->total_impression,
-            'sold_7_days' => (int) ($row->sort_sold_7_days ?? 0),
-            'total_sold' => (int) ($row->sort_total_sold ?? 0),
         ];
     }
 
     /**
-     * @param  Builder<TrackingCtrSummary>  $query
+     * @param  Builder  $query
      */
     private function applySearchFilter($query, string $search): void
     {
@@ -376,7 +771,7 @@ class EcommerceCtrSummaryController extends Controller
     }
 
     /**
-     * @param  Builder<TrackingCtrSummary>  $query
+     * @param  Builder  $query
      */
     private function applySortOrder($query, string $primaryKey, string $dir): void
     {
@@ -391,10 +786,10 @@ class EcommerceCtrSummaryController extends Controller
             $query->orderBy(self::SORT_COLUMNS[$key], $dir);
         }
 
-        $query->orderBy('tracking_ctr_summaries.id');
+        $query->orderBy('tracking_ctr_summaries.product_code');
     }
 
-    private function formatDepartmentColumn(TrackingCtrSummary $row): string
+    private function formatDepartmentColumn(object $row): string
     {
         $label = $this->formatLabel($row->department_slug, $row->department_id, true);
 
@@ -405,9 +800,20 @@ class EcommerceCtrSummaryController extends Controller
         return $this->formatCtrTypeLabel($row->type);
     }
 
-    private function formatCategoryColumn(TrackingCtrSummary $row): string
+    private function formatCategoryColumn(object $row): string
     {
+        $type = trim((string) ($row->type ?? ''));
         $categoryLabel = $this->formatLabel($row->category_slug, $row->category_id);
+        $departmentId = (int) ($row->department_id ?? 0);
+
+        if ($type === TrackingCtrCategory::TYPE_STATIC && $departmentId > 0) {
+            return 'Static -> '.$categoryLabel;
+        }
+
+        if ($type === TrackingCtrCategory::TYPE_DYNAMIC_CUSTOM_LINK && $departmentId > 0) {
+            return 'Custom link -> '.$categoryLabel;
+        }
+
         $microLabel = $this->formatMicroCategoryColumn($row);
 
         if ($microLabel === '—') {
@@ -417,7 +823,7 @@ class EcommerceCtrSummaryController extends Controller
         return $categoryLabel.' -> '.$microLabel;
     }
 
-    private function formatMicroCategoryColumn(TrackingCtrSummary $row): string
+    private function formatMicroCategoryColumn(object $row): string
     {
         $microId = (int) ($row->micro_category_id ?? 0);
         $microSlug = trim((string) ($row->micro_category_slug ?? ''));

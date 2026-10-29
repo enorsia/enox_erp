@@ -12,7 +12,10 @@
     $categoryPlaceholder = 'All';
     $filterDrawerHasFilters = trim((string) ($search ?? request('search', ''))) !== ''
         || $selectedDepartments !== []
-        || $selectedCategories !== [];
+        || $selectedCategories !== []
+        || $sortBy !== 'ctr'
+        || $sortDir !== 'desc';
+    $drawerResetUrl = $data['drawerResetUrl'] ?? ($data['resetUrl'] ?? route('admin.ecommerce.ctr-summary.index'));
 @endphp
 
 <div id="ecom-dashboard-filter-backdrop" class="etd-filter-panel__backdrop etd-filter-panel--closed js-ecom-dashboard-filter-close" aria-hidden="true"></div>
@@ -32,7 +35,7 @@
             </div>
         </div>
         <div class="etd-filter-panel__header-actions">
-            <a href="{{ $data['resetUrl'] ?? route('admin.ecommerce.ctr-summary.index') }}"
+            <a href="{{ $drawerResetUrl }}"
                class="etd-filter-panel__clear no-underline {{ $filterDrawerHasFilters ? 'is-active' : '' }}"
                aria-label="Clear all filters"
                title="Clear all filters">
@@ -46,6 +49,11 @@
     <form method="GET" action="{{ $data['filterFormAction'] ?? route('admin.ecommerce.ctr-summary.index') }}" class="etd-filter-panel__form">
         <input type="hidden" name="sort" value="{{ $sortBy }}">
         <input type="hidden" name="dir" value="{{ $sortDir }}">
+        <input type="hidden" name="period" value="{{ $data['period'] ?? '24h' }}">
+        @if (($data['period'] ?? '') === 'custom')
+            <input type="hidden" name="date_from" value="{{ $data['dateFrom'] ?? '' }}">
+            <input type="hidden" name="date_to" value="{{ $data['dateTo'] ?? '' }}">
+        @endif
         <div class="etd-filter-panel__body etd-filter-drawer__body">
             <section class="etd-activity-filter-section etd-activity-filter-section--full">
                 <p class="etd-activity-filter-section-title">Search</p>
@@ -65,7 +73,10 @@
 
             <hr class="etd-filter-divider"/>
 
-            <section class="etd-activity-filter-section etd-activity-filter-section--full" data-etd-department-category data-etd-show-all-categories="1">
+            <section class="etd-activity-filter-section etd-activity-filter-section--full"
+                     data-etd-department-category
+                     data-etd-show-all-categories="1"
+                     data-etd-always-visible-category-departments="__custom_link__,__static__">
                 <p class="etd-activity-filter-section-title">Catalog</p>
                 <div class="etd-activity-filter-grid">
                     <label class="etd-filter-compact-field" for="ctr-summary-filter-department">
@@ -113,7 +124,7 @@
             </section>
         </div>
         <div class="etd-filter-panel__footer">
-            <a href="{{ $data['resetUrl'] ?? route('admin.ecommerce.ctr-summary.index') }}" class="etd-filter-panel__reset">Reset</a>
+            <a href="{{ $drawerResetUrl }}" class="etd-filter-panel__reset">Reset</a>
             <button type="submit" class="etd-filter-panel__apply">Apply filters</button>
         </div>
     </form>
