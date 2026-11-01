@@ -372,16 +372,18 @@ registerEtdFilterPeriodAlpine();
 
 function setSelectValue(select, value) {
     if (select.tomselect) {
+        select._etdSilentTomUpdate = true;
+
         if (select.multiple) {
             const nextValues = Array.isArray(value)
                 ? value
                 : (value === '' || value === null || value === undefined ? [] : [value]);
             select.tomselect.setValue(nextValues, true);
-
-            return;
+        } else {
+            select.tomselect.setValue(value ?? '', true);
         }
 
-        select.tomselect.setValue(value ?? '', true);
+        select._etdSilentTomUpdate = false;
 
         return;
     }
@@ -476,7 +478,17 @@ function containerShowsAllCategories(container) {
     return value === '1' || value === 'true';
 }
 
-function matchingCategoryOptions(options, department, showAllWhenNoDepartment = false) {
+function alwaysVisibleCategoryDepartments(container) {
+    const raw = container?.dataset?.etdAlwaysVisibleCategoryDepartments?.trim();
+
+    if (!raw) {
+        return [];
+    }
+
+    return raw.split(',').map((entry) => entry.trim()).filter(Boolean);
+}
+
+function matchingCategoryOptions(options, department, showAllWhenNoDepartment = false, alwaysVisibleDepartments = []) {
     const departmentKeys = Array.isArray(department)
         ? department.filter((value) => value !== '')
         : (department === '' ? [] : [department]);
@@ -485,7 +497,10 @@ function matchingCategoryOptions(options, department, showAllWhenNoDepartment = 
         return showAllWhenNoDepartment ? options : [];
     }
 
-    return options.filter((option) => departmentKeys.includes(option.department));
+    return options.filter((option) => (
+        departmentKeys.includes(option.department)
+        || alwaysVisibleDepartments.includes(option.department)
+    ));
 }
 
 function selectedDepartmentKeys(departmentSelect) {
@@ -517,8 +532,8 @@ function departmentKeysFromFilter(department) {
         : (department === '' ? [] : [department]);
 }
 
-function writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment = false) {
-    const matching = matchingCategoryOptions(options, department, showAllWhenNoDepartment);
+function writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment = false, alwaysVisibleDepartments = []) {
+    const matching = matchingCategoryOptions(options, department, showAllWhenNoDepartment, alwaysVisibleDepartments);
     const departmentKeys = departmentKeysFromFilter(department);
     const allValue = categoryAllOptionValue(categorySelect);
     const allLabel = emptyLabel || 'All';
@@ -537,8 +552,8 @@ function writeCategorySelectOptions(categorySelect, options, department, emptyLa
     categorySelect.innerHTML = html;
 }
 
-function syncNativeCategoryOptions(categorySelect, options, department, selectedValues, emptyLabel, showAllWhenNoDepartment = false) {
-    writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment);
+function syncNativeCategoryOptions(categorySelect, options, department, selectedValues, emptyLabel, showAllWhenNoDepartment = false, alwaysVisibleDepartments = []) {
+    writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment, alwaysVisibleDepartments);
     const departmentKeys = departmentKeysFromFilter(department);
     categorySelect.disabled = !showAllWhenNoDepartment && departmentKeys.length === 0;
 
@@ -546,12 +561,17 @@ function syncNativeCategoryOptions(categorySelect, options, department, selected
         ? selectedValues
         : (selectedValues ? [selectedValues] : []);
     const allValue = categoryAllOptionValue(categorySelect);
+    const showAllOption = allValue && (departmentKeys.length > 0 || showAllWhenNoDepartment);
     let nextValues = values.filter((value) => (
         Array.from(categorySelect.options).some((option) => option.value === value)
     ));
 
     if (allValue && (departmentKeys.length > 0 || showAllWhenNoDepartment)) {
         nextValues = resolveFilterTomSelectValues(nextValues, allValue);
+    }
+
+    if (nextValues.length === 0 && showAllOption) {
+        nextValues = [allValue];
     }
 
     Array.from(categorySelect.options).forEach((option) => {
@@ -562,6 +582,10 @@ function syncNativeCategoryOptions(categorySelect, options, department, selected
 function resolveFilterTomSelectValues(values, allValue) {
     if (!allValue) {
         return values;
+    }
+
+    if (values.includes(allValue)) {
+        return [allValue];
     }
 
     return values.filter((value) => value !== allValue);
@@ -618,44 +642,32 @@ function patchEtdFilterTomSelect(select) {
         ts.on('dropdown_open', () => {
             const container = select.closest('[data-etd-department-category]');
 
-            container?.querySelectorAll('.tom-select').forEach((peer) => {
+            container?.querySelectorAll('select.tom-select').forEach((peer) => {
                 if (peer !== select && peer.tomselect?.isOpen) {
                     peer.tomselect.close();
                 }
             });
         });
-
-        ts.on('item_add', () => {
-            window.requestAnimationFrame(() => {
-                if (select.disabled || ts.isDisabled) {
-                    return;
-                }
-
-                ts.focus();
-
-                if (!ts.isOpen) {
-                    ts.open();
-                }
-            });
-        });
     }
-
-    ts.inputState();
 
     return true;
 }
 
 window.patchEtdFilterTomSelect = patchEtdFilterTomSelect;
 
-function syncTomSelectCategoryOptions(categorySelect, options, department, selectedValues, emptyLabel, showAllWhenNoDepartment = false) {
+function syncTomSelectCategoryOptions(categorySelect, options, department, selectedValues, emptyLabel, showAllWhenNoDepartment = false, alwaysVisibleDepartments = []) {
     const ts = categorySelect.tomselect;
-    const matching = matchingCategoryOptions(options, department, showAllWhenNoDepartment);
+    const matching = matchingCategoryOptions(options, department, showAllWhenNoDepartment, alwaysVisibleDepartments);
     const allValue = categoryAllOptionValue(categorySelect);
     const allLabel = emptyLabel || 'All';
     const departmentKeys = departmentKeysFromFilter(department);
     const showAllOption = allValue && (departmentKeys.length > 0 || showAllWhenNoDepartment);
 
-    writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment);
+    if (!ts) {
+        writeCategorySelectOptions(categorySelect, options, department, emptyLabel, showAllWhenNoDepartment, alwaysVisibleDepartments);
+
+        return;
+    }
 
     ts.clearOptions();
 
@@ -686,7 +698,13 @@ function syncTomSelectCategoryOptions(categorySelect, options, department, selec
         nextValues = resolveFilterTomSelectValues(nextValues, allValue);
     }
 
+    if (nextValues.length === 0 && showAllOption) {
+        nextValues = [allValue];
+    }
+
+    categorySelect._etdSilentTomUpdate = true;
     ts.setValue(nextValues, true);
+    categorySelect._etdSilentTomUpdate = false;
     patchEtdFilterTomSelect(categorySelect);
 }
 
@@ -730,7 +748,20 @@ function bindFilterAllOption(select) {
             const allWasAdded = !previousList.includes(allValue);
 
             select._etdApplyingAllRules = true;
-            setSelectValue(select, allWasAdded ? [] : specifics);
+            if (allWasAdded || specifics.length === 0) {
+                setSelectValue(select, [allValue]);
+            } else {
+                setSelectValue(select, specifics);
+            }
+            select._etdApplyingAllRules = false;
+            previousList = selectValues(select);
+
+            return;
+        }
+
+        if (specifics.length === 0) {
+            select._etdApplyingAllRules = true;
+            setSelectValue(select, [allValue]);
             select._etdApplyingAllRules = false;
             previousList = selectValues(select);
 
@@ -750,6 +781,13 @@ function bindFilterAllOption(select) {
         previousList = selectValues(select);
         select.tomselect.on('change', applyAllRules);
         patchEtdFilterTomSelect(select);
+
+        if (select.multiple && previousList.length === 0) {
+            select._etdApplyingAllRules = true;
+            setSelectValue(select, [allValue]);
+            select._etdApplyingAllRules = false;
+            previousList = selectValues(select);
+        }
 
         return true;
     };
@@ -799,6 +837,7 @@ function initDepartmentCategoryFilters(root) {
         const categoryOptions = container._etdCategoryOptions || snapshot;
         const emptyLabel = container._etdCategoryEmptyLabel;
         const showAllCategories = containerShowsAllCategories(container);
+        const alwaysVisibleDepartments = alwaysVisibleCategoryDepartments(container);
 
         const syncCategoryOptions = (resetCategory = false) => {
             const departmentKeys = selectedDepartmentKeys(departmentSelect);
@@ -820,7 +859,12 @@ function initDepartmentCategoryFilters(root) {
 
             const previousValues = resetCategory ? [] : selectValues(categorySelect);
             const filteredPrevious = previousValues.filter((value) => value !== filterAllOptionValue(categorySelect));
-            const selectedValues = matchingCategoryOptions(categoryOptions, departmentKeys, showAllCategories)
+            const selectedValues = matchingCategoryOptions(
+                categoryOptions,
+                departmentKeys,
+                showAllCategories,
+                alwaysVisibleDepartments,
+            )
                 .filter((option) => filteredPrevious.includes(option.value))
                 .map((option) => option.value);
 
@@ -832,6 +876,7 @@ function initDepartmentCategoryFilters(root) {
                     selectedValues,
                     emptyLabel,
                     showAllCategories,
+                    alwaysVisibleDepartments,
                 );
             } else {
                 syncNativeCategoryOptions(
@@ -841,6 +886,7 @@ function initDepartmentCategoryFilters(root) {
                     selectedValues,
                     emptyLabel,
                     showAllCategories,
+                    alwaysVisibleDepartments,
                 );
             }
         };
@@ -849,6 +895,10 @@ function initDepartmentCategoryFilters(root) {
             container._etdDepartmentCategoryBound = true;
 
             departmentSelect.addEventListener('change', () => {
+                if (departmentSelect._etdSilentTomUpdate || departmentSelect._etdApplyingAllRules) {
+                    return;
+                }
+
                 container._etdCategoryDeptKey = null;
 
                 if (!departmentSelect.multiple) {
@@ -856,21 +906,21 @@ function initDepartmentCategoryFilters(root) {
                 }
                 syncCategoryOptions(!departmentSelect.multiple);
             });
-        }
 
-        syncCategoryOptions();
+            syncCategoryOptions();
 
-        if (categorySelect.classList.contains('tom-select') && !categorySelect.tomselect) {
-            const startedAt = Date.now();
-            const waitForTomSelect = window.setInterval(() => {
-                if (categorySelect.tomselect || Date.now() - startedAt > 2000) {
-                    window.clearInterval(waitForTomSelect);
+            if (categorySelect.classList.contains('tom-select') && !categorySelect.tomselect) {
+                const startedAt = Date.now();
+                const waitForTomSelect = window.setInterval(() => {
+                    if (categorySelect.tomselect || Date.now() - startedAt > 2000) {
+                        window.clearInterval(waitForTomSelect);
 
-                    if (categorySelect.tomselect) {
-                        syncCategoryOptions();
+                        if (categorySelect.tomselect) {
+                            syncCategoryOptions();
+                        }
                     }
-                }
-            }, 50);
+                }, 50);
+            }
         }
     });
 }
@@ -878,12 +928,12 @@ function initDepartmentCategoryFilters(root) {
 window.initDepartmentCategoryFilters = initDepartmentCategoryFilters;
 
 window.refreshEtdFilterControls = function (root) {
+    initEtdFlatpickr(root);
+    initDepartmentCategoryFilters(root);
+
     if (typeof window.refreshTomSelectIn === 'function') {
         window.refreshTomSelectIn(root);
     }
-
-    initEtdFlatpickr(root);
-    initDepartmentCategoryFilters(root);
 
     if (typeof window.initEtdTipPositioning === 'function') {
         window.initEtdTipPositioning(root);

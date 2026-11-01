@@ -13,6 +13,7 @@ class TrackingCtrSummary extends Model
     protected $table = 'tracking_ctr_summaries';
 
     protected $fillable = [
+        'tracking_ctr_category_id',
         'department_id',
         'department_slug',
         'category_id',
@@ -30,6 +31,7 @@ class TrackingCtrSummary extends Model
     protected function casts(): array
     {
         return [
+            'tracking_ctr_category_id' => 'integer',
             'department_id' => 'integer',
             'department_slug' => 'string',
             'category_id' => 'integer',

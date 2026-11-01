@@ -204,7 +204,6 @@ class TrackController extends Controller
                     $rollupSettings,
                 );
             }
-
             return response()->json([
                 'status' => true,
                 'message' => 'Tracking CTR summaries updated successfully',

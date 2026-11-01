@@ -68,7 +68,6 @@ class TrackingCtrCategoryIngestService
             return [];
         }
 
-        $categoryRow = $this->resolveCategoryRow($categoryData);
         $acceptedIds = [];
 
         foreach ($events as $event) {
@@ -85,7 +84,13 @@ class TrackingCtrCategoryIngestService
                 continue;
             }
 
+            $eventCategoryData = $event['tracking_meta'] ?? $event['category'] ?? null;
+            $eventCategoryData = is_array($eventCategoryData) && $eventCategoryData !== []
+                ? $eventCategoryData
+                : $categoryData;
+
             try {
+                $categoryRow = $this->resolveCategoryRow($eventCategoryData);
                 $inserted = $this->storeImpressionRow(
                     $trackingSessionId,
                     $categoryRow,
