@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Clients\EnoxApiClient;
 use App\Models\TrackingCtrCategory;
 use App\Services\EcomActivityListService;
 use App\Services\EcommerceCtrSummaryExportService;
@@ -13,6 +14,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -29,10 +31,10 @@ class EcommerceCtrSummaryController extends Controller
 
     /** @var list<string> Tie-break order after the column the user clicked */
     private const SORT_SEQUENCE = [
-        'ctr',
-        'ctr_average',
         'click',
         'impression',
+        'ctr',
+        'ctr_average',
     ];
 
     /** @var array<string, string> Sort key => SQL order expression */
@@ -53,8 +55,25 @@ class EcommerceCtrSummaryController extends Controller
             ->paginate(self::PER_PAGE)
             ->withQueryString();
 
+        $salesWindowDays = 7;
+        $productCodes = $summaries->getCollection()
+            ->map(fn (object $row): string => trim((string) $row->product_code))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        [$salesByProductCode, $salesWindowDays] = $this->fetchSalesByProductCode(
+            $productCodes,
+            $context['data']['dateFrom'],
+            $context['data']['dateTo'],
+            $salesWindowDays,
+        );
+
         $summaries->setCollection(
-            $summaries->getCollection()->map(fn (object $row) => $this->mapRow($row)),
+            $summaries->getCollection()->map(
+                fn (object $row): array => $this->mapRowWithSales($row, $salesByProductCode),
+            ),
         );
 
         return view('ecommerce.ctr_summary.index', [
@@ -64,6 +83,7 @@ class EcommerceCtrSummaryController extends Controller
             'search' => $context['search'],
             'filterCatalog' => $context['filterCatalog'],
             'data' => $context['data'],
+            'salesWindowDays' => $salesWindowDays,
         ]);
     }
 
@@ -722,6 +742,145 @@ class EcommerceCtrSummaryController extends Controller
     }
 
     /**
+     * @param  array<string, array{sales_window_sale: float, total_sale: float}>  $salesByProductCode
+     * @return array<string, mixed>
+     */
+    private function mapRowWithSales(object $row, array $salesByProductCode): array
+    {
+        $mapped = $this->mapRow($row);
+        $sales = $salesByProductCode[$mapped['product_code']] ?? null;
+        $mapped['sales_window_sale'] = round((float) ($sales['sales_window_sale'] ?? 0), 2);
+        $mapped['total_sold'] = round((float) ($sales['total_sale'] ?? 0), 2);
+
+        return $mapped;
+    }
+
+    /**
+     * @param  list<string>  $productCodes
+     * @return array{0: array<string, array{sales_window_sale: float, total_sale: float}>, 1: int}
+     */
+    private function fetchSalesByProductCode(
+        array $productCodes,
+        string $dateFrom,
+        string $dateTo,
+        int $defaultSalesWindowDays,
+    ): array {
+        $salesByProductCode = [];
+        $salesWindowDays = $defaultSalesWindowDays;
+        $logContext = [
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'product_code_count' => count($productCodes),
+        ];
+
+        if ($productCodes === []) {
+            return [$salesByProductCode, $salesWindowDays];
+        }
+
+        if (rtrim((string) config('enox.base_url'), '/') === '') {
+            Log::warning('CTR summary: ENOX_API_BASE_URL is empty; sold columns will show zero.', $logContext);
+
+            return [$salesByProductCode, $salesWindowDays];
+        }
+
+        $endpoint = (string) config('enox.endpoints.tracking_products_total_sold');
+        $chunks = array_chunk($productCodes, 100);
+        $failedChunks = 0;
+
+        try {
+            $client = app(EnoxApiClient::class);
+
+            foreach ($chunks as $chunkIndex => $chunk) {
+                $chunkContext = $logContext + [
+                    'endpoint' => $endpoint,
+                    'chunk' => $chunkIndex + 1,
+                    'chunk_count' => count($chunks),
+                    'chunk_size' => count($chunk),
+                ];
+
+                try {
+                    $response = $client->post($endpoint, [
+                        'product_code' => $chunk,
+                        'date_from' => $dateFrom,
+                        'date_to' => $dateTo,
+                    ]);
+                } catch (\Throwable $chunkException) {
+                    $failedChunks++;
+                    Log::error('CTR summary: tracking/products/total-sold request threw an exception.', $chunkContext + [
+                        'error' => $chunkException->getMessage(),
+                    ]);
+
+                    continue;
+                }
+
+                if (! $response->successful()) {
+                    $failedChunks++;
+                    Log::warning('CTR summary: tracking/products/total-sold HTTP request failed.', $chunkContext + [
+                        'http_status' => $response->status(),
+                        'response_body' => mb_substr(trim((string) $response->body()), 0, 500),
+                    ]);
+
+                    continue;
+                }
+
+                $payload = $response->json();
+
+                if (! is_array($payload) || ! ($payload['status'] ?? false)) {
+                    $failedChunks++;
+                    Log::warning('CTR summary: tracking/products/total-sold returned status=false.', $chunkContext + [
+                        'message' => is_array($payload) ? ($payload['message'] ?? null) : null,
+                        'error' => is_array($payload) ? ($payload['error'] ?? null) : null,
+                    ]);
+
+                    continue;
+                }
+
+                $salesWindowDays = max(1, (int) ($payload['sales_window_days'] ?? $salesWindowDays));
+
+                foreach ($payload['data'] ?? [] as $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+
+                    $code = trim((string) ($item['product_code'] ?? ''));
+
+                    if ($code === '') {
+                        continue;
+                    }
+
+                    $salesByProductCode[$code] = [
+                        'sales_window_sale' => (float) ($item['sales_window_sale'] ?? 0),
+                        'total_sale' => (float) ($item['total_sale'] ?? 0),
+                    ];
+                }
+            }
+        } catch (\Throwable $exception) {
+            Log::error('CTR summary: tracking/products/total-sold fetch failed unexpectedly.', $logContext + [
+                'endpoint' => $endpoint,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return [$salesByProductCode, $salesWindowDays];
+        }
+
+        if ($failedChunks > 0) {
+            Log::warning('CTR summary: tracking/products/total-sold completed with failed chunk(s); some sold values may be zero.', $logContext + [
+                'endpoint' => $endpoint,
+                'failed_chunks' => $failedChunks,
+                'total_chunks' => count($chunks),
+                'products_with_sales' => count($salesByProductCode),
+            ]);
+        } elseif (count($salesByProductCode) === 0) {
+            Log::info('CTR summary: tracking/products/total-sold returned no sales rows for requested product codes.', $logContext + [
+                'endpoint' => $endpoint,
+                'sales_window_days' => $salesWindowDays,
+            ]);
+        }
+
+        return [$salesByProductCode, $salesWindowDays];
+    }
+
+    /**
      * @param  Builder  $query
      */
     private function applySearchFilter($query, string $search): void
@@ -789,6 +948,10 @@ class EcommerceCtrSummaryController extends Controller
      */
     private function applySortOrder($query, string $primaryKey, string $dir): void
     {
+        if (! array_key_exists($primaryKey, self::SORT_COLUMNS)) {
+            $primaryKey = 'ctr';
+        }
+
         $keys = [$primaryKey];
         foreach (self::SORT_SEQUENCE as $key) {
             if ($key !== $primaryKey) {

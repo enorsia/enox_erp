@@ -5,13 +5,13 @@
 @section('content')
     @php
         $sortableColumns = [
-            'ctr' => 'CTR',
-            'ctr_average' => 'CTR average',
             'click' => 'Click',
             'impression' => 'Impression',
+            'ctr' => 'CTR',
+            'ctr_average' => 'CTR average',
         ];
-        $staticMetricColumns = [
-            'sold_7_days' => '7 days sold',
+        $soldMetricColumns = [
+            'sales_window_sale' => ((int) ($salesWindowDays ?? 7)).' days sold',
             'total_sold' => 'Total sold',
         ];
         $sortUrl = function (string $column) use ($sortBy, $sortDir, $data): string {
@@ -174,7 +174,7 @@
                                 @php
                                     $isActiveSort = $sortBy === $sortKey;
                                 @endphp
-                                <th class="whitespace-nowrap text-right">
+                                <th class="whitespace-nowrap etd-num">
                                     <a href="{{ $sortUrl($sortKey) }}"
                                         class="inline-flex items-center justify-end gap-1.5 w-full transition-colors
                                             {{ $isActiveSort
@@ -197,8 +197,8 @@
                                     </a>
                                 </th>
                             @endforeach
-                            @foreach ($staticMetricColumns as $columnKey => $columnLabel)
-                                <th class="whitespace-nowrap text-right text-slate-500 dark:text-slate-400">{{ $columnLabel }}</th>
+                            @foreach ($soldMetricColumns as $columnKey => $columnLabel)
+                                <th class="whitespace-nowrap etd-num text-slate-500 dark:text-slate-400">{{ $columnLabel }}</th>
                             @endforeach
                         </tr>
                     </thead>
@@ -208,12 +208,19 @@
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--dept" data-label="Department">{{ $row['department'] }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--category" data-label="Category">{{ $row['category_display'] }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--product font-mono text-[12px]" data-label="Product code">{{ $row['product_code'] }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="CTR">{{ number_format((float) $row['ctr'], 2, '.', '') }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="CTR average">{{ number_format((float) $row['ctr_average'], 2, '.', '') }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="Click">{{ number_format($row['click']) }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="Impression">{{ number_format($row['impression']) }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="7 days sold">0</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="Total sold">0</td>
+                                @foreach ($sortableColumns as $metricKey => $metricLabel)
+                                    @php
+                                        $metricValue = match ($metricKey) {
+                                            'ctr', 'ctr_average' => number_format((float) $row[$metricKey], 2, '.', ''),
+                                            'click', 'impression' => number_format($row[$metricKey]),
+                                            default => $row[$metricKey] ?? '',
+                                        };
+                                    @endphp
+                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-num text-right tabular-nums" data-label="{{ $metricLabel }}">{{ $metricValue }}</td>
+                                @endforeach
+                                @foreach ($soldMetricColumns as $columnKey => $columnLabel)
+                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-num text-right tabular-nums" data-label="{{ $columnLabel }}">{{ number_format((float) ($row[$columnKey] ?? 0), 2, '.', ',') }}</td>
+                                @endforeach
                             </tr>
                         @empty
                             <tr class="etd-ctr-summary-empty">
