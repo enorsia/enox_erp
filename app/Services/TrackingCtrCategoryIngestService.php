@@ -158,7 +158,7 @@ class TrackingCtrCategoryIngestService
         $categoryId = (int) $categoryData['category_id'];
         $categorySlug = trim((string) ($categoryData['category_slug'] ?? ''));
         $type = trim((string) ($categoryData['type'] ?? TrackingCtrCategory::TYPE_CATEGORY));
-        $departmentId = $categoryData['department_id'];
+        $departmentId = $categoryData['department_id'] ?? null;
         $departmentId = $departmentId === null || $departmentId === ''
             ? null
             : (int) $departmentId;
