@@ -5,11 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\TrackingCtrCategory;
 use App\Services\TrackerClientContextResolver;
-use App\Models\TrackingCtrCategoryImpression;
 use App\Models\TrackingCtrSummary;
 use App\Services\TrackIngestService;
 use App\Services\TrackingCtrBatchDispatcher;
-use App\Services\TrackingCtrRollupService;
 use App\Services\TrackingCtrSyncSiteSettingsService;
 use App\Support\EcomTrackerLogger;
 use App\Support\TrackerTime;
@@ -188,7 +186,7 @@ class TrackController extends Controller
 
     public function forceCTRGenerate(
         Request $request,
-        TrackingCtrRollupService $ctrRollupService,
+        TrackingCtrBatchDispatcher $ctrBatchDispatcher,
         TrackingCtrSyncSiteSettingsService $ctrSyncSiteSettings,
     ): JsonResponse {
         $validated = $request->validate([
@@ -197,8 +195,6 @@ class TrackController extends Controller
         ]);
 
         try {
-            set_time_limit(0);
-
             $from = Carbon::parse((string) $validated['from'], TrackerTime::timezone())->startOfDay();
             $to = filled($validated['to'] ?? null)
                 ? Carbon::parse((string) $validated['to'], TrackerTime::timezone())->startOfDay()
@@ -210,19 +206,15 @@ class TrackController extends Controller
 
             $endDay = $to ?? $from;
             $rollupSettings = $ctrSyncSiteSettings->fetchForSync();
-            $result = $ctrRollupService->rebuildSummariesFromDailyRange(
-                $from->toDateString(),
-                $endDay->toDateString(),
-                (int) $rollupSettings['min_clicks'],
-            );
+            $result = $ctrBatchDispatcher->dispatchPendingBatches(true, $from, $to, $rollupSettings);
 
-            Log::info('Tracking CTR summaries force regenerate completed', [
+            Log::info('Tracking CTR summaries force regenerate queued', [
                 'from' => $from->toDateString(),
                 'to' => $endDay->toDateString(),
                 'timezone' => TrackerTime::timezone(),
                 'min_clicks' => $rollupSettings['min_clicks'],
-                'upserted' => $result['upserted'],
-                'categories' => $result['categories'],
+                'queued_jobs' => $result['queued_jobs'],
+                'category_impression_count' => $result['category_impression_count'],
             ]);
 
             return response()->json([
@@ -231,8 +223,8 @@ class TrackController extends Controller
                 'from' => $from->toDateString(),
                 'to' => $endDay->toDateString(),
                 'timezone' => TrackerTime::timezone(),
-                'upserted' => $result['upserted'],
-                'categories' => $result['categories'],
+                'queued_jobs' => $result['queued_jobs'],
+                'category_impression_count' => $result['category_impression_count'],
             ], 200);
         } catch (Throwable $th) {
             Log::error('Tracking CTR summaries force regenerate failed', [
@@ -254,20 +246,9 @@ class TrackController extends Controller
         TrackingCtrSyncSiteSettingsService $ctrSyncSiteSettings,
     ): JsonResponse {
         try {
-
             $rollupSettings = $ctrSyncSiteSettings->fetchForSync();
+            $ctrBatchDispatcher->dispatchPendingBatches(false, null, null, $rollupSettings);
 
-            if (
-                ! $this->ctrSummariesRefreshedForToday()
-                || TrackingCtrCategoryImpression::query()->whereNull('ctr_rollup_status')->exists()
-            ) {
-                $ctrBatchDispatcher->processAllPendingSynchronously(
-                    false,
-                    null,
-                    null,
-                    $rollupSettings,
-                );
-            }
             return response()->json([
                 'status' => true,
                 'message' => 'Tracking CTR summaries updated successfully',
@@ -305,20 +286,6 @@ class TrackController extends Controller
                 'message' => $th->getMessage(),
             ], 500);
         }
-    }
-
-    private function ctrSummariesRefreshedForToday(): bool
-    {
-        $latestUpdatedAt = TrackingCtrSummary::query()->max('updated_at');
-
-        if ($latestUpdatedAt === null) {
-            return false;
-        }
-
-        $updatedDay = TrackerTime::toUtc($latestUpdatedAt)?->timezone(TrackerTime::timezone())->toDateString()
-            ?? Carbon::parse((string) $latestUpdatedAt, TrackerTime::timezone())->toDateString();
-
-        return $updatedDay === TrackerTime::localNow()->toDateString();
     }
 
     /**
