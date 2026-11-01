@@ -19,6 +19,8 @@ class EcommerceCtrSummaryExportService
         'CTR average',
         'Click',
         'Impression',
+        '7 days sold',
+        'Total sold',
     ];
 
     /**
@@ -48,6 +50,8 @@ class EcommerceCtrSummaryExportService
                 round((float) ($row['ctr_average'] ?? 0) * 100, 2),
                 (int) ($row['click'] ?? 0),
                 (int) ($row['impression'] ?? 0),
+                0,
+                0,
             ];
         }
 

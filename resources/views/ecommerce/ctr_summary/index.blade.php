@@ -10,6 +10,10 @@
             'click' => 'Click',
             'impression' => 'Impression',
         ];
+        $staticMetricColumns = [
+            'sold_7_days' => '7 days sold',
+            'total_sold' => 'Total sold',
+        ];
         $sortUrl = function (string $column) use ($sortBy, $sortDir, $data): string {
             $nextDir = ($sortBy === $column && $sortDir === 'desc') ? 'asc' : 'desc';
 
@@ -193,6 +197,9 @@
                                     </a>
                                 </th>
                             @endforeach
+                            @foreach ($staticMetricColumns as $columnKey => $columnLabel)
+                                <th class="whitespace-nowrap text-right text-slate-500 dark:text-slate-400">{{ $columnLabel }}</th>
+                            @endforeach
                         </tr>
                     </thead>
                     <tbody>
@@ -205,10 +212,12 @@
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="CTR average">{{ number_format((float) $row['ctr_average'], 2, '.', '') }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="Click">{{ number_format($row['click']) }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="Impression">{{ number_format($row['impression']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="7 days sold">0</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric text-right tabular-nums" data-label="Total sold">0</td>
                             </tr>
                         @empty
                             <tr class="etd-ctr-summary-empty">
-                                <td colspan="7" class="py-10 text-center text-slate-500 dark:text-slate-400">
+                                <td colspan="9" class="py-10 text-center text-slate-500 dark:text-slate-400">
                                     No CTR summary rows match your filters.
                                 </td>
                             </tr>
