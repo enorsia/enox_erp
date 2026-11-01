@@ -9,6 +9,7 @@ use App\Models\TrackingCtrCategoryImpression;
 use App\Models\TrackingCtrSummary;
 use App\Services\TrackIngestService;
 use App\Services\TrackingCtrBatchDispatcher;
+use App\Services\TrackingCtrRollupService;
 use App\Services\TrackingCtrSyncSiteSettingsService;
 use App\Support\EcomTrackerLogger;
 use App\Support\TrackerTime;
@@ -185,12 +186,76 @@ class TrackController extends Controller
         }
     }
 
+    public function forceCTRGenerate(
+        Request $request,
+        TrackingCtrRollupService $ctrRollupService,
+        TrackingCtrSyncSiteSettingsService $ctrSyncSiteSettings,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'from' => ['required', 'date'],
+            'to' => ['nullable', 'date'],
+        ]);
+
+        try {
+            set_time_limit(0);
+
+            $from = Carbon::parse((string) $validated['from'], TrackerTime::timezone())->startOfDay();
+            $to = filled($validated['to'] ?? null)
+                ? Carbon::parse((string) $validated['to'], TrackerTime::timezone())->startOfDay()
+                : null;
+
+            if ($to !== null && $to->lt($from)) {
+                [$from, $to] = [$to, $from];
+            }
+
+            $endDay = $to ?? $from;
+            $rollupSettings = $ctrSyncSiteSettings->fetchForSync();
+            $result = $ctrRollupService->rebuildSummariesFromDailyRange(
+                $from->toDateString(),
+                $endDay->toDateString(),
+                (int) $rollupSettings['min_clicks'],
+            );
+
+            Log::info('Tracking CTR summaries force regenerate completed', [
+                'from' => $from->toDateString(),
+                'to' => $endDay->toDateString(),
+                'timezone' => TrackerTime::timezone(),
+                'min_clicks' => $rollupSettings['min_clicks'],
+                'upserted' => $result['upserted'],
+                'categories' => $result['categories'],
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Tracking CTR summaries regenerated successfully',
+                'from' => $from->toDateString(),
+                'to' => $endDay->toDateString(),
+                'timezone' => TrackerTime::timezone(),
+                'upserted' => $result['upserted'],
+                'categories' => $result['categories'],
+                'data' => $this->buildCtrSummariesResponseData(),
+            ], 200);
+        } catch (Throwable $th) {
+            Log::error('Tracking CTR summaries force regenerate failed', [
+                'from' => $validated['from'] ?? null,
+                'to' => $validated['to'] ?? null,
+                'error' => $th->getMessage(),
+            ]);
+
+            return response()->json([
+                'status' => false,
+                'message' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
     public function getTrackingCtrSummaries(
         Request $request,
         TrackingCtrBatchDispatcher $ctrBatchDispatcher,
         TrackingCtrSyncSiteSettingsService $ctrSyncSiteSettings,
     ): JsonResponse {
         try {
+
             $rollupSettings = $ctrSyncSiteSettings->fetchForSync();
 
             if (

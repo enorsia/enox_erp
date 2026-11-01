@@ -17,6 +17,9 @@ class TrackingCtrSyncSiteSettingsService
         return [
             'product_sorting_ctr_days',
             'product_sorting_min_clicks',
+            'product_sorting_sales_days',
+            'product_sorting_new_in_interval',
+
         ];
     }
 
