@@ -14,6 +14,120 @@ use Throwable;
 class TrackingCtrRollupService
 {
     /**
+     * Rebuild tracking_ctr_summaries from existing daily rows in the date range.
+     * Reads tracking_ctr_daily_summaries only; does not insert, update, or delete that table.
+     *
+     * @return array{upserted: int, categories: int}
+     */
+    public function rebuildSummariesFromDailyRange(string $fromDate, string $toDate, int $minClicks): array
+    {
+        $minClicks = max(1, $minClicks);
+        $upserted = 0;
+        $categories = 0;
+
+        $categoryIds = TrackerDatabase::table('tracking_ctr_daily_summaries')
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->distinct()
+            ->orderBy('tracking_ctr_category_id')
+            ->pluck('tracking_ctr_category_id');
+
+        foreach ($categoryIds as $categoryId) {
+            $trackingCtrCategoryId = (int) $categoryId;
+            $rows = TrackerDatabase::table('tracking_ctr_daily_summaries')
+                ->where('tracking_ctr_category_id', $trackingCtrCategoryId)
+                ->whereBetween('metric_date', [$fromDate, $toDate])
+                ->groupBy('tracking_ctr_category_id', 'product_code')
+                ->select('tracking_ctr_category_id', 'product_code')
+                ->selectRaw('MAX(department_id) as department_id')
+                ->selectRaw('MAX(department_slug) as department_slug')
+                ->selectRaw('MAX(category_id) as category_id')
+                ->selectRaw('MAX(category_slug) as category_slug')
+                ->selectRaw('MAX(micro_category_id) as micro_category_id')
+                ->selectRaw('MAX(micro_category_slug) as micro_category_slug')
+                ->selectRaw('MAX(type) as type')
+                ->selectRaw('COALESCE(SUM(total_click), 0) as total_click')
+                ->selectRaw('COALESCE(SUM(total_impression), 0) as total_impression')
+                ->get();
+
+            if ($rows->isEmpty()) {
+                continue;
+            }
+
+            $categories++;
+            $categoryClicks = 0;
+            $categoryImpressions = 0;
+
+            foreach ($rows as $row) {
+                $categoryClicks += (int) $row->total_click;
+                $categoryImpressions += (int) $row->total_impression;
+            }
+
+            $ctrAverage = $this->ctrValue($categoryClicks, $categoryImpressions);
+            $now = now();
+            $payload = [];
+
+            foreach ($rows as $row) {
+                $productCode = trim((string) $row->product_code);
+
+                if ($productCode === '') {
+                    continue;
+                }
+
+                $totalClick = (int) $row->total_click;
+                $totalImpression = (int) $row->total_impression;
+                $ctr = $totalClick < $minClicks
+                    ? 0.0
+                    : $this->ctrValue($totalClick, $totalImpression);
+
+                $payload[] = [
+                    'tracking_ctr_category_id' => $trackingCtrCategoryId,
+                    'department_id' => (int) ($row->department_id ?? 0),
+                    'department_slug' => $this->nullableTrimmedString($row->department_slug),
+                    'category_id' => (int) ($row->category_id ?? 0),
+                    'category_slug' => $this->nullableTrimmedString($row->category_slug),
+                    'micro_category_id' => $row->micro_category_id !== null ? (int) $row->micro_category_id : null,
+                    'micro_category_slug' => $this->nullableTrimmedString($row->micro_category_slug),
+                    'type' => $this->nullableTrimmedString($row->type) ?? TrackingCtrCategory::TYPE_CATEGORY,
+                    'product_code' => $productCode,
+                    'total_click' => $totalClick,
+                    'total_impression' => $totalImpression,
+                    'ctr' => $ctr,
+                    'ctr_average' => $totalClick > 0 ? $ctrAverage : 0.0,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            foreach (array_chunk($payload, 200) as $chunk) {
+                TrackerDatabase::table('tracking_ctr_summaries')->upsert(
+                    $chunk,
+                    ['tracking_ctr_category_id', 'product_code'],
+                    [
+                        'department_id',
+                        'department_slug',
+                        'category_id',
+                        'category_slug',
+                        'micro_category_id',
+                        'micro_category_slug',
+                        'type',
+                        'total_click',
+                        'total_impression',
+                        'ctr',
+                        'ctr_average',
+                        'updated_at',
+                    ],
+                );
+                $upserted += count($chunk);
+            }
+        }
+
+        return [
+            'upserted' => $upserted,
+            'categories' => $categories,
+        ];
+    }
+
+    /**
      * @param  array<int, int>  $impressionIds
      * @return array{processed: int, skipped: int, touched_keys: array<int, array{tracking_ctr_category_id: int, product_code: string, department_id: int, category_id: int, micro_category_id: ?int, department_slug: ?string, category_slug: ?string, micro_category_slug: ?string, type: ?string}>}
      */
