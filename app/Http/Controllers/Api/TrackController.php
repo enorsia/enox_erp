@@ -233,7 +233,6 @@ class TrackController extends Controller
                 'timezone' => TrackerTime::timezone(),
                 'upserted' => $result['upserted'],
                 'categories' => $result['categories'],
-                'data' => $this->buildCtrSummariesResponseData(),
             ], 200);
         } catch (Throwable $th) {
             Log::error('Tracking CTR summaries force regenerate failed', [
