@@ -2,106 +2,108 @@
 
 namespace App\Services;
 
-use App\Http\Clients\EnoxApiClient;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class TrackingCtrSyncSiteSettingsService
 {
+    public const CTR_SUMMARIES_SETTINGS_CACHE_KEY = 'tracking:ctr_summaries_settings';
+
     /**
-     * Loaded once per `tracker:sync-ctr` run from GET /tracking/site-settings.
-     *
-     * @return array{
-     *     ctr_days: int,
-     *     min_clicks: int,
-     *     source: 'ecom_api'|'config_fallback',
-     * }
+     * @return list<string>
      */
-    public function fetchForSync(): array
+    public static function extraSettingKeys(): array
     {
-        $fromApi = $this->fetchFromEcomApi();
-
-        if ($fromApi !== null) {
-            return [
-                'ctr_days' => $fromApi['ctr_days'],
-                'min_clicks' => $fromApi['min_clicks'],
-                'source' => 'ecom_api',
-            ];
-        }
-
         return [
-            'ctr_days' => max(1, (int) config('tracker.ctr_rollup_days', 90)),
-            'min_clicks' => max(1, (int) config('tracker.ctr_min_clicks_fallback', 1)),
-            'source' => 'config_fallback',
+            'product_sorting_ctr_days',
+            'product_sorting_min_clicks',
         ];
     }
 
     /**
-     * @return array{ctr_days: int, min_clicks: int}|null
+     * @return array{product_sorting_ctr_days: int, product_sorting_min_clicks: int}
      */
-    private function fetchFromEcomApi(): ?array
+    public function getExtraSettings(): array
     {
-        $baseUrl = rtrim((string) config('enox.base_url'), '/');
+        $cached = Cache::get(self::CTR_SUMMARIES_SETTINGS_CACHE_KEY);
 
-        if ($baseUrl === '') {
-            Log::warning('CTR sync: ENOX_API_BASE_URL is empty; using config fallback for product sorting.');
-
-            return null;
+        if (is_array($cached) && $cached !== []) {
+            return $this->mergeWithConfigDefaults($cached);
         }
 
-        try {
-            $client = app(EnoxApiClient::class);
-            $response = $client->get((string) config('enox.endpoints.tracking_site_settings'));
+        Log::info('CTR sync: no pushed site settings in cache; using config defaults');
 
-            if (! $response->successful()) {
-                Log::warning('CTR sync: tracking/site-settings request failed', [
-                    'status' => $response->status(),
-                    'base_url' => $baseUrl,
-                ]);
-
-                return null;
-            }
-
-            $payload = $response->json();
-
-            if (! ($payload['status'] ?? false)) {
-                Log::warning('CTR sync: tracking/site-settings returned status=false using [config fallback]');
-
-                return null;
-            }
-
-            $extra = $this->extraJsonFromSiteSettingsPayload($payload['data'] ?? null);
-
-            return $this->normalizeFromExtra($extra);
-        } catch (\Throwable $exception) {
-            Log::warning('CTR sync: tracking/site-settings fetch failed using [config fallback]', [
-                'error' => $exception->getMessage(),
-                'base_url' => $baseUrl,
-            ]);
-
-            return null;
-        }
+        return $this->configFallbackExtra();
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array{
+     *     ctr_days: int,
+     *     min_clicks: int,
+     *     source: 'push_cache'|'config_fallback',
+     * }
      */
-    private function extraJsonFromSiteSettingsPayload(mixed $data): array
+    public function fetchForSync(): array
     {
-        if ($data === null) {
-            return [];
-        }
+        $extra = $this->getExtraSettings();
+        $normalized = $this->normalizeFromExtra($extra);
+        $fromCache = $this->hasPushCache();
 
-        $extra = is_array($data)
-            ? ($data['extra_json'] ?? [])
-            : (is_object($data) ? ($data->extra_json ?? []) : []);
+        return [
+            'ctr_days' => $normalized['ctr_days'],
+            'min_clicks' => $normalized['min_clicks'],
+            'source' => $fromCache ? 'push_cache' : 'config_fallback',
+        ];
+    }
 
-        if (is_string($extra)) {
-            $decoded = json_decode($extra, true);
+    /**
+     * @param  array{ctr_days?: int, min_clicks?: int, source?: string}  $rollupSettings
+     * @return array{ctr_days: int, min_clicks: int, source: string}
+     */
+    public function resolveRollupSettings(array $rollupSettings = []): array
+    {
+        $defaults = $this->fetchForSync();
 
-            return is_array($decoded) ? $decoded : [];
-        }
+        return [
+            'ctr_days' => max(
+                1,
+                (int) ($rollupSettings['ctr_days'] ?? $defaults['ctr_days']),
+            ),
+            'min_clicks' => max(
+                1,
+                (int) ($rollupSettings['min_clicks'] ?? $defaults['min_clicks']),
+            ),
+            'source' => (string) ($rollupSettings['source'] ?? $defaults['source']),
+        ];
+    }
 
-        return is_array($extra) ? $extra : [];
+    public function hasPushCache(): bool
+    {
+        $cached = Cache::get(self::CTR_SUMMARIES_SETTINGS_CACHE_KEY);
+
+        return is_array($cached) && $cached !== [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @return array{product_sorting_ctr_days: int, product_sorting_min_clicks: int}
+     */
+    public function mergeWithConfigDefaults(array $values): array
+    {
+        $filtered = array_intersect_key($values, array_flip(self::extraSettingKeys()));
+
+        return array_merge($this->configFallbackExtra(), $filtered);
+    }
+
+    /**
+     * @return array{product_sorting_ctr_days: int, product_sorting_min_clicks: int}
+     */
+    private function configFallbackExtra(): array
+    {
+        return [
+            'product_sorting_ctr_days' => (int) config('tracker.ctr_rollup_days', 90),
+            'product_sorting_min_clicks' => (int) config('tracker.ctr_min_clicks_fallback', 1),
+        ];
     }
 
     /**

@@ -12,6 +12,10 @@ class TrackingCtrBatchDispatcher
 {
     private const BATCH_SIZE = 50;
 
+    public function __construct(
+        private TrackingCtrSyncSiteSettingsService $siteSettings,
+    ) {}
+
     /**
      * @return array{
      *     queued_jobs: int,
@@ -26,17 +30,9 @@ class TrackingCtrBatchDispatcher
         ?Carbon $to = null,
         array $rollupSettings = [],
     ): array {
-        $ctrRollupDays = max(
-            1,
-            (int) ($rollupSettings['ctr_days']
-                ?? config('tracker.ctr_rollup_days', 90))
-        );
-
-        $minClicks = max(
-            1,
-            (int) ($rollupSettings['min_clicks']
-                ?? config('tracker.ctr_min_clicks_fallback', 1))
-        );
+        $rollup = $this->siteSettings->resolveRollupSettings($rollupSettings);
+        $ctrRollupDays = $rollup['ctr_days'];
+        $minClicks = $rollup['min_clicks'];
 
         $forceStats = [
             'force_reset_impressions' => 0,
@@ -104,17 +100,9 @@ class TrackingCtrBatchDispatcher
         ?Carbon $to = null,
         array $rollupSettings = [],
     ): array {
-        $ctrRollupDays = max(
-            1,
-            (int) ($rollupSettings['ctr_days']
-                ?? config('tracker.ctr_rollup_days', 90))
-        );
-
-        $minClicks = max(
-            1,
-            (int) ($rollupSettings['min_clicks']
-                ?? config('tracker.ctr_min_clicks_fallback', 1))
-        );
+        $rollup = $this->siteSettings->resolveRollupSettings($rollupSettings);
+        $ctrRollupDays = $rollup['ctr_days'];
+        $minClicks = $rollup['min_clicks'];
 
         $forceStats = [
             'force_reset_impressions' => 0,
