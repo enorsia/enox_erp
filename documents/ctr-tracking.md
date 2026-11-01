@@ -13,7 +13,7 @@ flowchart TD
     C --> D["tracking_ctr_summaries"]
     D --> E["CTR Tracking Data Ready"]
 
-    E --> F["12:03 AM - ENOX"]
+    E --> F["12:05 AM - ENOX"]
     F --> G["php artisan daily-sales:calculate"]
     G --> H["daily_sales_summary"]
     H --> I["product_ranking_settings"]
