@@ -14,6 +14,15 @@
             'sales_window_sale' => ((int) ($salesWindowDays ?? 7)).' days sold',
             'total_sold' => 'Total sold',
         ];
+        $soldWindowDays = (int) ($salesWindowDays ?? 7);
+        $metricColumnTips = [
+            'click' => 'Total product clicks on the category grid in the selected date range. Every click is counted (not unique visitors or sessions).',
+            'impression' => 'How many times this product tile was counted in view on category listing pages in the selected date range (in viewport on the grid, not product detail views).',
+            'ctr' => 'Click divided by impression for this row in the selected date range. The value is a ratio, not a formatted percent: multiply by 100 for % (0.05 = 5%). Zero when there are no impressions.',
+            'ctr_average' => 'Category rollup CTR for this product placement (store CTR lookback). Shown as a ratio like CTR; multiply by 100 for % (0.05 = 5%). This table uses the highest daily value across days in your filter.',
+            'sales_window_sale' => "Gross sale amount (Enorsia and marketplace channels) in the rolling last {$soldWindowDays} days from store settings. Independent of the CTR date filter above.",
+            'total_sold' => 'Gross sale amount (Enorsia and marketplace channels) for orders dated within the same range as the CTR period selector above.',
+        ];
         $sortUrl = function (string $column) use ($sortBy, $sortDir, $data): string {
             $nextDir = ($sortBy === $column && $sortDir === 'desc') ? 'asc' : 'desc';
 
@@ -70,31 +79,6 @@
                         </p>
                     </div>
                 </div>
-                @if (! empty($data['productSorting']))
-                    @php
-                        $sortFromStore = (bool) ($data['productSorting']['fromStoreApi'] ?? false);
-                        $sortCtrDays = (int) $data['productSorting']['ctrDays'];
-                        $sortMinClicks = (int) $data['productSorting']['minClicks'];
-                        $sortRulesLabel = "Product sort: {$sortCtrDays}-day CTR window, minimum {$sortMinClicks} clicks"
-                            .($sortFromStore ? ' (from store settings)' : ' (config fallback)');
-                    @endphp
-                    <div class="etd-ctr-summary-header-center etd-print-hide">
-                        <p class="etd-ctr-summary-sort-rules"
-                           tabindex="0"
-                           role="note"
-                           aria-label="{{ $sortRulesLabel }}">
-                            <span class="etd-ctr-summary-sort-rules__label">Product sort</span>
-                            <span class="etd-ctr-summary-sort-rules__values">
-                                = {{ $sortCtrDays }} - Day
-                                <span class="etd-ctr-summary-sort-rules__sep" aria-hidden="true">||</span>
-                                <span class="etd-ctr-summary-sort-rules__label">Min clicks</span> = {{ $sortMinClicks }}
-                            </span>
-                            @unless ($sortFromStore)
-                                <span class="etd-ctr-summary-sort-rules__fallback">Config fallback</span>
-                            @endunless
-                        </p>
-                    </div>
-                @endif
                 <div class="etd-page-header-toolbar">
                     <div class="etd-header-toolbar-row">
                         <div class="etd-header-period-nav etd-print-hide">
@@ -175,14 +159,20 @@
                                     $isActiveSort = $sortBy === $sortKey;
                                 @endphp
                                 <th class="whitespace-nowrap etd-num">
-                                    <a href="{{ $sortUrl($sortKey) }}"
-                                        class="inline-flex items-center justify-end gap-1.5 w-full transition-colors
-                                            {{ $isActiveSort
-                                                ? 'text-slate-700 dark:text-slate-200'
-                                                : 'text-slate-400/90 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-400' }}"
-                                        @if ($isActiveSort) aria-sort="{{ $sortDir === 'asc' ? 'ascending' : 'descending' }}" @endif>
-                                        <span>{{ $sortLabel }}</span>
-                                        <span class="inline-flex flex-col items-center justify-center leading-none gap-px shrink-0" aria-hidden="true">
+                                    <span class="inline-flex items-center justify-end gap-0.5 w-full min-w-0">
+                                        @include('ecom_tracker.partials.column-header-with-tip', [
+                                            'label' => $sortLabel,
+                                            'tip' => $metricColumnTips[$sortKey] ?? '',
+                                            'align' => 'right',
+                                            'iconBefore' => true,
+                                        ])
+                                        <a href="{{ $sortUrl($sortKey) }}"
+                                            class="inline-flex flex-col items-center justify-center leading-none gap-px shrink-0 p-0.5 rounded transition-colors
+                                                {{ $isActiveSort
+                                                    ? 'text-slate-700 dark:text-slate-200'
+                                                    : 'text-slate-400/90 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-400' }}"
+                                            aria-label="Sort by {{ $sortLabel }}"
+                                            @if ($isActiveSort) aria-sort="{{ $sortDir === 'asc' ? 'ascending' : 'descending' }}" @endif>
                                             <svg @class([
                                                 'w-3 h-3 transition-colors',
                                                 'text-accent-600 dark:text-accent-300' => $isActiveSort && $sortDir === 'asc',
@@ -193,12 +183,19 @@
                                                 'text-accent-600 dark:text-accent-300' => $isActiveSort && $sortDir === 'desc',
                                                 'text-slate-300/80 dark:text-slate-600' => ! $isActiveSort || $sortDir !== 'desc',
                                             ]) viewBox="0 0 12 12" fill="currentColor"><path d="M6 9.5 2 4h8L6 9.5z"/></svg>
-                                        </span>
-                                    </a>
+                                        </a>
+                                    </span>
                                 </th>
                             @endforeach
                             @foreach ($soldMetricColumns as $columnKey => $columnLabel)
-                                <th class="whitespace-nowrap etd-num text-slate-500 dark:text-slate-400">{{ $columnLabel }}</th>
+                                <th class="whitespace-nowrap etd-num text-slate-500 dark:text-slate-400">
+                                    @include('ecom_tracker.partials.column-header-with-tip', [
+                                        'label' => $columnLabel,
+                                        'tip' => $metricColumnTips[$columnKey] ?? '',
+                                        'align' => 'right',
+                                        'iconBefore' => true,
+                                    ])
+                                </th>
                             @endforeach
                         </tr>
                     </thead>

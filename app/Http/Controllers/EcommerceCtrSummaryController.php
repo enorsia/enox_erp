@@ -126,7 +126,6 @@ class EcommerceCtrSummaryController extends Controller
         );
         $fromDate = $range['from']->toDateString();
         $toDate = $range['to']->toDateString();
-        $productSorting = $syncSiteSettings->fetchForSync();
 
         $query = $this->summariesQuery($request, $sortKey, $sortDir, $fromDate, $toDate);
 
@@ -158,11 +157,6 @@ class EcommerceCtrSummaryController extends Controller
                 'admin.ecommerce.ctr-summary.index',
                 ['period' => $periodKey] + $catalogQuery,
             ),
-            'productSorting' => [
-                'ctrDays' => $productSorting['ctr_days'],
-                'minClicks' => $productSorting['min_clicks'],
-                'fromStoreApi' => $productSorting['source'] === 'ecom_api',
-            ],
         ];
 
         return [
