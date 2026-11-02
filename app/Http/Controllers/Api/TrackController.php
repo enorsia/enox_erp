@@ -3,12 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\TrackingCtrCategory;
 use App\Services\TrackerClientContextResolver;
 use App\Models\TrackingCtrSummary;
 use App\Services\TrackIngestService;
+use App\Services\TrackingCtrBatchDispatcher;
+use App\Services\TrackingCtrSyncSiteSettingsService;
 use App\Support\EcomTrackerLogger;
+use App\Support\TrackerTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -25,6 +31,36 @@ class TrackController extends Controller
         $startedAt = microtime(true);
 
         $events = $request->input('events', []);
+        $legacyGridTypes = ['grid_impression', 'grid_click'];
+        $discardedLegacyIds = [];
+
+        $events = array_values(array_filter($events, function ($event) use ($legacyGridTypes, &$discardedLegacyIds) {
+            $actionType = (string) ($event['action_type'] ?? '');
+
+            if (! in_array($actionType, $legacyGridTypes, true)) {
+                return true;
+            }
+
+            if (! empty($event['id'])) {
+                $discardedLegacyIds[] = (string) $event['id'];
+            }
+
+            return false;
+        }));
+
+        if ($discardedLegacyIds !== []) {
+            $request->merge(['events' => $events]);
+            EcomTrackerLogger::frontend()->info('api.track.legacy_grid_stripped', 'Dropped legacy grid events from /track batch', [
+                'discarded_count' => count($discardedLegacyIds),
+                'discarded_event_ids' => $discardedLegacyIds,
+            ]);
+        }
+
+        if ($events === []) {
+            return response()->json([
+                'accepted_ids' => $discardedLegacyIds,
+            ]);
+        }
 
         EcomTrackerLogger::frontend()->info('api.track.request', 'Website sent user actions', [
             'ip' => $request->ip(),
@@ -32,9 +68,6 @@ class TrackController extends Controller
             'visitor_id' => $request->input('session.visitor_id'),
             'event_count' => count($events),
             'action_types' => collect($events)->pluck('action_type')->filter()->values()->all(),
-            'grid_event_count' => collect($events)
-                ->whereIn('action_type', ['grid_impression', 'product_click'])
-                ->count(),
         ]);
 
         try {
@@ -121,7 +154,7 @@ class TrackController extends Controller
             ]);
 
             return response()->json([
-                'accepted_ids' => $acceptedIds,
+                'accepted_ids' => array_values(array_unique(array_merge($acceptedIds, $discardedLegacyIds))),
             ]);
         } catch (ValidationException $e) {
             EcomTrackerLogger::frontend()->error('api.track.validation_failed', 'Website sent invalid track payload', [
@@ -151,26 +184,142 @@ class TrackController extends Controller
         }
     }
 
-    public function getTrackingCtrSummaries(Request $request)
-    {
+    public function forceCTRGenerate(
+        Request $request,
+        TrackingCtrBatchDispatcher $ctrBatchDispatcher,
+        TrackingCtrSyncSiteSettingsService $ctrSyncSiteSettings,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'from' => ['required', 'date'],
+            'to' => ['nullable', 'date'],
+        ]);
+
         try {
-            $summaries = TrackingCtrSummary::select(
-                'product_code',
-                'ctr',
-                'ctr_average',
-            )->get()->keyBy('product_code');
+            $from = Carbon::parse((string) $validated['from'], TrackerTime::timezone())->startOfDay();
+            $to = filled($validated['to'] ?? null)
+                ? Carbon::parse((string) $validated['to'], TrackerTime::timezone())->startOfDay()
+                : null;
+
+            if ($to !== null && $to->lt($from)) {
+                [$from, $to] = [$to, $from];
+            }
+
+            $endDay = $to ?? $from;
+            $rollupSettings = $ctrSyncSiteSettings->fetchForSync();
+            $result = $ctrBatchDispatcher->dispatchPendingBatches(true, $from, $to, $rollupSettings);
+
+            Log::info('Tracking CTR summaries force regenerate queued', [
+                'from' => $from->toDateString(),
+                'to' => $endDay->toDateString(),
+                'timezone' => TrackerTime::timezone(),
+                'min_clicks' => $rollupSettings['min_clicks'],
+                'queued_jobs' => $result['queued_jobs'],
+                'category_impression_count' => $result['category_impression_count'],
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Tracking CTR summaries regenerated successfully',
+                'from' => $from->toDateString(),
+                'to' => $endDay->toDateString(),
+                'timezone' => TrackerTime::timezone(),
+                'queued_jobs' => $result['queued_jobs'],
+                'category_impression_count' => $result['category_impression_count'],
+            ], 200);
+        } catch (Throwable $th) {
+            Log::error('Tracking CTR summaries force regenerate failed', [
+                'from' => $validated['from'] ?? null,
+                'to' => $validated['to'] ?? null,
+                'error' => $th->getMessage(),
+            ]);
+
+            return response()->json([
+                'status' => false,
+                'message' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getTrackingCtrSummaries(
+        Request $request,
+        TrackingCtrBatchDispatcher $ctrBatchDispatcher,
+        TrackingCtrSyncSiteSettingsService $ctrSyncSiteSettings,
+    ): JsonResponse {
+        try {
+            $rollupSettings = $ctrSyncSiteSettings->fetchForSync();
+            $ctrBatchDispatcher->dispatchPendingBatches(false, null, null, $rollupSettings);
 
             return response()->json([
                 'status' => true,
                 'message' => 'Tracking CTR summaries updated successfully',
-                'data' => $summaries
+                'data' => $this->buildCtrSummariesResponseData(),
             ], 200);
         } catch (Throwable $th) {
             Log::error('Tracking CTR summaries update failed', ['error' => $th->getMessage()]);
+
             return response()->json([
                 'status' => false,
-                'message' => $th->getMessage()
+                'message' => $th->getMessage(),
             ], 500);
         }
+    }
+
+    public function ctrSummariesSettings(Request $request): JsonResponse
+    {
+        try {
+            $settings = $request->only(TrackingCtrSyncSiteSettingsService::extraSettingKeys());
+
+            Cache::forever(
+                TrackingCtrSyncSiteSettingsService::CTR_SUMMARIES_SETTINGS_CACHE_KEY,
+                $settings,
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Tracking CTR summaries settings updated successfully',
+            ], 200);
+        } catch (Throwable $th) {
+            Log::error('Tracking CTR summaries settings update failed', ['error' => $th->getMessage()]);
+
+            return response()->json([
+                'status' => false,
+                'message' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function buildCtrSummariesResponseData(): array
+    {
+        $data = [];
+
+        foreach (TrackingCtrSummary::query()->select(
+            'type',
+            'department_id',
+            'category_id',
+            'micro_category_id',
+            'product_code',
+            'ctr',
+            'ctr_average',
+            'total_click',
+            'total_impression',
+        )->get() as $row) {
+            $type = (string) ($row->type ?? TrackingCtrCategory::TYPE_CATEGORY);
+            $departmentId = max(0, (int) ($row->department_id ?? 0));
+            $categoryId = max(0, (int) ($row->category_id ?? 0));
+            $microCategoryId = max(0, (int) ($row->micro_category_id ?? 0));
+            $productCode = (string) ($row->product_code ?? '');
+
+            if ($productCode === '') {
+                continue;
+            }
+
+            $key = $type . '_' . $departmentId . '_' . $categoryId . '_' . $microCategoryId . '_' . $productCode;
+            $data[$key] = $row->toArray();
+        }
+
+        return $data;
     }
 }
