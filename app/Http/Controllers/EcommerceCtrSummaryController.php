@@ -25,6 +25,18 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EcommerceCtrSummaryController extends Controller
 {
+    public const DEFAULT_PERIOD = '7d';
+
+    /** @var list<string> */
+    public const PERIODS = ['yesterday', '7d', '30d', 'custom'];
+
+    /** @var array<string, string> Header preset buttons (period key => label). */
+    public const PERIOD_PRESETS = [
+        'yesterday' => 'Yesterday',
+        '7d' => '7d',
+        '30d' => '30d',
+    ];
+
     private const PER_PAGE = 20;
 
     private const CATEGORY_FILTER_DEPARTMENT_CUSTOM_LINK = '__custom_link__';
@@ -60,7 +72,6 @@ class EcommerceCtrSummaryController extends Controller
             ->paginate(self::PER_PAGE)
             ->withQueryString();
 
-        $salesWindowDays = 7;
         $productCodes = $summaries->getCollection()
             ->map(fn (object $row): string => trim((string) $row->product_code))
             ->filter()
@@ -68,11 +79,10 @@ class EcommerceCtrSummaryController extends Controller
             ->values()
             ->all();
 
-        [$salesByProductCode, $salesWindowDays] = $this->fetchSalesByProductCode(
+        $salesByProductCode = $this->fetchSalesByProductCode(
             $productCodes,
             $context['data']['dateFrom'],
             $context['data']['dateTo'],
-            $salesWindowDays,
         );
 
         $summaries->setCollection(
@@ -88,7 +98,6 @@ class EcommerceCtrSummaryController extends Controller
             'search' => $context['search'],
             'filterCatalog' => $context['filterCatalog'],
             'data' => $context['data'],
-            'salesWindowDays' => $salesWindowDays,
         ]);
     }
 
@@ -245,9 +254,23 @@ class EcommerceCtrSummaryController extends Controller
 
         $context = $this->listContext($request, $syncSiteSettings);
 
-        $rows = (clone $context['query'])
-            ->get()
-            ->map(fn (object $row) => $this->mapRow($row))
+        $collection = (clone $context['query'])->get();
+
+        $productCodes = $collection
+            ->map(fn (object $row): string => trim((string) $row->product_code))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $salesByProductCode = $this->fetchSalesByProductCode(
+            $productCodes,
+            $context['data']['dateFrom'],
+            $context['data']['dateTo'],
+        );
+
+        $rows = $collection
+            ->map(fn (object $row): array => $this->mapRowWithSales($row, $salesByProductCode))
             ->all();
 
         return $exportService->download($rows, $context['filterSummary']);
@@ -270,7 +293,7 @@ class EcommerceCtrSummaryController extends Controller
         [$sortKey, $sortDir] = $this->resolveSort($request);
         $search = trim((string) $request->query('search', ''));
         $catalogFilters = $this->catalogFiltersFromRequest($request);
-        $period = EcomActivityListService::normalizePeriod($request->query('period'));
+        $period = $this->resolvePeriod($request);
         $range = EcomActivityListService::periodRange(
             $period,
             (string) $request->query('date_from', ''),
@@ -288,13 +311,15 @@ class EcommerceCtrSummaryController extends Controller
 
         $resetUrl = route('admin.ecommerce.ctr-summary.index');
         $drawerResetUrl = route('admin.ecommerce.ctr-summary.index', array_filter([
-            'period' => $period !== EcomActivityListService::DEFAULT_PERIOD ? $period : null,
+            'period' => $period !== self::DEFAULT_PERIOD ? $period : null,
             'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
             'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
         ], fn ($value) => $value !== null && $value !== []));
 
         $data = [
             'period' => $period,
+            'periodLabel' => $this->periodLabel($period),
+            'periodPresets' => self::PERIOD_PRESETS,
             'dateFrom' => $fromDate,
             'dateTo' => $toDate,
             'rangeLabel' => TrackerTime::formatLocalDateRangeLabel($range['from'], $range['to']),
@@ -342,10 +367,30 @@ class EcommerceCtrSummaryController extends Controller
             'search' => $search !== '' ? $search : null,
             'department' => $catalogFilters['departments'] !== [] ? $catalogFilters['departments'] : null,
             'category' => $catalogFilters['categories'] !== [] ? $catalogFilters['categories'] : null,
-            'period' => $period !== EcomActivityListService::DEFAULT_PERIOD ? $period : null,
+            'period' => $period !== self::DEFAULT_PERIOD ? $period : null,
             'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
             'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
         ], fn ($value) => $value !== null && $value !== []);
+    }
+
+    private function resolvePeriod(Request $request): string
+    {
+        $period = $request->query('period');
+
+        return is_string($period) && in_array($period, self::PERIODS, true)
+            ? $period
+            : self::DEFAULT_PERIOD;
+    }
+
+    private function periodLabel(string $period): string
+    {
+        return match ($period) {
+            'yesterday' => 'Yesterday',
+            '7d' => 'Last 7 days',
+            '30d' => 'Last 30 days',
+            'custom' => 'Custom range',
+            default => 'Last 7 days',
+        };
     }
 
     /**
@@ -888,16 +933,14 @@ class EcommerceCtrSummaryController extends Controller
     }
 
     /**
-     * @param  array<string, array{sales_window_sale: float, total_sale: float, sales_window_qty: int, total_qty: int}>  $salesByProductCode
+     * @param  array<string, array{total_sale: float, total_qty: int}>  $salesByProductCode
      * @return array<string, mixed>
      */
     private function mapRowWithSales(object $row, array $salesByProductCode): array
     {
         $mapped = $this->mapRow($row);
         $sales = $salesByProductCode[$mapped['product_code']] ?? null;
-        $mapped['sales_window_sale'] = round((float) ($sales['sales_window_sale'] ?? 0), 2);
         $mapped['total_sold'] = round((float) ($sales['total_sale'] ?? 0), 2);
-        $mapped['sales_window_qty'] = (int) ($sales['sales_window_qty'] ?? 0);
         $mapped['total_qty'] = (int) ($sales['total_qty'] ?? 0);
 
         return $mapped;
@@ -905,16 +948,14 @@ class EcommerceCtrSummaryController extends Controller
 
     /**
      * @param  list<string>  $productCodes
-     * @return array{0: array<string, array{sales_window_sale: float, total_sale: float, sales_window_qty: int, total_qty: int}>, 1: int}
+     * @return array<string, array{total_sale: float, total_qty: int}>
      */
     private function fetchSalesByProductCode(
         array $productCodes,
         string $dateFrom,
         string $dateTo,
-        int $defaultSalesWindowDays,
     ): array {
         $salesByProductCode = [];
-        $salesWindowDays = $defaultSalesWindowDays;
         $logContext = [
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
@@ -922,13 +963,13 @@ class EcommerceCtrSummaryController extends Controller
         ];
 
         if ($productCodes === []) {
-            return [$salesByProductCode, $salesWindowDays];
+            return $salesByProductCode;
         }
 
         if (rtrim((string) config('enox.base_url'), '/') === '') {
             Log::warning('CTR summary: ENOX_API_BASE_URL is empty; sold columns will show zero.', $logContext);
 
-            return [$salesByProductCode, $salesWindowDays];
+            return $salesByProductCode;
         }
 
         $endpoint = (string) config('enox.endpoints.tracking_products_total_sold');
@@ -983,8 +1024,6 @@ class EcommerceCtrSummaryController extends Controller
                     continue;
                 }
 
-                $salesWindowDays = max(1, (int) ($payload['sales_window_days'] ?? $salesWindowDays));
-
                 foreach ($payload['data'] ?? [] as $item) {
                     if (! is_array($item)) {
                         continue;
@@ -997,9 +1036,7 @@ class EcommerceCtrSummaryController extends Controller
                     }
 
                     $salesByProductCode[$code] = [
-                        'sales_window_sale' => (float) ($item['sales_window_sale'] ?? 0),
                         'total_sale' => (float) ($item['total_sale'] ?? 0),
-                        'sales_window_qty' => (int) ($item['sales_window_qty'] ?? 0),
                         'total_qty' => (int) ($item['total_qty'] ?? 0),
                     ];
                 }
@@ -1010,7 +1047,7 @@ class EcommerceCtrSummaryController extends Controller
                 'error' => $exception->getMessage(),
             ]);
 
-            return [$salesByProductCode, $salesWindowDays];
+            return $salesByProductCode;
         }
 
         if ($failedChunks > 0) {
@@ -1023,11 +1060,10 @@ class EcommerceCtrSummaryController extends Controller
         } elseif (count($salesByProductCode) === 0) {
             Log::info('CTR summary: tracking/products/total-sold returned no sales rows for requested product codes.', $logContext + [
                 'endpoint' => $endpoint,
-                'sales_window_days' => $salesWindowDays,
             ]);
         }
 
-        return [$salesByProductCode, $salesWindowDays];
+        return $salesByProductCode;
     }
 
     /**
