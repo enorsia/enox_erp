@@ -379,6 +379,10 @@ class EcomActivityListService
         $filters = self::ecomTrackerFiltersFromRequest($request);
         $productCode = trim((string) ($filters['product_code'] ?? ''));
         $hasOrder = $filters['has_order'] ?? null;
+        $productListCategoryIds = array_values(array_filter(
+            array_map('intval', (array) $request->query('category', [])),
+            fn (int $id) => $id > 0,
+        ));
         $filters['search'] = '';
         $filters['product_code'] = $productCode;
         $filters['funnel'] = [];
@@ -392,6 +396,7 @@ class EcomActivityListService
         $filters['utm_mediums'] = [];
         $filters['department'] = null;
         $filters['categories'] = [];
+        $filters['product_list_category_ids'] = $productListCategoryIds;
         $filters['visitor_type'] = null;
 
         return $filters;
@@ -409,6 +414,14 @@ class EcomActivityListService
         }
         if (in_array($request->query('has_order'), ['0', '1'], true)) {
             $params['has_order'] = $request->query('has_order');
+        }
+
+        $categoryIds = array_values(array_filter(
+            array_map('intval', (array) $request->query('category', [])),
+            fn (int $id) => $id > 0,
+        ));
+        if ($categoryIds !== []) {
+            $params['category'] = $categoryIds;
         }
 
         return $params;

@@ -88,11 +88,14 @@ class EcomTrackerDashboardController extends Controller
         );
         $paginator->appends($request->except('page'));
 
-        $data['dashboardUrl'] = route('admin.ecom-tracker.dashboard', array_filter([
-            'period' => $period,
-            'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
-            'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
-        ]) + $filterQuery);
+        $data['dashboardUrl'] = EcomActivityListService::backUrl(
+            $request,
+            route('admin.ecom-tracker.dashboard', array_filter([
+                'period' => $period,
+                'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
+                'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
+            ])),
+        );
 
         $exportQuery = array_filter([
             'period' => $period,

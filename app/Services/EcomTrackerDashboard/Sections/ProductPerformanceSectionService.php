@@ -52,6 +52,7 @@ class ProductPerformanceSectionService
         });
 
         $all = $this->applyProductListHasOrderFilter($all, $sessionFilters);
+        $all = $this->applyProductListCategoryScope($all, $from, $to, $sessionFilters);
 
         return $this->packageProductRows($all, $limit, $from, $to, $period, []);
     }
@@ -123,6 +124,58 @@ class ProductPerformanceSectionService
         }
 
         return $all;
+    }
+
+    /**
+     * Product performance list only: limit rows to styles seen in these categories (metrics unchanged).
+     *
+     * @param  Collection<int, array<string, mixed>>  $all
+     * @param  array<string, mixed>  $sessionFilters
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function applyProductListCategoryScope(
+        Collection $all,
+        Carbon $from,
+        Carbon $to,
+        array $sessionFilters,
+    ): Collection {
+        $categoryIds = array_values(array_filter(
+            array_map('intval', (array) ($sessionFilters['product_list_category_ids'] ?? [])),
+            fn (int $id) => $id > 0,
+        ));
+        if ($categoryIds === []) {
+            return $all;
+        }
+
+        $allowed = $this->productCodesForProductListCategoryFilter($from, $to, $categoryIds);
+
+        return $all->filter(fn (array $row) => isset($allowed[(string) ($row['code'] ?? '')]))->values();
+    }
+
+    /**
+     * @param  list<int>  $categoryIds
+     * @return array<string, true>
+     */
+    private function productCodesForProductListCategoryFilter(Carbon $from, Carbon $to, array $categoryIds): array
+    {
+        $codes = TrackerDatabase::table('tracking_session_p_cat as sp')
+            ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
+            ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->whereIn('sp.tracking_category_id', $categoryIds)
+            ->whereBetween('dv.visit_date', [$from->toDateString(), $to->toDateString()])
+            ->distinct()
+            ->pluck('p.code');
+
+        $allowed = [];
+        foreach ($codes as $code) {
+            $code = trim((string) $code);
+            if ($code !== '') {
+                $allowed[$code] = true;
+            }
+        }
+
+        return $allowed;
     }
 
     /**
@@ -224,7 +277,9 @@ class ProductPerformanceSectionService
             $byCode = isset($byCode[$productCode]) ? [$productCode => $byCode[$productCode]] : [];
         }
 
-        return $this->packageProductRows(collect(array_values($byCode)), $limit, $from, $to, $period, $sessionFilters);
+        $all = $this->applyProductListCategoryScope(collect(array_values($byCode)), $from, $to, $sessionFilters);
+
+        return $this->packageProductRows($all, $limit, $from, $to, $period, $sessionFilters);
     }
 
     /**

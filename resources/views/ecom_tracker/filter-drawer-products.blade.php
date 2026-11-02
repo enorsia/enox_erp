@@ -24,6 +24,11 @@
             <input type="hidden" name="date_from" value="{{ $data['dateFrom'] }}">
             <input type="hidden" name="date_to" value="{{ $data['dateTo'] }}">
         @endif
+        @foreach ((array) request('category', []) as $categoryId)
+            @if ((int) $categoryId > 0)
+                <input type="hidden" name="category[]" value="{{ (int) $categoryId }}">
+            @endif
+        @endforeach
         <div class="etd-filter-panel__body etd-filter-drawer__body">
             <section class="etd-activity-filter-section">
                 <p class="etd-activity-filter-section-title">Product</p>
