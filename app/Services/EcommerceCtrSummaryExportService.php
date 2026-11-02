@@ -15,10 +15,12 @@ class EcommerceCtrSummaryExportService
         'Category',
         'Micro category',
         'Product code',
-        'CTR',
-        'CTR average',
         'Click',
         'Impression',
+        'CTR',
+        'CTR average',
+        '7 days sold',
+        'Total sold',
     ];
 
     /**
@@ -44,10 +46,12 @@ class EcommerceCtrSummaryExportService
                 (string) ($row['category_display'] ?? $row['category'] ?? ''),
                 (string) ($row['micro_category'] ?? '—'),
                 (string) ($row['product_code'] ?? ''),
-                round((float) ($row['ctr'] ?? 0) * 100, 2),
-                round((float) ($row['ctr_average'] ?? 0) * 100, 2),
                 (int) ($row['click'] ?? 0),
                 (int) ($row['impression'] ?? 0),
+                round((float) ($row['ctr'] ?? 0) * 100, 2),
+                round((float) ($row['ctr_average'] ?? 0) * 100, 2),
+                0,
+                0,
             ];
         }
 
