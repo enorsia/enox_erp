@@ -11,6 +11,7 @@ use App\Models\TrackingSession;
 use App\Support\CheckoutPayloadTotals;
 use App\Support\CommercePricingExtractor;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerTime;
@@ -121,7 +122,9 @@ class EcomActivityListService
             'browsers' => $lookups->get('browser', collect())->pluck('name', 'id')->all(),
             'utmSources' => $sources->pluck('name', 'id')->all(),
             'utmMediums' => $utmMediums,
-            'departments' => $categories->whereNull('parent_id')->pluck('name', 'id')->all(),
+            'departments' => collect($categories->whereNull('parent_id')->pluck('name', 'id'))
+                ->map(fn (string $name) => TrackerCategoryIdentity::formatDepartmentDisplayName($name))
+                ->all(),
             'categories' => $departmentId ? $categories->where('parent_id', $departmentId)->pluck('name', 'id')->all() : [],
         ];
     }
@@ -3040,8 +3043,19 @@ class EcomActivityListService
             ->pluck('catalog_path', 'tracking_session_id');
 
         foreach ($rows as $row) {
-            $row->catalog_path = $paths[$row->id] ?? '—';
+            $path = (string) ($paths[$row->id] ?? '—');
+            $row->catalog_path = $path === '—' ? '—' : $this->formatCatalogPathForDisplay($path);
         }
+    }
+
+    private function formatCatalogPathForDisplay(string $path): string
+    {
+        $storedPrefix = TrackerCategoryIdentity::NO_DEPARTMENT_STORED_LABEL.' › ';
+        if (str_starts_with(strtolower($path), strtolower($storedPrefix))) {
+            return TrackerCategoryIdentity::NO_DEPARTMENT_DISPLAY_LABEL.' › '.substr($path, strlen($storedPrefix));
+        }
+
+        return TrackerCategoryIdentity::formatDepartmentDisplayName($path);
     }
 
     /**

@@ -32,6 +32,10 @@ class TrackerCategoryIdentity
      */
     public const DEPARTMENTS = ['Men', 'Women', 'Boys', 'Girls'];
 
+    public const NO_DEPARTMENT_STORED_LABEL = '(no department)';
+
+    public const NO_DEPARTMENT_DISPLAY_LABEL = 'Custom Link';
+
     public static function normalizeDepartmentName(string $departmentName): string
     {
         $departmentName = trim($departmentName);
@@ -47,6 +51,20 @@ class TrackerCategoryIdentity
         }
 
         return $departmentName;
+    }
+
+    public static function formatDepartmentDisplayName(mixed $departmentName): string
+    {
+        $name = trim((string) ($departmentName ?? ''));
+        if ($name === '') {
+            return '';
+        }
+
+        if (strcasecmp($name, self::NO_DEPARTMENT_STORED_LABEL) === 0) {
+            return self::NO_DEPARTMENT_DISPLAY_LABEL;
+        }
+
+        return $name;
     }
 
     public static function departmentNameFromPageUrl(?string $pageUrl): string

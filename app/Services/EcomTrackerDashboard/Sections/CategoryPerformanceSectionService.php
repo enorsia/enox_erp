@@ -3,6 +3,7 @@
 namespace App\Services\EcomTrackerDashboard\Sections;
 
 use App\Services\EcomActivityListService;
+use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -56,7 +57,7 @@ class CategoryPerformanceSectionService
                 'sale_amount' => (float) $sold['sale_amount'],
             ];
 
-            $departments[$departmentId] ??= ['key' => 'department-'.$departmentId, 'name' => (string) ($row->department_name ?? 'Other'), 'categories' => []] + array_fill_keys($metrics, 0);
+            $departments[$departmentId] ??= ['key' => 'department-'.$departmentId, 'name' => TrackerCategoryIdentity::formatDepartmentDisplayName($row->department_name ?? 'Other') ?: 'Other', 'categories' => []] + array_fill_keys($metrics, 0);
             $departments[$departmentId]['categories'][] = $category;
             foreach ($metrics as $metric) {
                 $departments[$departmentId][$metric] += $category[$metric];
@@ -159,7 +160,7 @@ class CategoryPerformanceSectionService
             $departmentId = (int) ($category['department_id'] ?? 0);
             $departments[$departmentId] ??= [
                 'key' => 'department-'.$departmentId,
-                'name' => (string) $category['department_name'],
+                'name' => TrackerCategoryIdentity::formatDepartmentDisplayName($category['department_name']) ?: 'Other',
                 'categories' => [],
             ] + array_fill_keys($metrics, 0);
             unset($category['department_name']);
@@ -251,7 +252,7 @@ class CategoryPerformanceSectionService
 
             $departments[$departmentId] ??= [
                 'key' => 'department-'.$departmentId,
-                'name' => $departmentName,
+                'name' => TrackerCategoryIdentity::formatDepartmentDisplayName($departmentName) ?: 'Other',
                 'categories' => [],
             ] + array_fill_keys($metrics, 0);
             $departments[$departmentId]['categories'][] = $category;
