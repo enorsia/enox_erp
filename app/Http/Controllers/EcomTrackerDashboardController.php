@@ -6,6 +6,7 @@ use App\Jobs\TrackerDashboardSyncJob;
 use App\Services\EcomActivityListService;
 use App\Services\EcomTrackerCompareFilteredDashboardService;
 use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
+use App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService;
 use App\Services\EcomTrackerProductPerformanceExportService;
 use App\Services\TrackerDashboardSyncService;
 use App\Support\TrackerTime;
@@ -114,7 +115,10 @@ class EcomTrackerDashboardController extends Controller
             $range['to'],
         );
 
-        return view('ecom_tracker.products', compact('data', 'products', 'paginator', 'catalogFilterUi'));
+        $sortBy = ProductPerformanceSectionService::normalizeProductListSort($request->query('sort'));
+        $sortDir = ProductPerformanceSectionService::normalizeProductListSortDir($request->query('dir'));
+
+        return view('ecom_tracker.products', compact('data', 'products', 'paginator', 'catalogFilterUi', 'sortBy', 'sortDir'));
     }
 
     public function exportProducts(

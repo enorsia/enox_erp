@@ -2,7 +2,6 @@
 
 namespace App\Services\EcomTrackerDashboard\Sections;
 
-use App\Support\TrackerDatabase;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -61,8 +60,8 @@ class DashboardKpiSectionService
                 $metric('Avg stay time', 'avg_stay_seconds', $duration, 'Average Duration per session in the period (total stay time divided by session count).'),
             ]],
             ['title' => 'Sale & conversion', 'modifier' => 'etd-kpi-group--sale', 'cols' => 2, 'metrics' => [
-                $metric('Items sold', 'items_sold', $count, 'Total product units sold from completed orders in the period (sums line-item quantities from payment_success events in the date range).', ['has_order' => 1]),
-                $metric('Sale amount', 'sale_amount', fn (float|int $value) => '£'.number_format((float) $value, 2), 'Total sale amount from completed orders in the period (sum of payment_success amount_paid in the date range).', ['has_order' => 1]),
+                $metric('Items sold', 'items_sold', $count, 'Total units from completed orders for sessions in this period (sum of order header quantities; same scope as Payments).', ['has_order' => 1]),
+                $metric('Sale amount', 'sale_amount', fn (float|int $value) => '£'.number_format((float) $value, 2), 'Total paid from those orders (sum of order amount_paid; same scope as Payments). Not the same as Product performance Sale line totals.', ['has_order' => 1]),
             ]],
             ['title' => 'Funnel drop-off', 'modifier' => 'etd-kpi-group--funnel', 'cols' => 4, 'metrics' => [
                 $this->funnelDropMetric(
@@ -157,23 +156,6 @@ class DashboardKpiSectionService
                 $this->formatFunnelDropValue($previousRate, $previousCount),
                 $comparisonLabel,
             ),
-        ];
-    }
-
-    /**
-     * @return array{items_sold: int, sale_amount: float}
-     */
-    private function saleTotalsFromOrders(string $from, string $to): array
-    {
-        $row = TrackerDatabase::table('tracking_orders')
-            ->whereBetween('metric_date', [$from, $to])
-            ->selectRaw('COALESCE(SUM(items_qty), 0) as items_sold')
-            ->selectRaw('COALESCE(SUM(amount_paid), 0) as sale_amount')
-            ->first();
-
-        return [
-            'items_sold' => (int) ($row->items_sold ?? 0),
-            'sale_amount' => round((float) ($row->sale_amount ?? 0), 2),
         ];
     }
 

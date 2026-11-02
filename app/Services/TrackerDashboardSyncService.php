@@ -2644,6 +2644,8 @@ class TrackerDashboardSyncService
         $this->refreshSoldTotals($date, 'tracking_daily_categories', 'tracking_category_id', 'od.tracking_category_id', true, $now);
         $this->refreshSoldTotals($date, 'tracking_daily_products', 'product_code', 'p.code', false, $now);
 
+        $this->purgeEmptyDailyCategoryRows($date);
+
         $this->backfillTrackingSessionStartedAt($date);
 
         $this->refreshHourlySummaries($date, $now);
@@ -3139,6 +3141,21 @@ class TrackerDashboardSyncService
         })->all();
 
         TrackerDatabase::table($table)->upsert($rows, ['metric_date', $column], [...$soldColumns, 'updated_at']);
+    }
+
+    /** Remove category day rows left with no metrics after funnel + sold refresh. */
+    private function purgeEmptyDailyCategoryRows(string $date): void
+    {
+        TrackerDatabase::table('tracking_daily_categories')
+            ->where('metric_date', $date)
+            ->where('category_views', 0)
+            ->where('product_views', 0)
+            ->where('add_to_carts', 0)
+            ->where('proceed_checkouts', 0)
+            ->where('sold_qty', 0)
+            ->where('orders', 0)
+            ->where('sale_amount', 0)
+            ->delete();
     }
 
     // ===== 6. Status marks =====

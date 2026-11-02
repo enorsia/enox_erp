@@ -29,6 +29,12 @@
                 <input type="hidden" name="category[]" value="{{ (int) $categoryId }}">
             @endif
         @endforeach
+        @if (request()->filled('sort'))
+            <input type="hidden" name="sort" value="{{ request('sort') }}">
+        @endif
+        @if (request()->filled('dir'))
+            <input type="hidden" name="dir" value="{{ request('dir') }}">
+        @endif
         <div class="etd-filter-panel__body etd-filter-drawer__body">
             <section class="etd-activity-filter-section">
                 <p class="etd-activity-filter-section-title">Product</p>

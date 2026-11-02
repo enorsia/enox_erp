@@ -8,6 +8,7 @@ use App\Models\ActivityEcomUserAction;
 use App\Models\TrackingCategory;
 use App\Models\TrackingDailyDuration;
 use App\Models\TrackingSession;
+use App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService;
 use App\Support\CheckoutPayloadTotals;
 use App\Support\CommercePricingExtractor;
 use App\Support\SessionTrafficAttribution;
@@ -398,6 +399,8 @@ class EcomActivityListService
         $filters['categories'] = [];
         $filters['product_list_category_ids'] = $productListCategoryIds;
         $filters['visitor_type'] = null;
+        $filters['sort'] = ProductPerformanceSectionService::normalizeProductListSort($request->query('sort'));
+        $filters['sort_dir'] = ProductPerformanceSectionService::normalizeProductListSortDir($request->query('dir'));
 
         return $filters;
     }
@@ -427,6 +430,15 @@ class EcomActivityListService
         $departmentId = $request->integer('department');
         if ($departmentId > 0) {
             $params['department'] = $departmentId;
+        }
+
+        $sort = ProductPerformanceSectionService::normalizeProductListSort($request->query('sort'));
+        $dir = ProductPerformanceSectionService::normalizeProductListSortDir($request->query('dir'));
+        if ($sort !== ProductPerformanceSectionService::PRODUCT_LIST_DEFAULT_SORT) {
+            $params['sort'] = $sort;
+        }
+        if ($dir !== 'desc') {
+            $params['dir'] = $dir;
         }
 
         return $params;

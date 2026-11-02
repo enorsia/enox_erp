@@ -13,7 +13,46 @@ class ProductPerformanceSectionService
 {
     public const PRODUCT_LIMIT = 10;
 
+    public const PRODUCT_LIST_DEFAULT_SORT = 'paid';
+
+    /** @var list<string> */
+    public const PRODUCT_LIST_SORT_KEYS = [
+        'product',
+        'views',
+        'add_to_cart',
+        'begin_checkout',
+        'proceed_checkout',
+        'paid',
+        'revenue',
+    ];
+
+    /** @var list<string> Default tie-break order (desc) after the active sort column. */
+    private const PRODUCT_LIST_SORT_SEQUENCE = [
+        'paid',
+        'proceed_checkout',
+        'begin_checkout',
+        'add_to_cart',
+        'views',
+    ];
+
     use \App\Services\EcomTrackerDashboard\Concerns\InteractsWithSessionFilterRatios;
+
+    public static function normalizeProductListSort(mixed $sort): string
+    {
+        $sort = is_string($sort) ? $sort : '';
+
+        return in_array($sort, self::PRODUCT_LIST_SORT_KEYS, true)
+            ? $sort
+            : self::PRODUCT_LIST_DEFAULT_SORT;
+    }
+
+    /** @return 'asc'|'desc' */
+    public static function normalizeProductListSortDir(mixed $dir): string
+    {
+        $dir = strtolower(is_string($dir) ? $dir : '');
+
+        return in_array($dir, ['asc', 'desc'], true) ? $dir : 'desc';
+    }
 
     public function products(Carbon $from, Carbon $to, string $period, array $sessionFilters = [], ?int $limit = self::PRODUCT_LIMIT): array
     {
@@ -55,12 +94,20 @@ class ProductPerformanceSectionService
         $all = $this->applyProductListHasOrderFilter($all, $sessionFilters);
         $all = $this->applyProductListCategoryScope($all, $from, $to, $sessionFilters);
 
-        return $this->packageProductRows($all, $limit, $from, $to, $period, []);
+        return $this->packageProductRows($all, $limit, $from, $to, $period, $sessionFilters);
     }
 
     /**
      * @param  Collection<int, array<string, mixed>>  $all
-     * @return array{rows: list<array<string, mixed>>, totals: array{views: int, product_count: int}}
+     * @return array{rows: list<array<string, mixed>>, totals: array{
+     *     views: int,
+     *     add_to_cart: int,
+     *     begin_checkout: int,
+     *     proceed_checkout: int,
+     *     paid: int,
+     *     revenue: float,
+     *     product_count: int,
+     * }}
      */
     private function packageProductRows(
         Collection $all,
@@ -71,7 +118,9 @@ class ProductPerformanceSectionService
         array $sessionFilters,
     ): array {
         $range = ['from' => $from, 'to' => $to, 'period' => $period];
-        $sorted = $this->sortProductRows($all);
+        $sortBy = self::normalizeProductListSort($sessionFilters['sort'] ?? null);
+        $sortDir = self::normalizeProductListSortDir($sessionFilters['sort_dir'] ?? null);
+        $sorted = $this->sortProductRows($all, $sortBy, $sortDir);
         $visible = $limit === null ? $sorted : $sorted->take($limit);
 
         $titles = collect();
@@ -104,6 +153,11 @@ class ProductPerformanceSectionService
             })->values()->all(),
             'totals' => [
                 'views' => (int) $all->sum('views'),
+                'add_to_cart' => (int) $all->sum('adds'),
+                'begin_checkout' => (int) $all->sum('begin_checkouts'),
+                'proceed_checkout' => (int) $all->sum('proceed_checkouts'),
+                'paid' => (int) $all->sum('qty'),
+                'revenue' => round((float) $all->sum('revenue'), 2),
                 'product_count' => $all->count(),
             ],
         ];
@@ -213,18 +267,107 @@ class ProductPerformanceSectionService
      * @param  Collection<int, array<string, mixed>>  $all
      * @return Collection<int, array<string, mixed>>
      */
-    private function sortProductRows(Collection $all): Collection
+    private function sortProductRows(Collection $all, string $sortBy, string $sortDir): Collection
     {
-        return $all
-            ->sortBy([
-                ['qty', 'desc'],
-                ['proceed_checkouts', 'desc'],
-                ['begin_checkouts', 'desc'],
-                ['adds', 'desc'],
-                ['views', 'desc'],
-                ['revenue', 'desc'],
-            ])
-            ->values();
+        $sortBy = self::normalizeProductListSort($sortBy);
+        $sortDir = self::normalizeProductListSortDir($sortDir);
+        $keys = $this->productListSortKeysOrdered($sortBy);
+
+        $titles = in_array('product', $keys, true)
+            ? $this->productTitlesByCodes($all->pluck('code')->filter()->unique()->values()->all())
+            : null;
+
+        return $all->sort(function (array $a, array $b) use ($keys, $sortDir, $titles): int {
+            foreach ($keys as $index => $key) {
+                $direction = $index === 0 ? $sortDir : 'desc';
+                $cmp = $this->compareProductListSortRows($a, $b, $key, $titles);
+                if ($cmp === 0) {
+                    continue;
+                }
+
+                return $direction === 'desc' ? -$cmp : $cmp;
+            }
+
+            return 0;
+        })->values();
+    }
+
+    /**
+     * Clicked column first; remaining funnel metrics keep {@see PRODUCT_LIST_SORT_SEQUENCE} order.
+     *
+     * @return list<string>
+     */
+    private function productListSortKeysOrdered(string $primary): array
+    {
+        $primary = self::normalizeProductListSort($primary);
+
+        if ($primary === 'product') {
+            return array_merge(['product'], self::PRODUCT_LIST_SORT_SEQUENCE);
+        }
+
+        if ($primary === 'revenue') {
+            return array_merge(['revenue'], self::PRODUCT_LIST_SORT_SEQUENCE);
+        }
+
+        if (! in_array($primary, self::PRODUCT_LIST_SORT_SEQUENCE, true)) {
+            $primary = self::PRODUCT_LIST_DEFAULT_SORT;
+        }
+
+        $keys = [$primary];
+        foreach (self::PRODUCT_LIST_SORT_SEQUENCE as $key) {
+            if ($key !== $primary) {
+                $keys[] = $key;
+            }
+        }
+
+        return $keys;
+    }
+
+    /**
+     * @param  list<string>  $codes
+     */
+    private function productTitlesByCodes(array $codes): Collection
+    {
+        $titles = collect();
+        foreach (array_chunk($codes, 400) as $codeChunk) {
+            $titles = $titles->merge(
+                TrackerDatabase::table('tracking_product')
+                    ->whereIn('code', $codeChunk)
+                    ->pluck('title', 'code'),
+            );
+        }
+
+        return $titles;
+    }
+
+    /**
+     * @param  Collection<string, string>|null  $titles
+     */
+    private function compareProductListSortRows(array $a, array $b, string $key, ?Collection $titles): int
+    {
+        if ($key === 'product') {
+            $codeA = (string) ($a['code'] ?? '');
+            $codeB = (string) ($b['code'] ?? '');
+            $labelA = strtolower((string) ($titles?->get($codeA, $codeA))).'|'.$codeA;
+            $labelB = strtolower((string) ($titles?->get($codeB, $codeB))).'|'.$codeB;
+
+            return $labelA <=> $labelB;
+        }
+
+        return $this->productListSortMetricValue($a, $key) <=> $this->productListSortMetricValue($b, $key);
+    }
+
+    private function productListSortMetricValue(array $row, string $key): int|float
+    {
+        return match ($key) {
+            'views' => (int) ($row['views'] ?? 0),
+            'add_to_cart' => (int) ($row['adds'] ?? 0),
+            'begin_checkout' => (int) ($row['begin_checkouts'] ?? 0),
+            'proceed_checkout' => (int) ($row['proceed_checkouts'] ?? 0),
+            'paid' => (int) ($row['qty'] ?? 0),
+            'revenue' => (float) ($row['revenue'] ?? 0),
+            default => 0,
+        };
     }
 
     /**
