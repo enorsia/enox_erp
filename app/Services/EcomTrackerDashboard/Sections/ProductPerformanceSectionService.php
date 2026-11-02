@@ -6,7 +6,6 @@ use App\Services\EcomActivityListService;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 
 class ProductPerformanceSectionService
@@ -67,72 +66,31 @@ class ProductPerformanceSectionService
 
         $productCode = trim((string) ($sessionFilters['product_code'] ?? ''));
         $categoryIds = $this->productListCategoryIds($sessionFilters);
-        $soldFilters = $sessionFilters;
-        $soldFilters['product_code'] = '';
-        $soldFilters['has_order'] = null;
 
-        if ($categoryIds !== []) {
-            $aggregated = $this->aggregatedProductFunnelForCategories($from, $to, $categoryIds, $productCode);
-        } else {
-            $dailyProducts = TrackerDatabase::table('tracking_daily_products')
-                ->whereBetween('metric_date', [$fromDate, $toDate])
-                ->when($productCode !== '', fn ($query) => $query->where('product_code', $productCode));
+        $aggregated = TrackerDatabase::table('tracking_daily_products')
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->when($productCode !== '', fn ($query) => $query->where('product_code', $productCode))
+            ->when($categoryIds !== [], fn ($query) => $query->whereIn('tracking_category_id', $categoryIds))
+            ->groupBy('product_code')
+            ->selectRaw('product_code as code')
+            ->selectRaw('SUM(product_views) as views, SUM(add_to_carts) as adds, SUM(begin_checkouts) as begin_checkouts')
+            ->selectRaw('SUM(proceed_checkouts) as proceed_checkouts, SUM(sold_qty) as qty, SUM(sale_amount) as revenue')
+            ->get()
+            ->keyBy('code');
 
-            $aggregated = $dailyProducts
-                ->groupBy('product_code')
-                ->selectRaw('product_code as code')
-                ->selectRaw('SUM(product_views) as views, SUM(add_to_carts) as adds, SUM(begin_checkouts) as begin_checkouts')
-                ->selectRaw('SUM(proceed_checkouts) as proceed_checkouts')
-                ->get()
-                ->keyBy('code');
-        }
-
-        $soldByCode = $categoryIds !== []
-            ? $this->orderSoldByProductForCategories($from, $to, $period, $soldFilters)
-            : $this->orderSoldTotalsByParentCode($from, $to, $period, $soldFilters);
-        if ($productCode !== '') {
-            $soldByCode = isset($soldByCode[$productCode])
-                ? [$productCode => $soldByCode[$productCode]]
-                : [];
-        }
-
-        $all = $aggregated->map(function (object $row) use ($soldByCode) {
-            $code = (string) $row->code;
-            $sold = $soldByCode[$code] ?? ['qty' => 0, 'revenue' => 0.0];
-
+        $all = $aggregated->map(function (object $row) {
             return [
-                'code' => $code,
+                'code' => (string) $row->code,
                 'views' => (int) $row->views,
                 'adds' => (int) $row->adds,
                 'begin_checkouts' => (int) ($row->begin_checkouts ?? 0),
                 'proceed_checkouts' => (int) $row->proceed_checkouts,
-                'qty' => (int) $sold['qty'],
-                'revenue' => round((float) $sold['revenue'], 2),
+                'qty' => (int) $row->qty,
+                'revenue' => round((float) $row->revenue, 2),
             ];
         });
 
-        foreach ($soldByCode as $code => $sold) {
-            if ($all->has($code)) {
-                continue;
-            }
-
-            $all->put($code, [
-                'code' => $code,
-                'views' => 0,
-                'adds' => 0,
-                'begin_checkouts' => 0,
-                'proceed_checkouts' => 0,
-                'qty' => (int) $sold['qty'],
-                'revenue' => round((float) $sold['revenue'], 2),
-            ]);
-        }
-
         $all = $this->applyProductListHasOrderFilter($all, $sessionFilters);
-        if ($categoryIds === []) {
-            $all = $this->applyProductListCategoryScope($all, $from, $to, $sessionFilters, $soldByCode);
-        } else {
-            $all = $this->applyProductListCategoryProductScope($all, $soldByCode);
-        }
 
         return $this->packageProductRows($all, $limit, $from, $to, $period, $sessionFilters);
     }
@@ -277,71 +235,17 @@ class ProductPerformanceSectionService
     }
 
     /**
-     * Category filter: keep rows with category-attributed funnel or category order lines.
-     *
-     * @param  Collection<int, array<string, mixed>>  $all
-     * @param  array<string, array{qty: int, revenue: float}>  $soldByCode
-     * @return Collection<int, array<string, mixed>>
-     */
-    private function applyProductListCategoryProductScope(Collection $all, array $soldByCode): Collection
-    {
-        return $all->filter(function (array $row) use ($soldByCode) {
-            $code = (string) ($row['code'] ?? '');
-            if ((int) ($soldByCode[$code]['qty'] ?? 0) > 0) {
-                return true;
-            }
-
-            return (int) ($row['views'] ?? 0) > 0
-                || (int) ($row['adds'] ?? 0) > 0
-                || (int) ($row['begin_checkouts'] ?? 0) > 0
-                || (int) ($row['proceed_checkouts'] ?? 0) > 0;
-        })->values();
-    }
-
-    /**
-     * Funnel metrics counted only on days this style’s primary category matches the filter (same idea as category P view rollups).
-     *
-     * @param  list<int>  $categoryIds
-     * @return Collection<string, object{code: string, views: int, adds: int, begin_checkouts: int, proceed_checkouts: int}>
-     */
-    private function aggregatedProductFunnelForCategories(
-        Carbon $from,
-        Carbon $to,
-        array $categoryIds,
-        string $productCode = '',
-    ): Collection {
-        if ($categoryIds === []) {
-            return collect();
-        }
-
-        $fromDate = $from->toDateString();
-        $toDate = $to->toDateString();
-
-        return TrackerDatabase::table('tracking_daily_products as dp')
-            ->joinSub($this->primaryCategoryByProductDayQuery($fromDate, $toDate, $categoryIds), 'primary_cat', function ($join): void {
-                $join->on('primary_cat.visit_date', '=', 'dp.metric_date')
-                    ->whereRaw('primary_cat.code = LEFT(TRIM(dp.product_code), 100)');
-            })
-            ->whereBetween('dp.metric_date', [$fromDate, $toDate])
-            ->when($productCode !== '', fn ($query) => $query->where('dp.product_code', $productCode))
-            ->groupByRaw('LEFT(TRIM(dp.product_code), 100)')
-            ->selectRaw('LEFT(TRIM(dp.product_code), 100) as code')
-            ->selectRaw('SUM(dp.product_views) as views, SUM(dp.add_to_carts) as adds, SUM(dp.begin_checkouts) as begin_checkouts, SUM(dp.proceed_checkouts) as proceed_checkouts')
-            ->get()
-            ->keyBy('code');
-    }
-
-    /**
      * @param  list<int>  $categoryIds
      * @return array<string, true>
      */
     private function productCodesForProductListCategoryFilter(Carbon $from, Carbon $to, array $categoryIds): array
     {
         $allowed = [];
-        $codes = $this->primaryCategoryByProductDayQuery($from->toDateString(), $to->toDateString(), $categoryIds)
-            ->select('code')
+        $codes = TrackerDatabase::table('tracking_daily_products')
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->whereIn('tracking_category_id', $categoryIds)
             ->distinct()
-            ->pluck('code');
+            ->pluck('product_code');
 
         foreach ($codes as $code) {
             $code = trim((string) $code);
@@ -351,35 +255,6 @@ class ProductPerformanceSectionService
         }
 
         return $allowed;
-    }
-
-    /**
-     * One row per product per visit day whose primary category is in the filter.
-     * Primary category: highest tracking_session_p_cat link count, then the lower category id.
-     *
-     * @param  list<int>  $categoryIds
-     */
-    private function primaryCategoryByProductDayQuery(string $fromDate, string $toDate, array $categoryIds): Builder
-    {
-        $counts = TrackerDatabase::table('tracking_session_p_cat as sp')
-            ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
-            ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->whereBetween('dv.visit_date', [$fromDate, $toDate])
-            ->whereNotNull('sp.tracking_category_id')
-            ->whereRaw("TRIM(p.code) <> ''")
-            ->groupByRaw('LEFT(TRIM(p.code), 100), dv.visit_date, sp.tracking_category_id')
-            ->selectRaw('LEFT(TRIM(p.code), 100) as code, dv.visit_date as visit_date, sp.tracking_category_id as category_id, COUNT(*) as link_count');
-
-        $ranked = TrackerDatabase::query()
-            ->fromSub($counts, 'counts')
-            ->selectRaw('code, visit_date, category_id, ROW_NUMBER() OVER (PARTITION BY code, visit_date ORDER BY link_count DESC, category_id ASC) as rn');
-
-        return TrackerDatabase::query()
-            ->fromSub($ranked, 'ranked')
-            ->where('rn', 1)
-            ->whereIn('category_id', $categoryIds)
-            ->select(['code', 'visit_date', 'category_id']);
     }
 
     /**
@@ -506,8 +381,10 @@ class ProductPerformanceSectionService
         }
 
         $ratios = $this->sessionFilterRatiosByDate($from, $to, $period, $sessionFilters);
+        $categoryIds = $this->productListCategoryIds($sessionFilters);
         $dailyRows = TrackerDatabase::table('tracking_daily_products')
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->when($categoryIds !== [], fn ($query) => $query->whereIn('tracking_category_id', $categoryIds))
             ->when($withOrderOnly, fn ($query) => $query->whereIn('product_code', array_keys($soldByCode)))
             ->get([
                 'metric_date',

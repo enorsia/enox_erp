@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Str;
 
 class TrackerCategoryIdentity
@@ -514,43 +515,103 @@ class TrackerCategoryIdentity
     }
 
     /**
+     * Category id used in stored rows. A sale category saved under a department
+     * uses the Custom Link row when that same name exists under (no department).
+     *
+     * @return array<int, int> tracking_category_id => stored category id
+     */
+    public static function canonicalCategoryIds(): array
+    {
+        $customRootId = TrackerDatabase::table('tracking_category')
+            ->where('name', self::NO_DEPARTMENT_STORED_LABEL)
+            ->whereNull('parent_id')
+            ->value('id');
+
+        $customByName = [];
+        if ($customRootId !== null) {
+            foreach (TrackerDatabase::table('tracking_category')->where('parent_id', (int) $customRootId)->get(['id', 'name']) as $row) {
+                $customByName[(string) $row->name] = (int) $row->id;
+            }
+        }
+
+        $map = [];
+        foreach (TrackerDatabase::table('tracking_category')->get(['id', 'name']) as $row) {
+            $id = (int) $row->id;
+            $map[$id] = $customByName[(string) $row->name] ?? $id;
+        }
+
+        return $map;
+    }
+
+    /**
      * One primary tracking category per product for a visit day.
-     * Highest tracking_session_p_cat link count wins. Equal counts keep the lower category id
-     * so sync and the product list always pick the same category.
+     * Highest tracking_session_p_cat link count wins.
+     * When that count ties across departments, the style code initial picks the department: W women, M men, G girls, B boys.
+     * A remaining tie keeps the lower category id.
      *
      * @return array<string, int> product code => tracking_category_id
      */
     public static function primaryCategoryIdByProductCodeForVisitDate(string $visitDate): array
     {
-        $rows = TrackerDatabase::table('tracking_session_p_cat as sp')
-            ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
-            ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->where('dv.visit_date', $visitDate)
-            ->whereNotNull('sp.tracking_category_id')
-            ->groupBy('p.code', 'sp.tracking_category_id')
-            ->orderBy('p.code')
-            ->orderBy('sp.tracking_category_id')
-            ->selectRaw('p.code, sp.tracking_category_id as category_id, COUNT(*) as link_count')
-            ->get();
-
-        $best = [];
-        foreach ($rows as $row) {
+        $map = [];
+        foreach (self::primaryCategoryByProductDayQuery($visitDate, $visitDate)->get() as $row) {
             $code = Str::limit(trim((string) $row->code), 100, '');
             if ($code === '') {
                 continue;
             }
 
-            $categoryId = (int) $row->category_id;
-            $count = (int) $row->link_count;
-            $current = $best[$code] ?? null;
-            if ($current === null
-                || $count > $current['count']
-                || ($count === $current['count'] && $categoryId < $current['category_id'])) {
-                $best[$code] = ['category_id' => $categoryId, 'count' => $count];
-            }
+            $map[$code] = (int) $row->category_id;
         }
 
-        return array_map(fn (array $entry): int => $entry['category_id'], $best);
+        return $map;
+    }
+
+    /**
+     * One row per product per visit day.
+     * A sale or edit category stored under Men, Women, Boys, or Girls is the same Custom Link when that name also exists under (no department).
+     * Highest link count wins. A tie across departments uses the style code initial (W, M, G, B). A remaining tie keeps the lower category id.
+     *
+     * @param  list<int>  $categoryIds empty = every category
+     */
+    public static function primaryCategoryByProductDayQuery(string $fromDate, string $toDate, array $categoryIds = []): Builder
+    {
+        $categoryId = 'COALESCE(custom.id, sp.tracking_category_id)';
+        $expectedDept = "CASE LEFT(UPPER(TRIM(p.code)), 1) WHEN 'M' THEN 'Men' WHEN 'W' THEN 'Women' WHEN 'B' THEN 'Boys' WHEN 'G' THEN 'Girls' ELSE '' END";
+        $categoryDept = "CASE WHEN custom.id IS NOT NULL THEN '' WHEN dept.name IN ('Men', 'Women', 'Boys', 'Girls') THEN dept.name ELSE '' END";
+
+        $counts = TrackerDatabase::table('tracking_session_p_cat as sp')
+            ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
+            ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->leftJoin('tracking_category as cat', 'cat.id', '=', 'sp.tracking_category_id')
+            ->leftJoin('tracking_category as dept', 'dept.id', '=', 'cat.parent_id')
+            ->leftJoin('tracking_category as custom_root', function ($join): void {
+                $join->where('custom_root.name', '=', self::NO_DEPARTMENT_STORED_LABEL)
+                    ->whereNull('custom_root.parent_id');
+            })
+            ->leftJoin('tracking_category as custom', function ($join): void {
+                $join->on('custom.parent_id', '=', 'custom_root.id')
+                    ->on('custom.name', '=', 'cat.name');
+            })
+            ->whereBetween('dv.visit_date', [$fromDate, $toDate])
+            ->whereNotNull('sp.tracking_category_id')
+            ->whereRaw("TRIM(p.code) <> ''")
+            ->groupByRaw('LEFT(TRIM(p.code), 100), dv.visit_date, '.$categoryId.', '.$expectedDept.', '.$categoryDept)
+            ->selectRaw('LEFT(TRIM(p.code), 100) as code, dv.visit_date as visit_date, '.$categoryId.' as category_id, COUNT(*) as link_count, '.$expectedDept.' as expected_dept, '.$categoryDept.' as category_dept');
+
+        $ranked = TrackerDatabase::query()
+            ->fromSub($counts, 'counts')
+            ->selectRaw('code, visit_date, category_id, ROW_NUMBER() OVER (PARTITION BY code, visit_date ORDER BY link_count DESC, CASE WHEN expected_dept <> \'\' AND category_dept = expected_dept THEN 1 ELSE 0 END DESC, category_id ASC) as rn');
+
+        $query = TrackerDatabase::query()
+            ->fromSub($ranked, 'ranked')
+            ->where('rn', 1)
+            ->select(['code', 'visit_date', 'category_id']);
+
+        if ($categoryIds !== []) {
+            $query->whereIn('category_id', $categoryIds);
+        }
+
+        return $query;
     }
 }
