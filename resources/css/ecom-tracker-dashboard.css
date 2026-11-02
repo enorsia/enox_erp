@@ -8026,8 +8026,8 @@ a.etd-pager__btn:hover {
     flex-direction: column;
     gap: 0.1rem;
     flex: 0 0 auto;
-    min-width: 5.5rem;
-    max-width: 9rem;
+    min-width: 6rem;
+    max-width: 12.75rem;
     padding-right: 0.85rem;
     border-right: 1px solid #e2e8f0;
 }
@@ -8063,7 +8063,7 @@ a.etd-pager__btn:hover {
     font-weight: 500;
     line-height: 1.25;
     color: #94a3b8;
-    text-wrap: pretty;
+    white-space: nowrap;
 }
 
 .dark .etd-product-performance-totals__lead-scope {
@@ -8177,6 +8177,10 @@ a.etd-pager__btn:hover {
 
     .dark .etd-product-performance-totals__lead {
         border-bottom-color: #334155;
+    }
+
+    .etd-product-performance-totals__lead-scope {
+        white-space: normal;
     }
 
     .etd-product-performance-totals__metrics {

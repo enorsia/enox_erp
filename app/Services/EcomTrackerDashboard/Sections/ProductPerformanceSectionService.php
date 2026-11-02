@@ -3,6 +3,7 @@
 namespace App\Services\EcomTrackerDashboard\Sections;
 
 use App\Services\EcomActivityListService;
+use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -64,19 +65,27 @@ class ProductPerformanceSectionService
         }
 
         $productCode = trim((string) ($sessionFilters['product_code'] ?? ''));
-        $dailyProducts = TrackerDatabase::table('tracking_daily_products')
-            ->whereBetween('metric_date', [$fromDate, $toDate])
-            ->when($productCode !== '', fn ($query) => $query->where('product_code', $productCode));
+        $categoryIds = $this->productListCategoryIds($sessionFilters);
 
-        $aggregated = $dailyProducts
-            ->groupBy('product_code')
-            ->selectRaw('product_code as code')
-            ->selectRaw('SUM(product_views) as views, SUM(add_to_carts) as adds, SUM(begin_checkouts) as begin_checkouts')
-            ->selectRaw('SUM(proceed_checkouts) as proceed_checkouts')
-            ->get()
-            ->keyBy('code');
+        if ($categoryIds !== []) {
+            $aggregated = $this->aggregatedProductFunnelForCategories($from, $to, $categoryIds, $productCode);
+        } else {
+            $dailyProducts = TrackerDatabase::table('tracking_daily_products')
+                ->whereBetween('metric_date', [$fromDate, $toDate])
+                ->when($productCode !== '', fn ($query) => $query->where('product_code', $productCode));
 
-        $soldByCode = $this->orderSoldTotalsByParentCode($from, $to, $period, $sessionFilters);
+            $aggregated = $dailyProducts
+                ->groupBy('product_code')
+                ->selectRaw('product_code as code')
+                ->selectRaw('SUM(product_views) as views, SUM(add_to_carts) as adds, SUM(begin_checkouts) as begin_checkouts')
+                ->selectRaw('SUM(proceed_checkouts) as proceed_checkouts')
+                ->get()
+                ->keyBy('code');
+        }
+
+        $soldByCode = $categoryIds !== []
+            ? $this->orderSoldByProductForCategories($from, $to, $period, $sessionFilters)
+            : $this->orderSoldTotalsByParentCode($from, $to, $period, $sessionFilters);
 
         $all = $aggregated->map(function (object $row) use ($soldByCode) {
             $code = (string) $row->code;
@@ -110,7 +119,11 @@ class ProductPerformanceSectionService
         }
 
         $all = $this->applyProductListHasOrderFilter($all, $sessionFilters);
-        $all = $this->applyProductListCategoryScope($all, $from, $to, $sessionFilters);
+        if ($categoryIds === []) {
+            $all = $this->applyProductListCategoryScope($all, $from, $to, $sessionFilters, $soldByCode);
+        } else {
+            $all = $this->applyProductListCategoryProductScope($all, $soldByCode);
+        }
 
         return $this->packageProductRows($all, $limit, $from, $to, $period, $sessionFilters);
     }
@@ -169,15 +182,24 @@ class ProductPerformanceSectionService
                     'revenue_bar_percent' => (int) round($row['revenue'] / $maxRevenue * 100),
                 ];
             })->values()->all(),
-            'totals' => [
-                'views' => (int) $all->sum('views'),
-                'add_to_cart' => (int) $all->sum('adds'),
-                'begin_checkout' => (int) $all->sum('begin_checkouts'),
-                'proceed_checkout' => (int) $all->sum('proceed_checkouts'),
-                'paid' => (int) $all->sum('qty'),
-                'revenue' => round((float) $all->sum('revenue'), 2),
-                'product_count' => $all->count(),
-            ],
+            'totals' => $this->productListTotals($all),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $all
+     * @return array{views: int, add_to_cart: int, begin_checkout: int, proceed_checkout: int, paid: int, revenue: float, product_count: int}
+     */
+    private function productListTotals(Collection $all): array
+    {
+        return [
+            'views' => (int) $all->sum('views'),
+            'add_to_cart' => (int) $all->sum('adds'),
+            'begin_checkout' => (int) $all->sum('begin_checkouts'),
+            'proceed_checkout' => (int) $all->sum('proceed_checkouts'),
+            'paid' => (int) $all->sum('qty'),
+            'revenue' => round((float) $all->sum('revenue'), 2),
+            'product_count' => $all->count(),
         ];
     }
 
@@ -211,6 +233,7 @@ class ProductPerformanceSectionService
         Carbon $from,
         Carbon $to,
         array $sessionFilters,
+        array $soldByCode = [],
     ): Collection {
         $categoryIds = array_values(array_filter(
             array_map('intval', (array) ($sessionFilters['product_list_category_ids'] ?? [])),
@@ -222,7 +245,104 @@ class ProductPerformanceSectionService
 
         $allowed = $this->productCodesForProductListCategoryFilter($from, $to, $categoryIds);
 
-        return $all->filter(fn (array $row) => isset($allowed[(string) ($row['code'] ?? '')]))->values();
+        return $all->filter(function (array $row) use ($allowed, $soldByCode) {
+            $code = (string) ($row['code'] ?? '');
+            if (isset($allowed[$code])) {
+                return true;
+            }
+
+            return (int) ($soldByCode[$code]['qty'] ?? 0) > 0;
+        })->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $sessionFilters
+     * @return list<int>
+     */
+    private function productListCategoryIds(array $sessionFilters): array
+    {
+        return array_values(array_filter(
+            array_map('intval', (array) ($sessionFilters['product_list_category_ids'] ?? [])),
+            fn (int $id) => $id > 0,
+        ));
+    }
+
+    /**
+     * Category filter: keep rows with category-attributed funnel or category order lines.
+     *
+     * @param  Collection<int, array<string, mixed>>  $all
+     * @param  array<string, array{qty: int, revenue: float}>  $soldByCode
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function applyProductListCategoryProductScope(Collection $all, array $soldByCode): Collection
+    {
+        return $all->filter(function (array $row) use ($soldByCode) {
+            $code = (string) ($row['code'] ?? '');
+            if ((int) ($soldByCode[$code]['qty'] ?? 0) > 0) {
+                return true;
+            }
+
+            return (int) ($row['views'] ?? 0) > 0
+                || (int) ($row['adds'] ?? 0) > 0
+                || (int) ($row['begin_checkouts'] ?? 0) > 0
+                || (int) ($row['proceed_checkouts'] ?? 0) > 0;
+        })->values();
+    }
+
+    /**
+     * Funnel metrics counted only on days this style’s primary category matches the filter (same idea as category P view rollups).
+     *
+     * @param  list<int>  $categoryIds
+     * @return Collection<string, object{code: string, views: int, adds: int, begin_checkouts: int, proceed_checkouts: int}>
+     */
+    private function aggregatedProductFunnelForCategories(
+        Carbon $from,
+        Carbon $to,
+        array $categoryIds,
+        string $productCode = '',
+    ): Collection {
+        $categoryIdSet = array_fill_keys($categoryIds, true);
+        $byCode = [];
+
+        $day = $from->copy()->startOfDay();
+        $end = $to->copy()->startOfDay();
+        while ($day->lte($end)) {
+            $date = $day->toDateString();
+            $primaryByCode = $this->primaryProductCategoryIdsByCodeForVisitDate($date);
+
+            $dailyQuery = TrackerDatabase::table('tracking_daily_products')
+                ->where('metric_date', $date)
+                ->when($productCode !== '', fn ($query) => $query->where('product_code', $productCode));
+
+            foreach ($dailyQuery->get(['product_code', 'product_views', 'add_to_carts', 'begin_checkouts', 'proceed_checkouts']) as $row) {
+                $code = Str::limit(trim((string) $row->product_code), 100, '');
+                if ($code === '') {
+                    continue;
+                }
+
+                $primaryCategoryId = $primaryByCode[$code] ?? null;
+                if ($primaryCategoryId === null || ! isset($categoryIdSet[$primaryCategoryId])) {
+                    continue;
+                }
+
+                $byCode[$code] ??= (object) [
+                    'code' => $code,
+                    'views' => 0,
+                    'adds' => 0,
+                    'begin_checkouts' => 0,
+                    'proceed_checkouts' => 0,
+                ];
+
+                $byCode[$code]->views += (int) $row->product_views;
+                $byCode[$code]->adds += (int) $row->add_to_carts;
+                $byCode[$code]->begin_checkouts += (int) $row->begin_checkouts;
+                $byCode[$code]->proceed_checkouts += (int) $row->proceed_checkouts;
+            }
+
+            $day->addDay();
+        }
+
+        return collect($byCode);
     }
 
     /**
@@ -249,36 +369,11 @@ class ProductPerformanceSectionService
     }
 
     /**
-     * Same attribution as TrackerDashboardSyncService::productCategoryIdsByCodeForVisitDate (primary p_cat link count).
-     *
      * @return array<string, int> product code => tracking_category_id
      */
     private function primaryProductCategoryIdsByCodeForVisitDate(string $visitDate): array
     {
-        $rows = TrackerDatabase::table('tracking_session_p_cat as sp')
-            ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
-            ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->where('dv.visit_date', $visitDate)
-            ->whereNotNull('sp.tracking_category_id')
-            ->groupBy('p.code', 'sp.tracking_category_id')
-            ->selectRaw('p.code, sp.tracking_category_id as category_id, COUNT(*) as link_count')
-            ->get();
-
-        $best = [];
-        foreach ($rows as $row) {
-            $code = Str::limit(trim((string) $row->code), 100, '');
-            if ($code === '') {
-                continue;
-            }
-
-            $count = (int) $row->link_count;
-            if (! isset($best[$code]) || $count > $best[$code]['count']) {
-                $best[$code] = ['category_id' => (int) $row->category_id, 'count' => $count];
-            }
-        }
-
-        return array_map(fn (array $entry): int => $entry['category_id'], $best);
+        return TrackerCategoryIdentity::primaryCategoryIdByProductCodeForVisitDate($visitDate);
     }
 
     /**
@@ -396,7 +491,9 @@ class ProductPerformanceSectionService
     private function productsWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters, ?int $limit = self::PRODUCT_LIMIT): array
     {
         $withOrderOnly = ($sessionFilters['has_order'] ?? null) === true;
-        $soldByCode = $this->orderSoldTotalsByParentCode($from, $to, $period, $sessionFilters);
+        $soldByCode = $this->productListCategoryIds($sessionFilters) !== []
+            ? $this->orderSoldByProductForCategories($from, $to, $period, $sessionFilters)
+            : $this->orderSoldTotalsByParentCode($from, $to, $period, $sessionFilters);
 
         if ($withOrderOnly && $soldByCode === []) {
             return $this->packageProductRows(collect(), $limit, $from, $to, $period, $sessionFilters);
@@ -469,7 +566,7 @@ class ProductPerformanceSectionService
             $byCode = isset($byCode[$productCode]) ? [$productCode => $byCode[$productCode]] : [];
         }
 
-        $all = $this->applyProductListCategoryScope(collect(array_values($byCode)), $from, $to, $sessionFilters);
+        $all = $this->applyProductListCategoryScope(collect(array_values($byCode)), $from, $to, $sessionFilters, $soldByCode);
 
         return $this->packageProductRows($all, $limit, $from, $to, $period, $sessionFilters);
     }
@@ -557,6 +654,70 @@ class ProductPerformanceSectionService
         }
 
         return $totals;
+    }
+
+    /**
+     * Same order-line rules as CategoryPerformanceSectionService::scopedCategorySoldTotals(), by parent code.
+     *
+     * @param  array<string, mixed>  $sessionFilters
+     * @return array<string, array{qty: int, revenue: float}>
+     */
+    private function orderSoldByProductForCategories(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
+    {
+        $categoryIds = $this->productListCategoryIds($sessionFilters);
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        $rows = $this->categoryOrderLinesQuery($from, $to, $period, $categoryIds, $sessionFilters)
+            ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
+            ->groupBy('p.code')
+            ->selectRaw('p.code as product_code, SUM(od.qty) as qty, SUM(od.line_total) as revenue')
+            ->get();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $code = trim((string) $row->product_code);
+            if ($code === '') {
+                continue;
+            }
+
+            $map[$code] = [
+                'qty' => (int) $row->qty,
+                'revenue' => round((float) $row->revenue, 2),
+            ];
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  list<int>  $categoryIds
+     * @param  array<string, mixed>  $sessionFilters
+     * @return \Illuminate\Database\Query\Builder
+     */
+    private function categoryOrderLinesQuery(
+        Carbon $from,
+        Carbon $to,
+        string $period,
+        array $categoryIds,
+        array $sessionFilters,
+    ) {
+        [$fromBound, $toBound] = TrackerTime::storageRange($from, $to);
+        $range = ['from' => $from, 'to' => $to, 'period' => $period];
+
+        $query = TrackerDatabase::table('tracking_order_details as od')
+            ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
+            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
+            ->whereBetween('o.ordered_at', [$fromBound, $toBound])
+            ->whereIn('od.tracking_category_id', $categoryIds)
+            ->tap(fn ($inner) => TrackerTime::applyEcomActivitySessionScope($inner, $from, $to, $period, 'ts'));
+
+        if (EcomActivityListService::hasActiveFilters($sessionFilters)) {
+            $query->tap(fn ($inner) => $this->activityList->constrainDashboardSessionsInRange($inner, $range, $sessionFilters));
+        }
+
+        return $query;
     }
 
 }

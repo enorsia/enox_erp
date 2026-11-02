@@ -9,6 +9,7 @@ use App\Models\TrackingDailyDuration;
 use App\Models\TrackingOrderAddress;
 use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerActionSequence;
+use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -3022,30 +3023,7 @@ class TrackerDashboardSyncService
      */
     private function productCategoryIdsByCodeForVisitDate(string $visitDate): array
     {
-        $rows = TrackerDatabase::table('tracking_session_p_cat as sp')
-            ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
-            ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->where('dv.visit_date', $visitDate)
-            ->whereNotNull('sp.tracking_category_id')
-            ->groupBy('p.code', 'sp.tracking_category_id')
-            ->selectRaw('p.code, sp.tracking_category_id as category_id, COUNT(*) as link_count')
-            ->get();
-
-        $best = [];
-        foreach ($rows as $row) {
-            $code = $this->productCode((string) $row->code);
-            if ($code === '') {
-                continue;
-            }
-
-            $count = (int) $row->link_count;
-            if (! isset($best[$code]) || $count > $best[$code]['count']) {
-                $best[$code] = ['category_id' => (int) $row->category_id, 'count' => $count];
-            }
-        }
-
-        return array_map(fn (array $entry): int => $entry['category_id'], $best);
+        return TrackerCategoryIdentity::primaryCategoryIdByProductCodeForVisitDate($visitDate);
     }
 
     /**

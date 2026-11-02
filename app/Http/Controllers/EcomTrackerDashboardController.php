@@ -192,7 +192,14 @@ class EcomTrackerDashboardController extends Controller
                 'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
                 'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
             ])),
-            'activityLink' => fn (array $activityFilters = []) => route('admin.ecom-activity.index', $periodQuery + array_filter($activityFilters, fn ($value) => $value !== null)),
+            'activityLink' => function (array $activityFilters = [], array $dropQueryKeys = []) use ($periodQuery): string {
+                $query = $periodQuery;
+                foreach ($dropQueryKeys as $key) {
+                    unset($query[$key]);
+                }
+
+                return route('admin.ecom-activity.index', $query + array_filter($activityFilters, fn ($value) => $value !== null && $value !== ''));
+            },
             'filterFormAction' => route($routeName),
             'periodPresetUrl' => fn (string $periodKey) => route($routeName, ['period' => $periodKey] + $filterQuery),
         ];

@@ -114,9 +114,9 @@
             'sortDir' => $sortDir,
             'sortUrl' => $sortUrl,
             'productActivityLink' => fn (array $query) => $activityLink(array_filter([
-            'focus' => 'products',
-            'product_code' => (string) ($query['product_code'] ?? ''),
-        ])),
+                'focus' => 'products',
+                'product_code' => (string) ($query['product_code'] ?? ''),
+            ]), ['category', 'department', 'has_order', 'sort', 'dir', 'product_code']),
     ])
     <div class="etd-product-performance-list__pager etd-print-hide">
         @include('ecom_activity.partials.pagination', [
