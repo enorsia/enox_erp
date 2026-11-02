@@ -7,6 +7,7 @@ use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class ProductPerformanceSectionService
 {
@@ -158,24 +159,54 @@ class ProductPerformanceSectionService
      */
     private function productCodesForProductListCategoryFilter(Carbon $from, Carbon $to, array $categoryIds): array
     {
-        $codes = TrackerDatabase::table('tracking_session_p_cat as sp')
-            ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
-            ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->whereIn('sp.tracking_category_id', $categoryIds)
-            ->whereBetween('dv.visit_date', [$from->toDateString(), $to->toDateString()])
-            ->distinct()
-            ->pluck('p.code');
-
+        $categoryIdSet = array_fill_keys($categoryIds, true);
         $allowed = [];
-        foreach ($codes as $code) {
-            $code = trim((string) $code);
-            if ($code !== '') {
-                $allowed[$code] = true;
+
+        $day = $from->copy()->startOfDay();
+        $end = $to->copy()->startOfDay();
+        while ($day->lte($end)) {
+            foreach ($this->primaryProductCategoryIdsByCodeForVisitDate($day->toDateString()) as $code => $categoryId) {
+                if (isset($categoryIdSet[$categoryId])) {
+                    $allowed[$code] = true;
+                }
             }
+            $day->addDay();
         }
 
         return $allowed;
+    }
+
+    /**
+     * Same attribution as TrackerDashboardSyncService::productCategoryIdsByCodeForVisitDate (primary p_cat link count).
+     *
+     * @return array<string, int> product code => tracking_category_id
+     */
+    private function primaryProductCategoryIdsByCodeForVisitDate(string $visitDate): array
+    {
+        $rows = TrackerDatabase::table('tracking_session_p_cat as sp')
+            ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
+            ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $visitDate)
+            ->whereNotNull('sp.tracking_category_id')
+            ->groupBy('p.code', 'sp.tracking_category_id')
+            ->selectRaw('p.code, sp.tracking_category_id as category_id, COUNT(*) as link_count')
+            ->get();
+
+        $best = [];
+        foreach ($rows as $row) {
+            $code = Str::limit(trim((string) $row->code), 100, '');
+            if ($code === '') {
+                continue;
+            }
+
+            $count = (int) $row->link_count;
+            if (! isset($best[$code]) || $count > $best[$code]['count']) {
+                $best[$code] = ['category_id' => (int) $row->category_id, 'count' => $count];
+            }
+        }
+
+        return array_map(fn (array $entry): int => $entry['category_id'], $best);
     }
 
     /**
