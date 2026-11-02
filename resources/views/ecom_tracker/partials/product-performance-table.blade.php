@@ -36,14 +36,14 @@
             'key' => 'paid',
             'sortKey' => 'paid',
             'label' => 'Paid',
-            'tip' => 'Total units sold in the period (sold_qty on tracking_daily_products, summed across days after dashboard sync).',
+            'tip' => 'Units sold for sessions in this period (same rules as dashboard Items sold).',
         ],
     ];
     $saleColumn = [
         'key' => 'revenue',
         'sortKey' => 'revenue',
         'label' => 'Sale',
-        'tip' => 'Sale amount (£) in the period (sale_amount on tracking_daily_products, summed across days after dashboard sync).',
+        'tip' => 'Share of order amount paid for this product (totals match dashboard Sale amount).',
     ];
     $serialOffset = isset($serialOffset) ? max(0, (int) $serialOffset) : null;
     $showSerial = $serialOffset !== null;

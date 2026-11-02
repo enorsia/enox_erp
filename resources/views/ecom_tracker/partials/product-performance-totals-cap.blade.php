@@ -7,8 +7,8 @@
         ['key' => 'add_to_cart', 'label' => 'Add', 'tip' => 'Total add-to-cart units in this view.'],
         ['key' => 'begin_checkout', 'label' => 'Begin', 'tip' => 'Total begin-checkout units in this view.'],
         ['key' => 'proceed_checkout', 'label' => 'Proceed', 'tip' => 'Total proceed-checkout units in this view.'],
-        ['key' => 'paid', 'label' => 'Paid', 'tip' => 'Total paid units in this view.'],
-        ['key' => 'revenue', 'label' => 'Sale', 'tip' => 'Total sale amount in this view.', 'sale' => true],
+        ['key' => 'paid', 'label' => 'Paid', 'tip' => 'Paid units for sessions in this period (same total as dashboard Items sold).'],
+        ['key' => 'revenue', 'label' => 'Sale', 'tip' => 'Sale amount for those orders by product (same total as dashboard Sale amount).', 'sale' => true],
     ];
 @endphp
 

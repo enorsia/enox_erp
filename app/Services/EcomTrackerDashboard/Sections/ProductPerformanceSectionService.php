@@ -73,12 +73,14 @@ class ProductPerformanceSectionService
             ->selectRaw('product_code as code')
             ->selectRaw('SUM(product_views) as views, SUM(add_to_carts) as adds, SUM(begin_checkouts) as begin_checkouts')
             ->selectRaw('SUM(proceed_checkouts) as proceed_checkouts')
-            ->selectRaw('SUM(sold_qty) as qty, SUM(sale_amount) as revenue')
             ->get()
             ->keyBy('code');
 
-        $all = $aggregated->map(function (object $row) {
+        $soldByCode = $this->orderSoldTotalsByParentCode($from, $to, $period, $sessionFilters);
+
+        $all = $aggregated->map(function (object $row) use ($soldByCode) {
             $code = (string) $row->code;
+            $sold = $soldByCode[$code] ?? ['qty' => 0, 'revenue' => 0.0];
 
             return [
                 'code' => $code,
@@ -86,10 +88,26 @@ class ProductPerformanceSectionService
                 'adds' => (int) $row->adds,
                 'begin_checkouts' => (int) ($row->begin_checkouts ?? 0),
                 'proceed_checkouts' => (int) $row->proceed_checkouts,
-                'qty' => (int) $row->qty,
-                'revenue' => round((float) $row->revenue, 2),
+                'qty' => (int) $sold['qty'],
+                'revenue' => round((float) $sold['revenue'], 2),
             ];
         });
+
+        foreach ($soldByCode as $code => $sold) {
+            if ($all->has($code)) {
+                continue;
+            }
+
+            $all->put($code, [
+                'code' => $code,
+                'views' => 0,
+                'adds' => 0,
+                'begin_checkouts' => 0,
+                'proceed_checkouts' => 0,
+                'qty' => (int) $sold['qty'],
+                'revenue' => round((float) $sold['revenue'], 2),
+            ]);
+        }
 
         $all = $this->applyProductListHasOrderFilter($all, $sessionFilters);
         $all = $this->applyProductListCategoryScope($all, $from, $to, $sessionFilters);
@@ -378,7 +396,7 @@ class ProductPerformanceSectionService
     private function productsWithSessionFilters(Carbon $from, Carbon $to, string $period, array $sessionFilters, ?int $limit = self::PRODUCT_LIMIT): array
     {
         $withOrderOnly = ($sessionFilters['has_order'] ?? null) === true;
-        $soldByCode = $this->filteredProductSoldTotalsByCode($from, $to, $period, $sessionFilters);
+        $soldByCode = $this->orderSoldTotalsByParentCode($from, $to, $period, $sessionFilters);
 
         if ($withOrderOnly && $soldByCode === []) {
             return $this->packageProductRows(collect(), $limit, $from, $to, $period, $sessionFilters);
@@ -457,36 +475,88 @@ class ProductPerformanceSectionService
     }
 
     /**
-     * Sold qty / sale amount for filtered sessions (same order lines as sync writes to tracking_daily_products).
+     * Paid units / sale amount per parent style — same session scope and order headers as dashboard Sale & conversion.
      *
      * @param  array<string, mixed>  $sessionFilters
      * @return array<string, array{qty: int, revenue: float}>
      */
-    private function filteredProductSoldTotalsByCode(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
+    private function orderSoldTotalsByParentCode(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
     {
-        [$fromBound, $toBound] = TrackerTime::storageRange($from, $to);
         $range = ['from' => $from, 'to' => $to, 'period' => $period];
 
-        $rows = TrackerDatabase::table('tracking_order_details as od')
-            ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
+        $ordersQuery = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
-            ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
-            ->whereBetween('o.ordered_at', [$fromBound, $toBound])
-            ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, 'ts'))
-            ->tap(fn ($query) => $this->activityList->constrainDashboardSessionsInRange($query, $range, $sessionFilters))
-            ->groupBy('p.code')
-            ->selectRaw('p.code as product_code, SUM(od.qty) as qty, SUM(od.line_total) as revenue')
-            ->get();
+            ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope($query, $from, $to, $period, 'ts'));
 
-        $map = [];
-        foreach ($rows as $row) {
-            $map[(string) $row->product_code] = [
-                'qty' => (int) $row->qty,
-                'revenue' => round((float) $row->revenue, 2),
-            ];
+        if ($sessionFilters !== []) {
+            $ordersQuery->tap(fn ($query) => $this->activityList->constrainDashboardSessionsInRange($query, $range, $sessionFilters));
         }
 
-        return $map;
+        $orders = $ordersQuery->get(['o.id', 'o.amount_paid']);
+
+        if ($orders->isEmpty()) {
+            return [];
+        }
+
+        $details = TrackerDatabase::table('tracking_order_details as od')
+            ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
+            ->whereIn('od.tracking_order_id', $orders->pluck('id'))
+            ->get(['od.tracking_order_id', 'p.code as product_code', 'od.qty', 'od.line_total']);
+
+        $linesByOrder = [];
+        foreach ($details as $line) {
+            $linesByOrder[(int) $line->tracking_order_id][] = $line;
+        }
+
+        $totals = [];
+        foreach ($orders as $order) {
+            $orderId = (int) $order->id;
+            $lines = $linesByOrder[$orderId] ?? [];
+            if ($lines === []) {
+                continue;
+            }
+
+            $amountPaid = (float) $order->amount_paid;
+            $weightSum = 0.0;
+            foreach ($lines as $line) {
+                $weight = (float) $line->line_total;
+                if ($weight <= 0) {
+                    $weight = (float) max(1, (int) $line->qty);
+                }
+                $weightSum += $weight;
+            }
+
+            if ($weightSum <= 0) {
+                $weightSum = (float) count($lines);
+            }
+
+            foreach ($lines as $line) {
+                $code = trim((string) $line->product_code);
+                if ($code === '') {
+                    continue;
+                }
+
+                $weight = (float) $line->line_total;
+                if ($weight <= 0) {
+                    $weight = (float) max(1, (int) $line->qty);
+                }
+                if ($weightSum <= 0) {
+                    $weight = 1.0;
+                    $weightSum = (float) count($lines);
+                }
+
+                $share = $amountPaid * ($weight / $weightSum);
+                $totals[$code] ??= ['qty' => 0, 'revenue' => 0.0];
+                $totals[$code]['qty'] += (int) $line->qty;
+                $totals[$code]['revenue'] += $share;
+            }
+        }
+
+        foreach ($totals as $code => $row) {
+            $totals[$code]['revenue'] = round((float) $row['revenue'], 2);
+        }
+
+        return $totals;
     }
 
 }
