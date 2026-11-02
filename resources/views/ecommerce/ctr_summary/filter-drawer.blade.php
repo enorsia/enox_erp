@@ -49,7 +49,7 @@
     <form method="GET" action="{{ $data['filterFormAction'] ?? route('admin.ecommerce.ctr-summary.index') }}" class="etd-filter-panel__form">
         <input type="hidden" name="sort" value="{{ $sortBy }}">
         <input type="hidden" name="dir" value="{{ $sortDir }}">
-        <input type="hidden" name="period" value="{{ $data['period'] ?? '24h' }}">
+        <input type="hidden" name="period" value="{{ $data['period'] ?? \App\Http\Controllers\EcommerceCtrSummaryController::DEFAULT_PERIOD }}">
         @if (($data['period'] ?? '') === 'custom')
             <input type="hidden" name="date_from" value="{{ $data['dateFrom'] ?? '' }}">
             <input type="hidden" name="date_to" value="{{ $data['dateTo'] ?? '' }}">

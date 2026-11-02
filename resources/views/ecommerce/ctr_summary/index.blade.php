@@ -12,23 +12,17 @@
         ];
         $soldMetricGroups = [
             [
-                'amount_key' => 'sales_window_sale',
-                'amount_label' => ((int) ($salesWindowDays ?? 7)).' days sold',
-                'qty_key' => 'sales_window_qty',
-            ],
-            [
                 'amount_key' => 'total_sold',
                 'amount_label' => 'Total sold',
                 'qty_key' => 'total_qty',
             ],
         ];
-        $soldWindowDays = (int) ($salesWindowDays ?? 7);
+        $defaultPeriod = \App\Http\Controllers\EcommerceCtrSummaryController::DEFAULT_PERIOD;
         $metricColumnTips = [
             'click' => 'Total product clicks on the category grid in the selected date range. Every click is counted (not unique visitors or sessions).',
             'impression' => 'How many times this product tile was counted in view on category listing pages in the selected date range (in viewport on the grid, not product detail views).',
             'ctr' => 'Click divided by impression for this row in the selected date range. The value is a ratio, not a formatted percent: multiply by 100 for % (0.05 = 5%). Zero when there are no impressions.',
             'ctr_average' => 'Category rollup CTR for this product placement (store CTR lookback). Shown as a ratio like CTR; multiply by 100 for % (0.05 = 5%). This table uses the highest daily value across days in your filter.',
-            'sales_window_sale' => "Units sold → sale amount in the rolling last {$soldWindowDays} days (Enorsia and marketplaces). Shown as QTY → amount. Independent of the CTR date filter above.",
             'total_sold' => 'Units sold → sale amount for orders in the CTR period above. Shown as QTY → amount.',
         ];
         $sortUrl = function (string $column) use ($sortBy, $sortDir, $data): string {
@@ -51,14 +45,9 @@
         ));
         $hasCatalogFilters = $departmentQuery !== [] || $categoryQuery !== [];
         $filtersActive = $search !== '' || $hasCatalogFilters || $sortBy !== 'ctr' || $sortDir !== 'desc'
-            || ($data['period'] ?? '24h') !== '24h';
-        $ctrPeriodLabel = match ($data['period'] ?? '24h') {
-            'yesterday' => 'Yesterday',
-            '7d' => 'Last 7 days',
-            '30d' => 'Last 30 days',
-            'custom' => 'Custom range',
-            default => 'Today',
-        };
+            || ($data['period'] ?? $defaultPeriod) !== $defaultPeriod;
+        $ctrPeriodLabel = $data['periodLabel'] ?? 'Last 7 days';
+        $activePeriod = $data['period'] ?? $defaultPeriod;
         $ctrProductTotal = (int) $summaries->total();
     @endphp
 
@@ -96,16 +85,16 @@
                                 <span class="etd-segmented-btn etd-date-nav-btn is-disabled" aria-disabled="true" aria-label="Previous period"><svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 19l-7-7 7-7"/></svg></span>
                             @endif
                             <div class="etd-segmented etd-segmented--compact" role="group" aria-label="Date range">
-                                @foreach (['24h' => 'Today', 'yesterday' => 'Yesterday', '7d' => '7d', '30d' => '30d'] as $periodKey => $periodLabel)
+                                @foreach ($data['periodPresets'] ?? \App\Http\Controllers\EcommerceCtrSummaryController::PERIOD_PRESETS as $periodKey => $periodLabel)
                                     <a href="{{ ($data['periodPresetUrl'] ?? fn (string $key) => route('admin.ecommerce.ctr-summary.index', ['period' => $key]))($periodKey) }}"
-                                       class="etd-segmented-btn {{ ($data['period'] ?? '24h') === $periodKey ? 'active' : '' }} no-underline">{{ $periodLabel }}</a>
+                                       class="etd-segmented-btn {{ $activePeriod === $periodKey ? 'active' : '' }} no-underline">{{ $periodLabel }}</a>
                                 @endforeach
                                 <button type="button"
-                                        class="etd-segmented-btn js-ecom-dashboard-period-custom-toggle {{ ($data['period'] ?? '24h') === 'custom' ? 'active' : '' }}"
+                                        class="etd-segmented-btn js-ecom-dashboard-period-custom-toggle {{ $activePeriod === 'custom' ? 'active' : '' }}"
                                         aria-label="Custom date range">Custom</button>
                             </div>
                             <div id="ecom-dashboard-header-custom-dates"
-                                 class="etd-custom-dates etd-custom-dates--header @if(($data['period'] ?? '24h') !== 'custom') etd-custom-dates--closed @endif"
+                                 class="etd-custom-dates etd-custom-dates--header @if($activePeriod !== 'custom') etd-custom-dates--closed @endif"
                                  data-etd-date-range-single>
                                 <input type="text"
                                        class="etd-flatpickr-date-range f-input etd-date-input etd-date-input--range"
@@ -242,7 +231,7 @@
                             </tr>
                         @empty
                             <tr class="etd-ctr-summary-empty">
-                                <td colspan="9" class="py-10 text-center text-slate-500 dark:text-slate-400">
+                                <td colspan="8" class="py-10 text-center text-slate-500 dark:text-slate-400">
                                     No CTR summary rows match your filters.
                                 </td>
                             </tr>
