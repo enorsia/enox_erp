@@ -17,10 +17,12 @@ class ProcessTrackingCtrBatchJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
-     * @param  array<int, int>  $actionIds
+     * @param  array<int, int>  $categoryImpressionIds
      */
     public function __construct(
-        public readonly array $actionIds,
+        public readonly array $categoryImpressionIds = [],
+        public readonly int $ctrRollupDays = 90,
+        public readonly int $minClicks = 1,
     ) {
         $this->onConnection(TrackerQueueSupport::connection());
         $this->onQueue(TrackerQueueSupport::queue());
@@ -29,14 +31,21 @@ class ProcessTrackingCtrBatchJob implements ShouldQueue
     public function handle(TrackingCtrRollupService $rollupService): void
     {
         try {
-            $result = $rollupService->processActionIds($this->actionIds);
+            $impressionResult = ['processed' => 0, 'skipped' => 0];
+
+            if ($this->categoryImpressionIds !== []) {
+                $impressionResult = $rollupService->processCategoryImpressionIds(
+                    $this->categoryImpressionIds,
+                    $this->ctrRollupDays,
+                    $this->minClicks,
+                );
+            }
 
             try {
                 Log::info('CTR:tracking batch completed', [
-                    'action_ids' => $this->actionIds,
-                    'processed' => $result['processed'],
-                    'skipped' => $result['skipped'],
-                    'skip_samples' => $result['skip_samples'] ?? [],
+                    'category_impression_ids' => $this->categoryImpressionIds,
+                    'category_impressions_processed' => $impressionResult['processed'],
+                    'category_impressions_skipped' => $impressionResult['skipped'],
                 ]);
             } catch (Throwable) {
                 // Rollup already committed; do not fail the job when storage/logs is not writable.
@@ -44,7 +53,7 @@ class ProcessTrackingCtrBatchJob implements ShouldQueue
         } catch (Throwable $exception) {
             try {
                 Log::error('CTR:tracking job failed', [
-                    'action_ids' => $this->actionIds,
+                    'category_impression_ids' => $this->categoryImpressionIds,
                     'error' => $exception->getMessage(),
                 ]);
             } catch (Throwable) {

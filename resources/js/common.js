@@ -165,14 +165,27 @@ $(document).on('change', '.image-input', function () {
 ══════════════════════════════════════ */
 window.initTomSelectElements = function (root) {
     const scope = root && root.querySelectorAll ? root : document;
-    const elements = root && root.matches && root.matches('.tom-select')
-        ? [root, ...scope.querySelectorAll('.tom-select')]
-        : scope.querySelectorAll('.tom-select');
+    const selector = 'select.tom-select';
+    const elements = root && root.matches && root.matches(selector)
+        ? [root, ...scope.querySelectorAll(selector)]
+        : scope.querySelectorAll(selector);
 
     if (typeof TomSelect === 'undefined') return;
 
     elements.forEach(element => {
-        if (element.tomselect) return;
+        if (element.tomselect || !(element instanceof HTMLSelectElement)) return;
+
+        const optionElements = element.options ? Array.from(element.options) : [];
+
+        optionElements.forEach((option) => {
+            const label = option.textContent?.trim() ?? option.label?.trim() ?? '';
+
+            if (label === '' && option.value !== '') {
+                option.text = option.value;
+            } else if (label === '') {
+                option.text = '\u00a0';
+            }
+        });
 
         const options = {
             create: false,
@@ -187,6 +200,16 @@ window.initTomSelectElements = function (root) {
             options.plugins = ['remove_button'];
             options.persist = false;
             options.hidePlaceholder = true;
+
+            if (element.dataset.etdFilterAllValue || element.dataset.clearable === 'true') {
+                options.plugins.push('clear_button');
+            }
+        }
+
+        if (element.dataset.etdFilterAllValue) {
+            options.closeAfterSelect = false;
+            options.hideSelected = false;
+            options.dropdownParent = 'body';
         }
 
         if (element.dataset.dropdownParent === 'body') {
@@ -216,14 +239,31 @@ window.refreshTomSelectIn = function (root) {
     window.initTomSelectElements(root);
 
     const scope = root && root.querySelectorAll ? root : document;
-    scope.querySelectorAll('.tom-select').forEach((element) => {
-        if (element.tomselect) {
-            if (element.multiple) {
-                element.tomselect.settings.hidePlaceholder = true;
-                element.tomselect.inputState();
-            }
+    scope.querySelectorAll('select.tom-select').forEach((element) => {
+        if (!(element instanceof HTMLSelectElement) || !element.tomselect) {
+            return;
+        }
 
+        if (element.multiple) {
+            element.tomselect.settings.hidePlaceholder = true;
+        }
+
+        if (typeof window.patchEtdFilterTomSelect === 'function') {
+            window.patchEtdFilterTomSelect(element);
+        } else if (element.multiple) {
+            element.tomselect.inputState();
+        }
+
+        const isEtdCatalogFilter = element.multiple && element.dataset.etdFilterAllValue;
+
+        if (isEtdCatalogFilter) {
+            return;
+        }
+
+        try {
             element.tomselect.sync();
+        } catch {
+            // Native options were rebuilt; Tom Select will recover on next user interaction.
         }
     });
 };
