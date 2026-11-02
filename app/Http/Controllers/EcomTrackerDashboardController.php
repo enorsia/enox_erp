@@ -58,6 +58,7 @@ class EcomTrackerDashboardController extends Controller
     public function products(
         Request $request,
         EcomTrackerDashboardService $dashboardService,
+        EcomActivityListService $activityList,
     ): View {
         Gate::authorize('ecom_tracker.dashboard.index');
 
@@ -106,7 +107,14 @@ class EcomTrackerDashboardController extends Controller
             ? route('admin.ecom-tracker.dashboard.products.export', $exportQuery)
             : null;
 
-        return view('ecom_tracker.products', compact('data', 'products', 'paginator'));
+        $catalogFilterUi = $activityList->productListCatalogFilterUi(
+            $request,
+            $period,
+            $range['from'],
+            $range['to'],
+        );
+
+        return view('ecom_tracker.products', compact('data', 'products', 'paginator', 'catalogFilterUi'));
     }
 
     public function exportProducts(

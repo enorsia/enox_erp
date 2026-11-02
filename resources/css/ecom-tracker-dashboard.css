@@ -180,6 +180,12 @@
     gap: 0.35rem;
 }
 
+.etd-page--product-performance-list .etd-page-header {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
 .etd-filter-compact-field {
     display: flex;
     flex-direction: column;

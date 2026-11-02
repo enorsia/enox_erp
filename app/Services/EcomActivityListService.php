@@ -424,7 +424,71 @@ class EcomActivityListService
             $params['category'] = $categoryIds;
         }
 
+        $departmentId = $request->integer('department');
+        if ($departmentId > 0) {
+            $params['department'] = $departmentId;
+        }
+
         return $params;
+    }
+
+    /**
+     * Product performance list: active category filter chip (department -> category).
+     *
+     * @return array{chips: list<array{label: string, remove_url: string}>}
+     */
+    public function productListCatalogFilterUi(Request $request, string $period, Carbon $from, Carbon $to): array
+    {
+        $categoryIds = array_values(array_filter(
+            array_map('intval', (array) $request->query('category', [])),
+            fn (int $id) => $id > 0,
+        ));
+
+        if ($categoryIds === []) {
+            return ['chips' => []];
+        }
+
+        $departmentId = $request->integer('department') ?: null;
+        $filterOptions = $this->filterOptions($departmentId);
+
+        $baseQuery = array_filter([
+            'period' => $period,
+            'date_from' => $period === 'custom' ? $from->toDateString() : null,
+            'date_to' => $period === 'custom' ? $to->toDateString() : null,
+            'back' => is_string($request->query('back')) ? $request->query('back') : null,
+            'product_code' => trim((string) $request->query('product_code', '')) ?: null,
+            'has_order' => in_array($request->query('has_order'), ['0', '1'], true) ? $request->query('has_order') : null,
+            'department' => $departmentId ?: null,
+        ]);
+
+        $chips = [];
+
+        foreach ($categoryIds as $categoryId) {
+            $meta = TrackerDatabase::table('tracking_category as c')
+                ->leftJoin('tracking_category as d', 'd.id', '=', 'c.parent_id')
+                ->where('c.id', $categoryId)
+                ->first(['c.name as category_name', 'd.name as department_name']);
+
+            $categoryName = (string) ($meta->category_name ?? $filterOptions['categories'][$categoryId] ?? $categoryId);
+            $departmentName = TrackerCategoryIdentity::formatDepartmentDisplayName($meta->department_name ?? '') ?: 'Other';
+
+            $remaining = array_values(array_filter($categoryIds, fn (int $id) => $id !== $categoryId));
+            $query = $baseQuery;
+            if ($remaining !== []) {
+                $query['category'] = $remaining;
+            } else {
+                unset($query['department']);
+            }
+
+            $chips[] = [
+                'department' => $departmentName,
+                'category' => $categoryName,
+                'label' => $departmentName.' -> '.$categoryName,
+                'remove_url' => route('admin.ecom-tracker.dashboard.products', $query),
+            ];
+        }
+
+        return ['chips' => $chips];
     }
 
     /**

@@ -88,6 +88,9 @@
             </div>
         </div>
     </div>
+    @include('ecom_tracker.partials.product-list-catalog-filter', [
+        'catalogFilterUi' => $catalogFilterUi ?? ['chips' => []],
+    ])
 </header>
 
 <div class="etd-panel etd-print-unit etd-product-performance-list" id="products-all">
