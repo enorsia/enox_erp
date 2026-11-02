@@ -8080,6 +8080,20 @@ a.etd-pager__btn:hover {
     table-layout: fixed;
 }
 
+.etd-table--ctr-summary thead th,
+.etd-table--ctr-summary tbody td {
+    text-align: left !important;
+}
+
+.etd-table--ctr-summary thead th.etd-ctr-summary-col--num,
+.etd-table--ctr-summary tbody td.etd-ctr-summary-col--num,
+.etd-table--ctr-summary th.etd-ctr-summary-col--sold,
+.etd-table--ctr-summary td.etd-ctr-summary-col--sold {
+    text-align: left !important;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
 .etd-table--ctr-summary th:nth-child(1),
 .etd-table--ctr-summary td:nth-child(1) {
     width: 7.5rem;

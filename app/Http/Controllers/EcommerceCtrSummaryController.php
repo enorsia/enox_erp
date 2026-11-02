@@ -736,7 +736,7 @@ class EcommerceCtrSummaryController extends Controller
     }
 
     /**
-     * @param  array<string, array{sales_window_sale: float, total_sale: float}>  $salesByProductCode
+     * @param  array<string, array{sales_window_sale: float, total_sale: float, sales_window_qty: int, total_qty: int}>  $salesByProductCode
      * @return array<string, mixed>
      */
     private function mapRowWithSales(object $row, array $salesByProductCode): array
@@ -745,13 +745,15 @@ class EcommerceCtrSummaryController extends Controller
         $sales = $salesByProductCode[$mapped['product_code']] ?? null;
         $mapped['sales_window_sale'] = round((float) ($sales['sales_window_sale'] ?? 0), 2);
         $mapped['total_sold'] = round((float) ($sales['total_sale'] ?? 0), 2);
+        $mapped['sales_window_qty'] = (int) ($sales['sales_window_qty'] ?? 0);
+        $mapped['total_qty'] = (int) ($sales['total_qty'] ?? 0);
 
         return $mapped;
     }
 
     /**
      * @param  list<string>  $productCodes
-     * @return array{0: array<string, array{sales_window_sale: float, total_sale: float}>, 1: int}
+     * @return array{0: array<string, array{sales_window_sale: float, total_sale: float, sales_window_qty: int, total_qty: int}>, 1: int}
      */
     private function fetchSalesByProductCode(
         array $productCodes,
@@ -845,6 +847,8 @@ class EcommerceCtrSummaryController extends Controller
                     $salesByProductCode[$code] = [
                         'sales_window_sale' => (float) ($item['sales_window_sale'] ?? 0),
                         'total_sale' => (float) ($item['total_sale'] ?? 0),
+                        'sales_window_qty' => (int) ($item['sales_window_qty'] ?? 0),
+                        'total_qty' => (int) ($item['total_qty'] ?? 0),
                     ];
                 }
             }

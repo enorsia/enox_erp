@@ -5,14 +5,22 @@
 @section('content')
     @php
         $sortableColumns = [
-            'click' => 'Click',
-            'impression' => 'Impression',
             'ctr' => 'CTR',
             'ctr_average' => 'CTR average',
+            'click' => 'Click',
+            'impression' => 'Impression',
         ];
-        $soldMetricColumns = [
-            'sales_window_sale' => ((int) ($salesWindowDays ?? 7)).' days sold',
-            'total_sold' => 'Total sold',
+        $soldMetricGroups = [
+            [
+                'amount_key' => 'sales_window_sale',
+                'amount_label' => ((int) ($salesWindowDays ?? 7)).' days sold',
+                'qty_key' => 'sales_window_qty',
+            ],
+            [
+                'amount_key' => 'total_sold',
+                'amount_label' => 'Total sold',
+                'qty_key' => 'total_qty',
+            ],
         ];
         $soldWindowDays = (int) ($salesWindowDays ?? 7);
         $metricColumnTips = [
@@ -20,8 +28,8 @@
             'impression' => 'How many times this product tile was counted in view on category listing pages in the selected date range (in viewport on the grid, not product detail views).',
             'ctr' => 'Click divided by impression for this row in the selected date range. The value is a ratio, not a formatted percent: multiply by 100 for % (0.05 = 5%). Zero when there are no impressions.',
             'ctr_average' => 'Category rollup CTR for this product placement (store CTR lookback). Shown as a ratio like CTR; multiply by 100 for % (0.05 = 5%). This table uses the highest daily value across days in your filter.',
-            'sales_window_sale' => "Gross sale amount (Enorsia and marketplace channels) in the rolling last {$soldWindowDays} days from store settings. Independent of the CTR date filter above.",
-            'total_sold' => 'Gross sale amount (Enorsia and marketplace channels) for orders dated within the same range as the CTR period selector above.',
+            'sales_window_sale' => "Units sold → sale amount in the rolling last {$soldWindowDays} days (Enorsia and marketplaces). Shown as QTY → amount. Independent of the CTR date filter above.",
+            'total_sold' => 'Units sold → sale amount for orders in the CTR period above. Shown as QTY → amount.',
         ];
         $sortUrl = function (string $column) use ($sortBy, $sortDir, $data): string {
             $nextDir = ($sortBy === $column && $sortDir === 'desc') ? 'asc' : 'desc';
@@ -158,12 +166,12 @@
                                 @php
                                     $isActiveSort = $sortBy === $sortKey;
                                 @endphp
-                                <th class="whitespace-nowrap etd-num">
-                                    <span class="inline-flex items-center justify-end gap-0.5 w-full min-w-0">
+                                <th class="whitespace-nowrap etd-ctr-summary-col--num">
+                                    <span class="inline-flex items-center justify-start gap-0.5 w-full min-w-0">
                                         @include('ecom_tracker.partials.column-header-with-tip', [
                                             'label' => $sortLabel,
                                             'tip' => $metricColumnTips[$sortKey] ?? '',
-                                            'align' => 'right',
+                                            'align' => 'left',
                                             'iconBefore' => true,
                                         ])
                                         <a href="{{ $sortUrl($sortKey) }}"
@@ -187,12 +195,15 @@
                                     </span>
                                 </th>
                             @endforeach
-                            @foreach ($soldMetricColumns as $columnKey => $columnLabel)
-                                <th class="whitespace-nowrap etd-num text-slate-500 dark:text-slate-400">
+                            @foreach ($soldMetricGroups as $soldGroup)
+                                @php
+                                    $amountKey = $soldGroup['amount_key'];
+                                @endphp
+                                <th class="whitespace-nowrap etd-ctr-summary-col--sold text-slate-500 dark:text-slate-400">
                                     @include('ecom_tracker.partials.column-header-with-tip', [
-                                        'label' => $columnLabel,
-                                        'tip' => $metricColumnTips[$columnKey] ?? '',
-                                        'align' => 'right',
+                                        'label' => $soldGroup['amount_label'],
+                                        'tip' => $metricColumnTips[$amountKey] ?? '',
+                                        'align' => 'left',
                                         'iconBefore' => true,
                                     ])
                                 </th>
@@ -213,10 +224,20 @@
                                             default => $row[$metricKey] ?? '',
                                         };
                                     @endphp
-                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-num text-right tabular-nums" data-label="{{ $metricLabel }}">{{ $metricValue }}</td>
+                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums" data-label="{{ $metricLabel }}">{{ $metricValue }}</td>
                                 @endforeach
-                                @foreach ($soldMetricColumns as $columnKey => $columnLabel)
-                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-num text-right tabular-nums" data-label="{{ $columnLabel }}">{{ number_format((float) ($row[$columnKey] ?? 0), 2, '.', ',') }}</td>
+                                @foreach ($soldMetricGroups as $soldGroup)
+                                    @php
+                                        $soldAmount = number_format((float) ($row[$soldGroup['amount_key']] ?? 0), 2, '.', ',');
+                                        $soldQty = number_format((int) ($row[$soldGroup['qty_key']] ?? 0));
+                                    @endphp
+                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums" data-label="{{ $soldGroup['amount_label'] }}">
+                                        <span class="inline-flex items-center justify-start gap-1.5 w-full min-w-0">
+                                            <span>{{ $soldQty }}</span>
+                                            <span class="text-slate-400 dark:text-slate-500 shrink-0" aria-hidden="true">→</span>
+                                            <span>{{ $soldAmount }}</span>
+                                        </span>
+                                    </td>
                                 @endforeach
                             </tr>
                         @empty
