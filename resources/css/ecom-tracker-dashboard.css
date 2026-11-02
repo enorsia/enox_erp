@@ -8082,14 +8082,21 @@ a.etd-pager__btn:hover {
 
 .etd-table--ctr-summary thead th,
 .etd-table--ctr-summary tbody td {
+    text-align: left;
+}
+
+.etd-table--ctr-summary th.etd-ctr-summary-col--label,
+.etd-table--ctr-summary td.etd-ctr-summary-col--label {
     text-align: left !important;
 }
 
-.etd-table--ctr-summary thead th.etd-ctr-summary-col--num,
-.etd-table--ctr-summary tbody td.etd-ctr-summary-col--num,
-.etd-table--ctr-summary th.etd-ctr-summary-col--sold,
-.etd-table--ctr-summary td.etd-ctr-summary-col--sold {
-    text-align: left !important;
+.etd-ctr-summary-list .etd-table.etd-table--ctr-summary thead th.etd-ctr-summary-col--num,
+.etd-ctr-summary-list .etd-table.etd-table--ctr-summary tbody td.etd-ctr-summary-col--num,
+.etd-ctr-summary-list .etd-table.etd-table--ctr-summary thead th.etd-ctr-summary-col--sold,
+.etd-ctr-summary-list .etd-table.etd-table--ctr-summary tbody td.etd-ctr-summary-col--sold,
+.etd-ctr-summary-list .etd-table.etd-table--ctr-summary thead th:nth-child(n + 4),
+.etd-ctr-summary-list .etd-table.etd-table--ctr-summary tbody td:nth-child(n + 4) {
+    text-align: center !important;
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
 }

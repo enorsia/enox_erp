@@ -5,10 +5,10 @@
 @section('content')
     @php
         $sortableColumns = [
+            'impression' => 'Impression',
+            'click' => 'Click',
             'ctr' => 'CTR',
             'ctr_average' => 'CTR average',
-            'click' => 'Click',
-            'impression' => 'Impression',
         ];
         $soldMetricGroups = [
             [
@@ -156,22 +156,22 @@
 
         <div class="etd-panel etd-print-unit etd-ctr-summary-list">
             <div class="etd-ctr-summary-table-scroll overflow-x-auto" tabindex="0" role="region" aria-label="CTR summary table">
-                <table class="etd-table etd-table--ctr-summary w-full text-[13px] text-left border-collapse">
+                <table class="etd-table etd-table--ctr-summary w-full text-[13px] border-collapse">
                     <thead>
                         <tr>
-                            <th class="whitespace-nowrap">Department</th>
-                            <th class="whitespace-nowrap">Category</th>
-                            <th class="whitespace-nowrap">Product code</th>
+                            <th class="whitespace-nowrap etd-ctr-summary-col--label">Department</th>
+                            <th class="whitespace-nowrap etd-ctr-summary-col--label">Category</th>
+                            <th class="whitespace-nowrap etd-ctr-summary-col--label">Product code</th>
                             @foreach ($sortableColumns as $sortKey => $sortLabel)
                                 @php
                                     $isActiveSort = $sortBy === $sortKey;
                                 @endphp
                                 <th class="whitespace-nowrap etd-ctr-summary-col--num">
-                                    <span class="inline-flex items-center justify-start gap-0.5 w-full min-w-0">
+                                    <span class="inline-flex items-center justify-center gap-0.5 w-full min-w-0">
                                         @include('ecom_tracker.partials.column-header-with-tip', [
                                             'label' => $sortLabel,
                                             'tip' => $metricColumnTips[$sortKey] ?? '',
-                                            'align' => 'left',
+                                            'align' => 'center',
                                             'iconBefore' => true,
                                         ])
                                         <a href="{{ $sortUrl($sortKey) }}"
@@ -203,7 +203,7 @@
                                     @include('ecom_tracker.partials.column-header-with-tip', [
                                         'label' => $soldGroup['amount_label'],
                                         'tip' => $metricColumnTips[$amountKey] ?? '',
-                                        'align' => 'left',
+                                        'align' => 'center',
                                         'iconBefore' => true,
                                     ])
                                 </th>
@@ -213,9 +213,9 @@
                     <tbody>
                         @forelse ($summaries as $row)
                             <tr class="etd-ctr-summary-row">
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--dept" data-label="Department">{{ $row['department'] }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--category" data-label="Category">{{ $row['category_display'] }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--product font-mono text-[12px]" data-label="Product code">{{ $row['product_code'] }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label etd-ctr-summary-col--dept" data-label="Department">{{ $row['department'] }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label etd-ctr-summary-col--category" data-label="Category">{{ $row['category_display'] }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label etd-ctr-summary-col--product font-mono text-[12px]" data-label="Product code">{{ $row['product_code'] }}</td>
                                 @foreach ($sortableColumns as $metricKey => $metricLabel)
                                     @php
                                         $metricValue = match ($metricKey) {
@@ -224,15 +224,15 @@
                                             default => $row[$metricKey] ?? '',
                                         };
                                     @endphp
-                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums" data-label="{{ $metricLabel }}">{{ $metricValue }}</td>
+                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums !text-center" data-label="{{ $metricLabel }}">{{ $metricValue }}</td>
                                 @endforeach
                                 @foreach ($soldMetricGroups as $soldGroup)
                                     @php
                                         $soldAmount = number_format((float) ($row[$soldGroup['amount_key']] ?? 0), 2, '.', ',');
                                         $soldQty = number_format((int) ($row[$soldGroup['qty_key']] ?? 0));
                                     @endphp
-                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums" data-label="{{ $soldGroup['amount_label'] }}">
-                                        <span class="inline-flex items-center justify-start gap-1.5 w-full min-w-0">
+                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums !text-center" data-label="{{ $soldGroup['amount_label'] }}">
+                                        <span class="inline-flex items-center justify-center gap-1.5 w-full min-w-0">
                                             <span>{{ $soldQty }}</span>
                                             <span class="text-slate-400 dark:text-slate-500 shrink-0" aria-hidden="true">→</span>
                                             <span>{{ $soldAmount }}</span>
