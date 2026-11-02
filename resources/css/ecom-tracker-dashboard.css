@@ -8101,6 +8101,16 @@ a.etd-pager__btn:hover {
     font-variant-numeric: tabular-nums;
 }
 
+.etd-page--ctr-summary-index .etd-ctr-summary-list .etd-table.etd-table--ctr-summary thead th.etd-ctr-summary-col--sold,
+.etd-page--ctr-summary-index .etd-ctr-summary-list .etd-table.etd-table--ctr-summary tbody td.etd-ctr-summary-col--sold {
+    text-align: left !important;
+}
+
+.etd-page--ctr-summary-index .etd-ctr-summary-list .etd-table.etd-table--ctr-summary thead th.etd-ctr-summary-col--sold-header .etd-th-with-tip {
+    justify-content: flex-start;
+    width: 100%;
+}
+
 .etd-table--ctr-summary th:nth-child(1),
 .etd-table--ctr-summary td:nth-child(1) {
     width: 7.5rem;
