@@ -7,6 +7,13 @@
     $categoryTotals = $dashboard['categories']['totals'];
     $productTotals = $dashboard['products']['totals'];
     $products = $dashboard['products']['rows'];
+    $categoryProductsLink = fn (array $category): string => route('admin.ecom-tracker.dashboard.products', array_filter([
+        'period' => $data['period'],
+        'date_from' => $data['period'] === 'custom' ? $data['dateFrom'] : null,
+        'date_to' => $data['period'] === 'custom' ? $data['dateTo'] : null,
+        'back' => request()->fullUrl(),
+        'category' => array_values(array_filter([(int) ($category['category_id'] ?? 0)], fn (int $id) => $id > 0)),
+    ]));
 @endphp
 
 @section('content')
@@ -153,10 +160,7 @@
                 @include('ecom_tracker.partials.category-performance-table', [
                     'departments' => $dashboard['categories']['departments'],
                     'showCurrency' => true,
-                    'categoryActivityLink' => fn (array $category) => $activityLink([
-                        'department' => $category['department_id'],
-                        'category' => $category['category_id'],
-                    ]),
+                    'categoryActivityLink' => fn (array $category) => $categoryProductsLink($category),
                 ])
             </div>
         </div>

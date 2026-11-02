@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Str;
+
 class TrackerCategoryIdentity
 {
     /**
@@ -32,6 +34,10 @@ class TrackerCategoryIdentity
      */
     public const DEPARTMENTS = ['Men', 'Women', 'Boys', 'Girls'];
 
+    public const NO_DEPARTMENT_STORED_LABEL = '(no department)';
+
+    public const NO_DEPARTMENT_DISPLAY_LABEL = 'Custom Link';
+
     public static function normalizeDepartmentName(string $departmentName): string
     {
         $departmentName = trim($departmentName);
@@ -47,6 +53,20 @@ class TrackerCategoryIdentity
         }
 
         return $departmentName;
+    }
+
+    public static function formatDepartmentDisplayName(mixed $departmentName): string
+    {
+        $name = trim((string) ($departmentName ?? ''));
+        if ($name === '') {
+            return '';
+        }
+
+        if (strcasecmp($name, self::NO_DEPARTMENT_STORED_LABEL) === 0) {
+            return self::NO_DEPARTMENT_DISPLAY_LABEL;
+        }
+
+        return $name;
     }
 
     public static function departmentNameFromPageUrl(?string $pageUrl): string
@@ -491,5 +511,46 @@ class TrackerCategoryIdentity
                 array_flip($departments),
             ),
         ];
+    }
+
+    /**
+     * One primary tracking category per product for a visit day.
+     * Highest tracking_session_p_cat link count wins. Equal counts keep the lower category id
+     * so sync and the product list always pick the same category.
+     *
+     * @return array<string, int> product code => tracking_category_id
+     */
+    public static function primaryCategoryIdByProductCodeForVisitDate(string $visitDate): array
+    {
+        $rows = TrackerDatabase::table('tracking_session_p_cat as sp')
+            ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
+            ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $visitDate)
+            ->whereNotNull('sp.tracking_category_id')
+            ->groupBy('p.code', 'sp.tracking_category_id')
+            ->orderBy('p.code')
+            ->orderBy('sp.tracking_category_id')
+            ->selectRaw('p.code, sp.tracking_category_id as category_id, COUNT(*) as link_count')
+            ->get();
+
+        $best = [];
+        foreach ($rows as $row) {
+            $code = Str::limit(trim((string) $row->code), 100, '');
+            if ($code === '') {
+                continue;
+            }
+
+            $categoryId = (int) $row->category_id;
+            $count = (int) $row->link_count;
+            $current = $best[$code] ?? null;
+            if ($current === null
+                || $count > $current['count']
+                || ($count === $current['count'] && $categoryId < $current['category_id'])) {
+                $best[$code] = ['category_id' => $categoryId, 'count' => $count];
+            }
+        }
+
+        return array_map(fn (array $entry): int => $entry['category_id'], $best);
     }
 }

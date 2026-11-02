@@ -977,6 +977,10 @@ function bootDashboardPage() {
     initDashboardPeriodControls(page);
     initDashboardSyncButton(page);
 
+    if (page.classList.contains('etd-page--product-performance-list')) {
+        return;
+    }
+
     const charts = dashboardChartData();
     initDashboardTrendChart(charts.trend);
     initDashboardNewReturningChart(charts.new_returning);

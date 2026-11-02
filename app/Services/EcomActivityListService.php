@@ -8,9 +8,11 @@ use App\Models\ActivityEcomUserAction;
 use App\Models\TrackingCategory;
 use App\Models\TrackingDailyDuration;
 use App\Models\TrackingSession;
+use App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService;
 use App\Support\CheckoutPayloadTotals;
 use App\Support\CommercePricingExtractor;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerTime;
@@ -121,7 +123,9 @@ class EcomActivityListService
             'browsers' => $lookups->get('browser', collect())->pluck('name', 'id')->all(),
             'utmSources' => $sources->pluck('name', 'id')->all(),
             'utmMediums' => $utmMediums,
-            'departments' => $categories->whereNull('parent_id')->pluck('name', 'id')->all(),
+            'departments' => collect($categories->whereNull('parent_id')->pluck('name', 'id'))
+                ->map(fn (string $name) => TrackerCategoryIdentity::formatDepartmentDisplayName($name))
+                ->all(),
             'categories' => $departmentId ? $categories->where('parent_id', $departmentId)->pluck('name', 'id')->all() : [],
         ];
     }
@@ -376,6 +380,10 @@ class EcomActivityListService
         $filters = self::ecomTrackerFiltersFromRequest($request);
         $productCode = trim((string) ($filters['product_code'] ?? ''));
         $hasOrder = $filters['has_order'] ?? null;
+        $productListCategoryIds = array_values(array_filter(
+            array_map('intval', (array) $request->query('category', [])),
+            fn (int $id) => $id > 0,
+        ));
         $filters['search'] = '';
         $filters['product_code'] = $productCode;
         $filters['funnel'] = [];
@@ -389,7 +397,10 @@ class EcomActivityListService
         $filters['utm_mediums'] = [];
         $filters['department'] = null;
         $filters['categories'] = [];
+        $filters['product_list_category_ids'] = $productListCategoryIds;
         $filters['visitor_type'] = null;
+        $filters['sort'] = ProductPerformanceSectionService::normalizeProductListSort($request->query('sort'));
+        $filters['sort_dir'] = ProductPerformanceSectionService::normalizeProductListSortDir($request->query('dir'));
 
         return $filters;
     }
@@ -408,7 +419,88 @@ class EcomActivityListService
             $params['has_order'] = $request->query('has_order');
         }
 
+        $categoryIds = array_values(array_filter(
+            array_map('intval', (array) $request->query('category', [])),
+            fn (int $id) => $id > 0,
+        ));
+        if ($categoryIds !== []) {
+            $params['category'] = $categoryIds;
+        }
+
+        $departmentId = $request->integer('department');
+        if ($departmentId > 0) {
+            $params['department'] = $departmentId;
+        }
+
+        $sort = ProductPerformanceSectionService::normalizeProductListSort($request->query('sort'));
+        $dir = ProductPerformanceSectionService::normalizeProductListSortDir($request->query('dir'));
+        if ($sort !== ProductPerformanceSectionService::PRODUCT_LIST_DEFAULT_SORT) {
+            $params['sort'] = $sort;
+        }
+        if ($dir !== 'desc') {
+            $params['dir'] = $dir;
+        }
+
         return $params;
+    }
+
+    /**
+     * Product performance list: active category filter chip (department -> category).
+     *
+     * @return array{chips: list<array{label: string, remove_url: string}>}
+     */
+    public function productListCatalogFilterUi(Request $request, string $period, Carbon $from, Carbon $to): array
+    {
+        $categoryIds = array_values(array_filter(
+            array_map('intval', (array) $request->query('category', [])),
+            fn (int $id) => $id > 0,
+        ));
+
+        if ($categoryIds === []) {
+            return ['chips' => []];
+        }
+
+        $departmentId = $request->integer('department') ?: null;
+        $filterOptions = $this->filterOptions($departmentId);
+
+        $baseQuery = array_filter([
+            'period' => $period,
+            'date_from' => $period === 'custom' ? $from->toDateString() : null,
+            'date_to' => $period === 'custom' ? $to->toDateString() : null,
+            'back' => is_string($request->query('back')) ? $request->query('back') : null,
+            'product_code' => trim((string) $request->query('product_code', '')) ?: null,
+            'has_order' => in_array($request->query('has_order'), ['0', '1'], true) ? $request->query('has_order') : null,
+            'department' => $departmentId ?: null,
+        ]);
+
+        $chips = [];
+
+        foreach ($categoryIds as $categoryId) {
+            $meta = TrackerDatabase::table('tracking_category as c')
+                ->leftJoin('tracking_category as d', 'd.id', '=', 'c.parent_id')
+                ->where('c.id', $categoryId)
+                ->first(['c.name as category_name', 'd.name as department_name']);
+
+            $categoryName = (string) ($meta->category_name ?? $filterOptions['categories'][$categoryId] ?? $categoryId);
+            $departmentName = TrackerCategoryIdentity::formatDepartmentDisplayName($meta->department_name ?? '') ?: 'Other';
+
+            $remaining = array_values(array_filter($categoryIds, fn (int $id) => $id !== $categoryId));
+            $query = $baseQuery;
+            if ($remaining !== []) {
+                $query['category'] = $remaining;
+            } else {
+                unset($query['department']);
+            }
+
+            $chips[] = [
+                'department' => $departmentName,
+                'category' => $categoryName,
+                'label' => $departmentName.' -> '.$categoryName,
+                'remove_url' => route('admin.ecom-tracker.dashboard.products', $query),
+            ];
+        }
+
+        return ['chips' => $chips];
     }
 
     /**
@@ -3040,8 +3132,19 @@ class EcomActivityListService
             ->pluck('catalog_path', 'tracking_session_id');
 
         foreach ($rows as $row) {
-            $row->catalog_path = $paths[$row->id] ?? '—';
+            $path = (string) ($paths[$row->id] ?? '—');
+            $row->catalog_path = $path === '—' ? '—' : $this->formatCatalogPathForDisplay($path);
         }
+    }
+
+    private function formatCatalogPathForDisplay(string $path): string
+    {
+        $storedPrefix = TrackerCategoryIdentity::NO_DEPARTMENT_STORED_LABEL.' › ';
+        if (str_starts_with(strtolower($path), strtolower($storedPrefix))) {
+            return TrackerCategoryIdentity::NO_DEPARTMENT_DISPLAY_LABEL.' › '.substr($path, strlen($storedPrefix));
+        }
+
+        return TrackerCategoryIdentity::formatDepartmentDisplayName($path);
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Services\EcomTrackerDashboard\Sections;
 
 use App\Services\EcomActivityListService;
+use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -56,7 +57,7 @@ class CategoryPerformanceSectionService
                 'sale_amount' => (float) $sold['sale_amount'],
             ];
 
-            $departments[$departmentId] ??= ['key' => 'department-'.$departmentId, 'name' => (string) ($row->department_name ?? 'Other'), 'categories' => []] + array_fill_keys($metrics, 0);
+            $departments[$departmentId] ??= ['key' => 'department-'.$departmentId, 'name' => TrackerCategoryIdentity::formatDepartmentDisplayName($row->department_name ?? 'Other') ?: 'Other', 'categories' => []] + array_fill_keys($metrics, 0);
             $departments[$departmentId]['categories'][] = $category;
             foreach ($metrics as $metric) {
                 $departments[$departmentId][$metric] += $category[$metric];
@@ -64,6 +65,8 @@ class CategoryPerformanceSectionService
         }
 
         $this->appendSoldOnlyCategories($departments, $soldByCategory, $metrics, $sort);
+
+        $this->filterDepartmentsWithoutActivity($departments, $metrics);
 
         foreach ($departments as &$department) {
             usort($department['categories'], $sort);
@@ -75,9 +78,12 @@ class CategoryPerformanceSectionService
         return [
             'departments' => $departments,
             'totals' => [
-                'category_views' => (int) $rows->sum('category_views'),
-                'product_views' => (int) $rows->sum('product_views'),
-                'category_count' => $rows->count(),
+                'category_views' => (int) array_sum(array_column($departments, 'category_views')),
+                'product_views' => (int) array_sum(array_column($departments, 'product_views')),
+                'category_count' => (int) array_sum(array_map(
+                    fn (array $department) => count($department['categories']),
+                    $departments,
+                )),
             ],
         ];
     }
@@ -159,7 +165,7 @@ class CategoryPerformanceSectionService
             $departmentId = (int) ($category['department_id'] ?? 0);
             $departments[$departmentId] ??= [
                 'key' => 'department-'.$departmentId,
-                'name' => (string) $category['department_name'],
+                'name' => TrackerCategoryIdentity::formatDepartmentDisplayName($category['department_name']) ?: 'Other',
                 'categories' => [],
             ] + array_fill_keys($metrics, 0);
             unset($category['department_name']);
@@ -169,17 +175,56 @@ class CategoryPerformanceSectionService
             }
         }
 
-        $categoryTotals = ['category_views' => 0, 'product_views' => 0, 'category_count' => count($categoryMap)];
+        $this->filterDepartmentsWithoutActivity($departments, $metrics);
+
+        $categoryTotals = ['category_views' => 0, 'product_views' => 0, 'category_count' => 0];
         foreach ($departments as &$department) {
             usort($department['categories'], $sort);
             $department['category_count'] = count($department['categories']);
             $categoryTotals['category_views'] += (int) $department['category_views'];
             $categoryTotals['product_views'] += (int) $department['product_views'];
+            $categoryTotals['category_count'] += count($department['categories']);
         }
         unset($department);
         usort($departments, $sort);
 
         return ['departments' => array_values($departments), 'totals' => $categoryTotals];
+    }
+
+    /**
+     * Drop categories (and empty departments) with no views, funnel, or sale in the period.
+     *
+     * @param  array<int, array<string, mixed>>  $departments
+     * @param  list<string>  $metrics
+     */
+    private function filterDepartmentsWithoutActivity(array &$departments, array $metrics): void
+    {
+        foreach ($departments as $departmentId => &$department) {
+            $department['categories'] = array_values(array_filter(
+                $department['categories'],
+                fn (array $category) => TrackerCategoryIdentity::categoryRowHasActivity($category),
+            ));
+
+            if ($department['categories'] === []) {
+                unset($departments[$departmentId]);
+
+                continue;
+            }
+
+            foreach ($metrics as $metric) {
+                if ($metric === 'sale_amount') {
+                    $department[$metric] = round(array_sum(array_map(
+                        fn (array $category) => (float) ($category['sale_amount'] ?? 0),
+                        $department['categories'],
+                    )), 2);
+
+                    continue;
+                }
+
+                $department[$metric] = (int) array_sum(array_column($department['categories'], $metric));
+            }
+        }
+        unset($department);
     }
 
     private function scopedCategorySoldTotals(Carbon $from, Carbon $to, string $period, array $sessionFilters): array
@@ -251,7 +296,7 @@ class CategoryPerformanceSectionService
 
             $departments[$departmentId] ??= [
                 'key' => 'department-'.$departmentId,
-                'name' => $departmentName,
+                'name' => TrackerCategoryIdentity::formatDepartmentDisplayName($departmentName) ?: 'Other',
                 'categories' => [],
             ] + array_fill_keys($metrics, 0);
             $departments[$departmentId]['categories'][] = $category;

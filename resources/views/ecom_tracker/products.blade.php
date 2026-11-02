@@ -7,6 +7,17 @@
     $productTotals = $products['totals'];
     $productRows = $paginator->items();
     $productsRoute = 'admin.ecom-tracker.dashboard.products';
+    $sortBy = $sortBy ?? \App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService::PRODUCT_LIST_DEFAULT_SORT;
+    $sortDir = $sortDir ?? 'desc';
+    $sortUrl = function (string $column) use ($sortBy, $sortDir): string {
+        $nextDir = ($sortBy === $column && $sortDir === 'desc') ? 'asc' : 'desc';
+
+        return request()->fullUrlWithQuery(array_filter([
+            'sort' => $column,
+            'dir' => $nextDir,
+            'page' => null,
+        ], fn ($value) => $value !== null));
+    };
 @endphp
 
 @section('content')
@@ -24,11 +35,6 @@
                     <span class="etd-meta-item">All times (store timezone)</span>
                 </div>
                 <p class="etd-page-range">{{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => 'Custom', default => 'Today' } }} ({{ $data['rangeLabel'] }})</p>
-                @if ($productTotals['product_count'] > 0)
-                    <p class="etd-page-range text-slate-500 dark:text-slate-400 text-sm mb-0">
-                        {{ number_format($productTotals['views']) }} views across {{ number_format($productTotals['product_count']) }} products
-                    </p>
-                @endif
             </div>
         </div>
         <div class="etd-page-header-toolbar">
@@ -88,16 +94,29 @@
             </div>
         </div>
     </div>
+    @include('ecom_tracker.partials.product-list-catalog-filter', [
+        'catalogFilterUi' => $catalogFilterUi ?? ['chips' => []],
+    ])
 </header>
 
+@include('ecom_tracker.partials.product-performance-totals-cap', [
+    'totals' => $productTotals,
+    'totalsScopeLabel' => $paginator->total() > 0
+        ? number_format($paginator->total()).' '.($paginator->total() === 1 ? 'product' : 'products').' in this view'
+        : null,
+])
+
 <div class="etd-panel etd-print-unit etd-product-performance-list" id="products-all">
-    @include('ecom_tracker.partials.product-performance-table', [
-        'products' => $productRows,
-        'serialOffset' => ($paginator->currentPage() - 1) * $paginator->perPage(),
-        'productActivityLink' => fn (array $query) => $activityLink(array_filter([
-            'focus' => 'products',
-            'product_code' => (string) ($query['product_code'] ?? ''),
-        ])),
+        @include('ecom_tracker.partials.product-performance-table', [
+            'products' => $productRows,
+            'serialOffset' => ($paginator->currentPage() - 1) * $paginator->perPage(),
+            'sortBy' => $sortBy,
+            'sortDir' => $sortDir,
+            'sortUrl' => $sortUrl,
+            'productActivityLink' => fn (array $query) => $activityLink(array_filter([
+                'focus' => 'products',
+                'product_code' => (string) ($query['product_code'] ?? ''),
+            ]), ['category', 'department', 'has_order', 'sort', 'dir', 'product_code']),
     ])
     <div class="etd-product-performance-list__pager etd-print-hide">
         @include('ecom_activity.partials.pagination', [

@@ -6,6 +6,7 @@ use App\Jobs\TrackerDashboardSyncJob;
 use App\Services\EcomActivityListService;
 use App\Services\EcomTrackerCompareFilteredDashboardService;
 use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
+use App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService;
 use App\Services\EcomTrackerProductPerformanceExportService;
 use App\Services\TrackerDashboardSyncService;
 use App\Support\TrackerTime;
@@ -58,6 +59,7 @@ class EcomTrackerDashboardController extends Controller
     public function products(
         Request $request,
         EcomTrackerDashboardService $dashboardService,
+        EcomActivityListService $activityList,
     ): View {
         Gate::authorize('ecom_tracker.dashboard.index');
 
@@ -88,11 +90,14 @@ class EcomTrackerDashboardController extends Controller
         );
         $paginator->appends($request->except('page'));
 
-        $data['dashboardUrl'] = route('admin.ecom-tracker.dashboard', array_filter([
-            'period' => $period,
-            'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
-            'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
-        ]) + $filterQuery);
+        $data['dashboardUrl'] = EcomActivityListService::backUrl(
+            $request,
+            route('admin.ecom-tracker.dashboard', array_filter([
+                'period' => $period,
+                'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
+                'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
+            ])),
+        );
 
         $exportQuery = array_filter([
             'period' => $period,
@@ -103,7 +108,17 @@ class EcomTrackerDashboardController extends Controller
             ? route('admin.ecom-tracker.dashboard.products.export', $exportQuery)
             : null;
 
-        return view('ecom_tracker.products', compact('data', 'products', 'paginator'));
+        $catalogFilterUi = $activityList->productListCatalogFilterUi(
+            $request,
+            $period,
+            $range['from'],
+            $range['to'],
+        );
+
+        $sortBy = ProductPerformanceSectionService::normalizeProductListSort($request->query('sort'));
+        $sortDir = ProductPerformanceSectionService::normalizeProductListSortDir($request->query('dir'));
+
+        return view('ecom_tracker.products', compact('data', 'products', 'paginator', 'catalogFilterUi', 'sortBy', 'sortDir'));
     }
 
     public function exportProducts(
@@ -177,7 +192,14 @@ class EcomTrackerDashboardController extends Controller
                 'date_from' => $period === 'custom' ? $range['from']->toDateString() : null,
                 'date_to' => $period === 'custom' ? $range['to']->toDateString() : null,
             ])),
-            'activityLink' => fn (array $activityFilters = []) => route('admin.ecom-activity.index', $periodQuery + array_filter($activityFilters, fn ($value) => $value !== null)),
+            'activityLink' => function (array $activityFilters = [], array $dropQueryKeys = []) use ($periodQuery): string {
+                $query = $periodQuery;
+                foreach ($dropQueryKeys as $key) {
+                    unset($query[$key]);
+                }
+
+                return route('admin.ecom-activity.index', $query + array_filter($activityFilters, fn ($value) => $value !== null && $value !== ''));
+            },
             'filterFormAction' => route($routeName),
             'periodPresetUrl' => fn (string $periodKey) => route($routeName, ['period' => $periodKey] + $filterQuery),
         ];
