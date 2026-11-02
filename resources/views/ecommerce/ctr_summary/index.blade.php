@@ -51,7 +51,7 @@
         $ctrProductTotal = (int) $summaries->total();
     @endphp
 
-    <div id="ecom-tracker-dashboard-content" class="etd-page etd-page--product-performance-list etd-page--ctr-summary">
+    <div id="ecom-tracker-dashboard-content" class="etd-page etd-page--product-performance-list etd-page--ctr-summary etd-page--ctr-summary-index">
 
         @include('ecommerce.ctr_summary.filter-drawer', ['search' => $search])
 
@@ -188,11 +188,11 @@
                                 @php
                                     $amountKey = $soldGroup['amount_key'];
                                 @endphp
-                                <th class="whitespace-nowrap etd-ctr-summary-col--sold text-slate-500 dark:text-slate-400">
+                                <th class="whitespace-nowrap etd-ctr-summary-col--sold etd-ctr-summary-col--sold-header text-slate-500 dark:text-slate-400">
                                     @include('ecom_tracker.partials.column-header-with-tip', [
                                         'label' => $soldGroup['amount_label'],
                                         'tip' => $metricColumnTips[$amountKey] ?? '',
-                                        'align' => 'center',
+                                        'align' => 'left',
                                         'iconBefore' => true,
                                     ])
                                 </th>
@@ -220,8 +220,8 @@
                                         $soldAmount = number_format((float) ($row[$soldGroup['amount_key']] ?? 0), 2, '.', ',');
                                         $soldQty = number_format((int) ($row[$soldGroup['qty_key']] ?? 0));
                                     @endphp
-                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums !text-center" data-label="{{ $soldGroup['amount_label'] }}">
-                                        <span class="inline-flex items-center justify-center gap-1.5 w-full min-w-0">
+                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums !text-left" data-label="{{ $soldGroup['amount_label'] }}">
+                                        <span class="inline-flex items-center justify-start gap-1.5 w-full min-w-0">
                                             <span>{{ $soldQty }}</span>
                                             <span class="text-slate-400 dark:text-slate-500 shrink-0" aria-hidden="true">→</span>
                                             <span>{{ $soldAmount }}</span>

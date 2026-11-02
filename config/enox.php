@@ -22,5 +22,7 @@ return [
         'selling_chart_update_discount' => 'selling-chart/update-discount',
         'tracking_site_settings' => 'tracking/site-settings',
         'tracking_products_total_sold' => 'tracking/products/total-sold',
+        'tracking_ranking_products' => 'tracking/ranking-products',
+        'tracking_listing_contexts' => 'tracking/listing-contexts',
     ]
 ];
