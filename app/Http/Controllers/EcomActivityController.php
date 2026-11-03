@@ -85,9 +85,13 @@ class EcomActivityController extends Controller
             $filters['categories'] = [$filters['department'], ...array_keys($filterOptions['categories'])];
         }
 
+        $filters['session_list'] = $request->query('focus') === 'session'
+            && trim((string) ($filters['product_code'] ?? '')) === '';
+        $sessionListTableLayout = $filters['session_list'];
+
         $focusColumns = EcomActivityTableFocus::columnsForRequest($request);
         $showCatalogFilterColumn = EcomActivityTableFocus::showCatalogFilterColumn($request);
-        $productDrillTableLayout = EcomActivityTableFocus::usesProductDrillTableLayout($request);
+        $productDrillTableLayout = EcomActivityTableFocus::usesProductDrillTableLayout($request) || $sessionListTableLayout;
 
         $sessions = $activityList->paginate(
             $range,
@@ -115,6 +119,7 @@ class EcomActivityController extends Controller
             'focusColumns',
             'showCatalogFilterColumn',
             'productDrillTableLayout',
+            'sessionListTableLayout',
         ));
     }
 

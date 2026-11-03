@@ -25,7 +25,8 @@ class RecoverableSaleSectionService
             ->select('rs.type', 'rs.qty', 'rs.sale_value', 'rs.occurred_at', 'ts.session_id')
             ->selectRaw('ROW_NUMBER() OVER (PARTITION BY rs.type ORDER BY rs.occurred_at DESC, rs.id DESC) as row_no')
             ->selectRaw('COUNT(*) OVER (PARTITION BY rs.type) as total_count')
-            ->selectRaw('SUM(rs.sale_value) OVER (PARTITION BY rs.type) as total_value');
+            ->selectRaw('SUM(rs.sale_value) OVER (PARTITION BY rs.type) as total_value')
+            ->selectRaw('SUM(rs.qty) OVER (PARTITION BY rs.type) as total_qty');
 
         $rows = TrackerDatabase::query()
             ->fromSub($ranked, 'r')
@@ -42,18 +43,39 @@ class RecoverableSaleSectionService
                 'stage' => $stage,
                 'session_count' => (int) ($typeRows->first()->total_count ?? 0),
                 'at_stake' => (float) ($typeRows->first()->total_value ?? 0),
+                'qty_total' => (int) ($typeRows->first()->total_qty ?? 0),
                 'rows' => $typeRows->map(fn (object $row) => [
                     'session_id' => (string) $row->session_id,
                     'session_label' => substr((string) $row->session_id, 0, 8).'…',
                     'qty' => (int) $row->qty,
                     'value' => (float) $row->sale_value,
                     'occurred_ago' => TrackerTime::diffForHumansFromStorage($row->occurred_at) ?? '—',
-                    'activity_url' => route('admin.ecom-activity.show', ['session' => $row->session_id, 'back' => $backUrl]),
+                    'activity_url' => self::sessionActivityUrl($backUrl, (string) $row->session_id),
                 ])->all(),
             ];
         }
 
         return $panels;
+    }
+
+    public static function sessionActivityUrl(string $backUrl, string $sessionId): string
+    {
+        $backQuery = [];
+        $queryString = parse_url($backUrl, PHP_URL_QUERY);
+        if (is_string($queryString) && $queryString !== '') {
+            parse_str($queryString, $backQuery);
+        }
+
+        $period = isset($backQuery['period']) ? (string) $backQuery['period'] : null;
+
+        return route('admin.ecom-activity.index', array_filter([
+            'period' => $period,
+            'date_from' => $period === 'custom' ? ($backQuery['date_from'] ?? null) : null,
+            'date_to' => $period === 'custom' ? ($backQuery['date_to'] ?? null) : null,
+            'back' => $backUrl,
+            'focus' => 'session',
+            'session_id' => $sessionId,
+        ], fn ($value) => $value !== null && $value !== ''));
     }
 
 }
