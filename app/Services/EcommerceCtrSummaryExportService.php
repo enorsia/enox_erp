@@ -15,11 +15,12 @@ class EcommerceCtrSummaryExportService
         'Category',
         'Micro category',
         'Product code',
-        'Click',
         'Impression',
+        'Click',
         'CTR',
         'CTR average',
-        'Total sold',
+        'Total sold amount',
+        'Total sold qty',
     ];
 
     /**
@@ -44,14 +45,15 @@ class EcommerceCtrSummaryExportService
             $soldAmount = number_format((float) ($row['total_sold'] ?? 0), 2, '.', ',');
             $spreadsheetRows[] = [
                 (string) ($row['department'] ?? ''),
-                (string) ($row['category_display'] ?? $row['category'] ?? ''),
+                (string) ($row['category'] ?? $row['category_display'] ?? ''),
                 (string) ($row['micro_category'] ?? '—'),
                 (string) ($row['product_code'] ?? ''),
-                (int) ($row['click'] ?? 0),
                 (int) ($row['impression'] ?? 0),
+                (int) ($row['click'] ?? 0),
                 round((float) ($row['ctr'] ?? 0) * 100, 2),
                 round((float) ($row['ctr_average'] ?? 0) * 100, 2),
-                $soldQty.' → '.$soldAmount,
+                $soldAmount,
+                $soldQty,
             ];
         }
 

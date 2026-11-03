@@ -1120,11 +1120,11 @@ class EcommerceCtrSummaryController extends Controller
         $departmentId = (int) ($row->department_id ?? 0);
 
         if ($type === TrackingCtrCategory::TYPE_STATIC && $departmentId > 0) {
-            return 'Static -> '.$categoryLabel;
+            return $categoryLabel;
         }
 
         if ($type === TrackingCtrCategory::TYPE_DYNAMIC_CUSTOM_LINK && $departmentId > 0) {
-            return 'Custom link -> '.$categoryLabel;
+            return $categoryLabel;
         }
 
         $microLabel = $this->formatMicroCategoryColumn($row);
