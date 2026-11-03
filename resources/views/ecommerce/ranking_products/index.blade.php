@@ -50,10 +50,22 @@
                 <div class="etd-page-header-toolbar">
                     <div class="etd-header-toolbar-row">
                         <div class="etd-header-toolbar-icon-group etd-header-toolbar-icon-group--actions">
+                            @can('ecommerce.ranking_products.export')
+                                @if (filled($exportUrl ?? null))
+                                    <a href="{{ $exportUrl }}"
+                                       class="etd-header-btn etd-topbar-btn--export etd-print-hide no-underline"
+                                       title="Export all rows in this view to Excel">
+                                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                        </svg>
+                                        <span class="etd-header-btn-text">Export Excel</span>
+                                    </a>
+                                @endif
+                            @endcan
                             @can('ecommerce.ctr_summary.index')
                                 <a href="{{ route('admin.ecommerce.ctr-summary.index') }}"
                                    class="etd-header-btn etd-header-btn--icon no-underline etd-print-hide"
-                                   title="CTR Summary" target="_blank">
+                                   title="CTR Summary">
                                     <span class="etd-header-btn-text">CTR Summary</span>
                                 </a>
                             @endcan
@@ -77,6 +89,10 @@
         @if (filled($apiError ?? null))
             <div class="mx-4 mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
                 {{ $apiError }}
+            </div>
+        @elseif (filled(session('error')))
+            <div class="mx-4 mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
+                {{ session('error') }}
             </div>
         @endif
 

@@ -61,6 +61,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::get('ecommerce/ctr-summary', [EcommerceCtrSummaryController::class, 'index'])->name('ecommerce.ctr-summary.index');
     Route::get('ecommerce/ctr-summary/export', [EcommerceCtrSummaryController::class, 'export'])->name('ecommerce.ctr-summary.export');
     Route::get('ecommerce/ranking-products', [EcommerceRankingProductsController::class, 'index'])->name('ecommerce.ranking-products.index');
+    Route::get('ecommerce/ranking-products/export', [EcommerceRankingProductsController::class, 'export'])->name('ecommerce.ranking-products.export');
 
     Route::controller(SalesChartController::class)->group(function () {
         Route::get('selling-chart/manage', 'index')->name('selling_chart.index');

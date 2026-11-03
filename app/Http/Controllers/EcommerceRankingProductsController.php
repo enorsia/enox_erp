@@ -5,17 +5,24 @@ namespace App\Http\Controllers;
 use App\Http\Clients\EnoxApiClient;
 use App\Services\EcommerceListingScopeCtrResolver;
 use App\Services\EcommerceRankingListingContextService;
+use App\Services\EcommerceRankingListingPathService;
+use App\Services\EcommerceRankingProductsExportService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\Client\Response as HttpClientResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EcommerceRankingProductsController extends Controller
 {
     private const PER_PAGE = 20;
+
+    private const RANKING_API_MAX_ATTEMPTS = 6;
 
     /** @var list<string> */
     private const ALLOWED_LISTING_SCOPES = [
@@ -31,6 +38,7 @@ class EcommerceRankingProductsController extends Controller
         Request $request,
         EcommerceListingScopeCtrResolver $ctrResolver,
         EcommerceRankingListingContextService $listingContextService,
+        EcommerceRankingListingPathService $listingPathService,
     ): View {
         Gate::authorize('ecommerce.ranking_products.index');
 
@@ -47,9 +55,6 @@ class EcommerceRankingProductsController extends Controller
         $page = max(1, (int) ($validated['page'] ?? $request->integer('page', 1)));
         $paginationQuery = $this->paginationQuery($contextKey, $search);
         $listingContexts = $listingContextService->contexts();
-        $labelsByContextKey = collect($listingContexts)->mapWithKeys(
-            fn (array $ctx): array => [(string) $ctx['key'] => (string) $ctx['label']],
-        )->all();
 
         $apiError = null;
         $sortingSalesDays = 30;
@@ -76,7 +81,7 @@ class EcommerceRankingProductsController extends Controller
             if ($apiError === null && is_array($apiPayload)) {
                 $sortingSalesDays = max(1, (int) ($apiPayload['sorting_sales_days'] ?? 30));
                 $apiRows = collect($apiPayload['data'] ?? []);
-                $rows = $this->transformRankingApiRows($apiRows, $labelsByContextKey, $ctrResolver);
+                $rows = $this->transformRankingApiRows($apiRows, $listingContexts, $ctrResolver, $listingPathService);
 
                 $pagination = is_array($apiPayload['pagination'] ?? null) ? $apiPayload['pagination'] : [];
                 $paginator = new LengthAwarePaginator(
@@ -89,11 +94,13 @@ class EcommerceRankingProductsController extends Controller
             }
         }
 
-        $listingScopeLabel = $listingContextService->labelForKey(
+        $listingScopeLabel = $this->listingScopeCaption(
             $contextKey,
-            $listingContexts,
             $listingScope,
             $listingScopeId,
+            $listingContexts,
+            $listingContextService,
+            $listingPathService,
         );
 
         return view('ecommerce.ranking_products.index', [
@@ -110,7 +117,147 @@ class EcommerceRankingProductsController extends Controller
             'filterFormAction' => route('admin.ecommerce.ranking-products.index'),
             'paginationQuery' => $paginationQuery,
             'sortingSalesDays' => $sortingSalesDays,
+            'exportUrl' => route('admin.ecommerce.ranking-products.export', $paginationQuery),
         ]);
+    }
+
+    public function export(
+        Request $request,
+        EcommerceListingScopeCtrResolver $ctrResolver,
+        EcommerceRankingListingContextService $listingContextService,
+        EcommerceRankingListingPathService $listingPathService,
+        EcommerceRankingProductsExportService $exportService,
+    ): BinaryFileResponse|RedirectResponse {
+        Gate::authorize('ecommerce.ranking_products.export');
+
+        $validated = Validator::make($request->all(), [
+            'listing_scope' => 'sometimes|string|max:32',
+            'listing_scope_id' => 'sometimes|integer|min:0',
+            'context' => 'sometimes|string|max:64',
+            'search' => 'sometimes|string|max:255',
+        ])->validate();
+
+        [$contextKey, $listingScope, $listingScopeId] = $this->resolveRankingContext($validated, $request);
+        $search = trim((string) ($validated['search'] ?? $request->query('search', '')));
+        $paginationQuery = $this->paginationQuery($contextKey, $search);
+        $listingContexts = $listingContextService->contexts();
+
+        if ($listingScope !== null && ! in_array($listingScope, self::ALLOWED_LISTING_SCOPES, true)) {
+            return redirect()
+                ->route('admin.ecommerce.ranking-products.index', $paginationQuery)
+                ->with('error', 'Invalid listing scope.');
+        }
+
+        [$rows, $sortingSalesDays, $apiError] = $this->fetchRankingProductsExportRows(
+            $contextKey !== '' ? $contextKey : null,
+            $listingScope,
+            $listingScopeId,
+            $search,
+            $listingContexts,
+            $ctrResolver,
+            $listingPathService,
+        );
+
+        if ($apiError !== null) {
+            return redirect()
+                ->route('admin.ecommerce.ranking-products.index', $paginationQuery)
+                ->with('error', $apiError);
+        }
+
+        $listingScopeLabel = $this->listingScopeCaption(
+            $contextKey,
+            $listingScope,
+            $listingScopeId,
+            $listingContexts,
+            $listingContextService,
+            $listingPathService,
+        );
+        $filterSummary = $this->buildFilterSummary($listingScopeLabel, $search);
+
+        return $exportService->download($rows, $filterSummary, $sortingSalesDays);
+    }
+
+    /**
+     * @param  list<array{key: string, label: string, listing_scope: string, listing_scope_id: int}>  $contexts
+     */
+    private function listingScopeCaption(
+        string $contextKey,
+        ?string $listingScope,
+        ?int $listingScopeId,
+        array $contexts,
+        EcommerceRankingListingContextService $listingContextService,
+        EcommerceRankingListingPathService $listingPathService,
+    ): string {
+        if (trim($contextKey) === '') {
+            return 'All listing contexts';
+        }
+
+        $path = $listingPathService->resolve(
+            $contextKey,
+            (string) ($listingScope ?? ''),
+            (int) ($listingScopeId ?? 0),
+            $contexts,
+        );
+
+        if ($path['path'] !== '—') {
+            return $path['path'];
+        }
+
+        return $listingContextService->labelForKey(
+            $contextKey,
+            $contexts,
+            $listingScope,
+            $listingScopeId,
+        );
+    }
+
+    private function buildFilterSummary(string $listingScopeLabel, string $search): string
+    {
+        $parts = ['Listing: '.$listingScopeLabel];
+
+        if ($search !== '') {
+            $parts[] = 'Search: '.$search;
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    /**
+     * @param  list<array{key: string, label: string, listing_scope: string, listing_scope_id: int}>  $contexts
+     * @return array{0: list<array<string, mixed>>, 1: int, 2: string|null}
+     */
+    private function fetchRankingProductsExportRows(
+        ?string $contextKey,
+        ?string $listingScope,
+        ?int $listingScopeId,
+        string $search,
+        array $contexts,
+        EcommerceListingScopeCtrResolver $ctrResolver,
+        EcommerceRankingListingPathService $listingPathService,
+    ): array {
+        [$apiPayload, $apiError] = $this->fetchRankingProductsPage(
+            $contextKey,
+            $listingScope,
+            $listingScopeId,
+            1,
+            self::PER_PAGE,
+            $search,
+            forExport: true,
+        );
+
+        if ($apiError !== null) {
+            return [[], 30, $apiError];
+        }
+
+        if (! is_array($apiPayload)) {
+            return [[], 30, 'Invalid ranking products response.'];
+        }
+
+        $sortingSalesDays = max(1, (int) ($apiPayload['sorting_sales_days'] ?? 30));
+        $apiRows = collect($apiPayload['data'] ?? []);
+        $rows = $this->transformRankingApiRows($apiRows, $contexts, $ctrResolver, $listingPathService)->values()->all();
+
+        return [$rows, $sortingSalesDays, null];
     }
 
     /**
@@ -229,6 +376,7 @@ class EcommerceRankingProductsController extends Controller
         int $page,
         int $perPage,
         string $search = '',
+        bool $forExport = false,
     ): array {
         if (rtrim((string) config('enox.base_url'), '/') === '') {
             return [null, 'ENOX_API_BASE_URL is not configured.'];
@@ -236,10 +384,12 @@ class EcommerceRankingProductsController extends Controller
 
         $endpoint = (string) config('enox.endpoints.tracking_ranking_products', 'tracking/ranking-products');
 
-        $params = [
-            'page' => $page,
-            'per_page' => $perPage,
-        ];
+        $params = $forExport
+            ? ['export' => 1]
+            : [
+                'page' => $page,
+                'per_page' => $perPage,
+            ];
 
         if ($contextKey !== null && $contextKey !== '') {
             $params['context'] = $contextKey;
@@ -257,16 +407,58 @@ class EcommerceRankingProductsController extends Controller
             $params['search'] = $search;
         }
 
-        try {
-            $client = app(EnoxApiClient::class);
-            $response = $client->get($endpoint, $params);
-        } catch (\Throwable $exception) {
-            Log::error('Ranking products: tracking/ranking-products request failed.', [
-                'listing_scope' => $listingScope,
-                'listing_scope_id' => $listingScopeId,
-                'error' => $exception->getMessage(),
-            ]);
+        $client = app(EnoxApiClient::class);
+        $timeoutSeconds = $forExport
+            ? max(30, (int) config('enox.ranking_products_export_timeout', 120))
+            : ($perPage > self::PER_PAGE ? 30 : null);
+        $response = null;
 
+        for ($attempt = 1; $attempt <= self::RANKING_API_MAX_ATTEMPTS; $attempt++) {
+            try {
+                $response = $client->getOnce($endpoint, $params, $timeoutSeconds);
+            } catch (\Throwable $exception) {
+                Log::error('Ranking products: tracking/ranking-products request failed.', [
+                    'listing_scope' => $listingScope,
+                    'listing_scope_id' => $listingScopeId,
+                    'context' => $contextKey,
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'export' => $forExport,
+                    'attempt' => $attempt,
+                    'error' => $exception->getMessage(),
+                ]);
+
+                if ($attempt >= self::RANKING_API_MAX_ATTEMPTS) {
+                    return [null, 'Could not load ranking products from Enorsia.'];
+                }
+
+                usleep(400_000 * $attempt);
+
+                continue;
+            }
+
+            if ($response->status() === 429) {
+                Log::warning('Ranking products: Enorsia rate limit (429).', [
+                    'context' => $contextKey,
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'export' => $forExport,
+                    'attempt' => $attempt,
+                ]);
+
+                if ($attempt >= self::RANKING_API_MAX_ATTEMPTS) {
+                    return [null, 'Enorsia rate limit reached. Wait a moment and try export again.'];
+                }
+
+                usleep(600_000 * $attempt);
+
+                continue;
+            }
+
+            break;
+        }
+
+        if (! $response instanceof HttpClientResponse) {
             return [null, 'Could not load ranking products from Enorsia.'];
         }
 
@@ -274,9 +466,20 @@ class EcommerceRankingProductsController extends Controller
             Log::warning('Ranking products: tracking/ranking-products HTTP error.', [
                 'listing_scope' => $listingScope,
                 'listing_scope_id' => $listingScopeId,
+                'context' => $contextKey,
+                'export' => $forExport,
                 'http_status' => $response->status(),
                 'body' => mb_substr(trim((string) $response->body()), 0, 500),
             ]);
+
+            if ($response->status() === 422) {
+                $payload = $response->json();
+                $message = is_array($payload) ? trim((string) ($payload['message'] ?? '')) : '';
+
+                if ($message !== '') {
+                    return [null, $message];
+                }
+            }
 
             return [null, 'Enorsia returned HTTP '.$response->status().' for ranking products.'];
         }
@@ -292,13 +495,14 @@ class EcommerceRankingProductsController extends Controller
     }
 
     /**
-     * @param  array<string, string>  $labelsByContextKey
+     * @param  list<array{key: string, label: string, listing_scope: string, listing_scope_id: int}>  $contexts
      * @return Collection<int, array<string, mixed>>
      */
     private function transformRankingApiRows(
         Collection $apiRows,
-        array $labelsByContextKey,
+        array $contexts,
         EcommerceListingScopeCtrResolver $ctrResolver,
+        EcommerceRankingListingPathService $listingPathService,
     ): Collection {
         $ctrByContextCode = [];
 
@@ -321,7 +525,7 @@ class EcommerceRankingProductsController extends Controller
             }
         }
 
-        return $apiRows->map(function (array $item) use ($ctrByContextCode, $labelsByContextKey): array {
+        return $apiRows->map(function (array $item) use ($ctrByContextCode, $contexts, $listingPathService): array {
             $code = trim((string) ($item['product_code'] ?? ''));
             $scope = (string) ($item['listing_scope'] ?? '');
             $scopeId = (int) ($item['listing_scope_id'] ?? 0);
@@ -332,10 +536,14 @@ class EcommerceRankingProductsController extends Controller
             $pin = is_array($item['pin'] ?? null) ? $item['pin'] : [];
             $ctr = $ctrByContextCode[$rowContextKey][$code] ?? null;
             $pinSerial = isset($pin['pin_serial']) ? (int) $pin['pin_serial'] : 0;
+            $listing = $listingPathService->resolve($rowContextKey, $scope, $scopeId, $contexts);
 
             return [
                 'context_key' => $rowContextKey,
-                'context_label' => $labelsByContextKey[$rowContextKey] ?? $rowContextKey,
+                'context_label' => $listing['path'],
+                'listing_department' => $listing['department'],
+                'listing_category' => $listing['category'],
+                'listing_micro_category' => $listing['micro_category'],
                 'listing_scope' => $scope,
                 'listing_scope_id' => $scopeId,
                 'serial_number' => (int) ($item['serial_number'] ?? 0),

@@ -30,6 +30,15 @@ class EnoxApiClient
         return $this->client()->get($this->baseUrl . $uri, $params);
     }
 
+    public function getOnce(string $uri, array $params = [], ?int $timeoutSeconds = null): Response
+    {
+        $timeout = $timeoutSeconds ?? (int) config('enox.timeout', 10);
+
+        return Http::withHeaders(config('enox.headers'))
+            ->timeout($timeout)
+            ->get($this->baseUrl.$uri, $params);
+    }
+
     public function post(string $uri, array $data = [])
     {
         return $this->client()->post($this->baseUrl . $uri, $data);
