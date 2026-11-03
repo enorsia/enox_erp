@@ -579,6 +579,9 @@ class EcomActivityListService
 
         $sessions = (int) ($row->sessions ?? 0);
         $staySeconds = (int) ($row->stay_seconds ?? 0);
+        $stepQty = ($filters['session_list'] ?? false) === true
+            ? $this->sessionListStepQty($scope)
+            : ['add_qty' => 0, 'begin_qty' => 0, 'proceed_qty' => 0];
 
         return [
             'sessions' => $sessions,
@@ -587,10 +590,54 @@ class EcomActivityListService
             'adds' => (int) ($row->adds ?? 0),
             'checkouts' => (int) ($row->checkouts ?? 0),
             'proceeds' => (int) ($row->proceeds ?? 0),
+            'add_qty' => $stepQty['add_qty'],
+            'begin_qty' => $stepQty['begin_qty'],
+            'proceed_qty' => $stepQty['proceed_qty'],
             'cart_abandoned' => (int) ($row->cart_abandoned ?? 0),
             'sold' => (int) ($sales->sold ?? 0),
             'sold_qty' => (int) ($sales->sold_qty ?? 0),
             'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),
+        ];
+    }
+
+    /**
+     * Quantity on the latest add / begin / proceed action for the sessions in this filter.
+     *
+     * @param  \Closure(\Illuminate\Database\Query\Builder): void  $scope
+     * @return array{add_qty: int, begin_qty: int, proceed_qty: int}
+     */
+    private function sessionListStepQty(\Closure $scope): array
+    {
+        $empty = ['add_qty' => 0, 'begin_qty' => 0, 'proceed_qty' => 0];
+        $sessionIds = TrackerDatabase::table('tracking_session as ts')
+            ->tap($scope)
+            ->pluck('ts.session_id');
+
+        if ($sessionIds->isEmpty()) {
+            return $empty;
+        }
+
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds->all())
+            ->whereIn('action_type', ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'proceed_to_checkout'])
+            ->orderBy('id')
+            ->get(['session_id', 'action_type', 'item_qty']);
+
+        $latest = [];
+        foreach ($actions as $action) {
+            $step = $action->action_type === 'proceed_to_checkout' ? 'proceed_checkout' : $action->action_type;
+            $latest[$action->session_id.'|'.$step] = (int) ($action->item_qty ?? 0);
+        }
+
+        $sums = ['add_to_cart' => 0, 'begin_checkout' => 0, 'proceed_checkout' => 0];
+        foreach ($latest as $key => $qty) {
+            $sums[substr($key, (int) strrpos($key, '|') + 1)] += $qty;
+        }
+
+        return [
+            'add_qty' => $sums['add_to_cart'],
+            'begin_qty' => $sums['begin_checkout'],
+            'proceed_qty' => $sums['proceed_checkout'],
         ];
     }
 
@@ -757,18 +804,18 @@ class EcomActivityListService
             ],
             [
                 'label' => 'Add to cart',
-                'formatted' => number_format((int) $summary['adds']),
-                'tip' => 'Sessions that added to cart.',
+                'formatted' => number_format((int) ($summary['add_qty'] ?? 0)),
+                'tip' => 'Total quantity on the latest add to cart in these sessions.',
             ],
             [
                 'label' => 'Begin checkout',
-                'formatted' => number_format((int) $summary['checkouts']),
-                'tip' => 'Sessions that began checkout.',
+                'formatted' => number_format((int) ($summary['begin_qty'] ?? 0)),
+                'tip' => 'Total quantity on the latest begin checkout in these sessions.',
             ],
             [
                 'label' => 'Proceed checkout',
-                'formatted' => number_format((int) $summary['proceeds']),
-                'tip' => 'Sessions that proceeded to payment.',
+                'formatted' => number_format((int) ($summary['proceed_qty'] ?? 0)),
+                'tip' => 'Total quantity on the latest proceed checkout in these sessions.',
             ],
             [
                 'label' => 'Orders',
