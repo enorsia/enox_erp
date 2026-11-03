@@ -343,6 +343,7 @@ class EcomTrackerCompareService
             $deviceQuery = $baseQuery;
             if ($deviceType !== null && $deviceType !== '') {
                 $deviceQuery['device_type'] = [(int) $deviceType];
+                $deviceQuery['focus'] = 'session';
             }
             $byDevice[] = array_merge($row, [
                 'activity_url' => route('admin.ecom-activity.index', $deviceQuery),
@@ -355,7 +356,7 @@ class EcomTrackerCompareService
             $browserQuery = $baseQuery;
             if ($browserId !== null && $browserId !== '') {
                 $browserQuery['browser_type'] = [(int) $browserId];
-                $browserQuery['focus'] = 'devices';
+                $browserQuery['focus'] = 'session';
             }
             $byBrowser[] = array_merge($row, [
                 'activity_url' => route('admin.ecom-activity.index', $browserQuery),
