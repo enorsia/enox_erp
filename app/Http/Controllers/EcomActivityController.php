@@ -41,6 +41,7 @@ class EcomActivityController extends Controller
         'grid_impression' => 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200',
         'product_click' => 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-200',
         'add_to_cart' => 'badge-amber',
+        'edit_bag' => 'badge-amber',
         'begin_checkout' => 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
         'proceed_checkout' => 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
         'payment_success' => 'badge-green',

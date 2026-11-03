@@ -109,6 +109,7 @@ class TrackController extends Controller
                 'events.*.page_url' => ['nullable', 'string', 'max:2048'],
                 'events.*.referer' => ['nullable', 'string', 'max:2048'],
                 'events.*.add_to_cart' => ['nullable', 'array'],
+                'events.*.edit_bag' => ['nullable', 'array'],
                 'events.*.begin_checkout' => ['nullable', 'array'],
                 'events.*.proceed_to_checkout' => ['nullable', 'array'],
                 'events.*.payment_success' => ['nullable', 'array'],
