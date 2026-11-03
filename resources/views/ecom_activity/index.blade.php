@@ -149,6 +149,14 @@
             $activityTableBaseCols = $productDrillTableLayout ? 4 : 8;
             $activityTableColspan = $activityTableBaseCols + $focusColspan + ($showCatalogFilterColumn ? 1 : 0);
             $activityTableWide = $focusColspan > 0 || $showCatalogFilterColumn;
+            $singleSessionOpenEvent = null;
+            if (($sessionListTableLayout ?? false) && filled(request()->query('session_id')) && $sessions->count() === 1) {
+                $onlySession = $sessions->first();
+                $firstEvent = ($onlySession->commerce['expandable_commerce_events'] ?? [])[0] ?? null;
+                if (is_array($firstEvent)) {
+                    $singleSessionOpenEvent = $onlySession->session_id.':'.($firstEvent['id'] ?? 0);
+                }
+            }
         @endphp
         <div class="etd-activity-table-shell" data-etd-activity-table-shell>
             <div
@@ -158,7 +166,7 @@
                 ])
                 style="--etd-activity-focus-cols: {{ $focusColspan }}"
                 data-etd-activity-table-viewport
-                x-data="{ openEvent: null }"
+                x-data="{ openEvent: @js($singleSessionOpenEvent) }"
                 @keydown.escape.window="openEvent = null"
                 @click.window="if (openEvent && ! $event.target.closest('.etd-commerce-event-detail') && ! $event.target.closest('.etd-commerce-event-trigger')) openEvent = null"
             >
@@ -185,7 +193,9 @@
                                 @if ($productDrillTableLayout)
                                     @include('ecom_tracker.partials.column-header-with-tip', [
                                         'label' => 'Events',
-                                        'tip' => 'What this visitor did with this product — viewed, added to cart, checkout, or purchased. Purchased rows are highlighted in green.',
+                                        'tip' => ($sessionListTableLayout ?? false)
+                                            ? 'What this visitor did in the session — cart, checkout, or purchase. Purchased rows are highlighted in green.'
+                                            : 'What this visitor did with this product — viewed, added to cart, checkout, or purchased. Purchased rows are highlighted in green.',
                                     ])
                                 @else
                                     <a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Commerce</span></a>

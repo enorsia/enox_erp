@@ -282,7 +282,7 @@ class EcomActivityListService
     }
 
     /**
-     * @return array{search: string, product_code: string, funnel: list<int>, has_order: ?bool, devices: list<int>, browsers: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
+     * @return array{search: string, product_code: string, session_id: string, funnel: list<int>, has_order: ?bool, devices: list<int>, browsers: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
      */
     public static function filtersFromRequest(Request $request): array
     {
@@ -296,6 +296,7 @@ class EcomActivityListService
         return [
             'search' => $productCode !== '' ? '' : mb_substr(trim((string) $request->input('search', '')), 0, 100),
             'product_code' => $productCode,
+            'session_id' => mb_substr(trim((string) $request->input('session_id', '')), 0, 64),
             'funnel' => array_values(array_intersect($ints('funnel'), TrackingSession::FILTER_FUNNEL_STAGES)),
             'has_order' => $bool('has_order'),
             'devices' => $ints('device_type'),
@@ -325,8 +326,12 @@ class EcomActivityListService
         if (trim((string) $request->query('product_code', '')) !== '') {
             $params['product_code'] = $request->query('product_code');
             $params['focus'] = 'products';
-        } elseif ($request->query('focus') === 'products') {
-            $params['focus'] = 'products';
+        } elseif (in_array($request->query('focus'), ['products', 'session'], true)) {
+            $params['focus'] = $request->query('focus');
+        }
+
+        if (trim((string) $request->query('session_id', '')) !== '') {
+            $params['session_id'] = $request->query('session_id');
         }
 
         foreach (['device_type', 'browser_type', 'utm_source', 'utm_medium', 'funnel', 'category', 'duration_bucket'] as $key) {
@@ -574,6 +579,9 @@ class EcomActivityListService
 
         $sessions = (int) ($row->sessions ?? 0);
         $staySeconds = (int) ($row->stay_seconds ?? 0);
+        $stepQty = ($filters['session_list'] ?? false) === true
+            ? $this->sessionListStepQty($scope)
+            : ['add_qty' => 0, 'begin_qty' => 0, 'proceed_qty' => 0];
 
         return [
             'sessions' => $sessions,
@@ -582,10 +590,54 @@ class EcomActivityListService
             'adds' => (int) ($row->adds ?? 0),
             'checkouts' => (int) ($row->checkouts ?? 0),
             'proceeds' => (int) ($row->proceeds ?? 0),
+            'add_qty' => $stepQty['add_qty'],
+            'begin_qty' => $stepQty['begin_qty'],
+            'proceed_qty' => $stepQty['proceed_qty'],
             'cart_abandoned' => (int) ($row->cart_abandoned ?? 0),
             'sold' => (int) ($sales->sold ?? 0),
             'sold_qty' => (int) ($sales->sold_qty ?? 0),
             'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),
+        ];
+    }
+
+    /**
+     * Quantity on the latest add / begin / proceed action for the sessions in this filter.
+     *
+     * @param  \Closure(\Illuminate\Database\Query\Builder): void  $scope
+     * @return array{add_qty: int, begin_qty: int, proceed_qty: int}
+     */
+    private function sessionListStepQty(\Closure $scope): array
+    {
+        $empty = ['add_qty' => 0, 'begin_qty' => 0, 'proceed_qty' => 0];
+        $sessionIds = TrackerDatabase::table('tracking_session as ts')
+            ->tap($scope)
+            ->pluck('ts.session_id');
+
+        if ($sessionIds->isEmpty()) {
+            return $empty;
+        }
+
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds->all())
+            ->whereIn('action_type', ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'proceed_to_checkout'])
+            ->orderBy('id')
+            ->get(['session_id', 'action_type', 'item_qty']);
+
+        $latest = [];
+        foreach ($actions as $action) {
+            $step = $action->action_type === 'proceed_to_checkout' ? 'proceed_checkout' : $action->action_type;
+            $latest[$action->session_id.'|'.$step] = (int) ($action->item_qty ?? 0);
+        }
+
+        $sums = ['add_to_cart' => 0, 'begin_checkout' => 0, 'proceed_checkout' => 0];
+        foreach ($latest as $key => $qty) {
+            $sums[substr($key, (int) strrpos($key, '|') + 1)] += $qty;
+        }
+
+        return [
+            'add_qty' => $sums['add_to_cart'],
+            'begin_qty' => $sums['begin_checkout'],
+            'proceed_qty' => $sums['proceed_checkout'],
         ];
     }
 
@@ -631,12 +683,15 @@ class EcomActivityListService
         $sessionLabel = $sessions === 1 ? 'session' : 'sessions';
         $productCode = trim((string) ($filters['product_code'] ?? ''));
         $isProductDrill = $productCode !== '';
+        $isSessionList = ($filters['session_list'] ?? false) === true && ! $isProductDrill;
 
         $extraMetrics = [];
         $metricCards = [];
 
         if ($isProductDrill) {
             $metricCards = $this->productDrillSummaryMetricCards($summary, $sessions, $sessionLabel, $productCode);
+        } elseif ($isSessionList) {
+            $metricCards = $this->sessionListSummaryMetricCards($summary, $sessions);
         } else {
             $extraMetrics = [
                 ['label' => 'Adds', 'value' => number_format((int) $summary['adds'])],
@@ -652,7 +707,7 @@ class EcomActivityListService
         }
 
         $chips = $this->filterChips($request, $resetUrl, $filterOptions);
-        if ($chips !== [] && ! $isProductDrill) {
+        if ($chips !== [] && ! $isProductDrill && ! $isSessionList) {
             $chips[] = [
                 'label' => 'Clear filters',
                 'remove_url' => $resetUrl,
@@ -660,17 +715,18 @@ class EcomActivityListService
         }
 
         $focusLabel = $this->funnelFocusLabel($filters);
+        $sessionListLabel = $this->sessionListSectionLabel($filters);
 
         return [
-            'sectionLabel' => $isProductDrill ? 'Product performance' : 'Audience & engagement',
+            'sectionLabel' => $isProductDrill ? 'Product performance' : ($isSessionList ? $sessionListLabel : 'Audience & engagement'),
             'sectionSubtitle' => $isProductDrill ? $productCode : null,
-            'contextAriaLabel' => $isProductDrill ? 'Product drill-down summary' : 'Filtered session summary',
-            'tooltip' => $isProductDrill
+            'contextAriaLabel' => $isProductDrill ? 'Product drill-down summary' : ($isSessionList ? 'Session list summary' : 'Filtered session summary'),
+            'tooltip' => ($isProductDrill || $isSessionList)
                 ? ''
                 : ($focusLabel !== null
                     ? "Sessions in this period that match: {$focusLabel}"
                     : 'Sessions in this period that match the active filters'),
-            'useKpiCards' => $isProductDrill,
+            'useKpiCards' => $isProductDrill || $isSessionList,
             'metricCards' => $metricCards,
             'sessionCount' => $sessions,
             'sessionCountLabel' => $sessionLabel,
@@ -733,6 +789,73 @@ class EcomActivityListService
     }
 
     /**
+     * Same card row as the product drill, filled from the session-list filter (funnel or one session).
+     *
+     * @param  array<string, int|float>  $summary
+     * @return list<array{label: string, formatted: string, tip: string, value_class?: string}>
+     */
+    private function sessionListSummaryMetricCards(array $summary, int $sessions): array
+    {
+        return [
+            [
+                'label' => 'Sessions',
+                'formatted' => number_format($sessions),
+                'tip' => 'Sessions in this period that match the funnel or session filter.',
+            ],
+            [
+                'label' => 'Add to cart',
+                'formatted' => number_format((int) ($summary['add_qty'] ?? 0)),
+                'tip' => 'Total quantity on the latest add to cart in these sessions.',
+            ],
+            [
+                'label' => 'Begin checkout',
+                'formatted' => number_format((int) ($summary['begin_qty'] ?? 0)),
+                'tip' => 'Total quantity on the latest begin checkout in these sessions.',
+            ],
+            [
+                'label' => 'Proceed checkout',
+                'formatted' => number_format((int) ($summary['proceed_qty'] ?? 0)),
+                'tip' => 'Total quantity on the latest proceed checkout in these sessions.',
+            ],
+            [
+                'label' => 'Orders',
+                'formatted' => number_format((int) $summary['sold']),
+                'tip' => 'Completed orders in these sessions.',
+                'value_class' => (int) ($summary['sold'] ?? 0) > 0 ? 'etd-kpi-value--success' : '',
+            ],
+            [
+                'label' => 'Units sold',
+                'formatted' => number_format((int) $summary['sold_qty']),
+                'tip' => 'Units on those completed orders.',
+                'value_class' => (int) ($summary['sold_qty'] ?? 0) > 0 ? 'etd-kpi-value--success' : '',
+            ],
+            [
+                'label' => 'Sold amount',
+                'formatted' => '£'.number_format((float) $summary['sale_amount'], 2),
+                'tip' => 'Amount paid on those completed orders.',
+                'value_class' => (float) ($summary['sale_amount'] ?? 0) > 0 ? 'etd-kpi-value--success' : '',
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function sessionListSectionLabel(array $filters): string
+    {
+        $stages = array_values(array_map('intval', $filters['funnel'] ?? []));
+        if (count($stages) === 1 && isset(self::FUNNEL_FOCUS_LABELS[$stages[0]])) {
+            return self::FUNNEL_FOCUS_LABELS[$stages[0]];
+        }
+
+        if (trim((string) ($filters['session_id'] ?? '')) !== '') {
+            return 'Session';
+        }
+
+        return 'Recoverable sale';
+    }
+
+    /**
      * @param  array<string, mixed>  $filters
      */
     /**
@@ -752,6 +875,10 @@ class EcomActivityListService
         }
 
         if (trim((string) ($filters['product_code'] ?? '')) !== '') {
+            return true;
+        }
+
+        if (trim((string) ($filters['session_id'] ?? '')) !== '') {
             return true;
         }
 
@@ -1501,14 +1628,35 @@ class EcomActivityListService
             ];
         }
 
+        $sessionFocus = $request->query('focus') === 'session';
+        if ($sessionFocus && filled($request->query('session_id'))) {
+            $addChip((string) $request->query('session_id'), ['session_id', 'focus']);
+            $chips[] = [
+                'label' => 'Clear section',
+                'remove_url' => $resetUrl,
+            ];
+        }
+
         $funnelStages = array_values(array_filter(array_map('intval', (array) $request->query('funnel', []))));
         if ($funnelStages !== []) {
             $labels = array_map(
-                fn (int $stage) => $filterOptions['funnelStages'][$stage]
-                    ?? (TrackingSession::FUNNEL_STAGES[$stage] ?? "Stage {$stage}"),
+                function (int $stage) use ($filterOptions, $sessionFocus) {
+                    if ($sessionFocus && isset(self::FUNNEL_FOCUS_LABELS[$stage])) {
+                        return self::FUNNEL_FOCUS_LABELS[$stage];
+                    }
+
+                    return $filterOptions['funnelStages'][$stage]
+                        ?? (TrackingSession::FUNNEL_STAGES[$stage] ?? "Stage {$stage}");
+                },
                 $funnelStages,
             );
-            $addChip('Funnel: '.implode(', ', $labels), ['funnel']);
+            $addChip('Funnel: '.implode(', ', $labels), $sessionFocus ? ['funnel', 'focus'] : ['funnel']);
+            if ($sessionFocus && ! filled($request->query('session_id'))) {
+                $chips[] = [
+                    'label' => 'Clear section',
+                    'remove_url' => $resetUrl,
+                ];
+            }
         }
 
         if ($request->query('has_order') === '1') {
@@ -1593,6 +1741,7 @@ class EcomActivityListService
         $focusKeys = array_column($focusColumns, 'key');
         $productCode = trim((string) ($filters['product_code'] ?? ''));
         $isProductDrill = $productCode !== '';
+        $isSessionList = ($filters['session_list'] ?? false) === true && ! $isProductDrill;
         $sortBy = self::normalizeSort($sortBy, $isProductDrill);
         $rows = $total === 0
             ? collect()
@@ -1613,12 +1762,15 @@ class EcomActivityListService
             $this->attachPaymentSuccessActions($rows);
         }
 
-        $rows = $rows->map(function (object $row) use ($focusKeys, $isProductDrill, $productCode, $range) {
+        $rows = $rows->map(function (object $row) use ($focusKeys, $isProductDrill, $isSessionList, $productCode, $range) {
             if ($isProductDrill) {
                 $commerce = $this->commerceCellForProductDrill($row, $productCode, $range);
                 $commerce['presentation'] = $this->productDrillCommercePresentation($row, $commerce);
             } else {
                 $commerce = $this->commerceCell($row);
+                if ($isSessionList) {
+                    $commerce['presentation'] = $this->sessionListCommercePresentation($commerce);
+                }
             }
 
             $row->commerce = $commerce;
@@ -1710,6 +1862,11 @@ class EcomActivityListService
      */
     private function applyFilters(Builder $query, array $filters, ?array $range = null, bool $forDashboard = false, bool $applyFunnel = true): void
     {
+        $sessionId = trim((string) ($filters['session_id'] ?? ''));
+        if ($sessionId !== '') {
+            $query->where('ts.session_id', $sessionId);
+        }
+
         $productCode = trim((string) ($filters['product_code'] ?? ''));
         if ($productCode !== '' && $range !== null) {
             if ($forDashboard) {
@@ -3318,6 +3475,92 @@ class EcomActivityListService
             'lines' => [],
             'detail_label' => null,
             'show_expand' => false,
+        ];
+    }
+
+    /**
+     * Product-drill Events cell, filled from the session's own cart / checkout / payment.
+     *
+     * @param  array<string, mixed>  $commerce
+     * @return array{badge: string, tone: string, headline: string, lines: list<array{text: string}>, detail_label: ?string, show_expand: bool}
+     */
+    private function sessionListCommercePresentation(array $commerce): array
+    {
+        $events = $commerce['expandable_commerce_events'] ?? [];
+        $event = is_array($events[0] ?? null) ? $events[0] : null;
+        $stage = (string) ($event['stage'] ?? '');
+
+        $copy = match ($stage) {
+            'payment_success' => [
+                'badge' => 'Purchased',
+                'tone' => 'sold',
+                'headline' => 'Completed payment',
+                'detail_label' => 'See order details',
+            ],
+            'proceed_checkout' => [
+                'badge' => 'Proceed Checkout',
+                'tone' => 'proceed',
+                'headline' => 'Went to the payment step',
+                'detail_label' => 'See cart before payment',
+            ],
+            'begin_checkout' => [
+                'badge' => 'Checkout',
+                'tone' => 'checkout',
+                'headline' => 'Started checkout',
+                'detail_label' => 'See checkout details',
+            ],
+            'add_to_cart' => [
+                'badge' => 'In cart',
+                'tone' => 'cart',
+                'headline' => 'Added items to the cart',
+                'detail_label' => 'See cart details',
+            ],
+            default => null,
+        };
+
+        if ($copy === null || $event === null) {
+            return [
+                'badge' => '—',
+                'tone' => 'muted',
+                'headline' => '',
+                'lines' => [],
+                'detail_label' => null,
+                'show_expand' => false,
+            ];
+        }
+
+        $lines = [];
+        if ($stage === 'payment_success') {
+            $orderTitle = trim((string) ($event['title'] ?? ''));
+            $hash = strpos($orderTitle, '#');
+            if ($hash !== false) {
+                $lines[] = ['text' => 'Order '.substr($orderTitle, $hash)];
+            }
+            $trigger = (string) ($event['trigger_label'] ?? '');
+            $split = strrpos($trigger, '·');
+            if ($split !== false) {
+                $amount = trim(substr($trigger, $split + strlen('·')));
+                if ($amount !== '') {
+                    $lines[] = ['text' => 'Amount paid '.$amount];
+                }
+            }
+        } else {
+            if (filled($event['cart_total'] ?? null)) {
+                $lines[] = ['text' => 'Cart total '.$event['cart_total']];
+            }
+            $qty = (int) ($event['cart_qty'] ?? 0);
+            if ($qty > 0) {
+                $lines[] = ['text' => 'Qty '.$qty];
+            }
+        }
+
+        return [
+            'badge' => $copy['badge'],
+            'tone' => $copy['tone'],
+            'headline' => $copy['headline'],
+            'lines' => $lines,
+            'detail_label' => $copy['detail_label'],
+            'show_expand' => true,
         ];
     }
 

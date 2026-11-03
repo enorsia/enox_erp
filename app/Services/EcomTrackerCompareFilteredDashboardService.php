@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
+use App\Services\EcomTrackerDashboard\Sections\RecoverableSaleSectionService;
 use App\Support\TrackerDatabase;
 
 use App\Models\TrackingDailyAudience;
@@ -264,7 +265,8 @@ class EcomTrackerCompareFilteredDashboardService
             ->select('rs.type', 'rs.qty', 'rs.sale_value', 'rs.occurred_at', 'ts.session_id')
             ->selectRaw('ROW_NUMBER() OVER (PARTITION BY rs.type ORDER BY rs.occurred_at DESC, rs.id DESC) as row_no')
             ->selectRaw('COUNT(*) OVER (PARTITION BY rs.type) as total_count')
-            ->selectRaw('SUM(rs.sale_value) OVER (PARTITION BY rs.type) as total_value');
+            ->selectRaw('SUM(rs.sale_value) OVER (PARTITION BY rs.type) as total_value')
+            ->selectRaw('SUM(rs.qty) OVER (PARTITION BY rs.type) as total_qty');
 
         $rows = TrackerDatabase::query()
             ->fromSub($ranked, 'r')
@@ -281,13 +283,14 @@ class EcomTrackerCompareFilteredDashboardService
                 'stage' => $stage,
                 'session_count' => (int) ($typeRows->first()->total_count ?? 0),
                 'at_stake' => (float) ($typeRows->first()->total_value ?? 0),
+                'qty_total' => (int) ($typeRows->first()->total_qty ?? 0),
                 'rows' => $typeRows->map(fn (object $row) => [
                     'session_id' => (string) $row->session_id,
                     'session_label' => substr((string) $row->session_id, 0, 8).'…',
                     'qty' => (int) $row->qty,
                     'value' => (float) $row->sale_value,
                     'occurred_ago' => TrackerTime::diffForHumansFromStorage($row->occurred_at) ?? '—',
-                    'activity_url' => route('admin.ecom-activity.show', ['session' => $row->session_id, 'back' => $backUrl]),
+                    'activity_url' => RecoverableSaleSectionService::sessionActivityUrl($backUrl, (string) $row->session_id),
                 ])->all(),
             ];
         }

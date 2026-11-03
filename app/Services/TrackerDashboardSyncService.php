@@ -2084,6 +2084,42 @@ class TrackerDashboardSyncService
     }
 
     /**
+     * Device and browser sold units follow the product rows: every order whose session
+     * visited this day, including a payment just after midnight.
+     *
+     * @param  array<string, array<string, mixed>>  $audience
+     * @param  array<string, int|float>  $emptyAudience
+     */
+    private function addVisitDateDeviceBrowserSold(array &$audience, string $visitDate, array $emptyAudience): void
+    {
+        $ordersQuery = TrackerDatabase::table('tracking_orders as o')
+            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $visitDate);
+        SessionTrafficAttribution::joinLatestSessionDetails($ordersQuery, 'o.tracking_session_id');
+
+        $orders = $ordersQuery->get([
+            'o.items_qty',
+            'o.amount_paid',
+            'sd.tracking_device_id',
+            'sd.tracking_browser_id',
+        ]);
+
+        foreach ($orders as $order) {
+            foreach ([
+                ['type' => TrackingDailyAudience::TYPE_DEVICE, 'dimension_id' => (int) ($order->tracking_device_id ?? 0), 'source' => '', 'medium' => ''],
+                ['type' => TrackingDailyAudience::TYPE_BROWSER, 'dimension_id' => (int) ($order->tracking_browser_id ?? 0), 'source' => '', 'medium' => ''],
+            ] as $key) {
+                $id = implode('|', $key);
+                $audience[$id] ??= $key + $emptyAudience;
+                $audience[$id]['payments']++;
+                $audience[$id]['sold_qty'] += (int) $order->items_qty;
+                $audience[$id]['sale_amount'] += (float) $order->amount_paid;
+            }
+        }
+    }
+
+    /**
      * Checkout session device/browser; order last non-direct traffic for revenue rollups.
      */
     private function audienceKeysForOrder(object $orderRow): array
@@ -2409,67 +2445,210 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Add to cart / begin / proceed panels (master rule): the session's furthest funnel flag is that step
-     * and its latest commerce action of the visit day is at that step too; the row holds that action's lines.
-     * Payment rows come from the orders instead (refreshDay).
+     * One recoverable row per session, on the visit day, at tracking_session.latest_funnel_stage.
+     * That is the same session set as User activity. Qty and value come from the latest lines at
+     * that step (or the order, for payment), including a step that happened after midnight.
      *
      * @param  array<string, mixed>  $sessionRow
      * @param  Collection<int, object>  $actions
      */
     private function upsertRecoverableSale(int $trackingSessionId, string $visitDate, array $sessionRow, Collection $actions): void
     {
-        $stage = match (true) {
-            (bool) ($sessionRow['has_payment_success'] ?? false) => 6,
-            (bool) ($sessionRow['has_proceed_checkout'] ?? false) => 5,
-            (bool) ($sessionRow['has_begin_checkout'] ?? false) => 4,
-            (bool) ($sessionRow['has_add_to_cart'] ?? false) => 3,
-            default => 0,
-        };
+        $stage = (int) TrackerDatabase::table('tracking_session')
+            ->where('id', $trackingSessionId)
+            ->value('latest_funnel_stage');
 
-        // Latest commerce action with product lines on the visit day (actions come in id order).
-        $latest = null;
-        foreach ($actions as $action) {
-            $code = (int) $this->funnelStageCode($this->metricActionType($action));
-            $at = (string) ($action->created_at ?? '');
-            if ($code < 3 || $this->localDate($at) !== $visitDate) {
-                continue;
-            }
-
-            $lines = array_filter($this->actionCommerceLines($action), fn (array $line) => $line['product_code'] !== '' || $line['product_name'] !== '');
-            if ($lines !== [] && ($latest === null || [$at, $code] >= [$latest['at'], $latest['stage']])) {
-                $latest = ['at' => $at, 'stage' => $code, 'lines' => $lines];
-            }
-        }
-
-        $row = TrackerDatabase::table('tracking_recoverable_sales')
-            ->where('metric_date', $visitDate)
+        $existing = TrackerDatabase::table('tracking_recoverable_sales')
             ->where('tracking_session_id', $trackingSessionId);
 
-        if ($latest === null) {
-            // Nothing new at a commerce step: a row of the same step from an earlier sync stays.
-            $row->where('type', '<', $stage)->delete();
+        if (! in_array($stage, [3, 4, 5, 6], true)) {
+            $existing->delete();
 
             return;
         }
 
-        if ($latest['stage'] !== $stage || $stage === 6) {
-            $row->where('type', '<', 6)->delete();
+        $orders = $stage === 6
+            ? TrackerDatabase::table('tracking_orders')
+                ->where('tracking_session_id', $trackingSessionId)
+                ->get(['items_qty', 'amount_paid', 'ordered_at'])
+            : collect();
 
-            return;
-        }
-
+        $snapshot = $this->recoverableSaleSnapshot($stage, $actions, $orders);
         $now = now();
+
+        $existing->where('metric_date', '!=', $visitDate)->delete();
 
         TrackerDatabase::table('tracking_recoverable_sales')->upsert([[
             'metric_date' => $visitDate,
             'type' => $stage,
             'tracking_session_id' => $trackingSessionId,
-            'qty' => array_sum(array_column($latest['lines'], 'qty')),
-            'sale_value' => round(array_sum(array_column($latest['lines'], 'line_total')), 2),
-            'occurred_at' => $latest['at'],
+            'qty' => $snapshot['qty'],
+            'sale_value' => $snapshot['sale_value'],
+            'occurred_at' => $snapshot['occurred_at'],
             'created_at' => $now,
             'updated_at' => $now,
         ]], ['metric_date', 'tracking_session_id'], ['type', 'qty', 'sale_value', 'occurred_at', 'updated_at']);
+    }
+
+    /**
+     * @param  Collection<int, object>  $actions
+     * @param  Collection<int, object>  $orders
+     * @return array{qty: int, sale_value: float, occurred_at: ?string}
+     */
+    private function recoverableSaleSnapshot(int $stage, Collection $actions, Collection $orders): array
+    {
+        if ($stage === 6 && $orders->isNotEmpty()) {
+            $qty = 0;
+            $value = 0.0;
+            $at = null;
+            foreach ($orders as $order) {
+                $qty += max(1, (int) ($order->items_qty ?? 0));
+                $value += (float) ($order->amount_paid ?? 0);
+                $orderedAt = (string) ($order->ordered_at ?? '');
+                if ($orderedAt !== '' && ($at === null || $orderedAt > $at)) {
+                    $at = $orderedAt;
+                }
+            }
+
+            return ['qty' => $qty, 'sale_value' => round($value, 2), 'occurred_at' => $at];
+        }
+
+        $lines = $this->latestCommerceLines($actions, $stage)
+            ?? $this->latestCommerceLines($actions, null);
+
+        if ($lines === null) {
+            return ['qty' => 0, 'sale_value' => 0.0, 'occurred_at' => null];
+        }
+
+        return [
+            'qty' => (int) array_sum(array_column($lines['lines'], 'qty')),
+            'sale_value' => round((float) array_sum(array_column($lines['lines'], 'line_total')), 2),
+            'occurred_at' => $lines['at'] !== '' ? $lines['at'] : null,
+        ];
+    }
+
+    /**
+     * Latest action at $stage that still has product lines. Null $stage accepts any commerce step.
+     * Not limited to the visit calendar day: the session is already tied to that visit.
+     *
+     * @param  Collection<int, object>  $actions
+     * @return array{at: string, lines: list<array<string, mixed>>}|null
+     */
+    private function latestCommerceLines(Collection $actions, ?int $stage): ?array
+    {
+        $latest = null;
+
+        foreach ($actions as $action) {
+            $code = (int) $this->funnelStageCode($this->metricActionType($action));
+            if ($code < 3 || ($stage !== null && $code !== $stage)) {
+                continue;
+            }
+
+            $lines = array_values(array_filter(
+                $this->actionCommerceLines($action),
+                fn (array $line) => ($line['product_code'] ?? '') !== '' || ($line['product_name'] ?? '') !== '',
+            ));
+            if ($lines === []) {
+                continue;
+            }
+
+            $at = (string) ($action->created_at ?? '');
+            $id = (int) ($action->id ?? 0);
+            if ($latest === null || [$at, $id] >= [$latest['at'], $latest['id']]) {
+                $latest = ['at' => $at, 'id' => $id, 'lines' => $lines];
+            }
+        }
+
+        if ($latest === null) {
+            return null;
+        }
+
+        return ['at' => $latest['at'], 'lines' => $latest['lines']];
+    }
+
+    /**
+     * Rebuild recoverable rows for one visit day from tracking_session.latest_funnel_stage
+     * so the panel lists the same sessions as User activity.
+     */
+    private function rebuildRecoverableSales(string $visitDate, Carbon $now): void
+    {
+        $visiting = TrackerDatabase::table('tracking_session as ts')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $visitDate)
+            ->get(['ts.id', 'ts.session_id', 'ts.latest_funnel_stage']);
+
+        $keep = $visiting->filter(fn (object $session) => in_array((int) $session->latest_funnel_stage, [3, 4, 5, 6], true))->values();
+        $keepIds = $keep->map(fn (object $session) => (int) $session->id)->all();
+        $visitingIds = $visiting->map(fn (object $session) => (int) $session->id)->all();
+
+        TrackerDatabase::table('tracking_recoverable_sales')
+            ->where('metric_date', $visitDate)
+            ->whereNotIn('tracking_session_id', $keepIds ?: [0])
+            ->delete();
+
+        if ($visitingIds !== []) {
+            TrackerDatabase::table('tracking_recoverable_sales')
+                ->whereIn('tracking_session_id', $visitingIds)
+                ->where('metric_date', '!=', $visitDate)
+                ->delete();
+        }
+
+        if ($keep->isNotEmpty()) {
+            $actions = TrackerDatabase::table('activity_ecom_user_actions')
+                ->whereIn('session_id', $keep->pluck('session_id')->all())
+                ->orderBy('created_at')
+                ->orderBy('id')
+                ->get()
+                ->groupBy('session_id');
+
+            $orders = TrackerDatabase::table('tracking_orders')
+                ->whereIn('tracking_session_id', $keepIds)
+                ->get(['tracking_session_id', 'items_qty', 'amount_paid', 'ordered_at'])
+                ->groupBy(fn (object $order) => (int) $order->tracking_session_id);
+
+            $values = [];
+            foreach ($keep as $session) {
+                $sessionId = (int) $session->id;
+                $snapshot = $this->recoverableSaleSnapshot(
+                    (int) $session->latest_funnel_stage,
+                    $actions->get($session->session_id, collect()),
+                    $orders->get($sessionId, collect()),
+                );
+                $values[] = [
+                    'metric_date' => $visitDate,
+                    'type' => (int) $session->latest_funnel_stage,
+                    'tracking_session_id' => $sessionId,
+                    'qty' => $snapshot['qty'],
+                    'sale_value' => $snapshot['sale_value'],
+                    'occurred_at' => $snapshot['occurred_at'],
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            foreach (array_chunk($values, 200) as $chunk) {
+                TrackerDatabase::table('tracking_recoverable_sales')->upsert(
+                    $chunk,
+                    ['metric_date', 'tracking_session_id'],
+                    ['type', 'qty', 'sale_value', 'occurred_at', 'updated_at'],
+                );
+            }
+        }
+
+        $drops = TrackerDatabase::table('tracking_recoverable_sales')
+            ->where('metric_date', $visitDate)
+            ->whereIn('type', [3, 4, 5])
+            ->groupBy('type')
+            ->pluck(DB::raw('COUNT(*)'), 'type');
+
+        TrackerDatabase::table('tracking_daily_summaries')
+            ->where('metric_date', $visitDate)
+            ->update([
+                'cart_drops' => (int) ($drops[3] ?? 0),
+                'checkout_drops' => (int) ($drops[4] ?? 0),
+                'proceed_drops' => (int) ($drops[5] ?? 0),
+                'updated_at' => $now,
+            ]);
     }
 
     /**
@@ -2568,8 +2747,6 @@ class TrackerDashboardSyncService
             }
         }
 
-        $paymentRows = [];
-
         foreach ($orders as $order) {
             $summary['payments']++;
             $summary['items_sold'] += (int) $order->items_qty;
@@ -2579,13 +2756,11 @@ class TrackerDashboardSyncService
                 continue;
             }
 
-            $sessionId = (int) $order->tracking_session_id;
-            $paymentRows[$sessionId] ??= ['qty' => 0, 'sale_value' => 0, 'occurred_at' => $order->ordered_at];
-            $paymentRows[$sessionId]['qty'] += max(1, (int) $order->items_qty);
-            $paymentRows[$sessionId]['sale_value'] += (float) $order->amount_paid;
-            $paymentRows[$sessionId]['occurred_at'] = max($paymentRows[$sessionId]['occurred_at'], $order->ordered_at);
-
             foreach ($this->audienceKeysForOrder($order) as $key) {
+                if (in_array($key['type'], [TrackingDailyAudience::TYPE_DEVICE, TrackingDailyAudience::TYPE_BROWSER], true)) {
+                    continue;
+                }
+
                 $id = implode('|', $key);
                 $audience[$id] ??= $key + $emptyAudience;
                 $audience[$id]['payments']++;
@@ -2594,7 +2769,9 @@ class TrackerDashboardSyncService
             }
         }
 
-        $this->refreshPaymentRows($date, $paymentRows, $now);
+        $this->addVisitDateDeviceBrowserSold($audience, $date, $emptyAudience);
+
+        $this->rebuildRecoverableSales($date, $now);
 
         $drops = TrackerDatabase::table('tracking_recoverable_sales')
             ->where('metric_date', $date)
@@ -2833,44 +3010,6 @@ class TrackerDashboardSyncService
         }
 
         $hours[$hour][$column]++;
-    }
-
-    /**
-     * Payment success panel: one row per paying session of the day, rebuilt from its orders.
-     *
-     * @param  array<int, array{qty: int, sale_value: float, occurred_at: string}>  $rows
-     */
-    private function refreshPaymentRows(string $date, array $rows, Carbon $now): void
-    {
-        TrackerDatabase::table('tracking_recoverable_sales')
-            ->where('metric_date', $date)
-            ->where('type', 6)
-            ->whereNotIn('tracking_session_id', array_keys($rows) ?: [0])
-            ->delete();
-
-        if ($rows === []) {
-            return;
-        }
-
-        $values = [];
-        foreach ($rows as $sessionId => $row) {
-            $values[] = [
-                'metric_date' => $date,
-                'type' => 6,
-                'tracking_session_id' => $sessionId,
-                'qty' => $row['qty'],
-                'sale_value' => round($row['sale_value'], 2),
-                'occurred_at' => $row['occurred_at'],
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
-        }
-
-        TrackerDatabase::table('tracking_recoverable_sales')->upsert(
-            $values,
-            ['metric_date', 'tracking_session_id'],
-            ['type', 'qty', 'sale_value', 'occurred_at', 'updated_at'],
-        );
     }
 
     /**

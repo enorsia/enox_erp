@@ -2,6 +2,7 @@
     $rows = $panel['rows'] ?? [];
     $sessionCount = $panel['session_count'] ?? 0;
     $atStake = $panel['at_stake'] ?? 0;
+    $qtyTotal = (int) ($panel['qty_total'] ?? 0);
     $panelTone = $panelTone ?? 'cart';
 @endphp
 
@@ -18,6 +19,7 @@
             <p class="etd-recoverable-summary">
                 {{ number_format($sessionCount) }} {{ Str::plural('session', $sessionCount) }}
                 · £{{ number_format($atStake, 2) }}
+                · {{ number_format($qtyTotal) }} qty
             </p>
         </div>
         <div class="etd-panel-head-meta">

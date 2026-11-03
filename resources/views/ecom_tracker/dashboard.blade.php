@@ -206,7 +206,13 @@
     <div class="etd-section-print-block etd-print-section">
         <div class="etd-section-intro">
             <h2 class="etd-section-title"><span class="etd-section-num">02</span> Recoverable sale</h2>
-            <p class="etd-section-note">Sessions at each funnel step plus completed payments — click a session to review activity.</p>
+            @php
+                $recoverableLatestShown = collect($dashboard['recoverable'] ?? [])
+                    ->filter(fn (array $panel) => (int) ($panel['session_count'] ?? 0) > count($panel['rows'] ?? []))
+                    ->map(fn (array $panel) => count($panel['rows'] ?? []))
+                    ->max();
+            @endphp
+            <p class="etd-section-note">Sessions at each funnel step plus completed payments — click a session to review activity.@if ($recoverableLatestShown) · showing latest {{ number_format($recoverableLatestShown) }}@endif</p>
         </div>
         <div class="etd-section-print-body">
     <div class="etd-recoverable-section mb-3">
@@ -218,7 +224,7 @@
                 'title' => $panel['title'],
                 'panelTone' => $panel['tone'],
                 'emptyMessage' => $panel['emptyMessage'],
-                'detailUrl' => $activityLink(['funnel' => $panel['stage']]),
+                'detailUrl' => $activityLink(['funnel' => $panel['stage'], 'focus' => 'session']),
             ])
         @endforeach
         </div>
