@@ -2084,6 +2084,42 @@ class TrackerDashboardSyncService
     }
 
     /**
+     * Device and browser sold units follow the product rows: every order whose session
+     * visited this day, including a payment just after midnight.
+     *
+     * @param  array<string, array<string, mixed>>  $audience
+     * @param  array<string, int|float>  $emptyAudience
+     */
+    private function addVisitDateDeviceBrowserSold(array &$audience, string $visitDate, array $emptyAudience): void
+    {
+        $ordersQuery = TrackerDatabase::table('tracking_orders as o')
+            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $visitDate);
+        SessionTrafficAttribution::joinLatestSessionDetails($ordersQuery, 'o.tracking_session_id');
+
+        $orders = $ordersQuery->get([
+            'o.items_qty',
+            'o.amount_paid',
+            'sd.tracking_device_id',
+            'sd.tracking_browser_id',
+        ]);
+
+        foreach ($orders as $order) {
+            foreach ([
+                ['type' => TrackingDailyAudience::TYPE_DEVICE, 'dimension_id' => (int) ($order->tracking_device_id ?? 0), 'source' => '', 'medium' => ''],
+                ['type' => TrackingDailyAudience::TYPE_BROWSER, 'dimension_id' => (int) ($order->tracking_browser_id ?? 0), 'source' => '', 'medium' => ''],
+            ] as $key) {
+                $id = implode('|', $key);
+                $audience[$id] ??= $key + $emptyAudience;
+                $audience[$id]['payments']++;
+                $audience[$id]['sold_qty'] += (int) $order->items_qty;
+                $audience[$id]['sale_amount'] += (float) $order->amount_paid;
+            }
+        }
+    }
+
+    /**
      * Checkout session device/browser; order last non-direct traffic for revenue rollups.
      */
     private function audienceKeysForOrder(object $orderRow): array
@@ -2721,6 +2757,10 @@ class TrackerDashboardSyncService
             }
 
             foreach ($this->audienceKeysForOrder($order) as $key) {
+                if (in_array($key['type'], [TrackingDailyAudience::TYPE_DEVICE, TrackingDailyAudience::TYPE_BROWSER], true)) {
+                    continue;
+                }
+
                 $id = implode('|', $key);
                 $audience[$id] ??= $key + $emptyAudience;
                 $audience[$id]['payments']++;
@@ -2728,6 +2768,8 @@ class TrackerDashboardSyncService
                 $audience[$id]['sale_amount'] += (float) $order->amount_paid;
             }
         }
+
+        $this->addVisitDateDeviceBrowserSold($audience, $date, $emptyAudience);
 
         $this->rebuildRecoverableSales($date, $now);
 
