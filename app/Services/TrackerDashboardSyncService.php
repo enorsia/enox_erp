@@ -2641,9 +2641,9 @@ class TrackerDashboardSyncService
         }
 
         $this->refreshProductFunnelCounts($date, $now);
-
-        $this->refreshSoldTotals($date, 'tracking_daily_categories', 'tracking_category_id', 'od.tracking_category_id', true, $now);
-        $this->refreshSoldTotals($date, 'tracking_daily_products', 'product_code', 'p.code', false, $now);
+        $this->writeAllocatedProductSold($date, $now);
+        $this->storePrimaryCategoriesForDate($date);
+        $this->rollCategorySoldFromProducts($date, $now);
 
         $this->purgeEmptyDailyCategoryRows($date);
 
@@ -2881,6 +2881,7 @@ class TrackerDashboardSyncService
     private function refreshProductFunnelCounts(string $date, Carbon $now): void
     {
         TrackerDatabase::table('tracking_daily_products')->where('metric_date', $date)->update([
+            'tracking_category_id' => null,
             'product_views' => 0,
             'add_to_carts' => 0,
             'begin_checkouts' => 0,
@@ -3077,48 +3078,224 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Sold qty / sale amount (and order count for categories) per category or product
-     * from that day's orders of sessions that started that day (master rule).
-     * $source is the order line column the table row is keyed by (products: p.code, all skus of a code together).
+     * Save the sync category on each product row: link-count primary category, otherwise the order-line category.
      */
-    private function refreshSoldTotals(string $date, string $table, string $column, string $source, bool $withOrders, Carbon $now): void
+    private function storePrimaryCategoriesForDate(string $date): void
     {
-        $soldColumns = $withOrders ? ['sold_qty', 'orders', 'sale_amount'] : ['sold_qty', 'sale_amount'];
+        $this->writeProductCategoryIds($date, $this->productCategoryIdsByCodeForVisitDate($date));
 
-        TrackerDatabase::table($table)->where('metric_date', $date)->update(array_fill_keys($soldColumns, 0) + ['updated_at' => $now]);
-
-        $sold = TrackerDatabase::table('tracking_order_details as od')
+        $canonical = TrackerCategoryIdentity::canonicalCategoryIds();
+        $best = [];
+        $lines = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->when(str_starts_with($source, 'p.'), fn (Builder $query) => $query->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id'))
-            ->where('o.metric_date', $date)
+            ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
             ->where('dv.visit_date', $date)
-            ->whereNotNull($source)
-            ->groupBy($source)
-            ->selectRaw("{$source} as dimension_id, SUM(od.qty) as sold_qty, COUNT(DISTINCT od.tracking_order_id) as orders, SUM(od.line_total) as sale_amount")
+            ->whereNotNull('od.tracking_category_id')
+            ->groupBy('p.code', 'od.tracking_category_id')
+            ->selectRaw('p.code as product_code, od.tracking_category_id as category_id, SUM(od.qty) as qty')
+            ->get();
+
+        foreach ($lines as $line) {
+            $code = $this->productCode((string) $line->product_code);
+            if ($code === '') {
+                continue;
+            }
+
+            $categoryId = $canonical[(int) $line->category_id] ?? (int) $line->category_id;
+            $qty = (int) $line->qty;
+            $current = $best[$code] ?? null;
+            if ($current === null || $qty > $current['qty'] || ($qty === $current['qty'] && $categoryId < $current['id'])) {
+                $best[$code] = ['id' => $categoryId, 'qty' => $qty];
+            }
+        }
+
+        if ($best === []) {
+            return;
+        }
+
+        $open = TrackerDatabase::table('tracking_daily_products')
+            ->where('metric_date', $date)
+            ->whereNull('tracking_category_id')
+            ->whereIn('product_code', array_keys($best))
+            ->pluck('product_code');
+
+        $fallback = [];
+        foreach ($open as $code) {
+            $code = (string) $code;
+            if (isset($best[$code])) {
+                $fallback[$code] = $best[$code]['id'];
+            }
+        }
+
+        $this->writeProductCategoryIds($date, $fallback);
+    }
+
+    /**
+     * @param  array<string, int>  $categoryIdByCode
+     */
+    private function writeProductCategoryIds(string $date, array $categoryIdByCode): void
+    {
+        if ($categoryIdByCode === []) {
+            return;
+        }
+
+        $pdo = TrackerDatabase::connection()->getPdo();
+        foreach (array_chunk($categoryIdByCode, 300, true) as $chunk) {
+            $case = 'CASE product_code';
+            foreach ($chunk as $code => $categoryId) {
+                $case .= ' WHEN '.$pdo->quote((string) $code).' THEN '.(int) $categoryId;
+            }
+            $case .= ' ELSE tracking_category_id END';
+
+            TrackerDatabase::table('tracking_daily_products')
+                ->where('metric_date', $date)
+                ->whereIn('product_code', array_keys($chunk))
+                ->update(['tracking_category_id' => DB::raw($case)]);
+        }
+    }
+
+    /**
+     * Product paid and sale for one visit day. Same split as the product page: order amount_paid shared by line_total.
+     */
+    private function writeAllocatedProductSold(string $date, Carbon $now): void
+    {
+        TrackerDatabase::table('tracking_daily_products')->where('metric_date', $date)->update([
+            'sold_qty' => 0,
+            'sale_amount' => 0,
+            'updated_at' => $now,
+        ]);
+
+        $orders = TrackerDatabase::table('tracking_orders as o')
+            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $date)
+            ->get(['o.id', 'o.amount_paid']);
+
+        if ($orders->isEmpty()) {
+            return;
+        }
+
+        $details = TrackerDatabase::table('tracking_order_details as od')
+            ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
+            ->whereIn('od.tracking_order_id', $orders->pluck('id'))
+            ->get(['od.tracking_order_id', 'p.code as product_code', 'od.qty', 'od.line_total']);
+
+        $linesByOrder = [];
+        foreach ($details as $line) {
+            $linesByOrder[(int) $line->tracking_order_id][] = $line;
+        }
+
+        $totals = [];
+        foreach ($orders as $order) {
+            $lines = $linesByOrder[(int) $order->id] ?? [];
+            if ($lines === []) {
+                continue;
+            }
+
+            $amountPaid = (float) $order->amount_paid;
+            $weightSum = 0.0;
+            foreach ($lines as $line) {
+                $weight = (float) $line->line_total;
+                if ($weight <= 0) {
+                    $weight = (float) max(1, (int) $line->qty);
+                }
+                $weightSum += $weight;
+            }
+            if ($weightSum <= 0) {
+                $weightSum = (float) count($lines);
+            }
+
+            foreach ($lines as $line) {
+                $code = $this->productCode((string) $line->product_code);
+                if ($code === '') {
+                    continue;
+                }
+
+                $weight = (float) $line->line_total;
+                if ($weight <= 0) {
+                    $weight = (float) max(1, (int) $line->qty);
+                }
+
+                $totals[$code] ??= ['qty' => 0, 'revenue' => 0.0];
+                $totals[$code]['qty'] += (int) $line->qty;
+                $totals[$code]['revenue'] += $amountPaid * ($weight / $weightSum);
+            }
+        }
+
+        if ($totals === []) {
+            return;
+        }
+
+        $rows = [];
+        foreach ($totals as $code => $row) {
+            $rows[] = [
+                'metric_date' => $date,
+                'product_code' => $code,
+                'sold_qty' => (int) $row['qty'],
+                'sale_amount' => round((float) $row['revenue'], 2),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        TrackerDatabase::table('tracking_daily_products')->upsert(
+            $rows,
+            ['metric_date', 'product_code'],
+            ['sold_qty', 'sale_amount', 'updated_at'],
+        );
+    }
+
+    /**
+     * Category paid and sale are the sum of the product rows stored for that category.
+     */
+    private function rollCategorySoldFromProducts(string $date, Carbon $now): void
+    {
+        TrackerDatabase::table('tracking_daily_categories')->where('metric_date', $date)->update([
+            'sold_qty' => 0,
+            'orders' => 0,
+            'sale_amount' => 0,
+            'updated_at' => $now,
+        ]);
+
+        $sold = TrackerDatabase::table('tracking_daily_products')
+            ->where('metric_date', $date)
+            ->whereNotNull('tracking_category_id')
+            ->groupBy('tracking_category_id')
+            ->selectRaw('tracking_category_id, SUM(sold_qty) as sold_qty, SUM(sale_amount) as sale_amount')
             ->get();
 
         if ($sold->isEmpty()) {
             return;
         }
 
-        $rows = $sold->map(function (object $row) use ($date, $column, $withOrders, $now): array {
-            $values = [
-                'metric_date' => $date,
-                $column => $column === 'product_code' ? (string) $row->dimension_id : (int) $row->dimension_id,
-                'sold_qty' => (int) $row->sold_qty,
-                'sale_amount' => round((float) $row->sale_amount, 2),
-            ];
-
-            if ($withOrders) {
-                $values['orders'] = (int) $row->orders;
+        $rows = [];
+        foreach ($sold as $row) {
+            if ((int) $row->sold_qty === 0 && (float) $row->sale_amount == 0.0) {
+                continue;
             }
 
-            return $values + ['created_at' => $now, 'updated_at' => $now];
-        })->all();
+            $rows[] = [
+                'metric_date' => $date,
+                'tracking_category_id' => (int) $row->tracking_category_id,
+                'sold_qty' => (int) $row->sold_qty,
+                'orders' => 0,
+                'sale_amount' => round((float) $row->sale_amount, 2),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
 
-        TrackerDatabase::table($table)->upsert($rows, ['metric_date', $column], [...$soldColumns, 'updated_at']);
+        if ($rows === []) {
+            return;
+        }
+
+        TrackerDatabase::table('tracking_daily_categories')->upsert(
+            $rows,
+            ['metric_date', 'tracking_category_id'],
+            ['sold_qty', 'orders', 'sale_amount', 'updated_at'],
+        );
     }
 
     /** Remove category day rows left with no metrics after funnel + sold refresh. */

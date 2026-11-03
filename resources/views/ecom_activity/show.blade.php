@@ -53,7 +53,7 @@
                         @php
                             $badgeClass = $badgeColors[$item->action_type] ?? 'badge-amber';
                             $jsonPayload = match ($item->action_type) {
-                                'add_to_cart' => $item->add_to_cart,
+                                'add_to_cart', 'edit_bag' => $item->add_to_cart,
                                 'begin_checkout' => $item->begin_checkout,
                                 'proceed_checkout' => $item->proceed_to_checkout,
                                 'payment_success' => $item->payment_success,
@@ -130,7 +130,10 @@
                                 @if ($item->product_price)
                                     <div><span class="text-slate-400">Price:</span> £{{ number_format($item->product_price, 2) }}</div>
                                 @endif
-                                @if ($item->action_type === 'add_to_cart' && is_array($item->add_to_cart))
+                                @if (in_array($item->action_type, ['add_to_cart', 'edit_bag'], true) && is_array($item->add_to_cart))
+                                    @if (! empty($item->add_to_cart['qty']))
+                                        <div><span class="text-slate-400">Qty:</span> {{ $item->add_to_cart['qty'] }}</div>
+                                    @endif
                                     @if (! empty($item->add_to_cart['product_id']))
                                         <div><span class="text-slate-400">Product ID:</span> {{ $item->add_to_cart['product_id'] }}</div>
                                     @endif

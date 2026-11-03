@@ -35,6 +35,7 @@ return [
         'product_view',
         'product_view_popup',
         'add_to_cart',
+        'edit_bag',
         'begin_checkout',
         'proceed_checkout',
         'payment_success',

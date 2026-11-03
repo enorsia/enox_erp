@@ -941,10 +941,10 @@ class EcomActivityListService
      * Commerce (add / begin / proceed / paid) — per parent style, per session, in purchase cycles:
      * - A cycle runs until payment_success includes that product; the same product in the same
      *   session after pay starts a new cycle (open cycle state resets for that code).
-     * - Each stage contributes once per committed cycle; value = max line qty on events of that
-     *   stage in the cycle (add_to_cart, begin_checkout, proceed_checkout snapshots; paid = order
-     *   line qty when the cycle closes). Not a sum of every click; each event uses its own payload
-     *   at fire time (proceed max may be lower than an earlier begin in the same cycle).
+     * - Each stage contributes once per committed cycle. Begin and proceed use the max cart qty
+     *   for that product code. Add sums each sku: the highest add-click qty of that sku in the cycle.
+     *   An edit_bag event replaces that sku qty with the bag quantity.
+     *   Paid is the order line qty when the cycle closes. Not a sum of every click.
      * - Unpaid open cycles are committed at end of this pass (add/begin/proceed maxes only).
      * - Session totals sum all committed cycles; sync sums sessions onto tracking_daily_products.
      *
@@ -967,7 +967,7 @@ class EcomActivityListService
         };
 
         $totals = [];
-        /** @var array<string, array{add_max: int, begin_max: int, proceed_max: int}> */
+        /** @var array<string, array{add_max: int, begin_max: int, proceed_max: int, add_by_sku?: array<string, int>}> */
         $openCycles = [];
 
         foreach ($actions as $action) {
@@ -987,18 +987,22 @@ class EcomActivityListService
                 continue;
             }
 
-            if ($type === 'add_to_cart') {
+            if ($type === 'add_to_cart' || $type === 'edit_bag') {
                 $code = $this->resolveParentStyleCodeFromAddAction($action, $trackedFilter, $skuToParentCode);
                 if ($code === null) {
                     continue;
                 }
 
-                $qty = $this->addToCartQtyForAction($action);
+                [$sku, $qty] = $this->addToCartSkuAndQty($action);
                 if ($qty <= 0) {
                     continue;
                 }
 
-                $this->bumpProductFunnelCycleMax($openCycles, $code, 'add_max', $qty);
+                if ($type === 'edit_bag') {
+                    $this->setProductFunnelCycleSkuQty($openCycles, $code, $sku, $qty);
+                } else {
+                    $this->bumpProductFunnelCycleSkuMax($openCycles, $code, $sku, $qty);
+                }
 
                 continue;
             }
@@ -1056,8 +1060,68 @@ class EcomActivityListService
      */
     private function bumpProductFunnelCycleMax(array &$openCycles, string $code, string $field, int $qty): void
     {
-        $openCycles[$code] ??= ['add_max' => 0, 'begin_max' => 0, 'proceed_max' => 0];
+        $openCycles[$code] ??= ['add_max' => 0, 'begin_max' => 0, 'proceed_max' => 0, 'add_by_sku' => []];
         $openCycles[$code][$field] = max($openCycles[$code][$field], $qty);
+    }
+
+    /**
+     * @param  array<string, array{add_max: int, begin_max: int, proceed_max: int, add_by_sku?: array<string, int>}>  $openCycles
+     */
+    private function bumpProductFunnelCycleSkuMax(array &$openCycles, string $code, string $sku, int $qty): void
+    {
+        $openCycles[$code] ??= ['add_max' => 0, 'begin_max' => 0, 'proceed_max' => 0, 'add_by_sku' => []];
+        $openCycles[$code]['add_by_sku'][$sku] = max($openCycles[$code]['add_by_sku'][$sku] ?? 0, $qty);
+    }
+
+    /**
+     * Bag quantity edit replaces the sku qty. A later checkout uses this quantity.
+     *
+     * @param  array<string, array{add_max: int, begin_max: int, proceed_max: int, add_by_sku?: array<string, int>}>  $openCycles
+     */
+    private function setProductFunnelCycleSkuQty(array &$openCycles, string $code, string $sku, int $qty): void
+    {
+        $openCycles[$code] ??= ['add_max' => 0, 'begin_max' => 0, 'proceed_max' => 0, 'add_by_sku' => []];
+        $openCycles[$code]['add_by_sku'][$sku] = max(1, $qty);
+    }
+
+    /**
+     * @return array{0: string, 1: int}
+     */
+    private function addToCartSkuAndQty(object $action): array
+    {
+        $sku = trim((string) ($action->sku ?? ''));
+        $payload = json_decode((string) ($action->add_to_cart ?? ''), true);
+        $qty = null;
+
+        if (is_array($payload)) {
+            $items = $payload['items'] ?? $payload['cart_items'] ?? [];
+            if ($sku !== '' && is_array($items)) {
+                foreach ($items as $item) {
+                    if (! is_array($item) || trim((string) ($item['sku'] ?? '')) !== $sku) {
+                        continue;
+                    }
+                    $qty = max(1, (int) ($item['qty'] ?? 1));
+                    break;
+                }
+            }
+
+            if ($sku === '') {
+                $line = $this->addedCartLineFromAddToCartPayload($payload);
+                if (is_array($line)) {
+                    $sku = trim((string) ($line['sku'] ?? ''));
+                    $qty = max(1, (int) ($line['qty'] ?? 1));
+                }
+            }
+        }
+
+        if ($qty === null) {
+            $qty = $this->addToCartQtyForAction($action);
+        }
+        if ($sku === '') {
+            $sku = trim((string) ($action->product_code ?? ''));
+        }
+
+        return [$sku, $qty];
     }
 
     /**
@@ -1066,9 +1130,12 @@ class EcomActivityListService
      */
     private function commitProductFunnelCycle(array &$totals, array &$openCycles, string $code, int $paidQty): void
     {
-        $cycle = $openCycles[$code] ?? ['add_max' => 0, 'begin_max' => 0, 'proceed_max' => 0];
+        $cycle = $openCycles[$code] ?? ['add_max' => 0, 'begin_max' => 0, 'proceed_max' => 0, 'add_by_sku' => []];
+        $addQty = ($cycle['add_by_sku'] ?? []) !== []
+            ? (int) array_sum($cycle['add_by_sku'])
+            : (int) $cycle['add_max'];
 
-        $totals[$code]['add_to_cart'] = (int) ($totals[$code]['add_to_cart'] ?? 0) + $cycle['add_max'];
+        $totals[$code]['add_to_cart'] = (int) ($totals[$code]['add_to_cart'] ?? 0) + $addQty;
         $totals[$code]['begin_checkout'] = (int) ($totals[$code]['begin_checkout'] ?? 0) + $cycle['begin_max'];
         $totals[$code]['proceed_checkout'] = (int) ($totals[$code]['proceed_checkout'] ?? 0) + $cycle['proceed_max'];
 
@@ -1137,6 +1204,7 @@ class EcomActivityListService
             ->whereIn('action_type', [
                 'product_click',
                 'add_to_cart',
+                'edit_bag',
                 'begin_checkout',
                 'proceed_checkout',
                 'proceed_to_checkout',
@@ -1904,6 +1972,7 @@ class EcomActivityListService
             ->whereIn('session_id', $sessionIds)
             ->whereIn('action_type', [
                 'add_to_cart',
+                'edit_bag',
                 'begin_checkout',
                 'proceed_checkout',
                 'proceed_to_checkout',
@@ -2631,6 +2700,7 @@ class EcomActivityListService
             ->whereIn('session_id', $sessionIds)
             ->whereIn('action_type', [
                 'add_to_cart',
+                'edit_bag',
                 'begin_checkout',
                 'proceed_checkout',
                 'proceed_to_checkout',
@@ -3308,7 +3378,7 @@ class EcomActivityListService
     {
         $actions = TrackerDatabase::table('activity_ecom_user_actions')
             ->where('session_id', $sessionId)
-            ->whereIn('action_type', ['payment_success', 'proceed_checkout', 'proceed_to_checkout', 'begin_checkout', 'add_to_cart'])
+            ->whereIn('action_type', ['payment_success', 'proceed_checkout', 'proceed_to_checkout', 'begin_checkout', 'add_to_cart', 'edit_bag'])
             ->whereBetween('created_at', [$fromBound, $toBound])
             ->orderByDesc('id')
             ->get();
@@ -3319,7 +3389,7 @@ class EcomActivityListService
                 'payment_success' => 'payment_success',
                 'proceed_checkout', 'proceed_to_checkout' => 'proceed_to_checkout',
                 'begin_checkout' => 'begin_checkout',
-                'add_to_cart' => 'add_to_cart',
+                'add_to_cart', 'edit_bag' => 'add_to_cart',
                 default => null,
             };
 

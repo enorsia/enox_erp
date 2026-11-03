@@ -34,8 +34,6 @@ class CategoryPerformanceSectionService
             ->selectRaw('SUM(dc.proceed_checkouts) as proceed_checkouts, SUM(dc.sold_qty) as sale_items, SUM(dc.sale_amount) as sale_amount')
             ->get();
 
-        $soldByCategory = $this->scopedCategorySoldTotals($from, $to, $period, []);
-
         $metrics = ['category_views', 'product_views', 'adds', 'proceed_checkouts', 'sale_items', 'sale_amount'];
         $sort = fn (array $a, array $b) => [$b['sale_amount'], $b['product_views']] <=> [$a['sale_amount'], $a['product_views']];
 
@@ -43,7 +41,6 @@ class CategoryPerformanceSectionService
         foreach ($rows as $row) {
             $departmentId = (int) ($row->department_id ?? 0);
             $categoryId = (int) $row->id;
-            $sold = $soldByCategory[$categoryId] ?? ['sale_items' => (int) $row->sale_items, 'sale_amount' => (float) $row->sale_amount];
 
             $category = [
                 'category_id' => $categoryId,
@@ -53,8 +50,8 @@ class CategoryPerformanceSectionService
                 'product_views' => (int) $row->product_views,
                 'adds' => (int) $row->adds,
                 'proceed_checkouts' => (int) $row->proceed_checkouts,
-                'sale_items' => (int) $sold['sale_items'],
-                'sale_amount' => (float) $sold['sale_amount'],
+                'sale_items' => (int) $row->sale_items,
+                'sale_amount' => (float) $row->sale_amount,
             ];
 
             $departments[$departmentId] ??= ['key' => 'department-'.$departmentId, 'name' => TrackerCategoryIdentity::formatDepartmentDisplayName($row->department_name ?? 'Other') ?: 'Other', 'categories' => []] + array_fill_keys($metrics, 0);
@@ -63,8 +60,6 @@ class CategoryPerformanceSectionService
                 $departments[$departmentId][$metric] += $category[$metric];
             }
         }
-
-        $this->appendSoldOnlyCategories($departments, $soldByCategory, $metrics, $sort);
 
         $this->filterDepartmentsWithoutActivity($departments, $metrics);
 
@@ -121,7 +116,6 @@ class CategoryPerformanceSectionService
 
             $categoryId = (int) $row->id;
             $departmentId = (int) ($row->department_id ?? 0);
-
             $categoryMap[$categoryId] ??= [
                 'category_id' => $categoryId,
                 'category_name' => (string) $row->name,
@@ -255,56 +249,6 @@ class CategoryPerformanceSectionService
         }
 
         return $map;
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $departments
-     * @param  array<int, array{sale_items: int, sale_amount: float}>  $soldByCategory
-     * @param  list<string>  $metrics
-     */
-    private function appendSoldOnlyCategories(array &$departments, array $soldByCategory, array $metrics, callable $sort): void
-    {
-        $present = [];
-        foreach ($departments as $department) {
-            foreach ($department['categories'] as $category) {
-                $present[(int) ($category['category_id'] ?? 0)] = true;
-            }
-        }
-
-        foreach ($soldByCategory as $categoryId => $sold) {
-            $categoryId = (int) $categoryId;
-            if (isset($present[$categoryId])) {
-                continue;
-            }
-
-            if ((int) ($sold['sale_items'] ?? 0) === 0 && (float) ($sold['sale_amount'] ?? 0.0) === 0.0) {
-                continue;
-            }
-
-            [$categoryName, $departmentId, $departmentName] = $this->categoryMetaForPerformance($categoryId);
-            $category = [
-                'category_id' => $categoryId,
-                'category_name' => $categoryName,
-                'department_id' => $departmentId ?: null,
-                'category_views' => 0,
-                'product_views' => 0,
-                'adds' => 0,
-                'proceed_checkouts' => 0,
-                'sale_items' => (int) $sold['sale_items'],
-                'sale_amount' => (float) $sold['sale_amount'],
-            ];
-
-            $departments[$departmentId] ??= [
-                'key' => 'department-'.$departmentId,
-                'name' => TrackerCategoryIdentity::formatDepartmentDisplayName($departmentName) ?: 'Other',
-                'categories' => [],
-            ] + array_fill_keys($metrics, 0);
-            $departments[$departmentId]['categories'][] = $category;
-            foreach ($metrics as $metric) {
-                $departments[$departmentId][$metric] += $category[$metric];
-            }
-            $present[$categoryId] = true;
-        }
     }
 
     /**

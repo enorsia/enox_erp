@@ -494,6 +494,12 @@ class TrackIngestService
             $row = $this->enrichAddToCartScalars($row, $event['add_to_cart']);
         }
 
+        if ($actionType === 'edit_bag' && isset($event['edit_bag'])) {
+            $row['add_to_cart'] = json_encode($event['edit_bag']);
+            $row['item_qty'] = max(1, (int) ($event['edit_bag']['qty'] ?? 1));
+            $row = $this->enrichAddToCartScalars($row, $event['edit_bag']);
+        }
+
         if ($actionType === 'begin_checkout' && isset($event['begin_checkout'])) {
             $row['begin_checkout'] = json_encode($event['begin_checkout']);
         }
