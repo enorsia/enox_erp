@@ -59,6 +59,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::get('ecom-tracker/dashboard/compare', [EcomTrackerDashboardCompareController::class, 'index'])->name('ecom-tracker.dashboard.compare');
     Route::get('ecommerce/ctr-summary', [EcommerceCtrSummaryController::class, 'index'])->name('ecommerce.ctr-summary.index');
     Route::get('ecommerce/ctr-summary/export', [EcommerceCtrSummaryController::class, 'export'])->name('ecommerce.ctr-summary.export');
+    Route::get('ecommerce/ranking-products', [EcommerceCtrSummaryController::class, 'rankingProducts'])->name('ecommerce.ranking-products.index');
 
     Route::controller(SalesChartController::class)->group(function () {
         Route::get('selling-chart/manage', 'index')->name('selling_chart.index');

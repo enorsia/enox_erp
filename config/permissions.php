@@ -17,6 +17,7 @@ return [
             'ecommerce' => [
                 'wh_stock_in_out' => 'WH Stock In/Out',
                 'ctr_summary' => 'CTR Summary',
+                'ranking_products' => 'Ranking Products',
             ],
             'ecom_tracker' => [
                 'dashboard' => 'Store Performance',
@@ -106,6 +107,10 @@ return [
             'ctr_summary' => [
                 'guard' => 'web',
                 'actions' => ['index', 'export'],
+            ],
+            'ranking_products' => [
+                'guard' => 'web',
+                'actions' => ['index'],
             ],
         ],
 

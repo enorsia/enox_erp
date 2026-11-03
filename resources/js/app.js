@@ -59,6 +59,7 @@ const loadEcomTrackerPage = (selector, loader) => {
 loadEcomTrackerPage('#ecom-tracker-dashboard-content', () => import('./pages/ecom-tracker-dashboard'));
 loadEcomTrackerPage('#ecom-tracker-compare-content', () => import('./pages/ecom-tracker-compare'));
 loadEcomTrackerPage('#ecom-tracker-dashboard-content, #ecom-tracker-compare-content, .etd-tip-trigger', () => import('./lib/etd-tip-position'));
+if (has('#ranking-products-page'))                 import('./pages/ranking-products');
 if (has('#ecom-activity-page-content'))       import('./pages/ecom-activity-table');
 if (has('#sale-tracking-page'))               import('./pages/sale-tracking');
 if (has('#ads-performance-report-content'))  import('./pages/ads-performance-report');
