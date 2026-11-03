@@ -8,6 +8,7 @@
         $settingDaysSoldLabel = $sortingSalesDays.' days sold';
         $metricColumnTips = [
             'click' => 'Total product clicks on the category grid (rollup window from tracking CTR summaries).',
+            'impression' => 'How many times this product tile was counted in view on category listing pages (tracking_ctr_summaries total_impression rollup).',
             'ctr' => 'Click divided by impression for this placement. Ratio — multiply by 100 for %.',
             'ctr_average' => 'Category rollup CTR for this product placement in tracking_ctr_summaries.',
             'total_sold' => 'Total sold units from Enorsia product ranking settings.',
@@ -23,7 +24,7 @@
         $filtersActive = ($search ?? '') !== '' || ($contextKey ?? '') !== '';
     @endphp
 
-    <div id="ecom-tracker-dashboard-content" class="etd-page etd-page--product-performance-list etd-page--ctr-summary">
+    <div id="ecom-tracker-dashboard-content" class="etd-page etd-page--product-performance-list etd-page--ctr-summary etd-page--ranking-products">
         <div id="ranking-products-page" class="hidden" aria-hidden="true"></div>
 
         @include('ecommerce.ranking_products.filter-drawer')
@@ -50,10 +51,22 @@
                 <div class="etd-page-header-toolbar">
                     <div class="etd-header-toolbar-row">
                         <div class="etd-header-toolbar-icon-group etd-header-toolbar-icon-group--actions">
+                            @can('ecommerce.ranking_products.export')
+                                @if (filled($exportUrl ?? null))
+                                    <a href="{{ $exportUrl }}"
+                                       class="etd-header-btn etd-topbar-btn--export etd-print-hide no-underline"
+                                       title="Export all rows in this view to Excel">
+                                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                        </svg>
+                                        <span class="etd-header-btn-text">Export Excel</span>
+                                    </a>
+                                @endif
+                            @endcan
                             @can('ecommerce.ctr_summary.index')
                                 <a href="{{ route('admin.ecommerce.ctr-summary.index') }}"
                                    class="etd-header-btn etd-header-btn--icon no-underline etd-print-hide"
-                                   title="CTR Summary" target="_blank">
+                                   title="CTR Summary">
                                     <span class="etd-header-btn-text">CTR Summary</span>
                                 </a>
                             @endcan
@@ -78,6 +91,10 @@
             <div class="mx-4 mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
                 {{ $apiError }}
             </div>
+        @elseif (filled(session('error')))
+            <div class="mx-4 mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
+                {{ session('error') }}
+            </div>
         @endif
 
         <div class="etd-panel etd-print-unit etd-ctr-summary-list">
@@ -87,8 +104,8 @@
                 <table class="etd-table etd-table--ctr-summary w-full text-[13px] border-collapse">
                     <thead>
                         <tr>
-                            <th class="whitespace-nowrap etd-ctr-summary-col--label">Listing</th>
-                            <th class="whitespace-nowrap etd-ctr-summary-col--label">Rank</th>
+                            <th class="whitespace-nowrap etd-ctr-summary-col--label etd-ctr-summary-col--listing">Listing</th>
+                            <th class="whitespace-nowrap etd-ctr-summary-col--label etd-ctr-summary-col--rank">Rank</th>
                             <th class="whitespace-nowrap etd-ctr-summary-col--label">Product code</th>
                             <th class="whitespace-nowrap etd-ctr-summary-col--num">
                                 @include('ecom_tracker.partials.column-header-with-tip', [
@@ -130,6 +147,14 @@
                                     'iconBefore' => true,
                                 ])
                             </th>
+                            <th class="whitespace-nowrap etd-ctr-summary-col--num">
+                                @include('ecom_tracker.partials.column-header-with-tip', [
+                                    'label' => 'Impression',
+                                    'tip' => $metricColumnTips['impression'],
+                                    'align' => 'center',
+                                    'iconBefore' => true,
+                                ])
+                            </th>
                             @foreach ($statusColumnDefs as $statusCol)
                                 <th class="whitespace-nowrap etd-ctr-summary-col--num text-slate-500 dark:text-slate-400">{{ $statusCol['label'] }}</th>
                             @endforeach
@@ -138,16 +163,17 @@
                     <tbody>
                         @forelse ($rows as $row)
                             <tr class="etd-ctr-summary-row">
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label" data-label="Listing">{{ $row['context_label'] }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label tabular-nums" data-label="Rank">{{ number_format($row['serial_number']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label etd-ctr-summary-col--listing" data-label="Listing">{{ $row['context_label'] }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label etd-ctr-summary-col--rank tabular-nums" data-label="Rank">{{ number_format($row['serial_number']) }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--label etd-ctr-summary-col--product font-mono text-[12px]" data-label="Product code">{{ $row['product_code'] }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums !text-center" data-label="CTR">{{ number_format($row['ctr'], 2, '.', '') }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums !text-center" data-label="CTR average">{{ number_format($row['ctr_average'], 2, '.', '') }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums !text-center" data-label="{{ $settingDaysSoldLabel }}">{{ number_format($row['total_sold_rolling']) }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums !text-center" data-label="Total sold">{{ number_format($row['total_sold']) }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums !text-center" data-label="Click">{{ number_format($row['click']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="CTR">{{ number_format($row['ctr'], 2, '.', '') }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="CTR average">{{ number_format($row['ctr_average'], 2, '.', '') }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums max-sm:!text-left sm:!text-center" data-label="{{ $settingDaysSoldLabel }}">{{ number_format($row['total_sold_rolling']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums max-sm:!text-left sm:!text-center" data-label="Total sold">{{ number_format($row['total_sold']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="Click">{{ number_format($row['click']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="Impression">{{ number_format($row['impression']) }}</td>
                                 @foreach ($statusColumnDefs as $statusCol)
-                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums !text-center" data-label="{{ $statusCol['label'] }}">
+                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="{{ $statusCol['label'] }}">
                                         @if ($statusCol['type'] === 'pin')
                                             @if (($row['pin_serial'] ?? null) !== null)
                                                 <span class="text-emerald-600 dark:text-emerald-400">{{ number_format((int) $row['pin_serial']) }}</span>
@@ -164,7 +190,7 @@
                             </tr>
                         @empty
                             <tr class="etd-ctr-summary-empty">
-                                <td colspan="12" class="py-10 text-center text-slate-500 dark:text-slate-400">
+                                <td colspan="13" class="py-10 text-center text-slate-500 dark:text-slate-400">
                                     No ranking products for this listing context.
                                 </td>
                             </tr>

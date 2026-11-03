@@ -8456,6 +8456,31 @@ a.etd-pager__btn:hover {
     }
 }
 
+/* Product Ranking — Listing paths need more room; Rank is a small integer column */
+.etd-page--ranking-products .etd-table--ctr-summary .etd-ctr-summary-col--listing {
+    width: 8rem;
+    min-width: 6rem;
+    max-width: none;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.etd-page--ranking-products .etd-table--ctr-summary .etd-ctr-summary-col--rank {
+    width: 3.5rem;
+    min-width: 3.5rem;
+    max-width: 3.75rem;
+    text-align: center !important;
+    white-space: nowrap;
+}
+
+@media (min-width: 1024px) {
+    .etd-page--ranking-products .etd-table--ctr-summary .etd-ctr-summary-col--rank {
+        width: 3.25rem;
+        min-width: 3.25rem;
+        max-width: 3.5rem;
+    }
+}
+
 @media (min-width: 640px) and (max-width: 1023px) {
     .etd-ctr-summary-table-scroll {
         scroll-padding-inline: 0.5rem;
@@ -8597,6 +8622,12 @@ a.etd-pager__btn:hover {
         border: none;
         white-space: normal;
         overflow-wrap: anywhere;
+        text-align: left !important;
+    }
+
+    .etd-ctr-summary-list .etd-table.etd-table--ctr-summary tbody tr.etd-ctr-summary-row td.etd-ctr-summary-col--num,
+    .etd-ctr-summary-list .etd-table.etd-table--ctr-summary tbody tr.etd-ctr-summary-row td.etd-ctr-summary-col--sold,
+    .etd-ctr-summary-list .etd-table.etd-table--ctr-summary tbody tr.etd-ctr-summary-row td:nth-child(n + 4) {
         text-align: left !important;
     }
 

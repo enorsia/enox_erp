@@ -58,7 +58,8 @@
             </section>
         </div>
         <div class="etd-filter-panel__footer">
-            <button type="submit" class="etd-header-btn etd-header-btn--primary w-full justify-center">Apply filters</button>
+            <a href="{{ $drawerResetUrl }}" class="etd-filter-panel__reset">Reset</a>
+            <button type="submit" class="etd-filter-panel__apply">Apply filters</button>
         </div>
     </form>
 </div>
