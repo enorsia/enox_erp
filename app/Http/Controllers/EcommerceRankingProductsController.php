@@ -556,6 +556,7 @@ class EcommerceRankingProductsController extends Controller
                 'pin_serial' => $pinSerial > 0 ? $pinSerial : null,
                 'is_selling_fast' => (int) ($settings['is_selling_fast'] ?? 0),
                 'click' => (int) ($ctr['total_click'] ?? 0),
+                'impression' => (int) ($ctr['total_impression'] ?? 0),
                 'ctr' => (float) ($ctr['ctr'] ?? 0),
                 'ctr_average' => (float) ($ctr['ctr_average'] ?? 0),
             ];

@@ -8,6 +8,7 @@
         $settingDaysSoldLabel = $sortingSalesDays.' days sold';
         $metricColumnTips = [
             'click' => 'Total product clicks on the category grid (rollup window from tracking CTR summaries).',
+            'impression' => 'How many times this product tile was counted in view on category listing pages (tracking_ctr_summaries total_impression rollup).',
             'ctr' => 'Click divided by impression for this placement. Ratio — multiply by 100 for %.',
             'ctr_average' => 'Category rollup CTR for this product placement in tracking_ctr_summaries.',
             'total_sold' => 'Total sold units from Enorsia product ranking settings.',
@@ -146,6 +147,14 @@
                                     'iconBefore' => true,
                                 ])
                             </th>
+                            <th class="whitespace-nowrap etd-ctr-summary-col--num">
+                                @include('ecom_tracker.partials.column-header-with-tip', [
+                                    'label' => 'Impression',
+                                    'tip' => $metricColumnTips['impression'],
+                                    'align' => 'center',
+                                    'iconBefore' => true,
+                                ])
+                            </th>
                             @foreach ($statusColumnDefs as $statusCol)
                                 <th class="whitespace-nowrap etd-ctr-summary-col--num text-slate-500 dark:text-slate-400">{{ $statusCol['label'] }}</th>
                             @endforeach
@@ -162,6 +171,7 @@
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums max-sm:!text-left sm:!text-center" data-label="{{ $settingDaysSoldLabel }}">{{ number_format($row['total_sold_rolling']) }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums max-sm:!text-left sm:!text-center" data-label="Total sold">{{ number_format($row['total_sold']) }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="Click">{{ number_format($row['click']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="Impression">{{ number_format($row['impression']) }}</td>
                                 @foreach ($statusColumnDefs as $statusCol)
                                     <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="{{ $statusCol['label'] }}">
                                         @if ($statusCol['type'] === 'pin')
@@ -180,7 +190,7 @@
                             </tr>
                         @empty
                             <tr class="etd-ctr-summary-empty">
-                                <td colspan="12" class="py-10 text-center text-slate-500 dark:text-slate-400">
+                                <td colspan="13" class="py-10 text-center text-slate-500 dark:text-slate-400">
                                     No ranking products for this listing context.
                                 </td>
                             </tr>
