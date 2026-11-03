@@ -58,6 +58,10 @@ class TrackingCtrRollupService
             $categoryImpressions = 0;
 
             foreach ($rows as $row) {
+                $row->total_click = $this->clicksWithinImpressions(
+                    (int) $row->total_click,
+                    (int) $row->total_impression,
+                );
                 $categoryClicks += (int) $row->total_click;
                 $categoryImpressions += (int) $row->total_impression;
             }
@@ -443,11 +447,44 @@ class TrackingCtrRollupService
             ->where('tracking_ctr_category_id', $delta['tracking_ctr_category_id'])
             ->where('product_code', $delta['product_code'])
             ->update([
+                'total_click' => DB::raw('LEAST(total_click, total_impression)'),
                 'ctr' => DB::raw(
-                    'CASE WHEN total_impression > 0 THEN ROUND(total_click / total_impression, 6) ELSE 0 END',
+                    'CASE WHEN total_impression > 0 THEN ROUND(LEAST(total_click, total_impression) / total_impression, 6) ELSE 0 END',
                 ),
                 'updated_at' => now(),
             ]);
+    }
+
+    /**
+     * Stored clicks must not exceed impressions. Extra clicks are set equal to the impression count.
+     *
+     * @return array{daily: int, summaries: int}
+     */
+    public function capClicksToImpressions(): array
+    {
+        $clickCap = 'LEAST(total_click, total_impression)';
+        $ctr = 'CASE WHEN total_impression > 0 THEN ROUND('.$clickCap.' / total_impression, 6) ELSE 0 END';
+
+        $daily = TrackerDatabase::table('tracking_ctr_daily_summaries')
+            ->whereColumn('total_click', '>', 'total_impression')
+            ->update([
+                'total_click' => DB::raw($clickCap),
+                'ctr' => DB::raw($ctr),
+                'updated_at' => now(),
+            ]);
+
+        $summaries = TrackerDatabase::table('tracking_ctr_summaries')
+            ->whereColumn('total_click', '>', 'total_impression')
+            ->update([
+                'total_click' => DB::raw($clickCap),
+                'ctr' => DB::raw($ctr),
+                'updated_at' => now(),
+            ]);
+
+        return [
+            'daily' => (int) $daily,
+            'summaries' => (int) $summaries,
+        ];
     }
 
     private function refreshSummaryForProductCode(
@@ -478,8 +515,11 @@ class TrackingCtrRollupService
             ->selectRaw('COALESCE(SUM(total_impression), 0) as total_impression')
             ->first();
 
-        $totalClick = (int) ($aggregate->total_click ?? 0);
         $totalImpression = (int) ($aggregate->total_impression ?? 0);
+        $totalClick = $this->clicksWithinImpressions(
+            (int) ($aggregate->total_click ?? 0),
+            $totalImpression,
+        );
         $ctr = $this->ctrValue($totalClick, $totalImpression);
 
         if ($totalClick < $minClicks) {
@@ -566,6 +606,14 @@ class TrackingCtrRollupService
                 ),
                 'updated_at' => now(),
             ]);
+    }
+
+    private function clicksWithinImpressions(int $clicks, int $impressions): int
+    {
+        $clicks = max(0, $clicks);
+        $impressions = max(0, $impressions);
+
+        return $clicks > $impressions ? $impressions : $clicks;
     }
 
     private function ctrValue(int $clicks, int $impressions): float

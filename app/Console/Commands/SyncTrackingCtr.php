@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\TrackingCtrBatchDispatcher;
+use App\Services\TrackingCtrRollupService;
 use App\Services\TrackingCtrSyncSiteSettingsService;
 use App\Support\TrackerQueueSupport;
 use App\Support\TrackerTime;
@@ -21,6 +22,7 @@ class SyncTrackingCtr extends Command
 
     public function handle(
         TrackingCtrBatchDispatcher $dispatcher,
+        TrackingCtrRollupService $rollupService,
         TrackingCtrSyncSiteSettingsService $syncSiteSettings,
     ): int {
         $force = (bool) $this->option('force');
@@ -47,6 +49,16 @@ class SyncTrackingCtr extends Command
                 $from->toDateString(),
                 $endDay->toDateString(),
                 TrackerTime::timezone(),
+            ));
+        }
+
+        $capped = $rollupService->capClicksToImpressions();
+
+        if ($capped['daily'] > 0 || $capped['summaries'] > 0) {
+            $this->info(sprintf(
+                'CTR sync: capped clicks to impressions on %d daily row(s) and %d summary row(s).',
+                $capped['daily'],
+                $capped['summaries'],
             ));
         }
 
