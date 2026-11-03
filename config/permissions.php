@@ -110,7 +110,7 @@ return [
             ],
             'ranking_products' => [
                 'guard' => 'web',
-                'actions' => ['index'],
+                'actions' => ['index', 'export'],
             ],
         ],
 

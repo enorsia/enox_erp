@@ -213,7 +213,7 @@
                                             default => $row[$metricKey] ?? '',
                                         };
                                     @endphp
-                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums !text-center" data-label="{{ $metricLabel }}">{{ $metricValue }}</td>
+                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="{{ $metricLabel }}">{{ $metricValue }}</td>
                                 @endforeach
                                 @foreach ($soldMetricGroups as $soldGroup)
                                     @php

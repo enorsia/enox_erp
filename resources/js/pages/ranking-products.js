@@ -1,3 +1,21 @@
+function readRankingContextValue(selectEl) {
+    if (!selectEl) {
+        return '';
+    }
+
+    if (selectEl.tomselect) {
+        try {
+            selectEl.tomselect.sync();
+        } catch {
+            // Options may still be valid from getValue().
+        }
+
+        return String(selectEl.tomselect.getValue() ?? '').trim();
+    }
+
+    return String(selectEl.value ?? '').trim();
+}
+
 function initRankingProductsContextSelect() {
     const form = document.getElementById('ranking-products-context-form');
     const el = document.getElementById('ranking-products-context');
@@ -45,11 +63,10 @@ function initRankingProductsContextSelect() {
 }
 
 function initRankingProductsDrawerContextSelect() {
-    const drawerForm = document.getElementById('ranking-products-filter-drawer-form');
     const el = document.getElementById('ranking-filter-context');
     const mainSelect = document.getElementById('ranking-products-context');
 
-    if (!drawerForm || !el || el.tomselect || typeof window.TomSelect === 'undefined') {
+    if (!el || el.tomselect || typeof window.TomSelect === 'undefined') {
         return;
     }
 
@@ -72,9 +89,68 @@ function initRankingProductsDrawerContextSelect() {
     });
 }
 
+function initRankingProductsFilterDrawerForm() {
+    const drawerForm = document.getElementById('ranking-products-filter-drawer-form');
+
+    if (!drawerForm || drawerForm.dataset.etdSubmitBound === '1') {
+        return;
+    }
+
+    drawerForm.dataset.etdSubmitBound = '1';
+
+    drawerForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+
+        const contextEl = document.getElementById('ranking-filter-context');
+        const searchEl = document.getElementById('ranking-filter-search');
+        const contextValue = readRankingContextValue(contextEl);
+        const searchValue = String(searchEl?.value ?? '').trim();
+        const url = new URL(drawerForm.action || window.location.href, window.location.origin);
+
+        url.search = '';
+
+        if (contextValue !== '') {
+            url.searchParams.set('context', contextValue);
+        }
+
+        if (searchValue !== '') {
+            url.searchParams.set('search', searchValue);
+        }
+
+        url.searchParams.set('page', '1');
+
+        if (typeof window.closeFilterDrawer === 'function') {
+            window.closeFilterDrawer();
+        }
+
+        window.location.assign(url.toString());
+    });
+}
+
+let rankingFilterRefreshPatched = false;
+
+function patchRankingProductsFilterRefresh() {
+    if (rankingFilterRefreshPatched || !document.getElementById('ranking-products-page')) {
+        return;
+    }
+
+    rankingFilterRefreshPatched = true;
+    const previousRefresh = window.refreshEtdFilterControls;
+
+    window.refreshEtdFilterControls = function refreshRankingFilterControls(root) {
+        if (typeof previousRefresh === 'function') {
+            previousRefresh(root);
+        }
+
+        initRankingProductsDrawerContextSelect();
+    };
+}
+
 export function initRankingProductsPage() {
     initRankingProductsContextSelect();
     initRankingProductsDrawerContextSelect();
+    initRankingProductsFilterDrawerForm();
+    patchRankingProductsFilterRefresh();
 }
 
 if (document.getElementById('ranking-products-page')) {
