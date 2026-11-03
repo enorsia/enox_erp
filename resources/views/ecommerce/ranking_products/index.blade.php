@@ -104,8 +104,8 @@
                 <table class="etd-table etd-table--ctr-summary w-full text-[13px] border-collapse">
                     <thead>
                         <tr>
-                            <th class="whitespace-nowrap etd-ctr-summary-col--label">Listing</th>
-                            <th class="whitespace-nowrap etd-ctr-summary-col--label">Rank</th>
+                            <th class="whitespace-nowrap etd-ctr-summary-col--label etd-ctr-summary-col--listing">Listing</th>
+                            <th class="whitespace-nowrap etd-ctr-summary-col--label etd-ctr-summary-col--rank">Rank</th>
                             <th class="whitespace-nowrap etd-ctr-summary-col--label">Product code</th>
                             <th class="whitespace-nowrap etd-ctr-summary-col--num">
                                 @include('ecom_tracker.partials.column-header-with-tip', [
@@ -163,8 +163,8 @@
                     <tbody>
                         @forelse ($rows as $row)
                             <tr class="etd-ctr-summary-row">
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label" data-label="Listing">{{ $row['context_label'] }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label tabular-nums" data-label="Rank">{{ number_format($row['serial_number']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label etd-ctr-summary-col--listing" data-label="Listing">{{ $row['context_label'] }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--label etd-ctr-summary-col--rank tabular-nums" data-label="Rank">{{ number_format($row['serial_number']) }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--label etd-ctr-summary-col--product font-mono text-[12px]" data-label="Product code">{{ $row['product_code'] }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="CTR">{{ number_format($row['ctr'], 2, '.', '') }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="CTR average">{{ number_format($row['ctr_average'], 2, '.', '') }}</td>
