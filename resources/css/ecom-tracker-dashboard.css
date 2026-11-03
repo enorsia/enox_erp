@@ -8600,6 +8600,12 @@ a.etd-pager__btn:hover {
         text-align: left !important;
     }
 
+    .etd-ctr-summary-list .etd-table.etd-table--ctr-summary tbody tr.etd-ctr-summary-row td.etd-ctr-summary-col--num,
+    .etd-ctr-summary-list .etd-table.etd-table--ctr-summary tbody tr.etd-ctr-summary-row td.etd-ctr-summary-col--sold,
+    .etd-ctr-summary-list .etd-table.etd-table--ctr-summary tbody tr.etd-ctr-summary-row td:nth-child(n + 4) {
+        text-align: left !important;
+    }
+
     .etd-ctr-summary-list .etd-table--ctr-summary tbody tr.etd-ctr-summary-row td::before {
         content: attr(data-label);
         font-size: 10px;

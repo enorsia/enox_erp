@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Support\Collection;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EcommerceCtrSummaryController extends Controller
@@ -160,58 +161,7 @@ class EcommerceCtrSummaryController extends Controller
             if ($apiError === null && is_array($apiPayload)) {
                 $sortingSalesDays = max(1, (int) ($apiPayload['sorting_sales_days'] ?? 30));
                 $apiRows = collect($apiPayload['data'] ?? []);
-
-                $ctrByContextCode = [];
-                foreach ($apiRows->groupBy(fn (array $item): string => ($item['listing_scope'] ?? '').':'.($item['listing_scope_id'] ?? 0)) as $rowContextKey => $group) {
-                    [$scope, $scopeId] = array_pad(explode(':', (string) $rowContextKey, 2), 2, '0');
-                    $codes = $group
-                        ->map(fn (array $item): string => trim((string) ($item['product_code'] ?? '')))
-                        ->filter()
-                        ->unique()
-                        ->values()
-                        ->all();
-
-                    if ($codes === []) {
-                        continue;
-                    }
-
-                    $metrics = $ctrResolver->metricsByProductCode((string) $scope, (int) $scopeId, $codes);
-                    foreach ($metrics as $code => $metric) {
-                        $ctrByContextCode[$rowContextKey][$code] = $metric;
-                    }
-                }
-
-                $rows = $apiRows->map(function (array $item) use ($ctrByContextCode, $labelsByContextKey): array {
-                    $code = trim((string) ($item['product_code'] ?? ''));
-                    $scope = (string) ($item['listing_scope'] ?? '');
-                    $scopeId = (int) ($item['listing_scope_id'] ?? 0);
-                    $rowContextKey = $scope.':'.$scopeId;
-                    $settings = is_array($item['product_ranking_settings'] ?? null)
-                        ? $item['product_ranking_settings']
-                        : [];
-                    $pin = is_array($item['pin'] ?? null) ? $item['pin'] : [];
-                    $ctr = $ctrByContextCode[$rowContextKey][$code] ?? null;
-                    $pinSerial = isset($pin['pin_serial']) ? (int) $pin['pin_serial'] : 0;
-
-                    return [
-                        'context_key' => $rowContextKey,
-                        'context_label' => $labelsByContextKey[$rowContextKey] ?? $rowContextKey,
-                        'listing_scope' => $scope,
-                        'listing_scope_id' => $scopeId,
-                        'serial_number' => (int) ($item['serial_number'] ?? 0),
-                        'product_code' => $code,
-                        'total_sold' => (int) ($settings['total_sold'] ?? 0),
-                        'total_sold_rolling' => (int) ($settings['total_sold_rolling'] ?? 0),
-                        'is_stock_out' => (int) ($settings['is_stock_out'] ?? 0),
-                        'is_new_in' => (int) ($settings['is_new_in'] ?? 0),
-                        'is_pinned' => (int) ($pin['is_pinned'] ?? ($pinSerial > 0 ? 1 : 0)),
-                        'pin_serial' => $pinSerial > 0 ? $pinSerial : null,
-                        'is_selling_fast' => (int) ($settings['is_selling_fast'] ?? 0),
-                        'click' => (int) ($ctr['total_click'] ?? 0),
-                        'ctr' => (float) ($ctr['ctr'] ?? 0),
-                        'ctr_average' => (float) ($ctr['ctr_average'] ?? 0),
-                    ];
-                });
+                $rows = $this->transformRankingApiRows($apiRows, $labelsByContextKey, $ctrResolver);
 
                 $pagination = is_array($apiPayload['pagination'] ?? null) ? $apiPayload['pagination'] : [];
                 $paginator = new PaginationLengthAwarePaginator(
@@ -1406,5 +1356,68 @@ class EcommerceCtrSummaryController extends Controller
         }
 
         return [$payload, null];
+    }
+
+    /**
+     * @param  array<string, string>  $labelsByContextKey
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function transformRankingApiRows(
+        Collection $apiRows,
+        array $labelsByContextKey,
+        EcommerceListingScopeCtrResolver $ctrResolver,
+    ): Collection {
+        $ctrByContextCode = [];
+
+        foreach ($apiRows->groupBy(fn (array $item): string => ($item['listing_scope'] ?? '').':'.($item['listing_scope_id'] ?? 0)) as $rowContextKey => $group) {
+            [$scope, $scopeId] = array_pad(explode(':', (string) $rowContextKey, 2), 2, '0');
+            $codes = $group
+                ->map(fn (array $item): string => trim((string) ($item['product_code'] ?? '')))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($codes === []) {
+                continue;
+            }
+
+            $metrics = $ctrResolver->metricsByProductCode((string) $scope, (int) $scopeId, $codes);
+            foreach ($metrics as $code => $metric) {
+                $ctrByContextCode[$rowContextKey][$code] = $metric;
+            }
+        }
+
+        return $apiRows->map(function (array $item) use ($ctrByContextCode, $labelsByContextKey): array {
+            $code = trim((string) ($item['product_code'] ?? ''));
+            $scope = (string) ($item['listing_scope'] ?? '');
+            $scopeId = (int) ($item['listing_scope_id'] ?? 0);
+            $rowContextKey = $scope.':'.$scopeId;
+            $settings = is_array($item['product_ranking_settings'] ?? null)
+                ? $item['product_ranking_settings']
+                : [];
+            $pin = is_array($item['pin'] ?? null) ? $item['pin'] : [];
+            $ctr = $ctrByContextCode[$rowContextKey][$code] ?? null;
+            $pinSerial = isset($pin['pin_serial']) ? (int) $pin['pin_serial'] : 0;
+
+            return [
+                'context_key' => $rowContextKey,
+                'context_label' => $labelsByContextKey[$rowContextKey] ?? $rowContextKey,
+                'listing_scope' => $scope,
+                'listing_scope_id' => $scopeId,
+                'serial_number' => (int) ($item['serial_number'] ?? 0),
+                'product_code' => $code,
+                'total_sold' => (int) ($settings['total_sold'] ?? 0),
+                'total_sold_rolling' => (int) ($settings['total_sold_rolling'] ?? 0),
+                'is_stock_out' => (int) ($settings['is_stock_out'] ?? 0),
+                'is_new_in' => (int) ($settings['is_new_in'] ?? 0),
+                'is_pinned' => (int) ($pin['is_pinned'] ?? ($pinSerial > 0 ? 1 : 0)),
+                'pin_serial' => $pinSerial > 0 ? $pinSerial : null,
+                'is_selling_fast' => (int) ($settings['is_selling_fast'] ?? 0),
+                'click' => (int) ($ctr['total_click'] ?? 0),
+                'ctr' => (float) ($ctr['ctr'] ?? 0),
+                'ctr_average' => (float) ($ctr['ctr_average'] ?? 0),
+            ];
+        });
     }
 }

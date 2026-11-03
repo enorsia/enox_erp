@@ -23,7 +23,7 @@
         $filtersActive = ($search ?? '') !== '' || ($contextKey ?? '') !== '';
     @endphp
 
-    <div id="ecom-tracker-dashboard-content" class="etd-page etd-page--product-performance-list etd-page--ctr-summary">
+    <div id="ecom-tracker-dashboard-content" class="etd-page etd-page--product-performance-list etd-page--ctr-summary etd-page--ranking-products">
         <div id="ranking-products-page" class="hidden" aria-hidden="true"></div>
 
         @include('ecommerce.ranking_products.filter-drawer')
@@ -141,13 +141,13 @@
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--label" data-label="Listing">{{ $row['context_label'] }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--label tabular-nums" data-label="Rank">{{ number_format($row['serial_number']) }}</td>
                                 <td class="etd-ctr-summary-col etd-ctr-summary-col--label etd-ctr-summary-col--product font-mono text-[12px]" data-label="Product code">{{ $row['product_code'] }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums !text-center" data-label="CTR">{{ number_format($row['ctr'], 2, '.', '') }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums !text-center" data-label="CTR average">{{ number_format($row['ctr_average'], 2, '.', '') }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums !text-center" data-label="{{ $settingDaysSoldLabel }}">{{ number_format($row['total_sold_rolling']) }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums !text-center" data-label="Total sold">{{ number_format($row['total_sold']) }}</td>
-                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums !text-center" data-label="Click">{{ number_format($row['click']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="CTR">{{ number_format($row['ctr'], 2, '.', '') }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="CTR average">{{ number_format($row['ctr_average'], 2, '.', '') }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums max-sm:!text-left sm:!text-center" data-label="{{ $settingDaysSoldLabel }}">{{ number_format($row['total_sold_rolling']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--sold tabular-nums max-sm:!text-left sm:!text-center" data-label="Total sold">{{ number_format($row['total_sold']) }}</td>
+                                <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="Click">{{ number_format($row['click']) }}</td>
                                 @foreach ($statusColumnDefs as $statusCol)
-                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums !text-center" data-label="{{ $statusCol['label'] }}">
+                                    <td class="etd-ctr-summary-col etd-ctr-summary-col--metric etd-ctr-summary-col--num tabular-nums max-sm:!text-left sm:!text-center" data-label="{{ $statusCol['label'] }}">
                                         @if ($statusCol['type'] === 'pin')
                                             @if (($row['pin_serial'] ?? null) !== null)
                                                 <span class="text-emerald-600 dark:text-emerald-400">{{ number_format((int) $row['pin_serial']) }}</span>
