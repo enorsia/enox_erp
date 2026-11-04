@@ -21,9 +21,9 @@
         $metricColumnTips = [
             'click' => 'Total product clicks on the category grid in the selected date range. Every click is counted (not unique visitors or sessions).',
             'impression' => 'How many times this product tile was counted in view on category listing pages in the selected date range (in viewport on the grid, not product detail views).',
-            'ctr' => 'Click divided by impression for this row in the selected date range. The value is a ratio, not a formatted percent: multiply by 100 for % (0.05 = 5%). Zero when there are no impressions.',
-            'ctr_average' => 'Category rollup CTR for this product placement (store CTR lookback). Shown as a ratio like CTR; multiply by 100 for % (0.05 = 5%). This table uses the highest daily value across days in your filter.',
-            'total_sold' => 'Units sold → sale amount for orders in the CTR period above. Shown as QTY → amount.',
+            'ctr' => 'Click divided by impression for this product placement from tracking_ctr_summaries (rollup window). Ratio — multiply by 100 for %.',
+            'ctr_average' => 'Category rollup CTR for this product placement in tracking_ctr_summaries. Ratio — multiply by 100 for %.',
+            'total_sold' => 'Units sold → sale amount. For the 30d preset, uses the same rolling window as Ranking Products (site product_sorting_sales_days). Other periods use the CTR date filter above.',
         ];
         $sortUrl = function (string $column) use ($sortBy, $sortDir, $data): string {
             $nextDir = ($sortBy === $column && $sortDir === 'desc') ? 'asc' : 'desc';

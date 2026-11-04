@@ -20,7 +20,7 @@
         </p>
         <select name="context"
                 id="ranking-products-context"
-                class="f-input w-full text-[13px] ranking-context-ts"
+                class="w-full text-[13px] ranking-context-ts"
                 data-all-contexts-url="{{ $allContextsUrl }}"
                 data-placeholder="Select listing context…">
             <option value="">All listing contexts</option>

@@ -81,6 +81,7 @@ class EcommerceCtrSummaryController extends Controller
             $productCodes,
             $context['data']['dateFrom'],
             $context['data']['dateTo'],
+            $context['period'],
         );
 
         $summaries->setCollection(
@@ -118,6 +119,7 @@ class EcommerceCtrSummaryController extends Controller
             $productCodes,
             $context['data']['dateFrom'],
             $context['data']['dateTo'],
+            $context['period'],
         );
 
         $rows = $collection
@@ -554,17 +556,32 @@ class EcommerceCtrSummaryController extends Controller
                 'product_code',
                 DB::raw('COALESCE(SUM(total_click), 0) as total_click'),
                 DB::raw('COALESCE(SUM(total_impression), 0) as total_impression'),
-                DB::raw(
-                    'CASE WHEN SUM(total_impression) > 0 '
-                    .'THEN ROUND(SUM(total_click) / SUM(total_impression), 6) ELSE 0 END as ctr'
-                ),
-                DB::raw('ROUND(COALESCE(MAX(ctr_average), 0), 6) as ctr_average'),
             ])
             ->groupBy('department_id', 'category_id', 'micro_category_id', 'product_code');
 
         $query = TrackerDatabase::query()
-            ->fromSub($inner, 'tracking_ctr_summaries')
-            ->select('tracking_ctr_summaries.*');
+            ->fromSub($inner, 'daily_agg')
+            ->leftJoin('tracking_ctr_summaries as rollup', function ($join): void {
+                $join->on('rollup.department_id', '=', 'daily_agg.department_id')
+                    ->on('rollup.category_id', '=', 'daily_agg.category_id')
+                    ->on('rollup.product_code', '=', 'daily_agg.product_code')
+                    ->on('rollup.type', '=', 'daily_agg.type')
+                    ->whereRaw('COALESCE(rollup.micro_category_id, 0) = COALESCE(daily_agg.micro_category_id, 0)');
+            })
+            ->select([
+                'daily_agg.department_id',
+                'daily_agg.department_slug',
+                'daily_agg.category_id',
+                'daily_agg.category_slug',
+                'daily_agg.micro_category_id',
+                'daily_agg.micro_category_slug',
+                'daily_agg.type',
+                'daily_agg.product_code',
+                'daily_agg.total_click',
+                'daily_agg.total_impression',
+                DB::raw('COALESCE(rollup.ctr, 0) as ctr'),
+                DB::raw('COALESCE(rollup.ctr_average, 0) as ctr_average'),
+            ]);
 
         $this->applySortOrder($query, $sortKey, $sortDir);
 
@@ -805,11 +822,15 @@ class EcommerceCtrSummaryController extends Controller
         array $productCodes,
         string $dateFrom,
         string $dateTo,
+        string $period,
     ): array {
         $salesByProductCode = [];
+        $useRankingSalesWindow = $this->useRankingSalesWindowForSoldMetrics($period);
         $logContext = [
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
+            'period' => $period,
+            'use_ranking_sales_window' => $useRankingSalesWindow,
             'product_code_count' => count($productCodes),
         ];
 
@@ -839,11 +860,13 @@ class EcommerceCtrSummaryController extends Controller
                 ];
 
                 try {
-                    $response = $client->post($endpoint, [
-                        'product_code' => $chunk,
-                        'date_from' => $dateFrom,
-                        'date_to' => $dateTo,
-                    ]);
+                    $requestBody = ['product_code' => $chunk];
+                    if (! $useRankingSalesWindow) {
+                        $requestBody['date_from'] = $dateFrom;
+                        $requestBody['date_to'] = $dateTo;
+                    }
+
+                    $response = $client->post($endpoint, $requestBody);
                 } catch (\Throwable $chunkException) {
                     $failedChunks++;
                     Log::error('CTR summary: tracking/products/total-sold request threw an exception.', $chunkContext + [
@@ -887,8 +910,12 @@ class EcommerceCtrSummaryController extends Controller
                     }
 
                     $salesByProductCode[$code] = [
-                        'total_sale' => (float) ($item['total_sale'] ?? 0),
-                        'total_qty' => (int) ($item['total_qty'] ?? 0),
+                        'total_sale' => $useRankingSalesWindow
+                            ? (float) ($item['sales_window_sale'] ?? 0)
+                            : (float) ($item['total_sale'] ?? 0),
+                        'total_qty' => $useRankingSalesWindow
+                            ? (int) ($item['sales_window_qty'] ?? 0)
+                            : (int) ($item['total_qty'] ?? 0),
                     ];
                 }
             }
@@ -915,6 +942,14 @@ class EcommerceCtrSummaryController extends Controller
         }
 
         return $salesByProductCode;
+    }
+
+    /**
+     * Match Ranking Products total sold rolling (product_sorting_sales_days on daily_sales_summary).
+     */
+    private function useRankingSalesWindowForSoldMetrics(string $period): bool
+    {
+        return $period === '30d';
     }
 
     /**
@@ -1000,7 +1035,7 @@ class EcommerceCtrSummaryController extends Controller
             $query->orderBy(self::SORT_COLUMNS[$key], $dir);
         }
 
-        $query->orderBy('tracking_ctr_summaries.product_code');
+        $query->orderBy('daily_agg.product_code');
     }
 
     private function formatDepartmentColumn(object $row): string
