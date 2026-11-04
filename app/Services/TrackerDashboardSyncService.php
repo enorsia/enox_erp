@@ -3082,10 +3082,186 @@ class TrackerDashboardSyncService
     }
 
     /**
+     * @param  list<string>  $sessionIds
+     * @return array<string, object>
+     */
+    private function activityUsersBySessionId(array $sessionIds): array
+    {
+        $map = [];
+        foreach (array_chunk($sessionIds, 500) as $chunk) {
+            $rows = TrackerDatabase::table('activity_ecom_user')
+                ->whereIn('session_id', $chunk)
+                ->get(['session_id', 'visitor_id', 'created_at']);
+
+            foreach ($rows as $row) {
+                $map[$this->normalizeSessionId((string) $row->session_id)] = $row;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Earlier sessions of the same visitors, so a follow that started before this day still counts as the max.
+     *
+     * @param  list<array{id: string, visitor: string, started_at: ?Carbon, credit: bool, units: array<string, array<string, int>>}>  $todaySessions
+     * @param  array<string, string>  $skuToParent
+     * @return list<array{id: string, visitor: string, started_at: ?Carbon, credit: bool, units: array<string, array<string, int>>}>
+     */
+    private function priorVisitorFunnelSessions(array $todaySessions, array $skuToParent, EcomActivityListService $activityList): array
+    {
+        $todayIds = [];
+        $startsByVisitor = [];
+        foreach ($todaySessions as $session) {
+            $todayIds[$session['id']] = true;
+            if ($session['visitor'] === '' || $session['started_at'] === null) {
+                continue;
+            }
+            $startsByVisitor[$session['visitor']][] = $session['started_at'];
+        }
+
+        if ($startsByVisitor === []) {
+            return [];
+        }
+
+        $earliest = null;
+        foreach ($startsByVisitor as $starts) {
+            foreach ($starts as $start) {
+                $bound = $start->copy()->subHours(24);
+                if ($earliest === null || $bound->lt($earliest)) {
+                    $earliest = $bound;
+                }
+            }
+        }
+
+        $rows = TrackerDatabase::table('activity_ecom_user')
+            ->whereIn('visitor_id', array_keys($startsByVisitor))
+            ->where('created_at', '>=', TrackerTime::formatUtc($earliest))
+            ->get(['session_id', 'visitor_id', 'created_at']);
+
+        $prior = [];
+        foreach ($rows as $row) {
+            $sessionId = $this->normalizeSessionId((string) $row->session_id);
+            $visitor = trim((string) $row->visitor_id);
+            $started = TrackerTime::toUtc($row->created_at);
+            if (isset($todayIds[$sessionId]) || $visitor === '' || $started === null || ! isset($startsByVisitor[$visitor])) {
+                continue;
+            }
+
+            $inWindow = false;
+            foreach ($startsByVisitor[$visitor] as $start) {
+                $open = $started->lt($start) ? $started->copy() : $start->copy();
+                $later = $started->lt($start) ? $start : $started;
+                if ($later->lt($open->addHours(24))) {
+                    $inWindow = true;
+                    break;
+                }
+            }
+            if (! $inWindow) {
+                continue;
+            }
+
+            $prior[$sessionId] = [
+                'id' => $sessionId,
+                'visitor' => $visitor,
+                'started_at' => $started,
+                'credit' => false,
+                'units' => [],
+            ];
+        }
+
+        if ($prior === []) {
+            return [];
+        }
+
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('session_id', array_keys($prior))
+            ->orderBy('id')
+            ->get();
+
+        foreach ($actions->groupBy('session_id') as $rawSessionId => $sessionActions) {
+            $sessionId = $this->normalizeSessionId((string) $rawSessionId);
+            if (! isset($prior[$sessionId])) {
+                continue;
+            }
+
+            $prior[$sessionId]['units'] = $activityList->productFunnelUnitsForSessionActions($sessionActions, $skuToParent);
+        }
+
+        return array_values($prior);
+    }
+
+    /**
+     * Same visitor, 24 hours from the first session start, is one follow.
+     * View, add, begin, and proceed keep the max qty. A later session adds only the increase.
+     *
+     * @param  list<array{id: string, visitor: string, started_at: ?Carbon, credit: bool, units: array<string, array<string, int>>}>  $sessions
+     * @return array<string, array<string, array{views: int, add_to_cart: int, begin_checkout: int, proceed_checkout: int}>>
+     */
+    private function creditSameVisitorFunnelWithin24Hours(array $sessions): array
+    {
+        $steps = ['views', 'add_to_cart', 'begin_checkout', 'proceed_checkout'];
+        $groups = [];
+        foreach ($sessions as $session) {
+            $key = $session['visitor'] !== '' ? $session['visitor'] : 'session:'.$session['id'];
+            $groups[$key][] = $session;
+        }
+
+        $credits = [];
+        foreach ($groups as $group) {
+            usort($group, function (array $left, array $right): int {
+                $leftStart = $left['started_at'];
+                $rightStart = $right['started_at'];
+                if ($leftStart === null && $rightStart === null) {
+                    return strcmp($left['id'], $right['id']);
+                }
+                if ($leftStart === null) {
+                    return 1;
+                }
+                if ($rightStart === null) {
+                    return -1;
+                }
+
+                $byTime = $leftStart->getTimestamp() <=> $rightStart->getTimestamp();
+
+                return $byTime !== 0 ? $byTime : strcmp($left['id'], $right['id']);
+            });
+
+            $anchor = null;
+            $running = [];
+            foreach ($group as $session) {
+                $start = $session['started_at'];
+                if ($anchor === null || $start === null || $start->greaterThanOrEqualTo($anchor->copy()->addHours(24))) {
+                    $anchor = $start?->copy();
+                    $running = [];
+                }
+
+                foreach ($session['units'] as $productCode => $unitSteps) {
+                    foreach ($steps as $step) {
+                        $qty = (int) ($unitSteps[$step] ?? 0);
+                        $already = (int) ($running[$productCode][$step] ?? 0);
+                        if ($qty > $already) {
+                            $running[$productCode][$step] = $qty;
+                        }
+                        $gain = max(0, $qty - $already);
+                        if ($session['credit'] && $gain > 0) {
+                            $credits[$session['id']][$productCode][$step] = $gain;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $credits;
+    }
+
+    /**
      * Rebuild product / category / audience funnel columns for one calendar day.
      * Each action counts on its own time, the same way payment_success does.
      * Commerce units: {@see EcomActivityListService::productFunnelUnitsForSessionActions()}
      * (catalog product_click views; add / begin / proceed / paid cycle rules).
+     * Same visitor within 24 hours of the session start is one follow. View, add, begin,
+     * and proceed keep the max qty in that window. A later session adds only the increase.
      */
     private function refreshProductFunnelCounts(string $date, Carbon $now): void
     {
@@ -3154,6 +3330,8 @@ class TrackerDashboardSyncService
         $activityList = app(EcomActivityListService::class);
         $counters = [];
         $funnelDedupe = [];
+        $funnelSessions = [];
+        $usersBySession = $this->activityUsersBySessionId($sessionIds);
 
         foreach ($actions->groupBy('session_id') as $rawSessionId => $sessionActions) {
             $sessionId = $this->normalizeSessionId((string) $rawSessionId);
@@ -3170,8 +3348,26 @@ class TrackerDashboardSyncService
                 $this->recordFunnelAction($counters, $action, $type, $date, $sessionId, $funnelDedupe);
             }
 
-            $units = $activityList->productFunnelUnitsForSessionActions($dayActions, $skuToParent);
+            $user = $usersBySession[$sessionId] ?? null;
+            $funnelSessions[] = [
+                'id' => $sessionId,
+                'visitor' => trim((string) ($user->visitor_id ?? '')),
+                'started_at' => TrackerTime::toUtc($user->created_at ?? null),
+                'credit' => true,
+                'hour' => $this->localHour($dayActions->last()->created_at ?? null),
+                'audience' => $sessionAudienceKeys[$sessionId] ?? [],
+                'day_actions' => $dayActions,
+                'units' => $activityList->productFunnelUnitsForSessionActions($dayActions, $skuToParent),
+            ];
+        }
 
+        $credits = $this->creditSameVisitorFunnelWithin24Hours(array_merge(
+            $this->priorVisitorFunnelSessions($funnelSessions, $skuToParent, $activityList),
+            $funnelSessions,
+        ));
+
+        foreach ($funnelSessions as $session) {
+            $units = $credits[$session['id']] ?? [];
             $sessionViews = 0;
             $sessionAdds = 0;
             $sessionBegins = 0;
@@ -3197,7 +3393,7 @@ class TrackerDashboardSyncService
                     $this->bump($counters, 'tracking_daily_products', $key, 'proceed_checkouts', (int) $steps['proceed_checkout']);
                 }
 
-                $categoryId = $productCategoryByCode[$productCode] ?? $this->categoryIdFromActions($dayActions, $productCode);
+                $categoryId = $productCategoryByCode[$productCode] ?? $this->categoryIdFromActions($session['day_actions'], $productCode);
                 if ($categoryId !== null) {
                     $productCategoryByCode[$productCode] = (int) $categoryId;
                     $this->bumpCategoryFunnelSteps($counters, $date, (int) $categoryId, $steps);
@@ -3209,14 +3405,13 @@ class TrackerDashboardSyncService
                 $sessionProceeds += (int) ($steps['proceed_checkout'] ?? 0);
             }
 
-            $hour = $this->localHour($dayActions->last()->created_at ?? null);
+            $hour = $session['hour'];
             $this->productJourneyByHour[$hour]['views'] += $sessionViews;
             $this->productJourneyByHour[$hour]['adds'] += $sessionAdds;
             $this->productJourneyByHour[$hour]['begins'] += $sessionBegins;
             $this->productJourneyByHour[$hour]['proceeds'] += $sessionProceeds;
 
-            $audienceKeys = $sessionAudienceKeys[$sessionId] ?? [];
-            foreach ($audienceKeys as $audienceKey) {
+            foreach ($session['audience'] as $audienceKey) {
                 $this->bumpAudienceFunnelSteps($counters, $date, $audienceKey, $sessionViews, $sessionAdds, $sessionBegins, $sessionProceeds);
             }
         }
