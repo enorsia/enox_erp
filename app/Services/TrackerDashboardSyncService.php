@@ -2869,6 +2869,7 @@ class TrackerDashboardSyncService
         $this->writeAllocatedProductSold($date, $now);
         $this->storePrimaryCategoriesForDate($date);
         $this->rollCategorySoldFromProducts($date, $now);
+        $this->alignAudienceSaleToProductSale($date);
 
         $this->purgeEmptyDailyCategoryRows($date);
 
@@ -3140,6 +3141,7 @@ class TrackerDashboardSyncService
             ->values()
             ->all();
         $sessionAudienceKeys = $this->sessionAudienceKeysForSessionIds($sessionIds);
+        $this->fillAudienceKeysFromActivityUsers($sessionAudienceKeys, $sessionIds);
         $productCategoryByCode = $this->productCategoryIdsByCodeForVisitDate($date);
         $this->fillProductCategoriesFromSessions($productCategoryByCode, $sessionIds);
 
@@ -3195,8 +3197,9 @@ class TrackerDashboardSyncService
                     $this->bump($counters, 'tracking_daily_products', $key, 'proceed_checkouts', (int) $steps['proceed_checkout']);
                 }
 
-                $categoryId = $productCategoryByCode[$productCode] ?? null;
+                $categoryId = $productCategoryByCode[$productCode] ?? $this->categoryIdFromActions($dayActions, $productCode);
                 if ($categoryId !== null) {
+                    $productCategoryByCode[$productCode] = (int) $categoryId;
                     $this->bumpCategoryFunnelSteps($counters, $date, (int) $categoryId, $steps);
                 }
 
@@ -3254,6 +3257,104 @@ class TrackerDashboardSyncService
         $start = Carbon::parse($date, TrackerTime::timezone())->startOfDay();
 
         return TrackerTime::storageRange($start, $start->copy()->endOfDay());
+    }
+
+    /**
+     * @param  array<string, int>  $map
+     * @param  list<string>  $sessionIds
+     */
+    /**
+     * A session can have actions before its tracking_session row exists. Use the visitor row so the view still lands on device, browser, and traffic.
+     *
+     * @param  array<string, list<array{type: int, dimension_id: int, source: string, medium: string}>>  $map
+     * @param  list<string>  $sessionIds
+     */
+    private function fillAudienceKeysFromActivityUsers(array &$map, array $sessionIds): void
+    {
+        $missing = [];
+        foreach ($sessionIds as $sessionId) {
+            if (! isset($map[$sessionId])) {
+                $missing[] = $sessionId;
+            }
+        }
+
+        if ($missing === []) {
+            return;
+        }
+
+        foreach (array_chunk($missing, 500) as $chunk) {
+            $users = TrackerDatabase::table('activity_ecom_user')
+                ->whereIn('session_id', $chunk)
+                ->get(['session_id', 'device_type', 'browser']);
+
+            foreach ($users as $user) {
+                $sessionId = $this->normalizeSessionId((string) $user->session_id);
+                [$source, $medium] = $this->trafficSourceMedium(null, null);
+                $map[$sessionId] = $this->audienceKeys(
+                    $this->findOrCreateDevice((string) ($user->device_type ?? '')),
+                    $this->findOrCreateBrowser((string) ($user->browser ?? '')),
+                    $this->findOrCreateTrafficSource($source, $medium),
+                    $source,
+                    $medium,
+                );
+            }
+        }
+    }
+
+    /**
+     * @param  iterable<int, object>  $actions
+     */
+    private function categoryIdFromActions(iterable $actions, string $productCode): ?int
+    {
+        foreach ($actions as $action) {
+            if ($this->productCode((string) ($action->product_code ?? '')) !== $productCode) {
+                continue;
+            }
+
+            $categoryId = $this->resolveCategoryIdFromLine([
+                'category_name' => (string) ($action->category_name ?? ''),
+                'category_code' => (string) ($action->category_code ?? ''),
+                'department_name' => (string) ($action->department_name ?? ''),
+                'department_code' => (string) ($action->department_id ?? ''),
+            ]);
+
+            if ($categoryId !== null) {
+                return $categoryId;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Keep device, browser, and traffic sale equal to the rounded product sale. Row rounding can leave one penny out.
+     */
+    private function alignAudienceSaleToProductSale(string $date): void
+    {
+        $target = round((float) TrackerDatabase::table('tracking_daily_products')->where('metric_date', $date)->sum('sale_amount'), 2);
+
+        foreach ([TrackingDailyAudience::TYPE_DEVICE, TrackingDailyAudience::TYPE_BROWSER, TrackingDailyAudience::TYPE_TRAFFIC_SOURCE] as $type) {
+            $rows = TrackerDatabase::table('tracking_daily_audiences')
+                ->where('metric_date', $date)
+                ->where('type', $type)
+                ->get(['id', 'sale_amount']);
+
+            if ($rows->isEmpty()) {
+                continue;
+            }
+
+            $sum = round((float) $rows->sum('sale_amount'), 2);
+            $diff = round($target - $sum, 2);
+            if ($diff === 0.0) {
+                continue;
+            }
+
+            $largest = $rows->sortByDesc(fn (object $row) => (float) $row->sale_amount)->first();
+            TrackerDatabase::table('tracking_daily_audiences')->where('id', $largest->id)->update([
+                'sale_amount' => round((float) $largest->sale_amount + $diff, 2),
+                'updated_at' => now(),
+            ]);
+        }
     }
 
     /**
