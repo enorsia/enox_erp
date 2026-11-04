@@ -1,8 +1,8 @@
 const TREND_TOOLTIP_GROUPS = [
     { label: 'Reach', keys: ['unique_visitors', 'sessions'] },
-    { label: 'Discovery', keys: ['category_views', 'product_views'] },
-    { label: 'Checkout', keys: ['add_to_cart', 'begin_checkout', 'proceed_checkout'] },
-    { label: 'Sales', keys: ['purchases', 'items_sold_qty', 'conversion_rate'] },
+    { label: 'Views', keys: ['category_views', 'product_views'] },
+    { label: 'Product', keys: ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'purchases', 'items_sold_qty'] },
+    { label: 'Rate', keys: ['conversion_rate'] },
 ];
 
 let trendTooltipElement = null;
@@ -244,7 +244,7 @@ export function createTrendTooltipHandler(orderedSeries, colorForKey) {
                 return;
             }
 
-            const rawValue = point.parsed?.y ?? point.raw ?? 0;
+            const rawValue = seriesEntry.data?.[dataIndex] ?? point.parsed?.y ?? point.raw ?? 0;
 
             valuesByKey[seriesEntry.key] = {
                 label: seriesEntry.label,

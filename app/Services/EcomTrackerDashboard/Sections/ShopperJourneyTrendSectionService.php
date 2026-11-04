@@ -96,12 +96,12 @@ class ShopperJourneyTrendSectionService
                 'unique_visitors' => (int) ($row?->unique_visitors ?? 0),
                 'sessions' => (int) ($row?->sessions ?? 0),
                 'category_views' => (int) ($row?->category_views ?? 0),
-                'product_views' => (int) ($row?->product_views ?? 0),
-                'cart_sessions' => (int) ($row?->cart_sessions ?? 0),
-                'checkout_sessions' => (int) ($row?->checkout_sessions ?? 0),
-                'proceed_sessions' => (int) ($row?->proceed_sessions ?? 0),
+                'product_views' => (int) ($row?->product_view_units ?? 0),
+                'cart_sessions' => (int) ($row?->product_add_units ?? 0),
+                'checkout_sessions' => (int) ($row?->product_begin_units ?? 0),
+                'proceed_sessions' => (int) ($row?->product_proceed_units ?? 0),
                 'payments' => (int) ($row?->payments ?? 0),
-                'items_sold' => (int) ($row?->items_sold ?? 0),
+                'items_sold' => (int) ($row?->product_paid_units ?? 0),
                 'purchase_sessions' => (int) ($purchaseSessionsByHour->get($hour) ?? 0),
             ]);
         }
@@ -230,12 +230,12 @@ class ShopperJourneyTrendSectionService
 
             $metrics['sessions'] += (int) ($row->sessions ?? 0);
             $metrics['category_views'] += (int) ($row->category_views ?? 0);
-            $metrics['product_views'] += (int) ($row->product_views ?? 0);
-            $metrics['cart_sessions'] += (int) ($row->cart_sessions ?? 0);
-            $metrics['checkout_sessions'] += (int) ($row->checkout_sessions ?? 0);
-            $metrics['proceed_sessions'] += (int) ($row->proceed_sessions ?? 0);
+            $metrics['product_views'] += (int) ($row->product_view_units ?? 0);
+            $metrics['cart_sessions'] += (int) ($row->product_add_units ?? 0);
+            $metrics['checkout_sessions'] += (int) ($row->product_begin_units ?? 0);
+            $metrics['proceed_sessions'] += (int) ($row->product_proceed_units ?? 0);
             $metrics['payments'] += (int) ($row->payments ?? 0);
-            $metrics['items_sold'] += (int) ($row->items_sold ?? 0);
+            $metrics['items_sold'] += (int) ($row->product_paid_units ?? 0);
         }
 
         $visitorIds = collect();
@@ -282,12 +282,11 @@ class ShopperJourneyTrendSectionService
             ['key' => 'unique_visitors', 'label' => 'Unique visitors', 'data' => $data['unique_visitors'], 'chart_type' => 'bar', 'y_axis_id' => 'y'],
             ['key' => 'sessions', 'label' => 'Sessions', 'data' => $data['sessions'], 'chart_type' => 'bar', 'y_axis_id' => 'y'],
             ['key' => 'category_views', 'label' => 'Category view', 'data' => $data['category_views'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
-            ['key' => 'product_views', 'label' => 'Product view', 'data' => $data['product_views'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
-            ['key' => 'add_to_cart', 'label' => 'Add to cart', 'data' => $data['cart_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
-            ['key' => 'begin_checkout', 'label' => 'Begin checkout', 'data' => $data['checkout_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
-            ['key' => 'proceed_checkout', 'label' => 'Proceed checkout', 'data' => $data['proceed_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
-            ['key' => 'purchases', 'label' => 'Purchase', 'data' => $data['payments'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
-            ['key' => 'items_sold_qty', 'label' => 'Items sold qty', 'data' => $data['items_sold'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'product_views', 'label' => 'View', 'data' => $data['product_views'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'add_to_cart', 'label' => 'Add', 'data' => $data['cart_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'begin_checkout', 'label' => 'Begin', 'data' => $data['checkout_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'proceed_checkout', 'label' => 'Proceed', 'data' => $data['proceed_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'purchases', 'label' => 'Paid', 'data' => $data['items_sold'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
             ['key' => 'conversion_rate', 'label' => 'Conv. rate %', 'data' => $data['conversion_rate'], 'chart_type' => 'line', 'y_axis_id' => 'y1'],
         ];
 

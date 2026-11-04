@@ -5670,16 +5670,16 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     pointer-events: none;
     opacity: 0;
     box-sizing: border-box;
-    width: min(22rem, calc(100vw - 1rem));
+    width: min(17.75rem, calc(100vw - 1rem));
     min-width: 0;
-    max-width: min(22rem, calc(100vw - 1rem));
+    max-width: min(17.75rem, calc(100vw - 1rem));
     transform: translate(-50%, calc(-100% - 12px));
     transition: opacity 0.16s ease;
 }
 
 .etd-trend-tooltip--compare {
-    width: min(20rem, calc(100vw - 1rem));
-    max-width: min(20rem, calc(100vw - 1rem));
+    width: min(17.75rem, calc(100vw - 1rem));
+    max-width: min(17.75rem, calc(100vw - 1rem));
 }
 
 .etd-trend-tooltip--positioning {
@@ -5699,8 +5699,8 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     min-width: 0;
     min-height: 0;
     max-height: min(70vh, calc(100dvh - 1.5rem));
-    padding: clamp(0.55rem, 1.6vw, 0.8rem) clamp(0.6rem, 1.8vw, 0.85rem) clamp(0.6rem, 1.6vw, 0.75rem);
-    border-radius: clamp(0.6rem, 1.4vw, 0.75rem);
+    padding: 0.7rem 0.8rem 0.65rem;
+    border-radius: 0.75rem;
     border: 1px solid color-mix(in srgb, #cbd5e1 80%, transparent);
     background: color-mix(in srgb, #ffffff 92%, transparent);
     box-shadow:
@@ -5755,9 +5755,9 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
-    margin-bottom: 0.55rem;
-    padding-bottom: 0.5rem;
+    gap: 0.45rem;
+    margin-bottom: 0.45rem;
+    padding-bottom: 0.4rem;
     border-bottom: 1px solid color-mix(in srgb, #cbd5e1 55%, transparent);
     flex-shrink: 0;
 }
@@ -5767,7 +5767,7 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 }
 
 .etd-trend-tooltip__date {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: -0.01em;
     color: #0f172a;
@@ -5783,7 +5783,7 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: clamp(0.4rem, 1.2vw, 0.55rem);
+    gap: 0.42rem;
     min-height: 0;
     max-height: 100%;
     overflow-x: hidden;
@@ -5813,13 +5813,14 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 .etd-trend-tooltip__group {
     display: flex;
     flex-direction: column;
-    gap: 0.28rem;
+    gap: 0.12rem;
 }
 
 .etd-trend-tooltip__group-label {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.08rem;
     text-transform: uppercase;
     color: #94a3b8;
     line-height: 1.2;
@@ -5831,11 +5832,12 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 
 .etd-trend-tooltip__row {
     display: grid;
-    grid-template-columns: 0.5rem minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 0.35rem clamp(0.35rem, 1.4vw, 0.55rem);
+    grid-template-columns: 0.55rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.35rem 0.55rem;
     min-width: 0;
     width: 100%;
+    padding: 0.06rem 0;
 }
 
 .etd-trend-tooltip__swatch {
@@ -5847,9 +5849,9 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 }
 
 .etd-trend-tooltip__label {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 500;
-    color: #64748b;
+    color: #475569;
     line-height: 1.3;
     min-width: 0;
     overflow-wrap: anywhere;
@@ -5861,7 +5863,7 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 }
 
 .etd-trend-tooltip__value {
-    font-size: 10px;
+    font-size: 13px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     color: #0f172a;
@@ -5900,95 +5902,6 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     }
 }
 
-@media (min-width: 1024px) {
-    .etd-trend-tooltip {
-        width: min(24rem, calc(100vw - 2rem));
-        max-width: min(24rem, calc(100vw - 2rem));
-    }
-
-    .etd-trend-tooltip--compare {
-        width: min(20rem, calc(100vw - 2rem));
-        max-width: min(20rem, calc(100vw - 2rem));
-    }
-
-    .etd-trend-tooltip__card {
-        padding: 0.9rem 1rem 0.95rem;
-        border-radius: 0.85rem;
-    }
-
-    .etd-trend-tooltip__header {
-        margin-bottom: 0.65rem;
-        padding-bottom: 0.6rem;
-    }
-
-    .etd-trend-tooltip__date {
-        font-size: 14px;
-        line-height: 1.3;
-    }
-
-    .etd-trend-tooltip__body {
-        gap: 0.65rem;
-    }
-
-    .etd-trend-tooltip__group {
-        gap: 0.35rem;
-    }
-
-    .etd-trend-tooltip__group-label {
-        font-size: 10px;
-        letter-spacing: 0.07em;
-    }
-
-    .etd-trend-tooltip__row {
-        grid-template-columns: 0.65rem minmax(0, 1fr) max-content;
-        gap: 0.45rem 0.75rem;
-    }
-
-    .etd-trend-tooltip__swatch {
-        width: 0.65rem;
-        height: 0.65rem;
-    }
-
-    .etd-trend-tooltip__label,
-    .etd-trend-tooltip__value {
-        font-size: 13px;
-        line-height: 1.35;
-    }
-}
-
-@media (min-width: 1280px) {
-    .etd-trend-tooltip {
-        width: min(26rem, calc(100vw - 2.5rem));
-        max-width: min(26rem, calc(100vw - 2.5rem));
-    }
-
-    .etd-trend-tooltip--compare {
-        width: min(21rem, calc(100vw - 2.5rem));
-        max-width: min(21rem, calc(100vw - 2.5rem));
-    }
-
-    .etd-trend-tooltip__card {
-        padding: 1rem 1.1rem 1.05rem;
-        border-radius: 0.9rem;
-    }
-
-    .etd-trend-tooltip__date {
-        font-size: 15px;
-    }
-
-    .etd-trend-tooltip__group-label {
-        font-size: 11px;
-    }
-
-    .etd-trend-tooltip__row {
-        gap: 0.5rem 0.85rem;
-    }
-
-    .etd-trend-tooltip__label,
-    .etd-trend-tooltip__value {
-        font-size: 14px;
-    }
-}
 
 .etd-link {
     color: var(--etd-accent);

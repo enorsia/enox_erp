@@ -14,6 +14,10 @@ import {
     DoughnutController,
 } from 'chart.js';
 import './ecom-tracker-filters';
+import {
+    bindTrendTooltipDismiss,
+    createTrendTooltipHandler,
+} from '../lib/ecom-tracker-trend-tooltip';
 
 Chart.register(
     CategoryScale,
@@ -402,6 +406,7 @@ function initDashboardTrendChart(trend) {
 
     const orderedSeries = sortTrendSeries(series);
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
+    const showRateAxis = orderedSeries.some((entry) => (entry.y_axis_id || 'y') === 'y1');
 
     applyTrendChartLayout(labels.length);
     renderTrendLegend(orderedSeries);
@@ -425,7 +430,11 @@ function initDashboardTrendChart(trend) {
             borderColor: isBar ? `${color}CC` : color,
             backgroundColor: isBar ? `${color}99` : color,
             pointRadius: isBar ? 0 : (labels.length > 24 && !useHorizontalScroll ? 0 : 2.5),
-            pointHoverRadius: isBar ? 0 : 4,
+            pointHoverRadius: isBar ? 0 : 6,
+            pointHoverBorderWidth: isBar ? 0 : 2,
+            pointHoverBorderColor: isDark() ? '#0f172a' : '#ffffff',
+            pointHoverBackgroundColor: color,
+            hoverBorderWidth: isBar ? 0 : 2,
             tension: isBar ? 0 : 0.3,
             fill: false,
             yAxisID: entry.y_axis_id || 'y',
@@ -441,7 +450,7 @@ function initDashboardTrendChart(trend) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+            interaction: { mode: 'index', intersect: false, axis: 'x' },
             layout: {
                 padding: {
                     right: useHorizontalScroll ? 8 : 0,
@@ -459,22 +468,8 @@ function initDashboardTrendChart(trend) {
                     },
                 },
                 tooltip: {
-                    ...tipStyle(),
-                    titleFont: { size: isNarrow() ? 13 : 14, weight: '600' },
-                    bodyFont: { size: isNarrow() ? 12 : 13 },
-                    padding: isNarrow() ? 10 : 12,
-                    itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
-                    callbacks: {
-                        label(context) {
-                            const value = context.parsed.y ?? 0;
-
-                            if (context.dataset.yAxisID === 'y1') {
-                                return `${context.dataset.label}: ${value}%`;
-                            }
-
-                            return `${context.dataset.label}: ${value}`;
-                        },
-                    },
+                    enabled: false,
+                    external: createTrendTooltipHandler(orderedSeries, trendSeriesColor),
                 },
             },
             scales: {
@@ -506,6 +501,7 @@ function initDashboardTrendChart(trend) {
                     },
                 },
                 y1: {
+                    display: showRateAxis,
                     position: 'right',
                     grid: { display: false },
                     min: 0,
@@ -517,6 +513,8 @@ function initDashboardTrendChart(trend) {
             },
         },
     });
+
+    bindTrendTooltipDismiss(document.getElementById('etdTrendChartScroll'));
 
     requestAnimationFrame(() => {
         trendChart.resize();

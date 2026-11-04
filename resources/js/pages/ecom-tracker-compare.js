@@ -508,6 +508,7 @@ function initCompareTrendChart({
 
     const orderedSeries = sortTrendSeries(series);
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
+    const showRateAxis = orderedSeries.some((entry) => (entry.y_axis_id || 'y') === 'y1');
 
     applyTrendChartLayout(wrapId, hintId, labels.length);
     renderTrendLegend(legendId, orderedSeries);
@@ -593,6 +594,7 @@ function initCompareTrendChart({
                     },
                 },
                 y1: {
+                    display: showRateAxis,
                     position: 'right',
                     grid: { display: false },
                     min: 0,
