@@ -14,6 +14,10 @@ import {
     DoughnutController,
 } from 'chart.js';
 import './ecom-tracker-filters';
+import {
+    bindTrendTooltipDismiss,
+    createTrendTooltipHandler,
+} from '../lib/ecom-tracker-trend-tooltip';
 
 Chart.register(
     CategoryScale,
@@ -245,6 +249,7 @@ const TREND_SERIES_COLORS = {
     begin_checkout: '#ea580c',
     proceed_checkout: '#e11d48',
     purchases: '#16a34a',
+    sale_amount: '#0f766e',
     items_sold_qty: '#65a30d',
     conversion_rate: '#a21caf',
 };
@@ -258,6 +263,7 @@ const TREND_SERIES_ORDER = [
     'begin_checkout',
     'proceed_checkout',
     'purchases',
+    'sale_amount',
     'items_sold_qty',
     'conversion_rate',
 ];
@@ -401,12 +407,14 @@ function initDashboardTrendChart(trend) {
     } = trend;
 
     const orderedSeries = sortTrendSeries(series);
+    const plottedSeries = orderedSeries.filter((entry) => !entry.tooltip_only);
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
+    const showRateAxis = plottedSeries.some((entry) => (entry.y_axis_id || 'y') === 'y1');
 
     applyTrendChartLayout(labels.length);
-    renderTrendLegend(orderedSeries);
+    renderTrendLegend(plottedSeries);
 
-    const datasets = orderedSeries.map((entry, index) => {
+    const datasets = plottedSeries.map((entry, index) => {
         const color = trendSeriesColor(entry.key);
         const isConversion = entry.key === 'conversion_rate';
         const isBar = entry.chart_type === 'bar';
@@ -425,7 +433,11 @@ function initDashboardTrendChart(trend) {
             borderColor: isBar ? `${color}CC` : color,
             backgroundColor: isBar ? `${color}99` : color,
             pointRadius: isBar ? 0 : (labels.length > 24 && !useHorizontalScroll ? 0 : 2.5),
-            pointHoverRadius: isBar ? 0 : 4,
+            pointHoverRadius: isBar ? 0 : 6,
+            pointHoverBorderWidth: isBar ? 0 : 2,
+            pointHoverBorderColor: isDark() ? '#0f172a' : '#ffffff',
+            pointHoverBackgroundColor: color,
+            hoverBorderWidth: isBar ? 0 : 2,
             tension: isBar ? 0 : 0.3,
             fill: false,
             yAxisID: entry.y_axis_id || 'y',
@@ -441,7 +453,7 @@ function initDashboardTrendChart(trend) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+            interaction: { mode: 'index', intersect: false, axis: 'x' },
             layout: {
                 padding: {
                     right: useHorizontalScroll ? 8 : 0,
@@ -459,22 +471,8 @@ function initDashboardTrendChart(trend) {
                     },
                 },
                 tooltip: {
-                    ...tipStyle(),
-                    titleFont: { size: isNarrow() ? 13 : 14, weight: '600' },
-                    bodyFont: { size: isNarrow() ? 12 : 13 },
-                    padding: isNarrow() ? 10 : 12,
-                    itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
-                    callbacks: {
-                        label(context) {
-                            const value = context.parsed.y ?? 0;
-
-                            if (context.dataset.yAxisID === 'y1') {
-                                return `${context.dataset.label}: ${value}%`;
-                            }
-
-                            return `${context.dataset.label}: ${value}`;
-                        },
-                    },
+                    enabled: false,
+                    external: createTrendTooltipHandler(orderedSeries, trendSeriesColor),
                 },
             },
             scales: {
@@ -506,6 +504,7 @@ function initDashboardTrendChart(trend) {
                     },
                 },
                 y1: {
+                    display: showRateAxis,
                     position: 'right',
                     grid: { display: false },
                     min: 0,
@@ -517,6 +516,8 @@ function initDashboardTrendChart(trend) {
             },
         },
     });
+
+    bindTrendTooltipDismiss(document.getElementById('etdTrendChartScroll'));
 
     requestAnimationFrame(() => {
         trendChart.resize();
@@ -531,7 +532,7 @@ function initDashboardTrendChart(trend) {
 
         resizeFrame = requestAnimationFrame(() => {
             applyTrendChartLayout(labels.length);
-            renderTrendLegend(orderedSeries);
+            renderTrendLegend(plottedSeries);
             trendChart.options.plugins.legend.display = !isCompactChart();
             trendChart.options.scales.x.ticks.autoSkip = !trendUsesHorizontalScroll(labels.length) && labels.length > 24;
             trendChart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(

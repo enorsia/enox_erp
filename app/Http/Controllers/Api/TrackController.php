@@ -116,6 +116,7 @@ class TrackController extends Controller
                 'events.*.start_time' => ['nullable'],
                 'events.*.end_time' => ['nullable'],
                 'events.*.created_at' => ['nullable'],
+                'sent_at' => ['nullable', 'string', 'max:64'],
             ]);
 
             $clientContext = $this->clientContextResolver->resolve($request);
