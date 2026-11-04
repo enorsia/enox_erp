@@ -697,6 +697,97 @@ body.etd-filter-panel-open {
     padding: 0 !important;
 }
 
+.etd-ranking-products-context .ts-wrapper:not(.multi),
+#ranking-filter-context + .ts-wrapper:not(.multi) {
+    width: 100%;
+}
+
+.etd-ranking-products-context .ts-wrapper:not(.multi) .ts-control,
+#ranking-filter-context + .ts-wrapper:not(.multi) .ts-control {
+    min-height: 2.05rem !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0.5rem 0.75rem !important;
+    font-size: 13px !important;
+    border-radius: 0.5rem !important;
+    background: #f8fafc !important;
+    cursor: pointer;
+    justify-content: flex-start !important;
+}
+
+.dark .etd-ranking-products-context .ts-wrapper:not(.multi) .ts-control,
+.dark #ranking-filter-context + .ts-wrapper:not(.multi) .ts-control {
+    background: #1e293b !important;
+}
+
+.etd-ranking-products-context .ts-wrapper:not(.multi) .ts-control input,
+#ranking-filter-context + .ts-wrapper:not(.multi) .ts-control input {
+    font-size: 13px !important;
+    height: 1.25rem !important;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    width: 0 !important;
+    max-width: 100% !important;
+    text-align: left !important;
+}
+
+.etd-ranking-products-context .ts-wrapper:not(.multi).has-items:not(.input-active) .ts-control input,
+#ranking-filter-context + .ts-wrapper:not(.multi).has-items:not(.input-active) .ts-control input {
+    width: 0 !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex: 0 0 0 !important;
+}
+
+.etd-ranking-products-context .ts-wrapper.single.input-active.dropdown-active .ts-control > [data-value],
+.etd-ranking-products-context .ts-wrapper.single.input-active.dropdown-active .ts-control > .item,
+#ranking-filter-context + .ts-wrapper.single.input-active.dropdown-active .ts-control > [data-value],
+#ranking-filter-context + .ts-wrapper.single.input-active.dropdown-active .ts-control > .item {
+    display: none !important;
+}
+
+.etd-ranking-products-context .ts-wrapper.single.input-active.dropdown-active .ts-control > input,
+#ranking-filter-context + .ts-wrapper.single.input-active.dropdown-active .ts-control > input {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: calc(100% - 1.75rem) !important;
+}
+
+.etd-ranking-products-context .ts-wrapper.single .ts-control > [data-value],
+#ranking-filter-context + .ts-wrapper.single .ts-control > [data-value] {
+    flex: 1 1 auto !important;
+    max-width: calc(100% - 1.75rem) !important;
+    text-align: left !important;
+}
+
+.etd-ranking-products-context .plugin-clear_button,
+#ranking-filter-context + .ts-wrapper.plugin-clear_button {
+    --ts-pr-clear-button: 1.75rem;
+}
+
+.etd-ranking-products-context .plugin-clear_button .clear-button,
+#ranking-filter-context + .ts-wrapper.plugin-clear_button .clear-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    right: 0.5rem !important;
+    font-size: 1rem;
+    line-height: 1;
+    color: #94a3b8;
+    border-radius: 0.25rem;
+}
+
+.etd-ranking-products-context .ts-wrapper.single.has-items .clear-button,
+.etd-ranking-products-context .ts-wrapper.single.input-active .clear-button,
+#ranking-filter-context + .ts-wrapper.single.has-items .clear-button,
+#ranking-filter-context + .ts-wrapper.single.input-active .clear-button {
+    opacity: 1;
+}
+
 .etd-filter-drawer .ts-control > input,
 .etd-product-filters-compact .ts-control > input,
 .etd-activity-filter-grid .ts-control > input {

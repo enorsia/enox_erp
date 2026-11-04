@@ -49,7 +49,7 @@ function initRankingProductsContextSelect() {
         searchField: ['text'],
         sortField: [{ field: '$order' }],
         plugins: ['clear_button'],
-        wrapperClass: 'ts-wrapper single product-filter-ts',
+        wrapperClass: 'ts-wrapper single',
         dropdownParent: 'body',
         onChange(value) {
             const next = String(value ?? '').trim();
@@ -77,7 +77,7 @@ function initRankingProductsDrawerContextSelect() {
         searchField: ['text'],
         sortField: [{ field: '$order' }],
         plugins: ['clear_button'],
-        wrapperClass: 'ts-wrapper single product-filter-ts',
+        wrapperClass: 'ts-wrapper single',
         dropdownParent: 'body',
         onChange(value) {
             if (mainSelect?.tomselect) {

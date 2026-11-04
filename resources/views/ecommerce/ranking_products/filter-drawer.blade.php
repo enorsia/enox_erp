@@ -33,7 +33,7 @@
                 <label class="etd-filter-compact-field block" for="ranking-filter-context">
                     <span class="etd-filter-compact-label">Where should this ranking apply?</span>
                     <span class="text-[11px] text-slate-500 dark:text-slate-400 block mb-1.5">Global, department, category, or micro-category listing.</span>
-                    <select id="ranking-filter-context" name="context" class="f-input w-full ranking-context-ts" data-placeholder="All listing contexts">
+                    <select id="ranking-filter-context" name="context" class="w-full text-[13px] ranking-context-ts" data-placeholder="All listing contexts">
                         <option value="" @selected(($contextKey ?? '') === '')>All listing contexts</option>
                         @foreach ($listingContexts ?? [] as $ctx)
                             <option value="{{ $ctx['key'] }}" @selected(($contextKey ?? '') === $ctx['key'])>{{ $ctx['label'] }}</option>
