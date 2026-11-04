@@ -860,6 +860,10 @@ class EcomActivityListService
             return 'Traffic sources';
         }
 
+        if (($filters['duration'] ?? null) !== null || ($filters['durations'] ?? []) !== []) {
+            return 'Session duration';
+        }
+
         return 'Recoverable sale';
     }
 
@@ -1759,7 +1763,19 @@ class EcomActivityListService
 
         if (filled($request->query('duration'))) {
             $bucket = TrackingDailyDuration::BUCKETS[(int) $request->query('duration')] ?? null;
-            $addChip('Duration: '.($bucket['label'] ?? $request->query('duration')), ['duration']);
+            $dropDuration = ['duration'];
+            if (
+                $request->query('focus') === 'session'
+                && ! $request->filled('funnel')
+                && ! filled($request->query('session_id'))
+                && ! $request->filled('device_type')
+                && ! $request->filled('browser_type')
+                && ! $request->filled('utm_source')
+                && ! $request->filled('utm_medium')
+            ) {
+                $dropDuration[] = 'focus';
+            }
+            $addChip('Duration: '.($bucket['label'] ?? $request->query('duration')), $dropDuration);
         }
 
         return $chips;

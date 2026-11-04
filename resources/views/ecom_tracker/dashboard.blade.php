@@ -278,7 +278,10 @@
     @include('ecom_tracker.partials.acquisition-insights', [
         'distribution' => $dashboard['durations'],
         'newReturning' => $dashboard['newReturning'],
-        'activityDurationLink' => fn (array $bucket) => $activityLink(['duration' => $bucket['key']]),
+        'activityDurationLink' => fn (array $bucket) => $activityLink([
+            'duration' => $bucket['key'],
+            'focus' => 'session',
+        ], ['duration']),
     ])
         </div>
     </div>

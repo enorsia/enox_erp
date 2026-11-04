@@ -388,6 +388,7 @@ class EcomTrackerCompareService
                     'admin.ecom-activity.index',
                     array_merge($baseQuery, array_filter([
                         'duration' => $bucket['key'] ?? null,
+                        'focus' => 'session',
                     ], fn ($value) => $value !== null && $value !== '')),
                 ),
             ]);

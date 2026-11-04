@@ -6692,6 +6692,32 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     gap: 0.45rem;
 }
 
+.etd-page--activity .etd-kpi-grid.etd-activity-product-kpis__grid {
+    grid-template-columns: repeat(auto-fit, minmax(8.75rem, 1fr));
+}
+
+.etd-page--activity .etd-activity-product-kpis .etd-kpi-value {
+    white-space: nowrap;
+}
+
+.etd-page--activity .etd-activity-product-kpis .etd-kpi--compact .etd-kpi-label,
+.etd-page--activity .etd-activity-product-kpis .etd-kpi-label-wrap,
+.etd-page--activity .etd-activity-product-kpis .etd-kpi-label-text {
+    letter-spacing: 0.02em;
+}
+
+@media (min-width: 1400px) {
+    .etd-page--activity .etd-kpi-grid.etd-activity-product-kpis__grid {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 639px) {
+    .etd-page--activity .etd-kpi-grid.etd-activity-product-kpis__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 .etd-product-drill-period {
     font-size: 13px;
     font-weight: 600;
