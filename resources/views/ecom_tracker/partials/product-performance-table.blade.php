@@ -82,7 +82,6 @@
                                 'tip' => $column['tip'],
                                 'align' => 'center',
                                 'iconBefore' => true,
-                                'labelSuffix' => ':',
                             ])
                             @include('ecom_tracker.partials.table-column-sort-toggle', [
                                 'sortKey' => $column['sortKey'],
@@ -101,7 +100,6 @@
                             'tip' => $saleColumn['tip'],
                             'align' => 'center',
                             'iconBefore' => true,
-                            'labelSuffix' => ':',
                         ])
                         @include('ecom_tracker.partials.table-column-sort-toggle', [
                             'sortKey' => $saleColumn['sortKey'],
