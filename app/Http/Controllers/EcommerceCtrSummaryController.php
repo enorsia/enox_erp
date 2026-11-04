@@ -554,17 +554,32 @@ class EcommerceCtrSummaryController extends Controller
                 'product_code',
                 DB::raw('COALESCE(SUM(total_click), 0) as total_click'),
                 DB::raw('COALESCE(SUM(total_impression), 0) as total_impression'),
-                DB::raw(
-                    'CASE WHEN SUM(total_impression) > 0 '
-                    .'THEN ROUND(SUM(total_click) / SUM(total_impression), 6) ELSE 0 END as ctr'
-                ),
-                DB::raw('ROUND(COALESCE(MAX(ctr_average), 0), 6) as ctr_average'),
             ])
             ->groupBy('department_id', 'category_id', 'micro_category_id', 'product_code');
 
         $query = TrackerDatabase::query()
-            ->fromSub($inner, 'tracking_ctr_summaries')
-            ->select('tracking_ctr_summaries.*');
+            ->fromSub($inner, 'daily_agg')
+            ->leftJoin('tracking_ctr_summaries as rollup', function ($join): void {
+                $join->on('rollup.department_id', '=', 'daily_agg.department_id')
+                    ->on('rollup.category_id', '=', 'daily_agg.category_id')
+                    ->on('rollup.product_code', '=', 'daily_agg.product_code')
+                    ->on('rollup.type', '=', 'daily_agg.type')
+                    ->whereRaw('COALESCE(rollup.micro_category_id, 0) = COALESCE(daily_agg.micro_category_id, 0)');
+            })
+            ->select([
+                'daily_agg.department_id',
+                'daily_agg.department_slug',
+                'daily_agg.category_id',
+                'daily_agg.category_slug',
+                'daily_agg.micro_category_id',
+                'daily_agg.micro_category_slug',
+                'daily_agg.type',
+                'daily_agg.product_code',
+                'daily_agg.total_click',
+                'daily_agg.total_impression',
+                DB::raw('COALESCE(rollup.ctr, 0) as ctr'),
+                DB::raw('COALESCE(rollup.ctr_average, 0) as ctr_average'),
+            ]);
 
         $this->applySortOrder($query, $sortKey, $sortDir);
 
@@ -1000,7 +1015,7 @@ class EcommerceCtrSummaryController extends Controller
             $query->orderBy(self::SORT_COLUMNS[$key], $dir);
         }
 
-        $query->orderBy('tracking_ctr_summaries.product_code');
+        $query->orderBy('daily_agg.product_code');
     }
 
     private function formatDepartmentColumn(object $row): string
