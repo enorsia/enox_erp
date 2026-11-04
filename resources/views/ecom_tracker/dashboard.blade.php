@@ -265,10 +265,13 @@
         </div>
         @include('ecom_tracker.partials.traffic-sources-table', [
             'rows' => $dashboard['traffic'],
-            'activitySourceLink' => fn (array $row) => $activityLink(array_filter([
-                'utm_source' => $row['id'] ?? null,
-                'utm_medium' => filled($row['medium'] ?? null) ? $row['medium'] : null,
-            ], fn ($value) => $value !== null && $value !== '')),
+            'activitySourceLink' => fn (array $row) => filled($row['id'] ?? null) && ($row['source'] ?? '') !== 'Other'
+                ? $activityLink(array_filter([
+                    'utm_source' => $row['id'],
+                    'utm_medium' => filled($row['medium'] ?? null) ? $row['medium'] : null,
+                    'focus' => 'session',
+                ], fn ($value) => $value !== null && $value !== ''), ['utm_source', 'utm_medium'])
+                : null,
         ])
     </div>
 

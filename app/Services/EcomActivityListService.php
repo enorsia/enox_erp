@@ -856,6 +856,10 @@ class EcomActivityListService
             return 'Device & browser';
         }
 
+        if (($filters['utm_sources'] ?? []) !== [] || ($filters['utm_mediums'] ?? []) !== []) {
+            return 'Traffic sources';
+        }
+
         return 'Recoverable sale';
     }
 
@@ -961,7 +965,7 @@ class EcomActivityListService
         $sales = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->tap($scope)
-            ->selectRaw('COUNT(o.id) as payments')
+            ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as payments')
             ->selectRaw('COALESCE(SUM(o.items_qty), 0) as sold_qty')
             ->selectRaw('COALESCE(SUM(o.amount_paid), 0) as sale_amount')
             ->first();
@@ -1708,11 +1712,33 @@ class EcomActivityListService
 
         foreach ((array) $request->query('utm_source', []) as $sourceId) {
             $name = $filterOptions['utmSources'][(int) $sourceId] ?? $sourceId;
-            $addChip('Source: '.$name, ['utm_source']);
+            $dropSource = ['utm_source'];
+            if (
+                $request->query('focus') === 'session'
+                && ! $request->filled('funnel')
+                && ! filled($request->query('session_id'))
+                && ! $request->filled('device_type')
+                && ! $request->filled('browser_type')
+                && ! $request->filled('utm_medium')
+            ) {
+                $dropSource[] = 'focus';
+            }
+            $addChip('Source: '.$name, $dropSource);
         }
 
         foreach ((array) $request->query('utm_medium', []) as $medium) {
-            $addChip('Medium: '.$medium, ['utm_medium']);
+            $dropMedium = ['utm_medium'];
+            if (
+                $request->query('focus') === 'session'
+                && ! $request->filled('funnel')
+                && ! filled($request->query('session_id'))
+                && ! $request->filled('device_type')
+                && ! $request->filled('browser_type')
+                && ! $request->filled('utm_source')
+            ) {
+                $dropMedium[] = 'focus';
+            }
+            $addChip('Medium: '.$medium, $dropMedium);
         }
 
         if (filled($request->query('department'))) {

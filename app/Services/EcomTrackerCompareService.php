@@ -374,6 +374,7 @@ class EcomTrackerCompareService
                         array_merge($baseQuery, array_filter([
                             'utm_source' => [(int) $sourceId],
                             'utm_medium' => filled($row['medium'] ?? null) ? [(string) $row['medium']] : null,
+                            'focus' => 'session',
                         ], fn ($value) => $value !== null && $value !== [])),
                     ),
             ]);

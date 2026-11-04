@@ -2084,8 +2084,8 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Device and browser sold units follow the product rows: every order whose session
-     * visited this day, including a payment just after midnight.
+     * Device, browser, and traffic sold units follow the product rows: every order whose
+     * session visited this day, including a payment just after midnight.
      *
      * @param  array<string, array<string, mixed>>  $audience
      * @param  array<string, int|float>  $emptyAudience
@@ -2099,20 +2099,34 @@ class TrackerDashboardSyncService
         SessionTrafficAttribution::joinLatestSessionDetails($ordersQuery, 'o.tracking_session_id');
 
         $orders = $ordersQuery->get([
+            'o.tracking_session_id',
             'o.items_qty',
             'o.amount_paid',
             'sd.tracking_device_id',
             'sd.tracking_browser_id',
+            'sd.tracking_traffic_source_id',
+            'sd.utm_source',
+            'sd.utm_medium',
         ]);
 
+        $paidSessions = [];
         foreach ($orders as $order) {
+            $sessionId = (int) ($order->tracking_session_id ?? 0);
+            $countPayment = $sessionId === 0 || ! isset($paidSessions[$sessionId]);
+            if ($sessionId !== 0) {
+                $paidSessions[$sessionId] = true;
+            }
+            [$source, $medium] = $this->trafficSourceMedium($order->utm_source, $order->utm_medium);
             foreach ([
                 ['type' => TrackingDailyAudience::TYPE_DEVICE, 'dimension_id' => (int) ($order->tracking_device_id ?? 0), 'source' => '', 'medium' => ''],
                 ['type' => TrackingDailyAudience::TYPE_BROWSER, 'dimension_id' => (int) ($order->tracking_browser_id ?? 0), 'source' => '', 'medium' => ''],
+                ['type' => TrackingDailyAudience::TYPE_TRAFFIC_SOURCE, 'dimension_id' => (int) ($order->tracking_traffic_source_id ?? 0), 'source' => $source, 'medium' => $medium],
             ] as $key) {
                 $id = implode('|', $key);
                 $audience[$id] ??= $key + $emptyAudience;
-                $audience[$id]['payments']++;
+                if ($countPayment) {
+                    $audience[$id]['payments']++;
+                }
                 $audience[$id]['sold_qty'] += (int) $order->items_qty;
                 $audience[$id]['sale_amount'] += (float) $order->amount_paid;
             }
@@ -2747,8 +2761,15 @@ class TrackerDashboardSyncService
             }
         }
 
+        $paidSessions = [];
         foreach ($orders as $order) {
-            $summary['payments']++;
+            $sessionId = (int) ($order->tracking_session_id ?? 0);
+            if ($sessionId === 0 || ! isset($paidSessions[$sessionId])) {
+                $summary['payments']++;
+                if ($sessionId !== 0) {
+                    $paidSessions[$sessionId] = true;
+                }
+            }
             $summary['items_sold'] += (int) $order->items_qty;
             $summary['sale_amount'] += (float) $order->amount_paid;
 
@@ -2757,7 +2778,11 @@ class TrackerDashboardSyncService
             }
 
             foreach ($this->audienceKeysForOrder($order) as $key) {
-                if (in_array($key['type'], [TrackingDailyAudience::TYPE_DEVICE, TrackingDailyAudience::TYPE_BROWSER], true)) {
+                if (in_array($key['type'], [
+                    TrackingDailyAudience::TYPE_DEVICE,
+                    TrackingDailyAudience::TYPE_BROWSER,
+                    TrackingDailyAudience::TYPE_TRAFFIC_SOURCE,
+                ], true)) {
                     continue;
                 }
 
@@ -2893,9 +2918,16 @@ class TrackerDashboardSyncService
             ->where('metric_date', $date)
             ->get(['tracking_session_id', 'items_qty', 'amount_paid', 'ordered_at']);
 
+        $paidSessionsByHour = [];
         foreach ($orders as $order) {
             $hour = $this->localHour($order->ordered_at);
-            $hours[$hour]['payments']++;
+            $sessionId = (int) ($order->tracking_session_id ?? 0);
+            if ($sessionId === 0 || ! isset($paidSessionsByHour[$hour][$sessionId])) {
+                $hours[$hour]['payments']++;
+                if ($sessionId !== 0) {
+                    $paidSessionsByHour[$hour][$sessionId] = true;
+                }
+            }
             $hours[$hour]['items_sold'] += (int) $order->items_qty;
             $hours[$hour]['sale_amount'] += (float) $order->amount_paid;
         }

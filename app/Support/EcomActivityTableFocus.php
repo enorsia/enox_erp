@@ -73,6 +73,9 @@ final class EcomActivityTableFocus
         }
 
         if (self::hasTrafficScope($request)) {
+            if ($request->input('focus') === 'session') {
+                $keys = self::mergeKeys($keys, ['device_detail']);
+            }
             $keys = self::mergeKeys($keys, ['traffic_source', 'traffic_medium']);
         }
 

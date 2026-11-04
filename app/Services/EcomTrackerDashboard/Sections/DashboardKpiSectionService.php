@@ -46,7 +46,7 @@ class DashboardKpiSectionService
             $currentFunnel['payment_count'],
             $previousFunnel['payment_rate'],
             $previousFunnel['payment_count'],
-            'Share of sessions with at least one payment; count is completed orders (multiple orders in one session each count).',
+            'Sessions with at least one payment. Same count as Payment success. Items sold and sale amount still include every order in the session.',
             $comparisonLabel,
             ['funnel' => 6],
         );
