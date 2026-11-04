@@ -81,6 +81,7 @@ class EcommerceCtrSummaryController extends Controller
             $productCodes,
             $context['data']['dateFrom'],
             $context['data']['dateTo'],
+            $context['period'],
         );
 
         $summaries->setCollection(
@@ -118,6 +119,7 @@ class EcommerceCtrSummaryController extends Controller
             $productCodes,
             $context['data']['dateFrom'],
             $context['data']['dateTo'],
+            $context['period'],
         );
 
         $rows = $collection
@@ -820,11 +822,15 @@ class EcommerceCtrSummaryController extends Controller
         array $productCodes,
         string $dateFrom,
         string $dateTo,
+        string $period,
     ): array {
         $salesByProductCode = [];
+        $useRankingSalesWindow = $this->useRankingSalesWindowForSoldMetrics($period);
         $logContext = [
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
+            'period' => $period,
+            'use_ranking_sales_window' => $useRankingSalesWindow,
             'product_code_count' => count($productCodes),
         ];
 
@@ -854,11 +860,13 @@ class EcommerceCtrSummaryController extends Controller
                 ];
 
                 try {
-                    $response = $client->post($endpoint, [
-                        'product_code' => $chunk,
-                        'date_from' => $dateFrom,
-                        'date_to' => $dateTo,
-                    ]);
+                    $requestBody = ['product_code' => $chunk];
+                    if (! $useRankingSalesWindow) {
+                        $requestBody['date_from'] = $dateFrom;
+                        $requestBody['date_to'] = $dateTo;
+                    }
+
+                    $response = $client->post($endpoint, $requestBody);
                 } catch (\Throwable $chunkException) {
                     $failedChunks++;
                     Log::error('CTR summary: tracking/products/total-sold request threw an exception.', $chunkContext + [
@@ -902,8 +910,12 @@ class EcommerceCtrSummaryController extends Controller
                     }
 
                     $salesByProductCode[$code] = [
-                        'total_sale' => (float) ($item['total_sale'] ?? 0),
-                        'total_qty' => (int) ($item['total_qty'] ?? 0),
+                        'total_sale' => $useRankingSalesWindow
+                            ? (float) ($item['sales_window_sale'] ?? 0)
+                            : (float) ($item['total_sale'] ?? 0),
+                        'total_qty' => $useRankingSalesWindow
+                            ? (int) ($item['sales_window_qty'] ?? 0)
+                            : (int) ($item['total_qty'] ?? 0),
                     ];
                 }
             }
@@ -930,6 +942,14 @@ class EcommerceCtrSummaryController extends Controller
         }
 
         return $salesByProductCode;
+    }
+
+    /**
+     * Match Ranking Products total sold rolling (product_sorting_sales_days on daily_sales_summary).
+     */
+    private function useRankingSalesWindowForSoldMetrics(string $period): bool
+    {
+        return $period === '30d';
     }
 
     /**
