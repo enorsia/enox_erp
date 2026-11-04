@@ -61,6 +61,7 @@ class TrackIngestService
             ]);
         }
 
+        $events = $this->anchorEventsToServerClock($events, $payload['sent_at'] ?? null);
         $events = $this->sortEventsByClock($events);
 
         TrackerRedisSupport::logFrontendHealth('track_ingest');
@@ -107,7 +108,7 @@ class TrackIngestService
             ]);
         }
 
-        $this->upsertSession($request, $sessionId, $sessionData, $clientContext);
+        $this->upsertSession($request, $sessionId, $sessionData, $clientContext, $events);
 
         $acceptedIds = [];
 
@@ -293,11 +294,15 @@ class TrackIngestService
         return $acceptedUnique->all();
     }
 
-    private function upsertSession(Request $request, string $sessionId, array $sessionData, ?array $clientContext = null): void
+    /**
+     * @param  array<int, array<string, mixed>>  $events
+     */
+    private function upsertSession(Request $request, string $sessionId, array $sessionData, ?array $clientContext = null, array $events = []): void
     {
         $userAgent = $clientContext['user_agent'] ?? $request->userAgent();
         $parsed = UserAgentParser::parse($userAgent);
         $now = TrackerTime::formatUtc(TrackerTime::nowUtc());
+        $earliestEvent = $this->earliestClientInstant($events);
 
         $existing = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
 
@@ -325,7 +330,7 @@ class TrackIngestService
             $attributes['utm_medium'] = $ingestAttribution['utm_medium'] ?? $sessionData['utm_medium'] ?? null;
             $attributes['utm_campaign'] = $ingestAttribution['utm_campaign'] ?? $sessionData['utm_campaign'] ?? null;
             $attributes['landing_page'] = $ingestAttribution['landing_page'] ?? $sessionData['landing_page'] ?? null;
-            $attributes['created_at'] = $now;
+            $attributes['created_at'] = TrackerTime::formatUtc($earliestEvent ?? TrackerTime::nowUtc());
             $attributes['updated_at'] = $now;
             $attributes['session_duration_seconds'] = 0;
 
@@ -352,6 +357,14 @@ class TrackIngestService
         }
 
         $this->mergeAttributionIntoSession($existing, $sessionData);
+
+        if ($earliestEvent !== null) {
+            $existingCreated = TrackerTime::toUtc($existing->getRawOriginal('created_at'));
+
+            if ($existingCreated === null || $earliestEvent->lessThan($existingCreated)) {
+                $attributes['created_at'] = TrackerTime::formatUtc($earliestEvent);
+            }
+        }
 
         $attributes['session_duration_seconds'] = $this->sessionDurationSeconds($existing);
         $attributes['updated_at'] = $now;
@@ -938,25 +951,21 @@ class TrackIngestService
         $latest = null;
 
         foreach ($events as $event) {
-            $at = TrackerTime::toUtc($event['created_at'] ?? null);
+            foreach (['created_at', 'end_time'] as $field) {
+                $at = TrackerTime::toUtc($event[$field] ?? null);
 
-            if ($at === null) {
-                continue;
-            }
+                if ($at === null) {
+                    continue;
+                }
 
-            if ($latest === null || $at->greaterThan($latest)) {
-                $latest = $at;
+                if ($latest === null || $at->greaterThan($latest)) {
+                    $latest = $at;
+                }
             }
         }
 
-        $ingestedAt = TrackerTime::nowUtc();
-
         if ($latest === null) {
-            $latest = $ingestedAt;
-        } elseif ($ingestedAt->greaterThan($latest)) {
-            // Client event timestamps can predate session creation (view start time).
-            // Admin "last active" should reflect when we last heard from this session.
-            $latest = $ingestedAt;
+            $latest = TrackerTime::nowUtc();
         }
 
         $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
@@ -1273,6 +1282,102 @@ class TrackIngestService
         });
 
         return $events;
+    }
+
+    /**
+     * Put every event on the server clock. The browser time is only the gap before the batch was sent,
+     * because each user's device clock can be wrong. The stored instant is then read as UK/London.
+     *
+     * @param  array<int, array<string, mixed>>  $events
+     * @return array<int, array<string, mixed>>
+     */
+    private function anchorEventsToServerClock(array $events, mixed $clientSentAt): array
+    {
+        $serverNow = TrackerTime::nowUtc();
+        $sentAt = TrackerTime::toUtc($clientSentAt) ?? $this->latestClientInstant($events);
+
+        foreach ($events as $index => $event) {
+            $start = $this->serverAnchoredTime($event['start_time'] ?? null, $sentAt, $serverNow);
+            $end = $this->serverAnchoredTime($event['end_time'] ?? null, $sentAt, $serverNow);
+            $created = $this->serverAnchoredTime($event['created_at'] ?? null, $sentAt, $serverNow);
+
+            if ($start !== null) {
+                $events[$index]['start_time'] = $start;
+            }
+
+            if ($end !== null) {
+                $events[$index]['end_time'] = $end;
+            }
+
+            $events[$index]['created_at'] = $created ?? $start ?? TrackerTime::formatUtc($serverNow);
+        }
+
+        return $events;
+    }
+
+    private function serverAnchoredTime(mixed $clientTime, ?Carbon $clientSentAt, Carbon $serverNow): ?string
+    {
+        $clientAt = TrackerTime::toUtc($clientTime);
+
+        if ($clientAt === null) {
+            return null;
+        }
+
+        if ($clientSentAt === null) {
+            return TrackerTime::formatUtc($serverNow);
+        }
+
+        $anchored = $serverNow->copy()->addSeconds($clientAt->getTimestamp() - $clientSentAt->getTimestamp());
+
+        if ($anchored->greaterThan($serverNow)) {
+            $anchored = $serverNow->copy();
+        }
+
+        return TrackerTime::formatUtc($anchored);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $events
+     */
+    private function latestClientInstant(array $events): ?Carbon
+    {
+        $latest = null;
+
+        foreach ($events as $event) {
+            foreach (['end_time', 'created_at', 'start_time'] as $field) {
+                $at = TrackerTime::toUtc($event[$field] ?? null);
+
+                if ($at !== null && ($latest === null || $at->greaterThan($latest))) {
+                    $latest = $at;
+                }
+            }
+        }
+
+        return $latest;
+    }
+
+    /**
+     * Earliest action time in the batch. Events are already on the server clock.
+     *
+     * @param  array<int, array<string, mixed>>  $events
+     */
+    private function earliestClientInstant(array $events): ?Carbon
+    {
+        $earliest = null;
+
+        foreach ($events as $event) {
+            $at = TrackerTime::toUtc($event['created_at'] ?? $event['start_time'] ?? null);
+
+            if ($at === null) {
+                continue;
+            }
+
+            if ($earliest === null || $at->lessThan($earliest)) {
+                $earliest = $at;
+            }
+        }
+
+        return $earliest;
     }
 
     /**
