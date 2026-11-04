@@ -852,6 +852,10 @@ class EcomActivityListService
             return 'Session';
         }
 
+        if (($filters['devices'] ?? []) !== [] || ($filters['browsers'] ?? []) !== []) {
+            return 'Device & browser';
+        }
+
         return 'Recoverable sale';
     }
 
@@ -1673,12 +1677,33 @@ class EcomActivityListService
 
         foreach ((array) $request->query('device_type', []) as $deviceId) {
             $name = $filterOptions['devices'][(int) $deviceId] ?? $deviceId;
-            $addChip('Device: '.ucfirst((string) $name), ['device_type']);
+            $dropDevice = ['device_type'];
+            if (
+                $request->query('focus') === 'session'
+                && ! $request->filled('funnel')
+                && ! filled($request->query('session_id'))
+                && ! $request->filled('browser_type')
+            ) {
+                $dropDevice[] = 'focus';
+            }
+            $addChip('Device: '.ucfirst((string) $name), $dropDevice);
         }
 
         foreach ((array) $request->query('browser_type', []) as $browserId) {
             $name = $filterOptions['browsers'][(int) $browserId] ?? $browserId;
-            $addChip('Browser: '.ucfirst((string) $name), ['browser_type', 'focus']);
+            $dropBrowser = ['browser_type'];
+            if (
+                $request->query('focus') === 'devices'
+                || (
+                    $request->query('focus') === 'session'
+                    && ! $request->filled('funnel')
+                    && ! filled($request->query('session_id'))
+                    && ! $request->filled('device_type')
+                )
+            ) {
+                $dropBrowser[] = 'focus';
+            }
+            $addChip('Browser: '.ucfirst((string) $name), $dropBrowser);
         }
 
         foreach ((array) $request->query('utm_source', []) as $sourceId) {

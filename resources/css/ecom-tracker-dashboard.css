@@ -3305,6 +3305,11 @@ body.etd-filter-panel-open {
     min-width: 5.5rem;
 }
 
+.etd-table.etd-table--device-browser thead th.etd-num:nth-child(-n + 7),
+.etd-table.etd-table--device-browser tbody td.etd-num:nth-child(-n + 7) {
+    text-align: center;
+}
+
 .etd-table-scroll--traffic.etd-table-scroll--fixed {
     --etd-table-scroll-height: clamp(16rem, 34vh, 24rem);
     min-height: 12rem;

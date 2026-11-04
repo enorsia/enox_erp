@@ -17,35 +17,35 @@
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Views',
                             'tip' => 'Catalog product clicks (product_click) in sessions on this device/browser — once per parent style per session (Product performance View rules).',
-                            'align' => 'right',
+                            'align' => 'center',
                         ])
                     </th>
                     <th class="etd-num">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Cart',
                             'tip' => 'Add-to-cart units summed across products in sessions on this device/browser (Product performance Add rules).',
-                            'align' => 'right',
+                            'align' => 'center',
                         ])
                     </th>
                     <th class="etd-num">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Begin',
                             'tip' => 'Begin-checkout units summed across products in sessions on this device/browser (Product performance Begin rules).',
-                            'align' => 'right',
+                            'align' => 'center',
                         ])
                     </th>
                     <th class="etd-num">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Proceed',
                             'tip' => 'Proceed-checkout units summed across products in sessions on this device/browser (Product performance Proceed rules).',
-                            'align' => 'right',
+                            'align' => 'center',
                         ])
                     </th>
                     <th class="etd-num">
                         @include('ecom_tracker.partials.column-header-with-tip', [
                             'label' => 'Qty',
                             'tip' => 'Total units sold from payment_success events',
-                            'align' => 'right',
+                            'align' => 'center',
                         ])
                     </th>
                     <th class="etd-num">Conv.</th>

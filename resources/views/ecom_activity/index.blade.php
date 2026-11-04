@@ -145,8 +145,10 @@
             $focusColumns = $focusColumns ?? [];
             $showCatalogFilterColumn = $showCatalogFilterColumn ?? false;
             $productDrillTableLayout = $productDrillTableLayout ?? false;
+            $deviceBrowserSessionColumns = ($sessionListTableLayout ?? false)
+                && (request()->filled('device_type') || request()->filled('browser_type'));
             $focusColspan = count($focusColumns);
-            $activityTableBaseCols = $productDrillTableLayout ? 4 : 8;
+            $activityTableBaseCols = $productDrillTableLayout ? (4 + ($deviceBrowserSessionColumns ? 2 : 0)) : 8;
             $activityTableColspan = $activityTableBaseCols + $focusColspan + ($showCatalogFilterColumn ? 1 : 0);
             $activityTableWide = $focusColspan > 0 || $showCatalogFilterColumn;
             $singleSessionOpenEvent = null;
@@ -201,7 +203,7 @@
                                     <a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Commerce</span></a>
                                 @endif
                             </th>
-                            @unless ($productDrillTableLayout)
+                            @unless ($productDrillTableLayout && ! $deviceBrowserSessionColumns)
                                 <th class="etd-col-actions etd-num"><a href="#" data-etd-activity-sort class="etd-sort-th-link etd-sort-th-link--center"><span class="etd-sort-th-label">Actions</span></a></th>
                             @endunless
                             @if ($showCatalogFilterColumn)
@@ -225,7 +227,7 @@
                                     @endif
                                 </th>
                             @endforeach
-                            @unless ($productDrillTableLayout)
+                            @unless ($productDrillTableLayout && ! $deviceBrowserSessionColumns)
                                 <th class="etd-col-duration etd-activity-col--optional"><a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Duration</span></a></th>
                             @endunless
                             <th class="etd-col-last-active etd-activity-col--optional">
@@ -279,7 +281,7 @@
                                         ])
                                     @endif
                                 </td>
-                                @unless ($productDrillTableLayout)
+                                @unless ($productDrillTableLayout && ! $deviceBrowserSessionColumns)
                                     <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($row->actions_count ?? 0)) }}</td>
                                 @endunless
                                 @if ($showCatalogFilterColumn)
@@ -293,7 +295,7 @@
                                         {{ $row->focus[$column['key']] ?? '—' }}
                                     </td>
                                 @endforeach
-                                @unless ($productDrillTableLayout)
+                                @unless ($productDrillTableLayout && ! $deviceBrowserSessionColumns)
                                     <td class="etd-col-duration etd-activity-col--optional" data-label="Duration">{{ format_duration((int) ($row->duration_seconds ?? 0)) }}</td>
                                 @endunless
                                 <td class="etd-col-last-active etd-activity-col--optional" data-label="Last active">
