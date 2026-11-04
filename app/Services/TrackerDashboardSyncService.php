@@ -95,7 +95,7 @@ class TrackerDashboardSyncService
      * Day totals match SUM of tracking_daily_products. A session's view/add/begin/proceed
      * lands on the hour of its last action that day so the hours still add up to the day.
      *
-     * @var array<int, array{views: int, adds: int, begins: int, proceeds: int, paid: int}>
+     * @var array<int, array{views: int, adds: int, begins: int, proceeds: int, paid: int, sale: float}>
      */
     private array $productJourneyByHour = [];
 
@@ -775,6 +775,7 @@ class TrackerDashboardSyncService
         foreach ($actions as $action) {
             $type = $this->metricActionType($action);
             $actionDate = $this->localDate($action->created_at ?? null);
+            $this->touchedDates[$actionDate] = true;
             $metricHour = $this->localHour($action->created_at ?? null);
             $orderLines = [];
 
@@ -2101,8 +2102,8 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Device, browser, and traffic sold units follow the product rows: every order whose
-     * session visited this day, including a payment just after midnight.
+     * Device, browser, and traffic sold units follow the order placed time.
+     * One second into the next day counts on that day, not on the session visit date.
      *
      * @param  array<string, array<string, mixed>>  $audience
      * @param  array<string, int|float>  $emptyAudience
@@ -2111,8 +2112,7 @@ class TrackerDashboardSyncService
     {
         $ordersQuery = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->where('dv.visit_date', $visitDate);
+            ->where('o.metric_date', $visitDate);
         SessionTrafficAttribution::joinLatestSessionDetails($ordersQuery, 'o.tracking_session_id');
 
         $orders = $ordersQuery->get([
@@ -2893,7 +2893,7 @@ class TrackerDashboardSyncService
      */
     private function emptyProductJourneyHour(): array
     {
-        return ['views' => 0, 'adds' => 0, 'begins' => 0, 'proceeds' => 0, 'paid' => 0];
+        return ['views' => 0, 'adds' => 0, 'begins' => 0, 'proceeds' => 0, 'paid' => 0, 'sale' => 0.0];
     }
 
     private function resetProductJourneyHours(): void
@@ -2918,6 +2918,7 @@ class TrackerDashboardSyncService
             $totals['begins'] += $bucket['begins'];
             $totals['proceeds'] += $bucket['proceeds'];
             $totals['paid'] += $bucket['paid'];
+            $totals['sale'] += $bucket['sale'];
         }
 
         TrackerDatabase::table('tracking_daily_summaries')->where('metric_date', $date)->update([
@@ -2926,6 +2927,7 @@ class TrackerDashboardSyncService
             'product_begin_units' => $totals['begins'],
             'product_proceed_units' => $totals['proceeds'],
             'product_paid_units' => $totals['paid'],
+            'product_sale_amount' => round($totals['sale'], 2),
             'updated_at' => $now,
         ]);
     }
@@ -2948,6 +2950,7 @@ class TrackerDashboardSyncService
                 'product_begin_units' => $journey['begins'],
                 'product_proceed_units' => $journey['proceeds'],
                 'product_paid_units' => $journey['paid'],
+                'product_sale_amount' => round((float) $journey['sale'], 2),
                 'unique_visitors' => 0,
                 'sessions' => 0,
             ];
@@ -2997,6 +3000,7 @@ class TrackerDashboardSyncService
         $columns = [
             'unique_visitors', 'sessions', 'category_views', 'product_views',
             'product_view_units', 'product_add_units', 'product_begin_units', 'product_proceed_units', 'product_paid_units',
+            'product_sale_amount',
         ];
 
         TrackerDatabase::table('tracking_hourly_summaries')->upsert(
@@ -3020,7 +3024,7 @@ class TrackerDashboardSyncService
             }
         }
 
-        return true;
+        return round((float) ($row['product_sale_amount'] ?? 0), 2) === 0.0;
     }
 
     /**
@@ -3028,17 +3032,9 @@ class TrackerDashboardSyncService
      */
     private function applyHourlyTrendActionCounts(string $visitDate, array &$hours): void
     {
-        $sessionIds = TrackerDatabase::table('tracking_session as ts')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->where('dv.visit_date', $visitDate)
-            ->pluck('ts.session_id');
-
-        if ($sessionIds->isEmpty()) {
-            return;
-        }
-
+        [$fromBound, $toBound] = $this->actionStorageBounds($visitDate);
         $actions = TrackerDatabase::table('activity_ecom_user_actions')
-            ->whereIn('session_id', $sessionIds)
+            ->whereBetween('created_at', [$fromBound, $toBound])
             ->orderBy('id')
             ->get();
 
@@ -3085,7 +3081,8 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Rebuild product / category / audience funnel columns for one visit day.
+     * Rebuild product / category / audience funnel columns for one calendar day.
+     * Each action counts on its own time, the same way payment_success does.
      * Commerce units: {@see EcomActivityListService::productFunnelUnitsForSessionActions()}
      * (catalog product_click views; add / begin / proceed / paid cycle rules).
      */
@@ -3126,22 +3123,25 @@ class TrackerDashboardSyncService
             'updated_at' => $now,
         ]);
 
-        $sessionAudienceKeys = $this->sessionAudienceKeysForVisitDate($date);
-        $productCategoryByCode = $this->productCategoryIdsByCodeForVisitDate($date);
+        [$fromBound, $toBound] = $this->actionStorageBounds($date);
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereBetween('created_at', [$fromBound, $toBound])
+            ->orderBy('id')
+            ->get();
 
-        $sessionIds = TrackerDatabase::table('tracking_session as ts')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->where('dv.visit_date', $date)
-            ->pluck('ts.session_id');
-
-        if ($sessionIds->isEmpty()) {
+        if ($actions->isEmpty()) {
             return;
         }
 
-        $actions = TrackerDatabase::table('activity_ecom_user_actions')
-            ->whereIn('session_id', $sessionIds)
-            ->orderBy('id')
-            ->get();
+        $sessionIds = $actions
+            ->pluck('session_id')
+            ->map(fn ($id) => $this->normalizeSessionId((string) $id))
+            ->unique()
+            ->values()
+            ->all();
+        $sessionAudienceKeys = $this->sessionAudienceKeysForSessionIds($sessionIds);
+        $productCategoryByCode = $this->productCategoryIdsByCodeForVisitDate($date);
+        $this->fillProductCategoriesFromSessions($productCategoryByCode, $sessionIds);
 
         $skuToParent = TrackerDatabase::table('tracking_product')
             ->whereNotNull('sku')
@@ -3225,20 +3225,66 @@ class TrackerDashboardSyncService
     /**
      * @return array<string, list<array{type: int, dimension_id: int, source: string, medium: string}>>
      */
-    private function sessionAudienceKeysForVisitDate(string $visitDate): array
+    /**
+     * @param  list<string>  $sessionIds
+     * @return array<string, list<array{type: int, dimension_id: int, source: string, medium: string}>>
+     */
+    private function sessionAudienceKeysForSessionIds(array $sessionIds): array
     {
-        $query = TrackerDatabase::table('tracking_session as ts')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->where('dv.visit_date', $visitDate);
-        SessionTrafficAttribution::joinLatestSessionDetails($query);
-
         $map = [];
-        foreach ($query->get(['ts.session_id', 'sd.tracking_device_id', 'sd.tracking_browser_id', 'sd.tracking_traffic_source_id', 'sd.utm_source', 'sd.utm_medium']) as $row) {
-            $sessionId = $this->normalizeSessionId((string) $row->session_id);
-            $map[$sessionId] = $this->audienceKeysFromDetails($row);
+        foreach (array_chunk($sessionIds, 500) as $chunk) {
+            $query = TrackerDatabase::table('tracking_session as ts')
+                ->whereIn('ts.session_id', $chunk);
+            SessionTrafficAttribution::joinLatestSessionDetails($query);
+
+            foreach ($query->get(['ts.session_id', 'sd.tracking_device_id', 'sd.tracking_browser_id', 'sd.tracking_traffic_source_id', 'sd.utm_source', 'sd.utm_medium']) as $row) {
+                $sessionId = $this->normalizeSessionId((string) $row->session_id);
+                $map[$sessionId] = $this->audienceKeysFromDetails($row);
+            }
         }
 
         return $map;
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function actionStorageBounds(string $date): array
+    {
+        $start = Carbon::parse($date, TrackerTime::timezone())->startOfDay();
+
+        return TrackerTime::storageRange($start, $start->copy()->endOfDay());
+    }
+
+    /**
+     * @param  array<string, int>  $map
+     * @param  list<string>  $sessionIds
+     */
+    private function fillProductCategoriesFromSessions(array &$map, array $sessionIds): void
+    {
+        if ($sessionIds === []) {
+            return;
+        }
+
+        $canonical = TrackerCategoryIdentity::canonicalCategoryIds();
+        foreach (array_chunk($sessionIds, 500) as $chunk) {
+            $rows = TrackerDatabase::table('tracking_session_p_cat as sp')
+                ->join('tracking_session as ts', 'ts.id', '=', 'sp.tracking_session_id')
+                ->join('tracking_product as p', 'p.id', '=', 'sp.tracking_product_id')
+                ->whereIn('ts.session_id', $chunk)
+                ->whereNotNull('sp.tracking_category_id')
+                ->get(['p.code', 'sp.tracking_category_id']);
+
+            foreach ($rows as $row) {
+                $code = $this->productCode((string) $row->code);
+                if ($code === '' || isset($map[$code])) {
+                    continue;
+                }
+
+                $categoryId = (int) $row->tracking_category_id;
+                $map[$code] = $canonical[$categoryId] ?? $categoryId;
+            }
+        }
     }
 
     /**
@@ -3310,10 +3356,8 @@ class TrackerDashboardSyncService
         $best = [];
         $lines = TrackerDatabase::table('tracking_order_details as od')
             ->join('tracking_orders as o', 'o.id', '=', 'od.tracking_order_id')
-            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
             ->join('tracking_product as p', 'p.id', '=', 'od.tracking_product_id')
-            ->where('dv.visit_date', $date)
+            ->where('o.metric_date', $date)
             ->whereNotNull('od.tracking_category_id')
             ->groupBy('p.code', 'od.tracking_category_id')
             ->selectRaw('p.code as product_code, od.tracking_category_id as category_id, SUM(od.qty) as qty')
@@ -3379,7 +3423,7 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Product paid and sale for one visit day. Same split as the product page: order amount_paid shared by line_total.
+     * Product paid and sale for orders placed on this day. Same split as the product page: order amount_paid shared by line_total.
      */
     private function writeAllocatedProductSold(string $date, Carbon $now): void
     {
@@ -3390,16 +3434,16 @@ class TrackerDashboardSyncService
         ]);
         TrackerDatabase::table('tracking_daily_summaries')->where('metric_date', $date)->update([
             'product_paid_units' => 0,
+            'product_sale_amount' => 0,
             'updated_at' => $now,
         ]);
         foreach ($this->productJourneyByHour as $hour => $bucket) {
             $this->productJourneyByHour[$hour]['paid'] = 0;
+            $this->productJourneyByHour[$hour]['sale'] = 0.0;
         }
 
         $orders = TrackerDatabase::table('tracking_orders as o')
-            ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->where('dv.visit_date', $date)
+            ->where('o.metric_date', $date)
             ->get(['o.id', 'o.ordered_at', 'o.amount_paid']);
 
         if ($orders->isEmpty()) {
@@ -3436,9 +3480,7 @@ class TrackerDashboardSyncService
                 $weightSum = (float) count($lines);
             }
 
-            $paidHour = $this->localDate($order->ordered_at) === $date
-                ? $this->localHour($order->ordered_at)
-                : 0;
+            $paidHour = $this->localHour($order->ordered_at);
 
             foreach ($lines as $line) {
                 $code = $this->productCode((string) $line->product_code);
@@ -3453,9 +3495,11 @@ class TrackerDashboardSyncService
 
                 $qty = (int) $line->qty;
                 $totals[$code] ??= ['qty' => 0, 'revenue' => 0.0];
+                $share = $amountPaid * ($weight / $weightSum);
                 $totals[$code]['qty'] += $qty;
-                $totals[$code]['revenue'] += $amountPaid * ($weight / $weightSum);
+                $totals[$code]['revenue'] += $share;
                 $this->productJourneyByHour[$paidHour]['paid'] += $qty;
+                $this->productJourneyByHour[$paidHour]['sale'] += $share;
             }
         }
 
@@ -3480,6 +3524,28 @@ class TrackerDashboardSyncService
             ['metric_date', 'product_code'],
             ['sold_qty', 'sale_amount', 'updated_at'],
         );
+
+        $roundedDay = 0.0;
+        foreach ($totals as $row) {
+            $roundedDay += round((float) $row['revenue'], 2);
+        }
+        $roundedDay = round($roundedDay, 2);
+        $roundedHours = 0.0;
+        $adjustHour = 0;
+        $largestHourSale = -1.0;
+        foreach ($this->productJourneyByHour as $hour => $bucket) {
+            $rounded = round((float) $bucket['sale'], 2);
+            $this->productJourneyByHour[$hour]['sale'] = $rounded;
+            $roundedHours += $rounded;
+            if ($rounded > $largestHourSale) {
+                $largestHourSale = $rounded;
+                $adjustHour = $hour;
+            }
+        }
+        $diff = round($roundedDay - $roundedHours, 2);
+        if ($diff !== 0.0) {
+            $this->productJourneyByHour[$adjustHour]['sale'] = round($this->productJourneyByHour[$adjustHour]['sale'] + $diff, 2);
+        }
 
         $this->storeProductJourneyDayTotals($date, $now);
     }

@@ -102,6 +102,7 @@ class ShopperJourneyTrendSectionService
                 'proceed_sessions' => (int) ($row?->product_proceed_units ?? 0),
                 'payments' => (int) ($row?->payments ?? 0),
                 'items_sold' => (int) ($row?->product_paid_units ?? 0),
+                'sale_amount' => round((float) ($row?->product_sale_amount ?? 0), 2),
                 'purchase_sessions' => (int) ($purchaseSessionsByHour->get($hour) ?? 0),
             ]);
         }
@@ -131,6 +132,7 @@ class ShopperJourneyTrendSectionService
             'proceed_sessions' => [],
             'payments' => [],
             'items_sold' => [],
+            'sale_amount' => [],
             'conversion_rate' => [],
         ];
     }
@@ -147,6 +149,8 @@ class ShopperJourneyTrendSectionService
         ] as $column) {
             $data[$column][] = (int) ($metrics[$column] ?? 0);
         }
+
+        $data['sale_amount'][] = round((float) ($metrics['sale_amount'] ?? 0), 2);
 
         $sessions = (int) ($metrics['sessions'] ?? 0);
         $purchaseSessions = (int) ($metrics['purchase_sessions'] ?? $metrics['payments'] ?? 0);
@@ -221,6 +225,7 @@ class ShopperJourneyTrendSectionService
             'proceed_sessions' => 0,
             'payments' => 0,
             'items_sold' => 0,
+            'sale_amount' => 0.0,
         ];
 
         foreach ($summaries as $date => $row) {
@@ -236,6 +241,7 @@ class ShopperJourneyTrendSectionService
             $metrics['proceed_sessions'] += (int) ($row->product_proceed_units ?? 0);
             $metrics['payments'] += (int) ($row->payments ?? 0);
             $metrics['items_sold'] += (int) ($row->product_paid_units ?? 0);
+            $metrics['sale_amount'] += (float) ($row->product_sale_amount ?? 0);
         }
 
         $visitorIds = collect();
@@ -262,6 +268,7 @@ class ShopperJourneyTrendSectionService
             'proceed_sessions' => $metrics['proceed_sessions'],
             'payments' => $metrics['payments'],
             'items_sold' => $metrics['items_sold'],
+            'sale_amount' => round((float) $metrics['sale_amount'], 2),
             'purchase_sessions' => $purchaseSessionIds->unique()->count(),
         ];
     }
@@ -287,6 +294,7 @@ class ShopperJourneyTrendSectionService
             ['key' => 'begin_checkout', 'label' => 'Begin', 'data' => $data['checkout_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
             ['key' => 'proceed_checkout', 'label' => 'Proceed', 'data' => $data['proceed_sessions'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
             ['key' => 'purchases', 'label' => 'Paid', 'data' => $data['items_sold'], 'chart_type' => 'line', 'y_axis_id' => 'y'],
+            ['key' => 'sale_amount', 'label' => 'Sold amount', 'data' => $data['sale_amount'], 'chart_type' => 'line', 'y_axis_id' => 'y', 'tooltip_only' => true],
             ['key' => 'conversion_rate', 'label' => 'Conv. rate %', 'data' => $data['conversion_rate'], 'chart_type' => 'line', 'y_axis_id' => 'y1'],
         ];
 

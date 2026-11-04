@@ -14,6 +14,7 @@ return new class extends TrackingMigration
             $table->unsignedInteger('product_begin_units')->default(0)->after('product_add_units');
             $table->unsignedInteger('product_proceed_units')->default(0)->after('product_begin_units');
             $table->unsignedInteger('product_paid_units')->default(0)->after('product_proceed_units');
+            $table->decimal('product_sale_amount', 12, 2)->default(0)->after('product_paid_units');
         });
 
         Schema::table('tracking_hourly_summaries', function (Blueprint $table) {
@@ -44,6 +45,7 @@ return new class extends TrackingMigration
                 'product_begin_units',
                 'product_proceed_units',
                 'product_paid_units',
+                'product_sale_amount',
             ]);
         });
     }

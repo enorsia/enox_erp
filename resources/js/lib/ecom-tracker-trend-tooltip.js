@@ -1,7 +1,7 @@
 const TREND_TOOLTIP_GROUPS = [
     { label: 'Reach', keys: ['unique_visitors', 'sessions'] },
     { label: 'Views', keys: ['category_views', 'product_views'] },
-    { label: 'Product', keys: ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'purchases', 'items_sold_qty'] },
+    { label: 'Product', keys: ['add_to_cart', 'begin_checkout', 'proceed_checkout', 'purchases', 'sale_amount', 'items_sold_qty'] },
     { label: 'Rate', keys: ['conversion_rate'] },
 ];
 
@@ -14,6 +14,10 @@ export function formatTrendTooltipValue(key, value) {
 
     if (key === 'conversion_rate') {
         return `${numeric.toFixed(1)}%`;
+    }
+
+    if (key === 'sale_amount') {
+        return `£${numeric.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
 
     return numeric.toLocaleString('en-GB');

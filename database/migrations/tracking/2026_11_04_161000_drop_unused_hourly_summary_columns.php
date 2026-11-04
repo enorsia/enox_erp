@@ -19,10 +19,18 @@ return new class extends TrackingMigration
                 'sale_amount',
             ]);
         });
+
+        Schema::table('tracking_hourly_summaries', function (Blueprint $table) {
+            $table->decimal('product_sale_amount', 12, 2)->default(0)->after('product_paid_units');
+        });
     }
 
     public function down(): void
     {
+        Schema::table('tracking_hourly_summaries', function (Blueprint $table) {
+            $table->dropColumn('product_sale_amount');
+        });
+
         Schema::table('tracking_hourly_summaries', function (Blueprint $table) {
             $table->unsignedBigInteger('stay_seconds')->default(0)->after('sessions');
             $table->unsignedInteger('cart_sessions')->default(0)->after('product_paid_units');

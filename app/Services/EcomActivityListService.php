@@ -969,7 +969,8 @@ class EcomActivityListService
 
         $sales = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
-            ->tap($scope)
+            ->whereBetween('o.metric_date', [$range['from']->toDateString(), $range['to']->toDateString()])
+            ->tap(fn (Builder $query) => $this->applyFilters($query, $filters, $range, $forDashboard))
             ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as payments')
             ->selectRaw('COALESCE(SUM(o.items_qty), 0) as sold_qty')
             ->selectRaw('COALESCE(SUM(o.amount_paid), 0) as sale_amount')
@@ -988,7 +989,7 @@ class EcomActivityListService
             'cart_drops' => (int) ($row->cart_drops ?? 0),
             'checkout_drops' => (int) ($row->checkout_drops ?? 0),
             'proceed_drops' => (int) ($row->proceed_drops ?? 0),
-            'purchase_sessions' => (int) ($row->purchase_sessions ?? 0),
+            'purchase_sessions' => (int) ($sales->payments ?? 0),
             'payments' => (int) ($sales->payments ?? 0),
             'items_sold' => (int) ($sales->sold_qty ?? 0),
             'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),

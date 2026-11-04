@@ -249,6 +249,7 @@ const TREND_SERIES_COLORS = {
     begin_checkout: '#ea580c',
     proceed_checkout: '#e11d48',
     purchases: '#16a34a',
+    sale_amount: '#0f766e',
     items_sold_qty: '#65a30d',
     conversion_rate: '#a21caf',
 };
@@ -262,6 +263,7 @@ const TREND_SERIES_ORDER = [
     'begin_checkout',
     'proceed_checkout',
     'purchases',
+    'sale_amount',
     'items_sold_qty',
     'conversion_rate',
 ];
@@ -405,13 +407,14 @@ function initDashboardTrendChart(trend) {
     } = trend;
 
     const orderedSeries = sortTrendSeries(series);
+    const plottedSeries = orderedSeries.filter((entry) => !entry.tooltip_only);
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
-    const showRateAxis = orderedSeries.some((entry) => (entry.y_axis_id || 'y') === 'y1');
+    const showRateAxis = plottedSeries.some((entry) => (entry.y_axis_id || 'y') === 'y1');
 
     applyTrendChartLayout(labels.length);
-    renderTrendLegend(orderedSeries);
+    renderTrendLegend(plottedSeries);
 
-    const datasets = orderedSeries.map((entry, index) => {
+    const datasets = plottedSeries.map((entry, index) => {
         const color = trendSeriesColor(entry.key);
         const isConversion = entry.key === 'conversion_rate';
         const isBar = entry.chart_type === 'bar';
@@ -529,7 +532,7 @@ function initDashboardTrendChart(trend) {
 
         resizeFrame = requestAnimationFrame(() => {
             applyTrendChartLayout(labels.length);
-            renderTrendLegend(orderedSeries);
+            renderTrendLegend(plottedSeries);
             trendChart.options.plugins.legend.display = !isCompactChart();
             trendChart.options.scales.x.ticks.autoSkip = !trendUsesHorizontalScroll(labels.length) && labels.length > 24;
             trendChart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(

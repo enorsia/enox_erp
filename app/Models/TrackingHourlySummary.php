@@ -22,6 +22,7 @@ class TrackingHourlySummary extends Model
         'product_begin_units',
         'product_proceed_units',
         'product_paid_units',
+        'product_sale_amount',
     ];
 
     protected function casts(): array
@@ -38,6 +39,7 @@ class TrackingHourlySummary extends Model
             'product_begin_units' => 'integer',
             'product_proceed_units' => 'integer',
             'product_paid_units' => 'integer',
+            'product_sale_amount' => 'decimal:2',
         ];
     }
 }
