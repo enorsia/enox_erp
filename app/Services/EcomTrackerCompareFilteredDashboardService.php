@@ -204,7 +204,7 @@ class EcomTrackerCompareFilteredDashboardService
             ->tap($scope)
             ->whereBetween('o.ordered_at', $bounds)
             ->selectRaw("{$orderHourExpr} as hour")
-            ->selectRaw('COUNT(o.id) as payments')
+            ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as payments')
             ->selectRaw('COALESCE(SUM(o.items_qty), 0) as items_sold')
             ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as purchase_sessions')
             ->groupBy('hour')

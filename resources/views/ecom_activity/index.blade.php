@@ -146,7 +146,7 @@
             $showCatalogFilterColumn = $showCatalogFilterColumn ?? false;
             $productDrillTableLayout = $productDrillTableLayout ?? false;
             $deviceBrowserSessionColumns = ($sessionListTableLayout ?? false)
-                && (request()->filled('device_type') || request()->filled('browser_type'));
+                && (request()->filled('device_type') || request()->filled('browser_type') || request()->filled('utm_source') || request()->filled('utm_medium') || request()->filled('duration'));
             $focusColspan = count($focusColumns);
             $activityTableBaseCols = $productDrillTableLayout ? (4 + ($deviceBrowserSessionColumns ? 2 : 0)) : 8;
             $activityTableColspan = $activityTableBaseCols + $focusColspan + ($showCatalogFilterColumn ? 1 : 0);

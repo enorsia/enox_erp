@@ -73,7 +73,14 @@ final class EcomActivityTableFocus
         }
 
         if (self::hasTrafficScope($request)) {
+            if ($request->input('focus') === 'session') {
+                $keys = self::mergeKeys($keys, ['device_detail']);
+            }
             $keys = self::mergeKeys($keys, ['traffic_source', 'traffic_medium']);
+        }
+
+        if (self::hasDurationScope($request) && $request->input('focus') === 'session') {
+            $keys = self::mergeKeys($keys, ['device_detail']);
         }
 
         if (filled($request->input('visitor_type'))) {
@@ -134,5 +141,10 @@ final class EcomActivityTableFocus
         }
 
         return $request->filled('utm_source') || $request->filled('utm_medium');
+    }
+
+    private static function hasDurationScope(Request $request): bool
+    {
+        return $request->filled('duration');
     }
 }

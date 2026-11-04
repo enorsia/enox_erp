@@ -3404,13 +3404,74 @@ body.etd-filter-panel-open {
 .etd-table-scroll--traffic.etd-table-scroll--fixed {
     --etd-table-scroll-height: clamp(16rem, 34vh, 24rem);
     min-height: 12rem;
+    overflow-x: auto;
+}
+
+.etd-table-scroll--traffic .etd-table.etd-table--traffic {
+    width: 100%;
+    min-width: 100%;
 }
 
 .etd-table--traffic th:first-child,
-.etd-table--traffic td:first-child,
+.etd-table--traffic td:first-child {
+    width: 21.7%;
+    white-space: nowrap;
+}
+
+#ecom-tracker-dashboard-content .etd-table-scroll--traffic .etd-table--traffic th:first-child,
+#ecom-tracker-dashboard-content .etd-table-scroll--traffic .etd-table--traffic td:first-child {
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+}
+
 .etd-table--traffic th:nth-child(2),
 .etd-table--traffic td:nth-child(2) {
-    min-width: 5.5rem;
+    width: 14.6%;
+    white-space: nowrap;
+}
+
+#ecom-tracker-dashboard-content .etd-table.etd-table--traffic thead th.etd-num:nth-child(n + 3):nth-child(-n + 9),
+#ecom-tracker-dashboard-content .etd-table.etd-table--traffic tbody td.etd-num:nth-child(n + 3):nth-child(-n + 9),
+.etd-table.etd-table--traffic thead th.etd-num:nth-child(n + 3):nth-child(-n + 9),
+.etd-table.etd-table--traffic tbody td.etd-num:nth-child(n + 3):nth-child(-n + 9) {
+    width: 6.85%;
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+    text-align: center;
+    letter-spacing: 0;
+}
+
+.etd-table--traffic thead th.etd-num:nth-child(n + 3):nth-child(-n + 9) .etd-th-with-tip {
+    gap: 0.08rem;
+    font-size: 8px;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+.etd-table--traffic thead th.etd-num:nth-child(n + 3):nth-child(-n + 9) .etd-tip-icon {
+    width: 11px;
+    height: 11px;
+}
+
+.etd-table.etd-table--traffic thead th:nth-child(10),
+.etd-table.etd-table--traffic tbody td:nth-child(10) {
+    width: 8%;
+    text-align: right;
+}
+
+.etd-table.etd-table--traffic thead th:nth-child(11),
+.etd-table.etd-table--traffic tbody td:nth-child(11) {
+    width: 7.75%;
+    text-align: right;
+    white-space: nowrap;
+}
+
+#ecom-tracker-dashboard-content .etd-table.etd-table--traffic thead th:nth-child(10),
+#ecom-tracker-dashboard-content .etd-table.etd-table--traffic tbody td:nth-child(10),
+#ecom-tracker-dashboard-content .etd-table.etd-table--traffic thead th:nth-child(11),
+#ecom-tracker-dashboard-content .etd-table.etd-table--traffic tbody td:nth-child(11) {
+    padding-left: 0.15rem;
+    padding-right: 0.25rem;
     white-space: nowrap;
 }
 
@@ -3629,9 +3690,63 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
     .etd-table--device-browser td {
         white-space: nowrap;
     }
+}
 
-    .etd-table--traffic {
-        min-width: 58rem;
+@media (max-width: 1023px) {
+    #ecom-tracker-dashboard-content #traffic {
+        min-width: 0;
+    }
+
+    .etd-table-scroll--traffic.etd-table-scroll--fixed {
+        --etd-table-scroll-height: clamp(14rem, min(22rem, 48dvh), 22rem);
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        max-height: var(--etd-table-scroll-height);
+        overflow-x: auto;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .etd-table-scroll--traffic .etd-table.etd-table--traffic {
+        width: max-content;
+        min-width: 54rem;
+        table-layout: fixed;
+    }
+
+    .etd-table-scroll--traffic .etd-table--traffic th:first-child,
+    .etd-table-scroll--traffic .etd-table--traffic td:first-child {
+        width: 12.5rem;
+    }
+
+    .etd-table-scroll--traffic .etd-table--traffic th:nth-child(2),
+    .etd-table-scroll--traffic .etd-table--traffic td:nth-child(2) {
+        width: 6.75rem;
+    }
+
+    .etd-table-scroll--traffic .etd-table.etd-table--traffic thead th.etd-num:nth-child(n + 3):nth-child(-n + 9),
+    .etd-table-scroll--traffic .etd-table.etd-table--traffic tbody td.etd-num:nth-child(n + 3):nth-child(-n + 9) {
+        width: 3.85rem;
+    }
+
+    .etd-table-scroll--traffic .etd-table.etd-table--traffic thead th:nth-child(10),
+    .etd-table-scroll--traffic .etd-table.etd-table--traffic tbody td:nth-child(10) {
+        width: 3.75rem;
+    }
+
+    .etd-table-scroll--traffic .etd-table.etd-table--traffic thead th:nth-child(11),
+    .etd-table-scroll--traffic .etd-table.etd-table--traffic tbody td:nth-child(11) {
+        width: 5.25rem;
+    }
+
+    .etd-table-scroll--traffic .etd-table--traffic th,
+    .etd-table-scroll--traffic .etd-table--traffic td {
+        white-space: nowrap;
+    }
+
+    .etd-compare-page [data-compare-sync='traffic'] .etd-table-scroll--traffic.etd-table-scroll--fixed {
+        max-height: var(--etd-table-scroll-height);
+        overflow-y: auto;
     }
 }
 
@@ -6666,6 +6781,32 @@ a.etd-duration-bucket--link:focus-visible .etd-duration-bucket__fill {
 .etd-activity-product-kpis__grid {
     width: 100%;
     gap: 0.45rem;
+}
+
+.etd-page--activity .etd-kpi-grid.etd-activity-product-kpis__grid {
+    grid-template-columns: repeat(auto-fit, minmax(8.75rem, 1fr));
+}
+
+.etd-page--activity .etd-activity-product-kpis .etd-kpi-value {
+    white-space: nowrap;
+}
+
+.etd-page--activity .etd-activity-product-kpis .etd-kpi--compact .etd-kpi-label,
+.etd-page--activity .etd-activity-product-kpis .etd-kpi-label-wrap,
+.etd-page--activity .etd-activity-product-kpis .etd-kpi-label-text {
+    letter-spacing: 0.02em;
+}
+
+@media (min-width: 1400px) {
+    .etd-page--activity .etd-kpi-grid.etd-activity-product-kpis__grid {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 639px) {
+    .etd-page--activity .etd-kpi-grid.etd-activity-product-kpis__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .etd-product-drill-period {
@@ -9871,6 +10012,73 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
         white-space: nowrap !important;
     }
 
+    #ecom-tracker-dashboard-content .etd-table-scroll--traffic,
+    #ecom-tracker-dashboard-content .etd-table-scroll--traffic.etd-table-scroll--fixed {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        max-height: none !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table.etd-table--traffic {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        table-layout: fixed !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic th,
+    #ecom-tracker-dashboard-content .etd-table--traffic td {
+        position: static !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        box-shadow: none !important;
+        font-size: 6pt !important;
+        letter-spacing: 0 !important;
+        padding: 0.08rem 0.05rem !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic th:first-child,
+    #ecom-tracker-dashboard-content .etd-table--traffic td:first-child,
+    #ecom-tracker-dashboard-content .etd-table--traffic th:nth-child(2),
+    #ecom-tracker-dashboard-content .etd-table--traffic td:nth-child(2) {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        overflow-wrap: anywhere !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic th:first-child,
+    #ecom-tracker-dashboard-content .etd-table--traffic td:first-child {
+        width: 18% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic th:nth-child(2),
+    #ecom-tracker-dashboard-content .etd-table--traffic td:nth-child(2) {
+        width: 12% !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic th:nth-child(n + 3):nth-child(-n + 9),
+    #ecom-tracker-dashboard-content .etd-table--traffic td:nth-child(n + 3):nth-child(-n + 9) {
+        width: 7.6% !important;
+        text-align: center !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic th:nth-child(10),
+    #ecom-tracker-dashboard-content .etd-table--traffic td:nth-child(10) {
+        width: 7% !important;
+        text-align: right !important;
+    }
+
+    #ecom-tracker-dashboard-content .etd-table--traffic th:nth-child(11),
+    #ecom-tracker-dashboard-content .etd-table--traffic td:nth-child(11) {
+        width: 9.8% !important;
+        text-align: right !important;
+        white-space: nowrap !important;
+    }
+
     #ecom-tracker-dashboard-content .etd-col-product {
         white-space: normal !important;
         overflow-wrap: anywhere !important;
@@ -12962,24 +13170,84 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
         width: 22% !important;
     }
 
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table-scroll--traffic,
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table-scroll--traffic.etd-table-scroll--fixed {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        max-height: none !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
     #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic {
         width: 100% !important;
         min-width: 0 !important;
+        max-width: 100% !important;
         font-size: 6pt !important;
         table-layout: fixed !important;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic th,
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic td {
+        position: static !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        box-shadow: none !important;
+        font-size: 5.5pt !important;
+        letter-spacing: 0 !important;
+        padding: 0.06rem 0.04rem !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: clip !important;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic thead th,
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic thead .etd-th-with-tip {
+        font-size: 4.25pt !important;
+        letter-spacing: 0 !important;
+        gap: 0 !important;
+        line-height: 1.1 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic th:first-child,
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic td:first-child,
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic th:nth-child(2),
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic td:nth-child(2) {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        overflow-wrap: anywhere !important;
     }
 
     #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic th:first-child,
     #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic td:first-child {
         width: 18% !important;
-        white-space: normal !important;
-        word-break: normal !important;
-        overflow-wrap: break-word !important;
     }
 
     #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic th:nth-child(2),
     #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic td:nth-child(2) {
-        width: 11% !important;
+        width: 12% !important;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic th:nth-child(n + 3):nth-child(-n + 9),
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic td:nth-child(n + 3):nth-child(-n + 9) {
+        width: 7.6% !important;
+        text-align: center !important;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic th:nth-child(10),
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic td:nth-child(10) {
+        width: 7% !important;
+        text-align: right !important;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic th:nth-child(11),
+    #ecom-tracker-compare-content [data-compare-sync='traffic'] .etd-table--traffic td:nth-child(11) {
+        width: 9.8% !important;
+        text-align: right !important;
     }
 
     #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-category-departments .etd-table,

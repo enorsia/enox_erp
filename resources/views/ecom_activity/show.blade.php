@@ -254,7 +254,7 @@
                                     @endif
                                 </div>
                                 @if (filled($touch['campaign'] ?? null))
-                                    <div class="text-slate-500 text-[12px]">{{ $touch['campaign'] }}</div>
+                                    <div class="text-slate-500 text-[12px] break-all min-w-0">{{ $touch['campaign'] }}</div>
                                 @endif
                                 <div class="text-[11px] text-slate-400">{{ $touch['captured_at'] }}</div>
                             </div>
