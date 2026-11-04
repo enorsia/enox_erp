@@ -244,7 +244,7 @@
         <div class="etd-panel-head etd-panel-head--device-browser">
             <h2 class="etd-panel-title">Device &amp; browser</h2>
             <div class="etd-panel-head-actions">
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $activityLink()])
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $activityLink(['focus' => 'devices'])])
             </div>
         </div>
         @include('ecom_tracker.partials.device-browser-breakdown', [
@@ -261,7 +261,7 @@
     <div class="etd-panel etd-print-unit mb-3" id="traffic">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Traffic sources</h2>
-            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $activityLink()])
+            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $activityLink(['focus' => 'traffic'])])
         </div>
         @include('ecom_tracker.partials.traffic-sources-table', [
             'rows' => $dashboard['traffic'],

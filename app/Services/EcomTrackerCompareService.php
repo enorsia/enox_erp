@@ -336,6 +336,8 @@ class EcomTrackerCompareService
     {
         $baseQuery = EcomTrackerCompareFilters::activityIndexQuery($filters, $backUrl);
         $activityIndexUrl = route('admin.ecom-activity.index', $baseQuery);
+        $devicesDetailUrl = route('admin.ecom-activity.index', array_merge($baseQuery, ['focus' => 'devices']));
+        $trafficDetailUrl = route('admin.ecom-activity.index', array_merge($baseQuery, ['focus' => 'traffic']));
 
         $byDevice = [];
         foreach ($dashboard['devices']['by_device'] ?? [] as $row) {
@@ -400,9 +402,9 @@ class EcomTrackerCompareService
                 'by_device' => $byDevice,
                 'by_browser' => $byBrowser,
             ],
-            'devicesDetailUrl' => $activityIndexUrl,
+            'devicesDetailUrl' => $devicesDetailUrl,
             'traffic' => $traffic,
-            'trafficDetailUrl' => $activityIndexUrl,
+            'trafficDetailUrl' => $trafficDetailUrl,
             'durations' => $durations,
             'newReturning' => $dashboard['newReturning'] ?? ['unique' => 0, 'returning' => 0],
             'audienceDetailUrl' => $activityIndexUrl,

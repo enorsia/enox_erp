@@ -68,6 +68,10 @@ final class EcomActivityTableFocus
             $keys = self::FOCUS_COLUMN_KEYS[$focus];
         }
 
+        if ($focus === 'traffic') {
+            $keys = self::mergeKeys(['device_detail'], $keys);
+        }
+
         if (self::hasDeviceScope($request)) {
             $keys = self::mergeKeys($keys, ['device_detail']);
         }

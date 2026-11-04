@@ -326,7 +326,7 @@ class EcomActivityListService
         if (trim((string) $request->query('product_code', '')) !== '') {
             $params['product_code'] = $request->query('product_code');
             $params['focus'] = 'products';
-        } elseif (in_array($request->query('focus'), ['products', 'session'], true)) {
+        } elseif (in_array($request->query('focus'), ['products', 'session', 'devices', 'traffic'], true)) {
             $params['focus'] = $request->query('focus');
         }
 
@@ -715,7 +715,8 @@ class EcomActivityListService
         }
 
         $focusLabel = $this->funnelFocusLabel($filters);
-        $sessionListLabel = $this->sessionListSectionLabel($filters);
+        $focus = $request->query('focus');
+        $sessionListLabel = $this->sessionListSectionLabel($filters, is_string($focus) ? $focus : null);
 
         return [
             'sectionLabel' => $isProductDrill ? 'Product performance' : ($isSessionList ? $sessionListLabel : 'Audience & engagement'),
@@ -841,7 +842,7 @@ class EcomActivityListService
     /**
      * @param  array<string, mixed>  $filters
      */
-    private function sessionListSectionLabel(array $filters): string
+    private function sessionListSectionLabel(array $filters, ?string $focus = null): string
     {
         $stages = array_values(array_map('intval', $filters['funnel'] ?? []));
         if (count($stages) === 1 && isset(self::FUNNEL_FOCUS_LABELS[$stages[0]])) {
@@ -852,11 +853,11 @@ class EcomActivityListService
             return 'Session';
         }
 
-        if (($filters['devices'] ?? []) !== [] || ($filters['browsers'] ?? []) !== []) {
+        if (($filters['devices'] ?? []) !== [] || ($filters['browsers'] ?? []) !== [] || $focus === 'devices') {
             return 'Device & browser';
         }
 
-        if (($filters['utm_sources'] ?? []) !== [] || ($filters['utm_mediums'] ?? []) !== []) {
+        if (($filters['utm_sources'] ?? []) !== [] || ($filters['utm_mediums'] ?? []) !== [] || $focus === 'traffic') {
             return 'Traffic sources';
         }
 
