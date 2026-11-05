@@ -1083,8 +1083,9 @@ class EcomActivityListService
      * - A cycle runs until payment_success includes that product; the same product in the same
      *   session after pay starts a new cycle (open cycle state resets for that code).
      * - Each stage contributes once per committed cycle. Begin and proceed use the max cart qty
-     *   for that product code. Add sums each sku: the highest add-click qty of that sku in the cycle.
-     *   An edit_bag event replaces that sku qty with the bag quantity.
+     *   for that product code. Add sums each sku: the highest qty from the add_to_cart event and the edit_bag event.
+     *   An edit_bag event is the bag after the edit. Each line is checked with the add event and the max qty is kept,
+     *   so two sizes of one product at qty 1 count as add 2.
      *   Paid is the order line qty when the cycle closes. Not a sum of every click.
      * - Unpaid open cycles are committed at end of this pass (add/begin/proceed maxes only).
      * - Session totals sum all committed cycles. Views stay per session.
@@ -1143,7 +1144,7 @@ class EcomActivityListService
                 }
 
                 if ($type === 'edit_bag') {
-                    $this->setProductFunnelCycleSkuQty($openCycles, $code, $sku, $qty);
+                    $this->applyEditBagSkuQty($openCycles, $action, $trackedFilter, $skuToParentCode);
                 } else {
                     $this->bumpProductFunnelCycleSkuMax($openCycles, $code, $sku, $qty);
                 }
@@ -1218,14 +1219,54 @@ class EcomActivityListService
     }
 
     /**
-     * Bag quantity edit replaces the sku qty. A later checkout uses this quantity.
+     * The edit_bag payload is the bag after the edit. Each line is kept if it is higher than the add_to_cart qty for that sku.
      *
      * @param  array<string, array{add_max: int, begin_max: int, proceed_max: int, add_by_sku?: array<string, int>}>  $openCycles
+     * @param  array<string, true>  $trackedCodes
+     * @param  array<string, string>  $skuToParentCode
      */
-    private function setProductFunnelCycleSkuQty(array &$openCycles, string $code, string $sku, int $qty): void
+    private function applyEditBagSkuQty(array &$openCycles, object $action, array $trackedCodes, array $skuToParentCode): void
     {
-        $openCycles[$code] ??= ['add_max' => 0, 'begin_max' => 0, 'proceed_max' => 0, 'add_by_sku' => []];
-        $openCycles[$code]['add_by_sku'][$sku] = max(1, $qty);
+        $payload = json_decode((string) ($action->add_to_cart ?? ''), true);
+        $items = is_array($payload) ? ($payload['items'] ?? $payload['cart_items'] ?? []) : [];
+        $applied = false;
+
+        if (is_array($items)) {
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+
+                $codes = $this->parentStyleCodesFromCartItem($item, $trackedCodes, $skuToParentCode);
+                if ($codes === []) {
+                    continue;
+                }
+
+                $sku = trim((string) ($item['sku'] ?? ''));
+                if ($sku === '') {
+                    $sku = trim((string) ($item['product_code'] ?? ''));
+                }
+                $qty = max(1, (int) ($item['qty'] ?? 1));
+                foreach ($codes as $code) {
+                    $this->bumpProductFunnelCycleSkuMax($openCycles, $code, $sku, $qty);
+                    $applied = true;
+                }
+            }
+        }
+
+        if ($applied) {
+            return;
+        }
+
+        $code = $this->resolveParentStyleCodeFromAddAction($action, $trackedCodes, $skuToParentCode);
+        if ($code === null) {
+            return;
+        }
+
+        [$sku, $qty] = $this->addToCartSkuAndQty($action);
+        if ($qty > 0) {
+            $this->bumpProductFunnelCycleSkuMax($openCycles, $code, $sku, $qty);
+        }
     }
 
     /**
