@@ -1847,6 +1847,344 @@ class EcomActivityListService
     }
 
     /**
+     * Header line for the activity Excel file: active filters, then the commerce rows included.
+     *
+     * @param  array<string, mixed>  $filterOptions
+     */
+    public function exportFilterSummary(Request $request, string $resetUrl, array $filterOptions): string
+    {
+        $labels = [];
+        foreach ($this->filterChips($request, $resetUrl, $filterOptions) as $chip) {
+            $label = (string) ($chip['label'] ?? '');
+            if ($label === '' || in_array($label, ['Clear filter', 'Clear filters'], true)) {
+                continue;
+            }
+            $labels[] = $label;
+        }
+
+        $labels[] = 'Cart, begin checkout, proceed checkout, sold';
+
+        return implode(' · ', $labels);
+    }
+
+    /**
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     * @param  array<string, mixed>  $filters
+     * @return array{rows: list<list<int|float|string|null>>, merges: list<array{column: int, start_row: int, end_row: int}>, separators: array<int, list<int>>}
+     */
+    public function commerceExportRows(array $range, array $filters, string $sortBy = self::DEFAULT_SORT): array
+    {
+        $funnel = array_values(array_map('intval', $filters['funnel'] ?? []));
+        $sortBy = self::normalizeSort($sortBy, trim((string) ($filters['product_code'] ?? '')) !== '');
+
+        $scope = function (Builder $query) use ($range, $filters, $funnel): void {
+            $this->applySessionDateScope($query, $range);
+            $this->applyFilters($query, $filters, $range);
+            if ($funnel === [] || array_intersect($funnel, [3, 4, 5, 6]) !== []) {
+                if ($funnel === []) {
+                    $query->where(function (Builder $inner): void {
+                        $inner->whereIn('ts.latest_funnel_stage', [3, 4, 5, 6])
+                            ->orWhere('ts.has_order', 1);
+                    });
+                }
+            }
+        };
+
+        if ($sortBy === 'order_value') {
+            $orderCount = (int) TrackerDatabase::table('tracking_session as ts')
+                ->tap($scope)
+                ->where('ts.has_order', 1)
+                ->count();
+            $orderedIds = array_map('intval', $this->orderValuePageIds($scope, $orderCount, 0, 500000));
+        } else {
+            $orderedIds = TrackerDatabase::table('tracking_session as ts')
+                ->tap($scope)
+                ->tap(fn (Builder $query) => $this->applySort($query, $sortBy, $filters, $range))
+                ->pluck('ts.id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        }
+
+        $lines = [];
+        $separators = [];
+        $serial = 1;
+        $dataIndex = 0;
+        $separatorColumns = range(0, 18);
+
+        foreach (array_chunk($orderedIds, 200) as $chunk) {
+            $fetched = $this->withCommerceAction(TrackerDatabase::table('tracking_session as ts'))
+                ->tap(fn (Builder $query) => $this->withVisitorTrust($query))
+                ->whereIn('ts.id', $chunk)
+                ->get()
+                ->keyBy(fn (object $row) => (int) $row->id);
+
+            $this->attachPaymentSuccessActions($fetched);
+            $sourcesBySession = $this->exportSourcesBySession($fetched);
+
+            foreach ($chunk as $id) {
+                $row = $fetched->get($id);
+                if ($row === null) {
+                    continue;
+                }
+
+                $traffic = $sourcesBySession[(int) $row->id] ?? null;
+                $exportLines = $this->commerceExportLines(
+                    $row,
+                    $serial,
+                    $traffic['source'] ?? null,
+                    $traffic['medium'] ?? null,
+                );
+                foreach ($exportLines as $line) {
+                    $lines[] = $line;
+                }
+
+                $count = count($exportLines);
+                $separators[$dataIndex + $count - 1] = $separatorColumns;
+
+                $dataIndex += $count;
+                $serial++;
+            }
+        }
+
+        return [
+            'rows' => $lines,
+            'merges' => [],
+            'separators' => $separators,
+        ];
+    }
+
+    /**
+     * @return list<list<int|float|string|null>>
+     */
+    private function commerceExportLines(object $row, int $serial, ?string $sources = null, ?string $mediums = null): array
+    {
+        $stage = (int) ($row->latest_funnel_stage ?? 0);
+        $paid = (int) ($row->has_order ?? 0) === 1 || $stage >= 6;
+        if ($paid) {
+            $stage = 6;
+        }
+
+        $stepLabel = match ($stage) {
+            6 => 'Sold',
+            5 => 'Proceed checkout',
+            4 => 'Begin checkout',
+            default => 'Add to cart',
+        };
+
+        $commerce = $this->commerceCell($row);
+        $payments = $row->payment_success_actions ?? collect();
+        $orderIds = [];
+        $sale = 0.0;
+        $actionAt = null;
+
+        if ($payments instanceof Collection) {
+            foreach ($payments as $payment) {
+                $orderId = trim((string) ($payment->order_id ?? ''));
+                if ($orderId !== '') {
+                    $orderIds[] = $orderId;
+                }
+                $sale += (float) ($payment->amount_paid ?? $payment->commerce_total ?? 0);
+                if ($paid && filled($payment->created_at ?? null)) {
+                    $actionAt = $payment->created_at;
+                }
+            }
+        }
+
+        if ($actionAt === null) {
+            $actionAt = $row->commerce_at ?? null;
+        }
+
+        $cartValue = $this->amount($row->commerce_total);
+        $amount = $paid && $sale > 0 ? round($sale, 2) : $cartValue;
+
+        $name = trim((string) ($row->name ?? ''));
+        if ($name === '') {
+            $name = (int) ($row->is_logged_in ?? 0) === 1 ? 'Signed-in visitor' : 'Guest visitor';
+        }
+
+        $source = $sources ?? (filled($row->session_touch_utm_source ?? null)
+            ? (string) $row->session_touch_utm_source
+            : (filled($row->traffic_source_name ?? null) ? (string) $row->traffic_source_name : 'Direct'));
+        $medium = $mediums ?? (filled($row->session_touch_utm_medium ?? null)
+            ? (string) $row->session_touch_utm_medium
+            : (filled($row->traffic_source_medium ?? null) ? (string) $row->traffic_source_medium : ''));
+        $products = $this->exportProductLines($commerce);
+        if ($products === []) {
+            $products[] = ['code' => '', 'sku' => '', 'title' => '', 'color' => '', 'size' => '', 'qty' => 0];
+        }
+
+        $orderId = implode(', ', array_values(array_unique($orderIds)));
+        $lines = [];
+
+        foreach ($products as $product) {
+            $qty = max(0, (int) ($product['qty'] ?? 0));
+
+            $lines[] = [
+                $serial,
+                $stepLabel,
+                $name,
+                trim((string) ($row->email ?? '')),
+                trim((string) ($row->phone ?? '')),
+                (int) ($row->is_logged_in ?? 0) === 1 ? 'Signed in' : 'Guest',
+                $product['code'],
+                $product['sku'],
+                $product['title'],
+                $product['color'],
+                $product['size'],
+                $qty,
+                $amount,
+                $orderId,
+                $source,
+                $medium,
+                filled($row->device_name ?? null) ? ucfirst((string) $row->device_name) : '',
+                TrackerTime::formatFromStorage($row->created_at) ?? '',
+                TrackerTime::formatFromStorage($actionAt) ?? '',
+            ];
+        }
+
+        return $lines;
+    }
+
+    /**
+     * Sources and mediums for the visitor behind each session, earliest first.
+     *
+     * @param  Collection<int, object>  $sessions
+     * @return array<int, array{source: string, medium: ?string}>
+     */
+    private function exportSourcesBySession(Collection $sessions): array
+    {
+        $dailyIds = [];
+        $sessionDaily = [];
+
+        foreach ($sessions as $session) {
+            $dailyId = (int) ($session->tracking_daily_visitor_id ?? 0);
+            $sessionDaily[(int) $session->id] = $dailyId;
+            if ($dailyId > 0) {
+                $dailyIds[$dailyId] = $dailyId;
+            }
+        }
+
+        if ($dailyIds === []) {
+            return [];
+        }
+
+        $mainByDaily = TrackerDatabase::table('tracking_daily_visitor')
+            ->whereIn('id', array_values($dailyIds))
+            ->pluck('tracking_main_visitor_id', 'id');
+
+        $mainIds = [];
+        foreach ($mainByDaily as $mainId) {
+            $mainId = (int) $mainId;
+            if ($mainId > 0) {
+                $mainIds[$mainId] = $mainId;
+            }
+        }
+
+        if ($mainIds === []) {
+            return [];
+        }
+
+        $touches = TrackerDatabase::table('tracking_session as ts')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->join('tracking_session_details as tsd', 'tsd.tracking_session_id', '=', 'ts.id')
+            ->leftJoin('tracking_traffic_source as tts', 'tts.id', '=', 'tsd.tracking_traffic_source_id')
+            ->whereIn('dv.tracking_main_visitor_id', array_values($mainIds))
+            ->orderBy('ts.created_at')
+            ->orderBy('ts.id')
+            ->orderBy('tsd.touch_sequence')
+            ->orderBy('tsd.id')
+            ->get([
+                'dv.tracking_main_visitor_id',
+                'tsd.utm_source',
+                'tsd.utm_medium',
+                'tts.name as traffic_source_name',
+                'tts.medium as traffic_source_medium',
+            ]);
+
+        $lists = [];
+        $seen = [];
+        $mediumLists = [];
+        $seenMediums = [];
+
+        foreach ($touches as $touch) {
+            $mainId = (int) $touch->tracking_main_visitor_id;
+            $label = filled($touch->utm_source ?? null)
+                ? trim((string) $touch->utm_source)
+                : (filled($touch->traffic_source_name ?? null) ? trim((string) $touch->traffic_source_name) : 'Direct');
+            if ($label === '') {
+                $label = 'Direct';
+            }
+
+            $key = strtolower($label);
+            if (! isset($seen[$mainId][$key])) {
+                $seen[$mainId][$key] = true;
+                $lists[$mainId][] = $label;
+            }
+
+            $mediumLabel = filled($touch->utm_medium ?? null)
+                ? trim((string) $touch->utm_medium)
+                : (filled($touch->traffic_source_medium ?? null) ? trim((string) $touch->traffic_source_medium) : '');
+            if ($mediumLabel === '') {
+                continue;
+            }
+
+            $mediumKey = strtolower($mediumLabel);
+            if (isset($seenMediums[$mainId][$mediumKey])) {
+                continue;
+            }
+
+            $seenMediums[$mainId][$mediumKey] = true;
+            $mediumLists[$mainId][] = $mediumLabel;
+        }
+
+        $bySession = [];
+
+        foreach ($sessionDaily as $sessionId => $dailyId) {
+            $mainId = (int) ($mainByDaily[$dailyId] ?? 0);
+            if ($mainId > 0 && isset($lists[$mainId])) {
+                $bySession[$sessionId] = [
+                    'source' => implode(', ', $lists[$mainId]),
+                    'medium' => isset($mediumLists[$mainId]) ? implode(', ', $mediumLists[$mainId]) : null,
+                ];
+            }
+        }
+
+        return $bySession;
+    }
+
+    /**
+     * @param  array<string, mixed>  $commerce
+     * @return list<array{code: string, sku: string, title: string, color: string, size: string, qty: int}>
+     */
+    private function exportProductLines(array $commerce): array
+    {
+        $lines = [];
+
+        foreach ($commerce['expandable_commerce_events'] ?? [] as $event) {
+            if (! is_array($event)) {
+                continue;
+            }
+
+            foreach ($event['products'] ?? [] as $product) {
+                if (! is_array($product)) {
+                    continue;
+                }
+
+                $lines[] = [
+                    'code' => trim((string) ($product['code'] ?? '')),
+                    'sku' => trim((string) ($product['sku'] ?? '')),
+                    'title' => trim((string) ($product['name'] ?? $product['title'] ?? '')),
+                    'color' => trim((string) ($product['color_po'] ?? '')),
+                    'size' => trim((string) ($product['size'] ?? '')),
+                    'qty' => max(1, (int) ($product['qty'] ?? 1)),
+                ];
+            }
+        }
+
+        return $lines;
+    }
+
+    /**
      * @param  list<array{key: string, label: string, class?: string, tip?: string}>  $focusColumns
      */
     public function paginate(
@@ -4292,10 +4630,15 @@ class EcomActivityListService
     private function product(array $item): array
     {
         $title = trim((string) ($item['product_name'] ?? ''));
-        $code = trim((string) ($item['product_code'] ?? $item['sku'] ?? ''));
+        $code = trim((string) ($item['product_code'] ?? ''));
+        $sku = trim((string) ($item['sku'] ?? ''));
+        $name = $title !== '' ? $title : ($code !== '' ? $code : ($sku !== '' ? $sku : 'Product'));
 
         return array_filter([
-            'title' => $title !== '' && $code !== '' ? "{$title} ({$code})" : ($title ?: ($code ?: 'Product')),
+            'title' => $title !== '' && $code !== '' ? "{$title} ({$code})" : ($title ?: ($code ?: ($sku ?: 'Product'))),
+            'name' => $name,
+            'code' => $code,
+            'sku' => $sku,
             'size' => trim((string) ($item['size_name'] ?? '')),
             'color_po' => trim((string) ($item['color_name'] ?? '')),
             'qty' => (string) max(1, (int) ($item['qty'] ?? 1)),

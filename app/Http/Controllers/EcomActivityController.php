@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Services\EcomActivityExportService;
 use App\Services\EcomActivityListService;
 use App\Services\TrackerDashboardSyncService;
 use App\Support\EcomActivityTableFocus;
@@ -19,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EcomActivityController extends Controller
 {
@@ -106,6 +108,7 @@ class EcomActivityController extends Controller
         $visitorQuality = $activityList->visitorQualitySummary($range, $filters);
         $drillDownUi = $activityList->drillDownUi($request, $filters, $summary, $data['resetUrl'], $filterOptions);
         $activityExport = null;
+        $data['exportUrl'] = route('admin.ecom-activity.export', $request->except('page'));
 
         return view('ecom_activity.index', compact(
             'data',
@@ -122,6 +125,44 @@ class EcomActivityController extends Controller
             'productDrillTableLayout',
             'sessionListTableLayout',
         ));
+    }
+
+    public function export(
+        Request $request,
+        EcomActivityListService $activityList,
+        EcomActivityExportService $exportService,
+    ): BinaryFileResponse {
+        Gate::authorize('ecom_tracker.activity.index');
+
+        set_time_limit(120);
+
+        $period = EcomActivityListService::normalizePeriod($request->query('period'));
+        $range = EcomActivityListService::periodRange(
+            $period,
+            (string) $request->query('date_from', ''),
+            (string) $request->query('date_to', ''),
+        );
+        $filters = EcomActivityListService::filtersFromRequest($request);
+        $filterOptions = $activityList->filterOptions($filters['department']);
+
+        if ($filters['department'] && $filters['categories'] === []) {
+            $filters['categories'] = [$filters['department'], ...array_keys($filterOptions['categories'])];
+        }
+
+        $resetUrl = route('admin.ecom-activity.index');
+
+        $productDrill = trim((string) ($filters['product_code'] ?? '')) !== '';
+        $sortBy = EcomActivityListService::normalizeSort($request->query('sort_by'), $productDrill);
+        $export = $activityList->commerceExportRows($range, $filters, $sortBy);
+
+        return $exportService->download(
+            $export['rows'],
+            $range['from'],
+            $range['to'],
+            $activityList->exportFilterSummary($request, $resetUrl, $filterOptions),
+            $export['merges'],
+            $export['separators'],
+        );
     }
 
     public function categories(Request $request, EcomActivityListService $activityList): JsonResponse
