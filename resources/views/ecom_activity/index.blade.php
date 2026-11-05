@@ -112,10 +112,12 @@
                 @elseif (! empty($drillDownUi['sectionSubtitle']))
                     <p class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">{{ $drillDownUi['sectionSubtitle'] }}</p>
                 @endif
-                @include('ecom_activity.partials.drill-down-context', [
-                    'drillDownUi' => $drillDownUi,
-                    'activityExport' => $activityExport,
-                ])
+                @unless (($drillDownUi['useKpiCards'] ?? false) && blank($drillDownUi['sectionSubtitle'] ?? null))
+                    @include('ecom_activity.partials.drill-down-context', [
+                        'drillDownUi' => $drillDownUi,
+                        'activityExport' => $activityExport,
+                    ])
+                @endunless
             @endif
             @unless ($productDrillTableLayout ?? false)
                 <p class="etd-visitor-quality-summary text-[12px] text-slate-500 dark:text-slate-400 mb-0">
@@ -128,6 +130,13 @@
         <div class="etd-page-header-meta-row__right"></div>
     </div>
 </header>
+
+@if (($drillDownUi['useKpiCards'] ?? false) && blank($drillDownUi['sectionSubtitle'] ?? null))
+    @include('ecom_activity.partials.drill-down-context', [
+        'drillDownUi' => $drillDownUi,
+        'activityExport' => $activityExport,
+    ])
+@endif
 
 <div class="etd-activity-table-block" data-etd-activity-table-block>
     <div class="etd-panel">

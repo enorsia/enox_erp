@@ -8187,7 +8187,8 @@ a.etd-pager__btn:hover {
     overflow: visible;
 }
 
-.etd-page--product-performance-list .etd-product-performance-totals {
+.etd-page--product-performance-list .etd-product-performance-totals,
+.etd-page--activity .etd-product-performance-totals {
     margin-bottom: clamp(0.65rem, 1.5vw, 0.85rem);
     padding: 0.45rem 0.75rem 0.45rem 0.65rem;
     border-color: color-mix(in srgb, var(--etd-accent, #1d9e75) 22%, #e2e8f0);
@@ -8202,7 +8203,8 @@ a.etd-pager__btn:hover {
         inset 3px 0 0 var(--etd-accent, #1d9e75);
 }
 
-.dark .etd-page--product-performance-list .etd-product-performance-totals {
+.dark .etd-page--product-performance-list .etd-product-performance-totals,
+.dark .etd-page--activity .etd-product-performance-totals {
     border-color: color-mix(in srgb, var(--etd-accent, #1d9e75) 28%, #334155);
     background: linear-gradient(
         90deg,
@@ -8269,6 +8271,35 @@ a.etd-pager__btn:hover {
 
 .dark .etd-product-performance-totals__lead-scope {
     color: #64748b;
+}
+
+.etd-page--activity .etd-product-performance-totals {
+    width: 100%;
+    flex: 0 0 auto;
+}
+
+.etd-page--activity .etd-panel.etd-product-performance-totals {
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow: visible;
+    display: block;
+    padding: 0.45rem 0.75rem 0.45rem 0.65rem;
+}
+
+.etd-page--activity .etd-product-performance-totals__row {
+    width: 100%;
+}
+
+.etd-page--activity .etd-product-performance-totals__lead {
+    min-width: 8.75rem;
+    max-width: 14rem;
+    padding-right: 1rem;
+}
+
+.etd-page--activity .etd-product-performance-totals__metrics {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: visible;
 }
 
 .etd-product-performance-totals__metrics {

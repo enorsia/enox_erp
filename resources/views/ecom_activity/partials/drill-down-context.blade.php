@@ -1,4 +1,46 @@
 @if ($drillDownUi)
+    @php
+        $sessionSlim = ($drillDownUi['useKpiCards'] ?? false) && blank($drillDownUi['sectionSubtitle'] ?? null);
+        $slimCards = $drillDownUi['metricCards'] ?? [];
+        $slimLead = $sessionSlim ? array_shift($slimCards) : null;
+    @endphp
+    @if ($sessionSlim)
+        <div class="etd-panel etd-print-unit etd-product-performance-totals" role="region" aria-label="{{ $drillDownUi['contextAriaLabel'] }}">
+            <div class="etd-product-performance-totals__row">
+                <div class="etd-product-performance-totals__lead">
+                    <span class="etd-product-performance-totals__lead-label">Total<span class="etd-product-performance-totals__lead-sep" aria-hidden="true">:</span></span>
+                    <span class="etd-product-performance-totals__lead-scope">{{ $slimLead['formatted'] ?? '0' }} {{ (int) str_replace(',', '', (string) ($slimLead['formatted'] ?? '0')) === 1 ? 'session' : 'sessions' }}</span>
+                </div>
+                <div class="etd-product-performance-totals__metrics">
+                    @foreach ($slimCards as $metric)
+                        @php
+                            $isSale = str_starts_with((string) ($metric['formatted'] ?? ''), '£');
+                            $slimLabel = match ($metric['label'] ?? '') {
+                                'Add to cart' => 'Add',
+                                'Begin checkout' => 'Begin',
+                                'Proceed checkout' => 'Proceed',
+                                'Units sold' => 'Units',
+                                'Sold amount' => 'Sale',
+                                default => $metric['label'] ?? '',
+                            };
+                        @endphp
+                        <div @class(['etd-product-performance-totals__metric', 'etd-product-performance-totals__metric--sale' => $isSale])>
+                            <span class="etd-product-performance-totals__metric-label">
+                                @include('ecom_tracker.partials.column-header-with-tip', [
+                                    'label' => $slimLabel,
+                                    'tip' => $metric['tip'] ?? '',
+                                    'align' => 'left',
+                                    'iconBefore' => true,
+                                    'labelSuffix' => ':',
+                                ])
+                            </span>
+                            <span class="etd-product-performance-totals__metric-value">{{ $metric['formatted'] }}</span>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @else
     <div
         class="etd-activity-context @if ($drillDownUi['useKpiCards'] ?? false) etd-activity-context--product-kpis @endif"
         role="region"
@@ -62,4 +104,5 @@
             </div>
         @endif
     </div>
+    @endif
 @endif

@@ -85,8 +85,9 @@ class EcomActivityController extends Controller
             $filters['categories'] = [$filters['department'], ...array_keys($filterOptions['categories'])];
         }
 
-        $filters['session_list'] = in_array($request->query('focus'), ['session', 'devices', 'traffic'], true)
-            && trim((string) ($filters['product_code'] ?? '')) === '';
+        $focus = $request->query('focus');
+        $filters['session_list'] = trim((string) ($filters['product_code'] ?? '')) === ''
+            && ($focus === null || $focus === '' || in_array($focus, ['session', 'devices', 'traffic'], true));
         $sessionListTableLayout = $filters['session_list'];
 
         $focusColumns = EcomActivityTableFocus::columnsForRequest($request);

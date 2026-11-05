@@ -865,7 +865,11 @@ class EcomActivityListService
             return 'Session duration';
         }
 
-        return 'Recoverable sale';
+        if (($filters['has_order'] ?? null) === true) {
+            return 'Sale & conversion';
+        }
+
+        return 'Audience & engagement';
     }
 
     /**
@@ -1717,10 +1721,25 @@ class EcomActivityListService
             }
         }
 
-        if ($request->query('has_order') === '1') {
-            $addChip('Has order: With order', ['has_order']);
-        } elseif ($request->query('has_order') === '0') {
-            $addChip('Has order: Without order', ['has_order']);
+        if ($request->query('has_order') === '1' || $request->query('has_order') === '0') {
+            $dropOrder = ['has_order'];
+            if (
+                $request->query('focus') === 'session'
+                && ! $request->filled('funnel')
+                && ! filled($request->query('session_id'))
+            ) {
+                $dropOrder[] = 'focus';
+            }
+            $addChip(
+                $request->query('has_order') === '1' ? 'Has order: With order' : 'Has order: Without order',
+                $dropOrder,
+            );
+            if ($request->query('focus') === 'session' && ! filled($request->query('session_id')) && ! $request->filled('funnel')) {
+                $chips[] = [
+                    'label' => 'Clear section',
+                    'remove_url' => $resetUrl,
+                ];
+            }
         }
 
         if ($request->query('logged_in') === '1') {

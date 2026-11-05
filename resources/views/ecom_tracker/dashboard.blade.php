@@ -107,7 +107,10 @@
                 'modifier' => $group['modifier'],
                 'cols' => $group['cols'],
                 'metrics' => $group['metrics'],
-                'metricHrefs' => array_map(fn (array $metric) => $activityLink($metric['activity']), $group['metrics']),
+                'metricHrefs' => array_map(
+                    fn (array $metric) => $activityLink(($metric['activity'] ?? []) + ['focus' => 'session']),
+                    $group['metrics'],
+                ),
             ])
         @endforeach
     </div>
