@@ -150,6 +150,8 @@ function initFlatpickrElement(element) {
     const isDatetime = element.classList.contains('etd-flatpickr-datetime');
     const altInputClass = inputClasses(element);
 
+    const inFilterPanel = Boolean(element.closest('.etd-filter-panel'));
+
     const fp = flatpickr(element, {
         allowInput: true,
         disableMobile: true,
@@ -160,6 +162,7 @@ function initFlatpickrElement(element) {
         time_24hr: isDatetime,
         defaultDate: element.value || element.dataset.default || null,
         altInputClass,
+        appendTo: inFilterPanel ? document.body : undefined,
         onChange(_selectedDates, dateStr, instance) {
             notifyInputChange(instance.input, dateStr);
         },
@@ -938,6 +941,169 @@ window.refreshEtdFilterControls = function (root) {
     if (typeof window.initEtdTipPositioning === 'function') {
         window.initEtdTipPositioning(root);
     }
+};
+
+function readFilterPeriodConfig(section) {
+    return {
+        period: section.dataset.etdPeriod || '24h',
+        today: section.dataset.etdToday || '',
+        yesterday: section.dataset.etdYesterday || '',
+        rangeFrom: section.dataset.etdRangeFrom || '',
+        rangeTo: section.dataset.etdRangeTo || '',
+        todayLabel: section.dataset.etdTodayLabel || 'Today',
+        yesterdayLabel: section.dataset.etdYesterdayLabel || 'Yesterday',
+    };
+}
+
+function setFilterPeriodCustomOpen(section, open) {
+    const customPanel = section.querySelector('.etd-filter-period__custom');
+
+    if (!customPanel) {
+        return;
+    }
+
+    customPanel.classList.toggle('etd-filter-period__custom--closed', !open);
+    customPanel.querySelectorAll('[name="date_from"], [name="date_to"]').forEach((input) => {
+        input.disabled = !open;
+    });
+
+    if (typeof window.syncEtdFlatpickrEnabled === 'function') {
+        window.syncEtdFlatpickrEnabled(customPanel, open);
+    }
+
+    if (open && typeof window.refreshEtdFilterControls === 'function') {
+        window.refreshEtdFilterControls(customPanel);
+    }
+}
+
+function updateFilterPeriodPresetActive(section, period) {
+    section.querySelectorAll('.etd-filter-period__preset[data-period]').forEach((button) => {
+        button.classList.toggle('is-active', button.dataset.period === period);
+    });
+}
+
+function updateFilterPeriodNav(section, config, from, to) {
+    const label = section.querySelector('.js-etd-filter-period-nav-label');
+    const nextBtn = section.querySelector('.js-etd-filter-period-shift[data-shift="1"]');
+
+    if (label) {
+        label.textContent = formatRangeLabel(from, to, config);
+    }
+
+    if (nextBtn) {
+        const canGoNext = config.today && to < config.today;
+        nextBtn.classList.toggle('is-disabled', !canGoNext);
+        nextBtn.toggleAttribute('disabled', !canGoNext);
+        nextBtn.setAttribute('aria-disabled', canGoNext ? 'false' : 'true');
+    }
+}
+
+function applyFilterPeriodPreset(section, periodKey, config) {
+    let state;
+
+    if (periodKey === '24h') {
+        state = { period: '24h', dateFrom: '', dateTo: '' };
+    } else if (periodKey === 'yesterday') {
+        state = { period: 'yesterday', dateFrom: '', dateTo: '' };
+    } else if (periodKey === '7d') {
+        state = { period: '7d', dateFrom: '', dateTo: '' };
+    } else if (periodKey === '30d') {
+        state = { period: '30d', dateFrom: '', dateTo: '' };
+    } else if (periodKey === 'custom') {
+        const root = section.closest('form') || section;
+        const from = root.querySelector('[name="date_from"]')?.value || config.rangeFrom;
+        const to = root.querySelector('[name="date_to"]')?.value || config.rangeTo;
+
+        applyPeriodStateToForm(root, { period: 'custom', dateFrom: from, dateTo: to });
+        setFilterPeriodCustomOpen(section, true);
+        updateFilterPeriodPresetActive(section, 'custom');
+        updateFilterPeriodNav(section, config, from || config.rangeFrom, to || config.rangeTo);
+
+        return;
+    } else {
+        return;
+    }
+
+    applyPeriodStateToForm(section.closest('form') || section, state);
+    setFilterPeriodCustomOpen(section, false);
+    updateFilterPeriodPresetActive(section, state.period);
+
+    const range = resolveRangeFromForm(section.closest('form') || section, config);
+    updateFilterPeriodNav(section, config, range.from, range.to);
+}
+
+function shiftFilterPeriodDay(section, delta, config) {
+    const root = section.closest('form') || section;
+    const current = resolveRangeFromForm(root, config);
+    const newFrom = addLocalDays(current.from, delta);
+    const newTo = addLocalDays(current.to, delta);
+
+    if (config.today && newTo > config.today) {
+        return;
+    }
+
+    const state = resolvePeriodState(newFrom, newTo, config);
+
+    applyPeriodStateToForm(root, state);
+    setFilterPeriodCustomOpen(section, state.period === 'custom');
+    updateFilterPeriodPresetActive(section, state.period);
+    updateFilterPeriodNav(section, config, newFrom, newTo);
+}
+
+window.initEtdFilterDrawerPeriod = function initEtdFilterDrawerPeriod(drawerRoot) {
+    const drawer = drawerRoot?.closest?.('.etd-filter-panel') || drawerRoot;
+
+    if (!drawer) {
+        return;
+    }
+
+    const section = drawer.querySelector('[data-etd-filter-period]');
+
+    if (!section || section.dataset.etdFilterPeriodBound === '1') {
+        return;
+    }
+
+    section.dataset.etdFilterPeriodBound = '1';
+
+    const config = readFilterPeriodConfig(section);
+    const form = drawer.querySelector('form.etd-filter-panel__form');
+
+    section.querySelectorAll('.js-etd-filter-period-shift').forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+
+            if (button.classList.contains('is-disabled') || button.disabled) {
+                return;
+            }
+
+            const delta = Number(button.dataset.shift || '0');
+            shiftFilterPeriodDay(section, delta, config);
+        });
+    });
+
+    section.querySelectorAll('.etd-filter-period__preset[data-period]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            applyFilterPeriodPreset(section, button.dataset.period, config);
+        });
+    });
+
+    if (form && form.dataset.etdFilterSubmitBound !== '1') {
+        form.dataset.etdFilterSubmitBound = '1';
+
+        form.addEventListener('submit', () => {
+            const period = form.querySelector('[name="period"]')?.value;
+
+            form.querySelectorAll('[name="date_from"], [name="date_to"]').forEach((input) => {
+                if (period !== 'custom') {
+                    input.disabled = true;
+                }
+            });
+        });
+    }
+
+    const initialRange = resolveRangeFromForm(form || section, config);
+    updateFilterPeriodNav(section, config, initialRange.from, initialRange.to);
 };
 
 window.syncEtdFlatpickrEnabled = function (container, enabled) {

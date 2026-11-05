@@ -1685,7 +1685,7 @@ class EcomActivityListService
         if (filled($request->query('product_code'))) {
             $addChip((string) $request->query('product_code'), ['product_code', 'focus']);
             $chips[] = [
-                'label' => 'Clear section',
+                'label' => 'Clear filter',
                 'remove_url' => $resetUrl,
             ];
         }
@@ -1694,7 +1694,7 @@ class EcomActivityListService
         if ($sessionFocus && filled($request->query('session_id'))) {
             $addChip((string) $request->query('session_id'), ['session_id', 'focus']);
             $chips[] = [
-                'label' => 'Clear section',
+                'label' => 'Clear filter',
                 'remove_url' => $resetUrl,
             ];
         }
@@ -1715,7 +1715,7 @@ class EcomActivityListService
             $addChip('Funnel: '.implode(', ', $labels), $sessionFocus ? ['funnel', 'focus'] : ['funnel']);
             if ($sessionFocus && ! filled($request->query('session_id'))) {
                 $chips[] = [
-                    'label' => 'Clear section',
+                    'label' => 'Clear filter',
                     'remove_url' => $resetUrl,
                 ];
             }
@@ -1736,7 +1736,7 @@ class EcomActivityListService
             );
             if ($request->query('focus') === 'session' && ! filled($request->query('session_id')) && ! $request->filled('funnel')) {
                 $chips[] = [
-                    'label' => 'Clear section',
+                    'label' => 'Clear filter',
                     'remove_url' => $resetUrl,
                 ];
             }

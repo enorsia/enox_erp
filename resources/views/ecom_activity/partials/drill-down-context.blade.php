@@ -85,6 +85,9 @@
             <div class="etd-activity-context__filters">
                 <div class="etd-activity-context__filter-chips">
                     @foreach ($drillDownUi['filterChips'] as $chip)
+                        @if (($chip['label'] ?? '') === 'Clear filter')
+                            <a href="{{ $chip['remove_url'] }}" class="etd-clear-section-btn no-underline">Clear filter</a>
+                        @else
                         <span class="etd-activity-context__chip">
                             <span class="etd-activity-context__chip-label">{{ $chip['label'] }}</span>
                             @if (! empty($chip['remove_url']))
@@ -99,6 +102,7 @@
                                 </a>
                             @endif
                         </span>
+                        @endif
                     @endforeach
                 </div>
             </div>
