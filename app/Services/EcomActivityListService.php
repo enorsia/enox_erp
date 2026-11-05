@@ -1087,9 +1087,10 @@ class EcomActivityListService
      *   An edit_bag event replaces that sku qty with the bag quantity.
      *   Paid is the order line qty when the cycle closes. Not a sum of every click.
      * - Unpaid open cycles are committed at end of this pass (add/begin/proceed maxes only).
-     * - Session totals sum all committed cycles. Sync then keeps one follow per visitor
-     *   for 24 hours from the session start: view, add, begin, and proceed use the max
-     *   qty in that window, and a later session only adds the increase.
+     * - Session totals sum all committed cycles. Views stay per session.
+     *   Sync then keeps one add / begin / proceed follow per visitor from the start
+     *   of the calendar day to the end of that day: the max qty, and a later session
+     *   that day only adds the increase.
      *
      * @param  iterable<object>  $actions  chronological (order by id)
      * @param  array<string, string>  $skuToParentCode
