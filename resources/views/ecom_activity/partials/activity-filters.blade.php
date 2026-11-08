@@ -116,9 +116,8 @@
             <label class="etd-filter-compact-field">
                 <span class="etd-filter-compact-label">Duration</span>
                 <select name="duration_bucket[]" multiple class="{{ $tomSelectClass }}" data-placeholder="All">
-                    @foreach (\App\Support\SessionDurationBuckets::optionLabels() as $value => $label)
-                        @continue($value === '')
-                        <option value="{{ $value }}" @selected($isSelected($selectedDurations, (string) $value))>{{ $label }}</option>
+                    @foreach (\App\Models\TrackingDailyDuration::BUCKETS as $key => $bucket)
+                        <option value="{{ $key }}" @selected($isSelected($selectedDurations, (string) $key))>{{ $bucket['label'] }}</option>
                     @endforeach
                 </select>
             </label>

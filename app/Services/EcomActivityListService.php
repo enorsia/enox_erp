@@ -92,7 +92,7 @@ class EcomActivityListService
      * Option lists for the filter drawer: devices, traffic sources, departments and the selected
      * department's categories, read from the small lookup tables in one UNION ALL query.
      *
-     * @return array{funnelStages: array<int, string>, durationBuckets: array<string, string>, devices: array<int, string>, browsers: array<int, string>, utmSources: array<int, string>, utmMediums: list<string>, departments: array<int, string>, categories: array<int, string>}
+     * @return array{funnelStages: array<int, string>, durationBuckets: array<int, string>, devices: array<int, string>, browsers: array<int, string>, utmSources: array<int, string>, utmMediums: list<string>, departments: array<int, string>, categories: array<int, string>}
      */
     public function filterOptions(?int $departmentId = null): array
     {
@@ -118,7 +118,7 @@ class EcomActivityListService
 
         return [
             'funnelStages' => array_intersect_key(TrackingSession::FUNNEL_STAGES, array_flip(TrackingSession::FILTER_FUNNEL_STAGES)),
-            'durationBuckets' => array_map(fn (array $bucket) => $bucket['label'], TrackingSession::DURATION_BUCKETS),
+            'durationBuckets' => array_map(fn (array $bucket) => $bucket['label'], TrackingDailyDuration::BUCKETS),
             'devices' => $lookups->get('device', collect())->pluck('name', 'id')->all(),
             'browsers' => $lookups->get('browser', collect())->pluck('name', 'id')->all(),
             'utmSources' => $sources->pluck('name', 'id')->all(),
@@ -282,7 +282,7 @@ class EcomActivityListService
     }
 
     /**
-     * @return array{search: string, product_code: string, session_id: string, funnel: list<int>, has_order: ?bool, devices: list<int>, browsers: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
+     * @return array{search: string, product_code: string, session_id: string, funnel: list<int>, has_order: ?bool, devices: list<int>, browsers: list<int>, logged_in: ?bool, durations: list<int>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
      */
     public static function filtersFromRequest(Request $request): array
     {
@@ -302,7 +302,10 @@ class EcomActivityListService
             'devices' => $ints('device_type'),
             'browsers' => $ints('browser_type'),
             'logged_in' => $bool('logged_in'),
-            'durations' => array_values(array_intersect($strings('duration_bucket'), array_keys(TrackingSession::DURATION_BUCKETS))),
+            'durations' => array_values(array_filter(
+                array_map('intval', (array) $request->input('duration_bucket', [])),
+                fn (int $id) => isset(TrackingDailyDuration::BUCKETS[$id]),
+            )),
             'duration' => isset(TrackingDailyDuration::BUCKETS[$request->integer('duration')]) ? $request->integer('duration') : null,
             'utm_sources' => $ints('utm_source'),
             'utm_mediums' => $strings('utm_medium'),
@@ -1822,7 +1825,7 @@ class EcomActivityListService
         }
 
         foreach ((array) $request->query('duration_bucket', []) as $bucket) {
-            $label = TrackingSession::DURATION_BUCKETS[$bucket]['label'] ?? $bucket;
+            $label = TrackingDailyDuration::BUCKETS[(int) $bucket]['label'] ?? $bucket;
             $addChip('Duration: '.$label, ['duration_bucket']);
         }
 
@@ -2367,7 +2370,7 @@ class EcomActivityListService
         if (! empty($filters['durations'])) {
             $query->where(function (Builder $durations) use ($filters) {
                 foreach ($filters['durations'] as $key) {
-                    $bucket = TrackingSession::DURATION_BUCKETS[$key];
+                    $bucket = TrackingDailyDuration::BUCKETS[$key];
                     $durations->orWhere(fn (Builder $range) => $range
                         ->where('ts.duration_seconds', '>=', $bucket['min'])
                         ->when($bucket['max'] !== null, fn (Builder $q) => $q->where('ts.duration_seconds', '<=', $bucket['max'])));
