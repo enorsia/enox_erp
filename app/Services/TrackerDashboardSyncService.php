@@ -1610,9 +1610,10 @@ class TrackerDashboardSyncService
     {
         $source = trim((string) $source);
         $medium = trim((string) $medium);
+        $source = SessionTrafficAttribution::normalizeSource($source !== '' ? $source : '(direct)') ?? '(direct)';
 
         return [
-            Str::limit($source !== '' ? $source : '(direct)', 100, ''),
+            Str::limit($source, 100, ''),
             Str::limit($medium !== '' ? $medium : 'none', 100, ''),
         ];
     }
@@ -2076,13 +2077,33 @@ class TrackerDashboardSyncService
     /**
      * @return list<array{type: int, dimension_id: int, source: string, medium: string}>
      */
-    private function audienceKeys(?int $deviceId, ?int $browserId, ?int $trafficId, string $source, string $medium): array
+    private function audienceKeys(?int $deviceId, ?int $browserId, string $source, string $medium): array
     {
         return [
             ['type' => TrackingDailyAudience::TYPE_DEVICE, 'dimension_id' => $deviceId ?? 0, 'source' => '', 'medium' => ''],
             ['type' => TrackingDailyAudience::TYPE_BROWSER, 'dimension_id' => $browserId ?? 0, 'source' => '', 'medium' => ''],
-            ['type' => TrackingDailyAudience::TYPE_TRAFFIC_SOURCE, 'dimension_id' => $trafficId ?? 0, 'source' => $source, 'medium' => $medium],
+            ['type' => TrackingDailyAudience::TYPE_TRAFFIC_SOURCE, 'dimension_id' => $this->trafficDimensionId($source, $medium), 'source' => $source, 'medium' => $medium],
         ];
+    }
+
+    /**
+     * One lookup id per source name. A missing or stale id must not open a second row for that source and medium.
+     */
+    private function trafficDimensionId(string $source, string $medium): int
+    {
+        [$source, $medium] = $this->trafficSourceMedium($source, $medium);
+
+        return (int) ($this->remember(
+            'traffic-id:'.$source,
+            function () use ($source, $medium): ?int {
+                $existing = TrackerDatabase::table('tracking_traffic_source')->where('name', $source)->value('id');
+                if ($existing !== null) {
+                    return (int) $existing;
+                }
+
+                return $this->findOrCreateTrafficSource($source, $medium);
+            },
+        ) ?? 0);
     }
 
     /**
@@ -2095,7 +2116,6 @@ class TrackerDashboardSyncService
         return $this->audienceKeys(
             $row->tracking_device_id !== null ? (int) $row->tracking_device_id : null,
             $row->tracking_browser_id !== null ? (int) $row->tracking_browser_id : null,
-            $row->tracking_traffic_source_id !== null ? (int) $row->tracking_traffic_source_id : null,
             $source,
             $medium,
         );
@@ -2134,11 +2154,12 @@ class TrackerDashboardSyncService
                 $paidSessions[$sessionId] = true;
             }
             [$source, $medium] = $this->trafficSourceMedium($order->utm_source, $order->utm_medium);
-            foreach ([
-                ['type' => TrackingDailyAudience::TYPE_DEVICE, 'dimension_id' => (int) ($order->tracking_device_id ?? 0), 'source' => '', 'medium' => ''],
-                ['type' => TrackingDailyAudience::TYPE_BROWSER, 'dimension_id' => (int) ($order->tracking_browser_id ?? 0), 'source' => '', 'medium' => ''],
-                ['type' => TrackingDailyAudience::TYPE_TRAFFIC_SOURCE, 'dimension_id' => (int) ($order->tracking_traffic_source_id ?? 0), 'source' => $source, 'medium' => $medium],
-            ] as $key) {
+            foreach ($this->audienceKeys(
+                $order->tracking_device_id !== null ? (int) $order->tracking_device_id : null,
+                $order->tracking_browser_id !== null ? (int) $order->tracking_browser_id : null,
+                $source,
+                $medium,
+            ) as $key) {
                 $id = implode('|', $key);
                 $audience[$id] ??= $key + $emptyAudience;
                 if ($countPayment) {
@@ -2163,7 +2184,6 @@ class TrackerDashboardSyncService
         return $this->audienceKeys(
             $orderRow->tracking_device_id !== null ? (int) $orderRow->tracking_device_id : null,
             $orderRow->tracking_browser_id !== null ? (int) $orderRow->tracking_browser_id : null,
-            $orderRow->order_tracking_traffic_source_id !== null ? (int) $orderRow->order_tracking_traffic_source_id : null,
             $source,
             $medium,
         );
@@ -2818,6 +2838,7 @@ class TrackerDashboardSyncService
         }
 
         $this->addVisitDateDeviceBrowserSold($audience, $date, $emptyAudience);
+        $audience = $this->mergeTrafficAudienceRows($audience);
 
         $this->rebuildRecoverableSales($date, $now);
 
@@ -2872,6 +2893,7 @@ class TrackerDashboardSyncService
         $this->alignAudienceSaleToProductSale($date);
 
         $this->purgeEmptyDailyCategoryRows($date);
+        $this->purgeEmptyTrafficAudienceRows($date);
 
         $this->backfillTrackingSessionStartedAt($date);
 
@@ -3394,7 +3416,6 @@ class TrackerDashboardSyncService
                 $map[$sessionId] = $this->audienceKeys(
                     $this->findOrCreateDevice((string) ($user->device_type ?? '')),
                     $this->findOrCreateBrowser((string) ($user->browser ?? '')),
-                    $this->findOrCreateTrafficSource($source, $medium),
                     $source,
                     $medium,
                 );
@@ -3803,6 +3824,62 @@ class TrackerDashboardSyncService
         );
     }
 
+    /**
+     * Same source and medium is one traffic row, for every source. The id is the lookup row for that source name.
+     *
+     * @param  array<string, array<string, mixed>>  $audience
+     * @return array<string, array<string, mixed>>
+     */
+    private function mergeTrafficAudienceRows(array $audience): array
+    {
+        $merged = [];
+        $traffic = [];
+
+        foreach ($audience as $row) {
+            if ((int) $row['type'] !== TrackingDailyAudience::TYPE_TRAFFIC_SOURCE) {
+                $id = $row['type'].'|'.$row['dimension_id'].'|'.$row['source'].'|'.$row['medium'];
+                if (! isset($merged[$id])) {
+                    $merged[$id] = $row;
+
+                    continue;
+                }
+
+                foreach (['sessions', 'add_to_carts', 'begin_checkouts', 'proceed_checkouts', 'payments', 'sold_qty', 'sale_amount'] as $column) {
+                    $merged[$id][$column] += $row[$column];
+                }
+
+                continue;
+            }
+
+            [$source, $medium] = $this->trafficSourceMedium((string) $row['source'], (string) $row['medium']);
+            $bucket = $source."\0".$medium;
+            $dimensionId = $this->trafficDimensionId($source, $medium);
+
+            if (! isset($traffic[$bucket])) {
+                $row['source'] = $source;
+                $row['medium'] = $medium;
+                $row['dimension_id'] = $dimensionId;
+                $traffic[$bucket] = $row;
+
+                continue;
+            }
+
+            if ($dimensionId > 0) {
+                $traffic[$bucket]['dimension_id'] = $dimensionId;
+            }
+
+            foreach (['sessions', 'add_to_carts', 'begin_checkouts', 'proceed_checkouts', 'payments', 'sold_qty', 'sale_amount'] as $column) {
+                $traffic[$bucket][$column] += $row[$column];
+            }
+        }
+
+        foreach ($traffic as $row) {
+            $merged[$row['type'].'|'.$row['dimension_id'].'|'.$row['source'].'|'.$row['medium']] = $row;
+        }
+
+        return $merged;
+    }
+
     /** Remove category day rows left with no metrics after funnel + sold refresh. */
     private function purgeEmptyDailyCategoryRows(string $date): void
     {
@@ -3814,6 +3891,23 @@ class TrackerDashboardSyncService
             ->where('proceed_checkouts', 0)
             ->where('sold_qty', 0)
             ->where('orders', 0)
+            ->where('sale_amount', 0)
+            ->delete();
+    }
+
+    /** Drop a zeroed traffic row left after that source and medium was merged into one id. */
+    private function purgeEmptyTrafficAudienceRows(string $date): void
+    {
+        TrackerDatabase::table('tracking_daily_audiences')
+            ->where('metric_date', $date)
+            ->where('type', TrackingDailyAudience::TYPE_TRAFFIC_SOURCE)
+            ->where('sessions', 0)
+            ->where('views', 0)
+            ->where('add_to_carts', 0)
+            ->where('begin_checkouts', 0)
+            ->where('proceed_checkouts', 0)
+            ->where('payments', 0)
+            ->where('sold_qty', 0)
             ->where('sale_amount', 0)
             ->delete();
     }

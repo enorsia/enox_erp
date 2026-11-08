@@ -3,6 +3,7 @@
 namespace App\Services\EcomTrackerDashboard\Sections;
 
 use App\Models\TrackingDailyAudience;
+use App\Support\SessionTrafficAttribution;
 use App\Support\TrackerDatabase;
 use Illuminate\Support\Collection;
 
@@ -31,8 +32,8 @@ class AudienceRollupSectionService
 
         return $rows
             ->groupBy('type')
-            ->map(fn (Collection $typeRows) => $this->sortByFunnelPerformance(
-                $typeRows->map(fn (object $row) => [
+            ->map(fn (Collection $typeRows, int|string $type) => $this->sortByFunnelPerformance(
+                $this->collapseTrafficRows((int) $type, $typeRows->map(fn (object $row) => [
                     'id' => (int) $row->dimension_id ?: null,
                     'label' => ucfirst((string) ($row->name ?? 'Unknown')),
                     'source' => (string) $row->source,
@@ -46,10 +47,55 @@ class AudienceRollupSectionService
                     'sold_qty' => (int) $row->sold_qty,
                     'revenue' => (float) $row->revenue,
                     'conversion_rate' => (int) $row->sessions > 0 ? round((int) $row->payment_success / (int) $row->sessions * 100, 1) : 0,
-                ])->all(),
+                ])->all()),
                 $performanceKeys,
             ))
             ->all();
+    }
+
+    /**
+     * Traffic rows that share a source and medium are one line. Different mediums stay separate.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function collapseTrafficRows(int $type, array $rows): array
+    {
+        if ($type !== TrackingDailyAudience::TYPE_TRAFFIC_SOURCE) {
+            return $rows;
+        }
+
+        $merged = [];
+        foreach ($rows as $row) {
+            $source = SessionTrafficAttribution::normalizeSource((string) $row['source']) ?? strtolower(trim((string) $row['source']));
+            if ($source === '') {
+                $source = '(direct)';
+            }
+            $medium = trim((string) $row['medium']);
+            if ($medium === '') {
+                $medium = 'none';
+            }
+            $key = $source."\0".$medium;
+
+            if (! isset($merged[$key])) {
+                $row['source'] = $source;
+                $row['medium'] = $medium;
+                $merged[$key] = $row;
+
+                continue;
+            }
+
+            foreach (['sessions', 'views', 'add_to_cart', 'begin_checkout', 'proceed_checkout', 'payment_success', 'sold_qty'] as $column) {
+                $merged[$key][$column] += $row[$column];
+            }
+            $merged[$key]['revenue'] += (float) $row['revenue'];
+            $sessions = (int) $merged[$key]['sessions'];
+            $merged[$key]['conversion_rate'] = $sessions > 0
+                ? round((int) $merged[$key]['payment_success'] / $sessions * 100, 1)
+                : 0;
+        }
+
+        return array_values($merged);
     }
 
     /**
