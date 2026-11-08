@@ -7496,18 +7496,19 @@ a.etd-pager__btn:hover {
 
 #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity th.etd-col-source-medium,
 #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td.etd-col-source-medium {
-    width: 9rem;
-    min-width: 9rem;
-    max-width: 9rem;
+    width: auto;
+    min-width: 11rem;
+    max-width: 20rem;
     vertical-align: top;
+    white-space: normal;
+    overflow-wrap: break-word;
 }
 
 #ecom-activity-page-content .etd-source-medium {
-    width: 9rem;
-    max-width: 9rem;
+    width: auto;
+    max-width: 100%;
     white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity th.etd-col-last-active,
@@ -7924,12 +7925,11 @@ a.etd-pager__btn:hover {
 
 #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity th.etd-col-commerce,
 #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td.etd-col-commerce {
-    width: 9rem;
-    min-width: 9rem;
-    max-width: 9rem;
+    width: auto;
+    min-width: 12.5rem;
+    max-width: 20rem;
     white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td.etd-col-commerce .etd-product-event,
@@ -7941,10 +7941,10 @@ a.etd-pager__btn:hover {
 #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td.etd-col-commerce .etd-commerce-events,
 #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td.etd-col-commerce .etd-commerce-event-trigger,
 #ecom-activity-page-content .etd-table-scroll--activity .etd-table--activity td.etd-col-commerce .etd-commerce-event-trigger__label {
-    max-width: 9rem;
+    width: auto;
+    max-width: 100%;
     white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 .etd-table-scroll--activity-wide {
@@ -8151,12 +8151,11 @@ a.etd-pager__btn:hover {
     #ecom-activity-page-content .etd-table-scroll--activity-wide .etd-table--activity-product-drill td.etd-col-commerce .etd-product-event__line,
     #ecom-activity-page-content .etd-table-scroll--activity-wide .etd-table--activity-product-drill td.etd-col-commerce .etd-commerce-event-trigger,
     #ecom-activity-page-content .etd-table-scroll--activity-wide .etd-table--activity-product-drill td.etd-col-commerce .etd-commerce-event-trigger__label {
-        width: 9rem;
-        min-width: 0;
-        max-width: 9rem;
+        width: auto;
+        min-width: 12.5rem;
+        max-width: 20rem;
         white-space: normal;
-        overflow-wrap: anywhere;
-        word-break: break-word;
+        overflow-wrap: break-word;
     }
 }
 
