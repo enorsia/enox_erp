@@ -185,32 +185,6 @@ function initDashboardPeriodControls(page) {
         window.location.href = url.toString();
     });
 
-    page.querySelector('.js-ecom-dashboard-drawer-custom-preset')?.addEventListener('click', () => {
-        if (periodInput) {
-            periodInput.value = 'custom';
-        }
-
-        drawerCustom?.classList.remove(ETD_DRAWER_CUSTOM_CLOSED_CLASS);
-        drawerCustom?.querySelectorAll('[name="date_from"], [name="date_to"]').forEach((input) => {
-            input.disabled = false;
-        });
-
-        if (typeof window.syncEtdFlatpickrEnabled === 'function') {
-            window.syncEtdFlatpickrEnabled(drawerCustom, true);
-        }
-
-        if (typeof window.refreshEtdFilterControls === 'function') {
-            window.refreshEtdFilterControls(drawerCustom);
-        }
-
-        syncDashboardCustomFlatpickr(
-            customPanel,
-            drawerCustom,
-            drawerCustom?.querySelector('[name="date_from"]')?.value ?? '',
-            drawerCustom?.querySelector('[name="date_to"]')?.value ?? '',
-        );
-    });
-
     const from = fromInput?.value?.trim() ?? '';
     const to = toInput?.value?.trim() ?? '';
 
@@ -320,8 +294,11 @@ function trendTickLimit(labelCount, useHorizontalScroll = false) {
 }
 
 function trendUsesHorizontalScroll(labelCount) {
-    // Hourly (24h) and weekly daily buckets fit without scroll; scrolling below
-    // mis-sizes the canvas and leaves the chart drawn on the left edge only.
+    // Phone: hourly/daily buckets need horizontal room; wide canvas + resize fixes draw area.
+    if (isNarrow() && labelCount > 8) {
+        return true;
+    }
+
     if (labelCount <= 24) {
         return false;
     }
@@ -334,9 +311,9 @@ function trendMinWidth(labelCount) {
         return null;
     }
 
-    const pixelsPerLabel = isNarrow() ? 34 : 30;
+    const pixelsPerLabel = isNarrow() ? 40 : 30;
 
-    return Math.max(labelCount * pixelsPerLabel, 320);
+    return Math.max(labelCount * pixelsPerLabel, isNarrow() ? 360 : 320);
 }
 
 function sessionsForLogScale(values) {
@@ -355,10 +332,18 @@ function applyTrendChartLayout(labelCount) {
 
     if (wrap) {
         wrap.style.minWidth = minWidth ? `${minWidth}px` : '';
+        wrap.style.width = minWidth ? `${minWidth}px` : '';
     }
 
     if (hint) {
         hint.hidden = !useHorizontalScroll;
+        if (useHorizontalScroll && isNarrow()) {
+            hint.textContent = labelCount <= 24
+                ? 'Swipe horizontally to see all hours'
+                : 'Swipe horizontally to see all dates';
+        } else if (useHorizontalScroll) {
+            hint.textContent = 'Swipe horizontally to see all dates';
+        }
     }
 }
 
@@ -456,7 +441,10 @@ function initDashboardTrendChart(trend) {
             interaction: { mode: 'index', intersect: false, axis: 'x' },
             layout: {
                 padding: {
-                    right: useHorizontalScroll ? 8 : 0,
+                    top: isNarrow() ? 6 : 0,
+                    right: useHorizontalScroll ? 8 : (showRateAxis && isNarrow() ? 8 : 0),
+                    bottom: isNarrow() ? 10 : 0,
+                    left: isNarrow() ? 4 : 0,
                 },
             },
             plugins: {
@@ -521,6 +509,7 @@ function initDashboardTrendChart(trend) {
 
     requestAnimationFrame(() => {
         trendChart.resize();
+        requestAnimationFrame(() => trendChart.resize());
     });
 
     let resizeFrame = null;
@@ -531,14 +520,23 @@ function initDashboardTrendChart(trend) {
         }
 
         resizeFrame = requestAnimationFrame(() => {
+            const useScroll = trendUsesHorizontalScroll(labels.length);
             applyTrendChartLayout(labels.length);
             renderTrendLegend(plottedSeries);
             trendChart.options.plugins.legend.display = !isCompactChart();
-            trendChart.options.scales.x.ticks.autoSkip = !trendUsesHorizontalScroll(labels.length) && labels.length > 24;
+            trendChart.options.scales.x.ticks.autoSkip = !useScroll && labels.length > 24;
             trendChart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(
                 labels.length,
-                trendUsesHorizontalScroll(labels.length),
+                useScroll,
             );
+            trendChart.options.scales.x.ticks.maxRotation = useScroll || labels.length > 20 ? 45 : 0;
+            trendChart.options.scales.x.ticks.minRotation = useScroll ? 35 : 0;
+            trendChart.options.layout.padding = {
+                top: isNarrow() ? 6 : 0,
+                right: useScroll ? 8 : (showRateAxis && isNarrow() ? 8 : 0),
+                bottom: isNarrow() ? 10 : 0,
+                left: isNarrow() ? 4 : 0,
+            };
             trendChart.resize();
         });
     });
@@ -727,7 +725,9 @@ function resetTrendChartForPrint() {
 
     if (wrap) {
         wrap.dataset.printRestoreMinWidth = wrap.style.minWidth;
+        wrap.dataset.printRestoreWidth = wrap.style.width;
         wrap.style.minWidth = '';
+        wrap.style.width = '';
     }
 
     if (hint) {
@@ -754,7 +754,9 @@ function restoreTrendChartAfterPrint() {
 
     if (wrap) {
         wrap.style.minWidth = wrap.dataset.printRestoreMinWidth || '';
+        wrap.style.width = wrap.dataset.printRestoreWidth || '';
         delete wrap.dataset.printRestoreMinWidth;
+        delete wrap.dataset.printRestoreWidth;
     }
 
     if (labels.length === 0) {
@@ -977,6 +979,12 @@ function bootDashboardPage() {
     initDashboardFilterDrawer(page);
     initDashboardPeriodControls(page);
     initDashboardSyncButton(page);
+
+    const filterDrawer = document.getElementById('ecom-dashboard-filter-drawer');
+
+    if (filterDrawer && typeof window.initEtdFilterDrawerPeriod === 'function') {
+        window.initEtdFilterDrawerPeriod(filterDrawer);
+    }
 
     if (page.classList.contains('etd-page--product-performance-list')) {
         return;

@@ -3102,105 +3102,16 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * Earlier sessions of the same visitors, so a follow that started before this day still counts as the max.
-     *
-     * @param  list<array{id: string, visitor: string, started_at: ?Carbon, credit: bool, units: array<string, array<string, int>>}>  $todaySessions
-     * @param  array<string, string>  $skuToParent
-     * @return list<array{id: string, visitor: string, started_at: ?Carbon, credit: bool, units: array<string, array<string, int>>}>
-     */
-    private function priorVisitorFunnelSessions(array $todaySessions, array $skuToParent, EcomActivityListService $activityList): array
-    {
-        $todayIds = [];
-        $startsByVisitor = [];
-        foreach ($todaySessions as $session) {
-            $todayIds[$session['id']] = true;
-            if ($session['visitor'] === '' || $session['started_at'] === null) {
-                continue;
-            }
-            $startsByVisitor[$session['visitor']][] = $session['started_at'];
-        }
-
-        if ($startsByVisitor === []) {
-            return [];
-        }
-
-        $earliest = null;
-        foreach ($startsByVisitor as $starts) {
-            foreach ($starts as $start) {
-                $bound = $start->copy()->subHours(24);
-                if ($earliest === null || $bound->lt($earliest)) {
-                    $earliest = $bound;
-                }
-            }
-        }
-
-        $rows = TrackerDatabase::table('activity_ecom_user')
-            ->whereIn('visitor_id', array_keys($startsByVisitor))
-            ->where('created_at', '>=', TrackerTime::formatUtc($earliest))
-            ->get(['session_id', 'visitor_id', 'created_at']);
-
-        $prior = [];
-        foreach ($rows as $row) {
-            $sessionId = $this->normalizeSessionId((string) $row->session_id);
-            $visitor = trim((string) $row->visitor_id);
-            $started = TrackerTime::toUtc($row->created_at);
-            if (isset($todayIds[$sessionId]) || $visitor === '' || $started === null || ! isset($startsByVisitor[$visitor])) {
-                continue;
-            }
-
-            $inWindow = false;
-            foreach ($startsByVisitor[$visitor] as $start) {
-                $open = $started->lt($start) ? $started->copy() : $start->copy();
-                $later = $started->lt($start) ? $start : $started;
-                if ($later->lt($open->addHours(24))) {
-                    $inWindow = true;
-                    break;
-                }
-            }
-            if (! $inWindow) {
-                continue;
-            }
-
-            $prior[$sessionId] = [
-                'id' => $sessionId,
-                'visitor' => $visitor,
-                'started_at' => $started,
-                'credit' => false,
-                'units' => [],
-            ];
-        }
-
-        if ($prior === []) {
-            return [];
-        }
-
-        $actions = TrackerDatabase::table('activity_ecom_user_actions')
-            ->whereIn('session_id', array_keys($prior))
-            ->orderBy('id')
-            ->get();
-
-        foreach ($actions->groupBy('session_id') as $rawSessionId => $sessionActions) {
-            $sessionId = $this->normalizeSessionId((string) $rawSessionId);
-            if (! isset($prior[$sessionId])) {
-                continue;
-            }
-
-            $prior[$sessionId]['units'] = $activityList->productFunnelUnitsForSessionActions($sessionActions, $skuToParent);
-        }
-
-        return array_values($prior);
-    }
-
-    /**
-     * Same visitor, 24 hours from the first session start, is one follow.
-     * View, add, begin, and proceed keep the max qty. A later session adds only the increase.
+     * Sessions passed in are already one calendar day. Views stay per session.
+     * Add, begin, and proceed for the same visitor use the max qty from the start
+     * of that day to the end of that day. A later session only adds the increase.
      *
      * @param  list<array{id: string, visitor: string, started_at: ?Carbon, credit: bool, units: array<string, array<string, int>>}>  $sessions
      * @return array<string, array<string, array{views: int, add_to_cart: int, begin_checkout: int, proceed_checkout: int}>>
      */
-    private function creditSameVisitorFunnelWithin24Hours(array $sessions): array
+    private function creditSameVisitorDayFunnel(array $sessions): array
     {
-        $steps = ['views', 'add_to_cart', 'begin_checkout', 'proceed_checkout'];
+        $maxSteps = ['add_to_cart', 'begin_checkout', 'proceed_checkout'];
         $groups = [];
         foreach ($sessions as $session) {
             $key = $session['visitor'] !== '' ? $session['visitor'] : 'session:'.$session['id'];
@@ -3227,17 +3138,15 @@ class TrackerDashboardSyncService
                 return $byTime !== 0 ? $byTime : strcmp($left['id'], $right['id']);
             });
 
-            $anchor = null;
             $running = [];
             foreach ($group as $session) {
-                $start = $session['started_at'];
-                if ($anchor === null || $start === null || $start->greaterThanOrEqualTo($anchor->copy()->addHours(24))) {
-                    $anchor = $start?->copy();
-                    $running = [];
-                }
-
                 foreach ($session['units'] as $productCode => $unitSteps) {
-                    foreach ($steps as $step) {
+                    $views = (int) ($unitSteps['views'] ?? 0);
+                    if ($session['credit'] && $views > 0) {
+                        $credits[$session['id']][$productCode]['views'] = ($credits[$session['id']][$productCode]['views'] ?? 0) + $views;
+                    }
+
+                    foreach ($maxSteps as $step) {
                         $qty = (int) ($unitSteps[$step] ?? 0);
                         $already = (int) ($running[$productCode][$step] ?? 0);
                         if ($qty > $already) {
@@ -3260,8 +3169,8 @@ class TrackerDashboardSyncService
      * Each action counts on its own time, the same way payment_success does.
      * Commerce units: {@see EcomActivityListService::productFunnelUnitsForSessionActions()}
      * (catalog product_click views; add / begin / proceed / paid cycle rules).
-     * Same visitor within 24 hours of the session start is one follow. View, add, begin,
-     * and proceed keep the max qty in that window. A later session adds only the increase.
+     * Views stay per session. Add, begin, and proceed for the same visitor use the max
+     * qty from the start of this calendar day to the end of this day.
      */
     private function refreshProductFunnelCounts(string $date, Carbon $now): void
     {
@@ -3361,10 +3270,7 @@ class TrackerDashboardSyncService
             ];
         }
 
-        $credits = $this->creditSameVisitorFunnelWithin24Hours(array_merge(
-            $this->priorVisitorFunnelSessions($funnelSessions, $skuToParent, $activityList),
-            $funnelSessions,
-        ));
+        $credits = $this->creditSameVisitorDayFunnel($funnelSessions);
 
         foreach ($funnelSessions as $session) {
             $units = $credits[$session['id']] ?? [];

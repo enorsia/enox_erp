@@ -15,19 +15,11 @@
     <div class="etd-page-header-bar">
         <div class="etd-page-header-main">
             <div class="etd-page-header-left">
-                <div class="flex items-center flex-wrap gap-x-2 gap-y-1">
+                <div class="etd-page-header-left-stack">
                     <h1 class="etd-page-title">User activity</h1>
-                    @unless ($productDrillTableLayout ?? false)
-                        <span class="etd-header-sep" aria-hidden="true">·</span>
-                        <span class="etd-page-range">{{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => 'Custom', default => 'Today' } }} ({{ $data['rangeLabel'] }})</span>
-                        <span class="etd-header-sep etd-header-sep--meta" aria-hidden="true">·</span>
+                    @unless (($productDrillTableLayout ?? false) && ! ($sessionListTableLayout ?? false))
+                        <p class="etd-page-range">{{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => 'Custom', default => 'Today' } }} ({{ $data['rangeLabel'] }})</p>
                     @endunless
-                    <div class="etd-page-meta">
-                        <span class="etd-meta-item">
-                            <svg class="etd-meta-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>
-                            All times (store timezone)
-                        </span>
-                    </div>
                 </div>
             </div>
         </div>
@@ -69,6 +61,16 @@
                         <span class="etd-segmented-btn etd-date-nav-btn is-disabled" aria-disabled="true" aria-label="Next period"><svg class="etd-date-nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg></span>
                     @endif
                 </div>
+                @if (filled($data['exportUrl'] ?? null))
+                    <a href="{{ $data['exportUrl'] }}"
+                       class="etd-header-btn etd-topbar-btn--export etd-print-hide no-underline"
+                       title="Export cart, begin, proceed, and sold visitors in this view to Excel">
+                        <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <span class="etd-header-btn-text">Export Excel</span>
+                    </a>
+                @endif
                 <a href="{{ $data['resetUrl'] }}" class="etd-header-btn etd-header-btn--icon-only no-underline" aria-label="Reset filters" title="Reset all filters">
                     <svg class="etd-header-btn-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                 </a>
@@ -81,8 +83,7 @@
     <div class="etd-page-header-meta-row @if (! $drillDownUi) etd-page-header-meta-row--empty @endif">
         <div class="etd-page-header-meta-row__left">
             @if ($drillDownUi)
-                <p class="etd-kpi-section-label mb-1">{{ $drillDownUi['sectionLabel'] ?? 'Audience & engagement' }}</p>
-                @if ($productDrillTableLayout ?? false)
+                @if (($productDrillTableLayout ?? false) && ! ($sessionListTableLayout ?? false))
                     <p class="etd-product-drill-period mb-1">
                         {{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => 'Custom', default => 'Today' } }}
                         <span class="etd-product-drill-period__dates">({{ $data['rangeLabel'] }})</span>
@@ -91,6 +92,9 @@
                         <div class="etd-activity-context__filters etd-activity-context__filters--product-drill mb-2">
                             <div class="etd-activity-context__filter-chips">
                                 @foreach ($drillDownUi['filterChips'] as $chip)
+                                    @if (($chip['label'] ?? '') === 'Clear filter')
+                                        <a href="{{ $chip['remove_url'] }}" class="etd-clear-section-btn no-underline">Clear filter</a>
+                                    @else
                                     <span class="etd-activity-context__chip">
                                         <span class="etd-activity-context__chip-label">{{ $chip['label'] }}</span>
                                         @if (! empty($chip['remove_url']))
@@ -105,6 +109,7 @@
                                             </a>
                                         @endif
                                     </span>
+                                    @endif
                                 @endforeach
                             </div>
                         </div>
@@ -112,22 +117,50 @@
                 @elseif (! empty($drillDownUi['sectionSubtitle']))
                     <p class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">{{ $drillDownUi['sectionSubtitle'] }}</p>
                 @endif
-                @include('ecom_activity.partials.drill-down-context', [
-                    'drillDownUi' => $drillDownUi,
-                    'activityExport' => $activityExport,
-                ])
+                @if (($sessionListTableLayout ?? false) && ! empty($drillDownUi['filterChips']))
+                    <div class="etd-activity-context__filters etd-activity-context__filters--product-drill">
+                        <div class="etd-activity-context__filter-chips">
+                            @foreach ($drillDownUi['filterChips'] as $chip)
+                                @if (($chip['label'] ?? '') === 'Clear filter')
+                                    <a href="{{ $chip['remove_url'] }}" class="etd-clear-section-btn no-underline">Clear filter</a>
+                                @else
+                                <span class="etd-activity-context__chip">
+                                    <span class="etd-activity-context__chip-label">{{ $chip['label'] }}</span>
+                                    @if (! empty($chip['remove_url']))
+                                        <a
+                                            href="{{ $chip['remove_url'] }}"
+                                            class="etd-activity-context__chip-remove"
+                                            aria-label="Remove filter: {{ $chip['label'] }}"
+                                        >
+                                            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </a>
+                                    @endif
+                                </span>
+                                @endif
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+                @unless (($drillDownUi['useKpiCards'] ?? false) && blank($drillDownUi['sectionSubtitle'] ?? null))
+                    @include('ecom_activity.partials.drill-down-context', [
+                        'drillDownUi' => $drillDownUi,
+                        'activityExport' => $activityExport,
+                    ])
+                @endunless
             @endif
-            @unless ($productDrillTableLayout ?? false)
-                <p class="etd-visitor-quality-summary text-[12px] text-slate-500 dark:text-slate-400 mb-0">
-                    <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['human']) }}</span> real visitors ·
-                    <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['bot']) }}</span> automated ·
-                    <span class="font-medium text-slate-700 dark:text-slate-200">{{ number_format($visitorQuality['unclassified']) }}</span> not classified
-                </p>
-            @endunless
         </div>
         <div class="etd-page-header-meta-row__right"></div>
     </div>
 </header>
+
+@if (($drillDownUi['useKpiCards'] ?? false) && blank($drillDownUi['sectionSubtitle'] ?? null))
+    @include('ecom_activity.partials.drill-down-context', [
+        'drillDownUi' => $drillDownUi,
+        'activityExport' => $activityExport,
+    ])
+@endif
 
 <div class="etd-activity-table-block" data-etd-activity-table-block>
     <div class="etd-panel">

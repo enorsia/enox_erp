@@ -314,7 +314,8 @@ final class SpreadsheetWriterProfile
             'Order value',
             'Cart value',
             'Value',
-            'Sale',
+            'Sold amount',
+            'Amount',
         ];
         $moneyIndices = [];
         $phoneColumn = 0;

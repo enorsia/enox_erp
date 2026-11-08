@@ -46,7 +46,7 @@ class DashboardKpiSectionService
             $currentFunnel['payment_count'],
             $previousFunnel['payment_rate'],
             $previousFunnel['payment_count'],
-            'Sessions with at least one payment. Same count as Payment success. Items sold and sale amount still include every order in the session.',
+            'Paid. The percent is this count divided by cart drop + checkout drop + proceed drop + payments.',
             $comparisonLabel,
             ['funnel' => 6],
         );
@@ -70,9 +70,10 @@ class DashboardKpiSectionService
                     $currentFunnel['cart_drop_count'],
                     $previousFunnel['cart_drop_rate'],
                     $previousFunnel['cart_drop_count'],
-                    'Sessions that added to cart but did not begin checkout (matches Cart abandoned drill-down).',
+                    'Stopped at cart. The percent is this count divided by cart drop + checkout drop + proceed drop + payments.',
                     $comparisonLabel,
                     ['funnel' => 3],
+                    true,
                 ),
                 $this->funnelDropMetric(
                     'Checkout drop',
@@ -80,9 +81,10 @@ class DashboardKpiSectionService
                     $currentFunnel['checkout_drop_count'],
                     $previousFunnel['checkout_drop_rate'],
                     $previousFunnel['checkout_drop_count'],
-                    'Sessions that began checkout but did not proceed (matches Begin checkout abandoned drill-down).',
+                    'Stopped at checkout. The percent is this count divided by cart drop + checkout drop + proceed drop + payments.',
                     $comparisonLabel,
                     ['funnel' => 4],
+                    true,
                 ),
                 $this->funnelDropMetric(
                     'Proceed drop',
@@ -90,9 +92,10 @@ class DashboardKpiSectionService
                     $currentFunnel['proceed_drop_count'],
                     $previousFunnel['proceed_drop_rate'],
                     $previousFunnel['proceed_drop_count'],
-                    'Sessions that proceeded to checkout but did not pay (matches Proceed checkout abandoned drill-down).',
+                    'Stopped at proceed. The percent is this count divided by cart drop + checkout drop + proceed drop + payments.',
                     $comparisonLabel,
                     ['funnel' => 5],
+                    true,
                 ),
                 $payments,
             ]],
@@ -105,24 +108,21 @@ class DashboardKpiSectionService
      */
     private function funnelKpisFromTotals(array $totals): array
     {
-        $sessions = (int) ($totals['sessions'] ?? 0);
-        $cartStage = (int) ($totals['cart_sessions'] ?? 0);
-        $checkoutStage = (int) ($totals['checkout_sessions'] ?? 0);
-        $proceedStage = (int) ($totals['proceed_sessions'] ?? 0);
-        $payments = (int) ($totals['payments'] ?? 0);
-        $purchaseSessions = (int) ($totals['purchase_sessions'] ?? $payments);
         $cartAbandoned = (int) ($totals['cart_drops'] ?? 0);
         $checkoutAbandoned = (int) ($totals['checkout_drops'] ?? 0);
         $proceedAbandoned = (int) ($totals['proceed_drops'] ?? 0);
+        $payments = (int) ($totals['payments'] ?? 0);
+        $funnel = $cartAbandoned + $checkoutAbandoned + $proceedAbandoned + $payments;
+        $rate = fn (int $count): float => $funnel > 0 ? round($count / $funnel * 100, 1) : 0.0;
 
         return [
-            'cart_drop_rate' => $cartStage > 0 ? round($cartAbandoned / $cartStage * 100, 1) : 0.0,
+            'cart_drop_rate' => $rate($cartAbandoned),
             'cart_drop_count' => $cartAbandoned,
-            'checkout_drop_rate' => $checkoutStage > 0 ? round($checkoutAbandoned / $checkoutStage * 100, 1) : 0.0,
+            'checkout_drop_rate' => $rate($checkoutAbandoned),
             'checkout_drop_count' => $checkoutAbandoned,
-            'proceed_drop_rate' => $proceedStage > 0 ? round($proceedAbandoned / $proceedStage * 100, 1) : 0.0,
+            'proceed_drop_rate' => $rate($proceedAbandoned),
             'proceed_drop_count' => $proceedAbandoned,
-            'payment_rate' => $sessions > 0 ? round($purchaseSessions / $sessions * 100, 1) : 0.0,
+            'payment_rate' => $rate($payments),
             'payment_count' => $payments,
         ];
     }
@@ -144,6 +144,7 @@ class DashboardKpiSectionService
         string $tip,
         string $comparisonLabel,
         array $activity = [],
+        bool $lowerIsBetter = false,
     ): array {
         return [
             'label' => $label,
@@ -155,6 +156,7 @@ class DashboardKpiSectionService
                 $previousRate,
                 $this->formatFunnelDropValue($previousRate, $previousCount),
                 $comparisonLabel,
+                $lowerIsBetter,
             ),
         ];
     }
@@ -162,13 +164,22 @@ class DashboardKpiSectionService
     /**
      * @return array{delta_pct: ?float, delta_direction: string, delta_label: null, previous_formatted: string, comparison_label: string}
      */
-    private function comparison(float|int $current, float|int $previous, string $previousFormatted, string $comparisonLabel): array
+    private function comparison(float|int $current, float|int $previous, string $previousFormatted, string $comparisonLabel, bool $lowerIsBetter = false): array
     {
         [$deltaPct, $direction] = match (true) {
             $previous == 0 => $current > 0 ? [null, 'up'] : [0.0, 'flat'],
             $current == 0 => [-100.0, 'down'],
             default => [round(($current - $previous) / $previous * 100, 1), $current > $previous ? 'up' : ($current < $previous ? 'down' : 'flat')],
         };
+
+        if ($lowerIsBetter) {
+            $deltaPct = $deltaPct === null ? null : (float) $deltaPct * -1;
+            $direction = match ($direction) {
+                'up' => 'down',
+                'down' => 'up',
+                default => $direction,
+            };
+        }
 
         return [
             'delta_pct' => $deltaPct,
