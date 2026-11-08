@@ -13020,41 +13020,202 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
         justify-content: flex-start;
     }
 
+    #ecom-tracker-compare-content .etd-compare-period-nav {
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
     #ecom-tracker-compare-content .etd-compare-period-nav .etd-segmented {
-        display: flex;
-        flex-wrap: wrap;
-        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
         max-width: 100%;
     }
 
     #ecom-tracker-compare-content .etd-compare-period-nav .etd-segmented-btn {
-        flex: 1 1 auto;
+        min-width: 0;
+        padding-inline: 0.2rem;
+        font-size: 0.6875rem;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__body {
+        min-width: 0;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table-wrap {
+        max-width: 100%;
+        max-height: min(52dvh, 22rem);
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
     }
 
     #ecom-tracker-compare-content .etd-compare-exec__table {
+        width: 100%;
         min-width: 0;
-        table-layout: fixed;
+        table-layout: auto;
+        font-size: 0.8125rem;
     }
 
     #ecom-tracker-compare-content .etd-compare-exec__table th,
     #ecom-tracker-compare-content .etd-compare-exec__table td {
-        padding: 0.4rem 0.3rem;
+        padding: 0.5rem 0.55rem;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-exec__col-metric,
+    #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-metric-row__label,
+    #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-metric-row__label-text {
         white-space: normal;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table th.etd-num,
+    #ecom-tracker-compare-content .etd-compare-exec__table td.etd-num {
+        white-space: nowrap;
     }
 
     #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-exec__col-period,
     #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-exec__col-change {
+        width: 1%;
         min-width: 0;
     }
 
     #ecom-tracker-compare-content .etd-compare-delta-badge {
-        white-space: normal;
+        white-space: nowrap;
     }
 
-    #ecom-tracker-compare-content .etd-compare-exec__table-wrap {
+    #ecom-tracker-compare-content .etd-compare-column__filter-wrap {
+        flex: 1 1 100%;
+        width: 100%;
+        margin-left: 0;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-column__filter-label {
+        display: inline;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-column-filters {
+        position: static;
+        top: auto;
+        right: auto;
+        left: auto;
+        bottom: auto;
+        z-index: auto;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        max-height: min(52dvh, 22rem);
+        margin-top: 0.45rem;
+        border-radius: 0.75rem;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-column-filters__body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='trend'] {
+        width: calc(100% + 1.7rem);
+        max-width: none;
+        margin-left: -0.85rem;
+        margin-right: -0.85rem;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='trend'] .etd-panel-head,
+    #ecom-tracker-compare-content [data-compare-sync='trend'] .etd-trend-legend {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='trend'] .etd-trend-chart,
+    #ecom-tracker-compare-content [data-compare-sync='trend'] .etd-trend-chart-scroll {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='trend'] .etd-trend-chart {
+        overflow: visible;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='trend'] .etd-trend-chart-scroll {
         overflow-x: auto;
         overflow-y: visible;
-        max-width: 100%;
+        max-height: none;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='trend'] .etd-chart-wrap.etd-chart-wrap--trend {
+        max-width: none;
+        min-height: 440px;
+        height: clamp(460px, 132vw, 580px);
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='trend'] .etd-trend-chart-scroll-hint:not([hidden]) {
+        display: block;
+        margin: 0.55rem 0.85rem 0;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-category-departments .etd-table,
+    #ecom-tracker-compare-content [data-compare-sync='products'] .etd-product-catalog .etd-table {
+        width: max-content;
+        min-width: 100%;
+        table-layout: auto;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-category-departments th,
+    #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-category-departments td,
+    #ecom-tracker-compare-content [data-compare-sync='products'] .etd-table th,
+    #ecom-tracker-compare-content [data-compare-sync='products'] .etd-table td {
+        white-space: nowrap;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='categories'] th.etd-col-category,
+    #ecom-tracker-compare-content [data-compare-sync='categories'] td.etd-col-category {
+        min-width: 9rem;
+        max-width: 12rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='products'] th.etd-col-product,
+    #ecom-tracker-compare-content [data-compare-sync='products'] td.etd-col-product {
+        min-width: 9.5rem;
+        max-width: 12rem;
+        width: 11rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-catalog-expand-col,
+    #ecom-tracker-compare-content [data-compare-sync='categories'] th.etd-col-category,
+    #ecom-tracker-compare-content [data-compare-sync='categories'] td.etd-col-category,
+    #ecom-tracker-compare-content [data-compare-sync='devices'] .etd-table--device-browser th:first-child,
+    #ecom-tracker-compare-content [data-compare-sync='devices'] .etd-table--device-browser td:first-child {
+        position: static;
+        left: auto;
+        box-shadow: none;
+        z-index: auto;
+    }
+
+    #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-table-scroll--fixed thead th.etd-catalog-expand-col,
+    #ecom-tracker-compare-content [data-compare-sync='categories'] .etd-table-scroll--fixed thead th.etd-col-category,
+    #ecom-tracker-compare-content [data-compare-sync='devices'] .etd-table-scroll--fixed .etd-table--device-browser thead th:first-child {
+        z-index: auto;
+        box-shadow: none;
     }
 }
 
@@ -13110,6 +13271,41 @@ body.etd-print-measure #ecom-tracker-compare-content .etd-compare-delta-badge {
 
     .dark #ecom-tracker-compare-content .etd-table-scroll--fixed .etd-table--device-browser thead th:first-child {
         background: #1e293b;
+    }
+}
+
+@media (max-width: 639px) {
+    #ecom-tracker-compare-content .etd-compare-exec__toggle,
+    #ecom-tracker-compare-content .etd-compare-exec__body {
+        padding-left: 0.45rem;
+        padding-right: 0.45rem;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table-wrap {
+        max-height: none;
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table {
+        width: max-content;
+        min-width: 100%;
+        table-layout: auto;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table th,
+    #ecom-tracker-compare-content .etd-compare-exec__table td,
+    #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-metric-row__label,
+    #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-metric-row__label-text {
+        padding: 0.5rem 0.4rem;
+        white-space: nowrap;
+    }
+
+    #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-exec__col-period,
+    #ecom-tracker-compare-content .etd-compare-exec__table .etd-compare-exec__col-change {
+        width: auto;
+        min-width: 4.75rem;
     }
 }
 

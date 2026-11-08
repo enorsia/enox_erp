@@ -424,6 +424,10 @@ function trendTickLimit(labelCount, useHorizontalScroll = false) {
 }
 
 function trendUsesHorizontalScroll(labelCount) {
+    if (isNarrow() && labelCount > 8) {
+        return true;
+    }
+
     if (labelCount <= 24) {
         return false;
     }
@@ -436,9 +440,9 @@ function trendMinWidth(labelCount) {
         return null;
     }
 
-    const pixelsPerLabel = isNarrow() ? 34 : 30;
+    const pixelsPerLabel = isNarrow() ? 40 : 30;
 
-    return Math.max(labelCount * pixelsPerLabel, 320);
+    return Math.max(labelCount * pixelsPerLabel, isNarrow() ? 360 : 320);
 }
 
 function sessionsForLogScale(values) {
@@ -457,10 +461,18 @@ function applyTrendChartLayout(wrapId, hintId, labelCount) {
 
     if (wrap) {
         wrap.style.minWidth = minWidth ? `${minWidth}px` : '';
+        wrap.style.width = minWidth ? `${minWidth}px` : '';
     }
 
     if (hint) {
         hint.hidden = !useHorizontalScroll;
+        if (useHorizontalScroll && isNarrow()) {
+            hint.textContent = labelCount <= 24
+                ? 'Swipe horizontally to see all hours'
+                : 'Swipe horizontally to see all dates';
+        } else if (useHorizontalScroll) {
+            hint.textContent = 'Swipe horizontally to see all dates';
+        }
     }
 }
 
@@ -535,7 +547,11 @@ function initCompareTrendChart({
             borderColor: isBar ? `${color}CC` : color,
             backgroundColor: isBar ? `${color}99` : color,
             pointRadius: isBar ? 0 : (labels.length > 24 && !useHorizontalScroll ? 0 : 2.5),
-            pointHoverRadius: isBar ? 0 : 4,
+            pointHoverRadius: isBar ? 0 : 6,
+            pointHoverBorderWidth: isBar ? 0 : 2,
+            pointHoverBorderColor: isDark() ? '#0f172a' : '#ffffff',
+            pointHoverBackgroundColor: color,
+            hoverBorderWidth: isBar ? 0 : 2,
             tension: isBar ? 0 : 0.3,
             fill: false,
             yAxisID: entry.y_axis_id || 'y',
@@ -551,10 +567,13 @@ function initCompareTrendChart({
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+            interaction: { mode: 'index', intersect: false, axis: 'x' },
             layout: {
                 padding: {
-                    right: useHorizontalScroll ? 8 : 0,
+                    top: isNarrow() ? 6 : 0,
+                    right: useHorizontalScroll ? 8 : (showRateAxis && isNarrow() ? 8 : 0),
+                    bottom: isNarrow() ? 10 : 0,
+                    left: isNarrow() ? 4 : 0,
                 },
             },
             plugins: {
@@ -610,15 +629,32 @@ function initCompareTrendChart({
         },
     });
 
+    bindTrendTooltipDismiss(document.getElementById(scrollId));
+
+    requestAnimationFrame(() => {
+        chart.resize();
+        requestAnimationFrame(() => chart.resize());
+    });
+
     window.addEventListener('resize', () => {
+        const useScroll = trendUsesHorizontalScroll(labels.length);
+
         applyTrendChartLayout(wrapId, hintId, labels.length);
         renderTrendLegend(legendId, plottedSeries);
         chart.options.plugins.legend.display = !isCompactChart();
+        chart.options.scales.x.ticks.autoSkip = !useScroll && labels.length > 24;
+        chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, useScroll);
+        chart.options.scales.x.ticks.maxRotation = useScroll || labels.length > 20 ? 45 : 0;
+        chart.options.scales.x.ticks.minRotation = useScroll ? 35 : 0;
+        chart.options.layout.padding = {
+            top: isNarrow() ? 6 : 0,
+            right: useScroll ? 8 : (showRateAxis && isNarrow() ? 8 : 0),
+            bottom: isNarrow() ? 10 : 0,
+            left: isNarrow() ? 4 : 0,
+        };
         chart.resize();
         scheduleCompareSectionSync();
     });
-
-    bindTrendTooltipDismiss(document.getElementById(scrollId));
 }
 
 function accent() {
