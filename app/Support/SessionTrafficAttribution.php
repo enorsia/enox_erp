@@ -104,6 +104,12 @@ final class SessionTrafficAttribution
         return $parsed;
     }
 
+    public const MULTI_SOURCE = 'multi sources';
+
+    public const MULTI_MEDIUM = 'multi mediums';
+
+    public const UNKNOWN_SOURCE = 'Unknown';
+
     public static function normalizeSource(?string $source): ?string
     {
         if (! filled($source)) {
@@ -484,6 +490,14 @@ final class SessionTrafficAttribution
                 $parsed = self::parseFromUrl($url);
 
                 if (! AttributionRules::isMarketingQualifyingTouch($parsed, $url)) {
+                    $unnamed = self::unnamedUtmIdBucket($url);
+                    if ($unnamed !== null) {
+                        return [
+                            'source' => $unnamed['source'],
+                            'medium' => $unnamed['medium'],
+                        ];
+                    }
+
                     continue;
                 }
 
@@ -921,6 +935,92 @@ final class SessionTrafficAttribution
         return $touches;
     }
 
+    /**
+     * One source and one medium for a visitor on one calendar day.
+     * Direct / none do not count. One real value covers every session that day.
+     * Two or more become multi sources / multi mediums. The next day starts again.
+     *
+     * @param  list<array<string, mixed>>  $touches
+     * @return array{source: string, medium: string}
+     */
+    public static function resolveVisitorDayBucket(array $touches): array
+    {
+        $sources = [];
+        $mediums = [];
+
+        foreach ($touches as $touch) {
+            if (! is_array($touch)) {
+                continue;
+            }
+
+            $source = self::normalizeSource(trim((string) ($touch['source'] ?? ''))) ?? '';
+            if ($source !== '' && $source !== '(direct)' && $source !== self::MULTI_SOURCE) {
+                $sources[$source] = $source;
+            }
+
+            $medium = strtolower(trim((string) ($touch['medium'] ?? '')));
+            if ($medium !== '' && $medium !== 'none' && $medium !== self::MULTI_MEDIUM) {
+                $mediums[$medium] = $medium;
+            }
+        }
+
+        return [
+            'source' => match (count($sources)) {
+                0 => '(direct)',
+                1 => array_values($sources)[0],
+                default => self::MULTI_SOURCE,
+            },
+            'medium' => match (count($mediums)) {
+                0 => 'none',
+                1 => array_values($mediums)[0],
+                default => self::MULTI_MEDIUM,
+            },
+        ];
+    }
+
+    public static function ensureMultiSourceOption(): void
+    {
+        TrackerDatabase::table('tracking_traffic_source')->insertOrIgnore([[
+            'name' => self::MULTI_SOURCE,
+            'medium' => self::MULTI_MEDIUM,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]]);
+    }
+
+    public static function ensureUnknownSourceOption(): void
+    {
+        TrackerDatabase::table('tracking_traffic_source')->insertOrIgnore([[
+            'name' => self::UNKNOWN_SOURCE,
+            'medium' => 'none',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]]);
+    }
+
+    /**
+     * A utm_id with no utm_source is Unknown, not Direct.
+     *
+     * @return array{source: string, medium: string, campaign: ?string}|null
+     */
+    public static function unnamedUtmIdBucket(?string $url): ?array
+    {
+        $parsed = self::parseFromUrl($url);
+        if (! filled($parsed['utm_id'] ?? null)) {
+            return null;
+        }
+
+        if (filled(self::normalizeSource($parsed['utm_source'] ?? null))) {
+            return null;
+        }
+
+        return [
+            'source' => self::UNKNOWN_SOURCE,
+            'medium' => filled($parsed['utm_medium'] ?? null) ? trim((string) $parsed['utm_medium']) : 'none',
+            'campaign' => filled($parsed['utm_campaign'] ?? null) ? trim((string) $parsed['utm_campaign']) : null,
+        ];
+    }
+
     public static function attributionCarryHours(): int
     {
         return max(1, (int) config('tracker.attribution_carry_hours', 24));
@@ -1010,6 +1110,10 @@ final class SessionTrafficAttribution
             return true;
         }
 
+        if (strcasecmp($source, self::UNKNOWN_SOURCE) === 0) {
+            return false;
+        }
+
         return self::orderTrafficSourceSkippable($source, $medium);
     }
 
@@ -1085,7 +1189,18 @@ final class SessionTrafficAttribution
         $landing = filled($pageUrl) ? (string) $pageUrl : null;
 
         if (! AttributionRules::isMarketingQualifyingTouch($parsed, $landing)) {
-            return null;
+            $unnamed = self::unnamedUtmIdBucket($landing ?? (filled($referer) ? (string) $referer : null));
+            if ($unnamed === null) {
+                return null;
+            }
+
+            return [
+                'source' => $unnamed['source'],
+                'medium' => $unnamed['medium'],
+                'campaign' => $unnamed['campaign'],
+                'landing_page' => $landing,
+                'referer' => filled($referer) ? (string) $referer : null,
+            ];
         }
 
         $source = self::normalizeSource((string) ($parsed['utm_source'] ?? '')) ?? (string) $parsed['utm_source'];
