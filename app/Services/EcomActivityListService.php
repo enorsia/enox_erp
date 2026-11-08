@@ -2052,7 +2052,7 @@ class EcomActivityListService
      * Sources and mediums for the visitor behind each session, earliest first.
      *
      * @param  Collection<int, object>  $sessions
-     * @return array<int, array{source: string, medium: ?string}>
+     * @return array<int, array{source: string, medium: ?string, label: ?string}>
      */
     private function exportSourcesBySession(Collection $sessions): array
     {
@@ -2108,6 +2108,8 @@ class EcomActivityListService
         $seen = [];
         $mediumLists = [];
         $seenMediums = [];
+        $pairLists = [];
+        $seenPairs = [];
 
         foreach ($touches as $touch) {
             $mainId = (int) $touch->tracking_main_visitor_id;
@@ -2127,6 +2129,13 @@ class EcomActivityListService
             $mediumLabel = filled($touch->utm_medium ?? null)
                 ? trim((string) $touch->utm_medium)
                 : (filled($touch->traffic_source_medium ?? null) ? trim((string) $touch->traffic_source_medium) : '');
+
+            $pairKey = $key.'|'.strtolower($mediumLabel === '' ? 'none' : $mediumLabel);
+            if (! isset($seenPairs[$mainId][$pairKey])) {
+                $seenPairs[$mainId][$pairKey] = true;
+                $pairLists[$mainId][] = $this->formatSourceMediumPair($label, $mediumLabel);
+            }
+
             if ($mediumLabel === '') {
                 continue;
             }
@@ -2148,11 +2157,36 @@ class EcomActivityListService
                 $bySession[$sessionId] = [
                     'source' => implode(', ', $lists[$mainId]),
                     'medium' => isset($mediumLists[$mainId]) ? implode(', ', $mediumLists[$mainId]) : null,
+                    'label' => isset($pairLists[$mainId]) ? implode(', ', $pairLists[$mainId]) : null,
                 ];
             }
         }
 
         return $bySession;
+    }
+
+    private function sourceMediumFromSessionRow(object $row): string
+    {
+        $source = filled($row->session_touch_utm_source ?? null)
+            ? trim((string) $row->session_touch_utm_source)
+            : (filled($row->traffic_source_name ?? null) ? trim((string) $row->traffic_source_name) : '');
+        if ($source === '') {
+            return '—';
+        }
+
+        $medium = filled($row->session_touch_utm_medium ?? null)
+            ? trim((string) $row->session_touch_utm_medium)
+            : (filled($row->traffic_source_medium ?? null) ? trim((string) $row->traffic_source_medium) : '');
+
+        return $this->formatSourceMediumPair($source, $medium);
+    }
+
+    private function formatSourceMediumPair(string $source, string $medium): string
+    {
+        $sourceLabel = SessionTrafficAttribution::displaySourceLabel($source) ?? $source;
+        $mediumLabel = $medium === '' || strtolower($medium) === 'none' ? '—' : $medium;
+
+        return $sourceLabel.' / '.$mediumLabel;
     }
 
     /**
@@ -2231,11 +2265,13 @@ class EcomActivityListService
             $this->attachProductCommerceCells($rows, $productCode, $range);
         }
 
+        $sourceMediumBySession = [];
         if ($rows->isNotEmpty()) {
             $this->attachPaymentSuccessActions($rows);
+            $sourceMediumBySession = $this->exportSourcesBySession($rows);
         }
 
-        $rows = $rows->map(function (object $row) use ($focusKeys, $isProductDrill, $isSessionList, $productCode, $range) {
+        $rows = $rows->map(function (object $row) use ($focusKeys, $isProductDrill, $isSessionList, $productCode, $range, $sourceMediumBySession) {
             if ($isProductDrill) {
                 $commerce = $this->commerceCellForProductDrill($row, $productCode, $range);
                 $commerce['presentation'] = $this->productDrillCommercePresentation($row, $commerce);
@@ -2249,6 +2285,8 @@ class EcomActivityListService
             $row->commerce = $commerce;
             $row->trust = $this->trustCell($row);
             $row->focus = $this->focusMetrics($row, $focusKeys);
+            $row->source_medium = $sourceMediumBySession[(int) $row->id]['label']
+                ?? $this->sourceMediumFromSessionRow($row);
 
             return $row;
         });

@@ -181,7 +181,7 @@
             $deviceBrowserSessionColumns = ($sessionListTableLayout ?? false)
                 && (request()->filled('device_type') || request()->filled('browser_type') || request()->filled('utm_source') || request()->filled('utm_medium') || request()->filled('duration') || request()->query('focus') === 'devices' || request()->query('focus') === 'traffic');
             $focusColspan = count($focusColumns);
-            $activityTableBaseCols = $productDrillTableLayout ? (4 + ($deviceBrowserSessionColumns ? 2 : 0)) : 8;
+            $activityTableBaseCols = $productDrillTableLayout ? (5 + ($deviceBrowserSessionColumns ? 2 : 0)) : 9;
             $activityTableColspan = $activityTableBaseCols + $focusColspan + ($showCatalogFilterColumn ? 1 : 0);
             $activityTableWide = $focusColspan > 0 || $showCatalogFilterColumn;
             $singleSessionOpenEvent = null;
@@ -236,6 +236,7 @@
                                     <a href="#" data-etd-activity-sort class="etd-sort-th-link"><span class="etd-sort-th-label">Commerce</span></a>
                                 @endif
                             </th>
+                            <th class="etd-col-source-medium">Source/Medium</th>
                             @unless ($productDrillTableLayout && ! $deviceBrowserSessionColumns)
                                 <th class="etd-col-actions etd-num"><a href="#" data-etd-activity-sort class="etd-sort-th-link etd-sort-th-link--center"><span class="etd-sort-th-label">Actions</span></a></th>
                             @endunless
@@ -313,6 +314,9 @@
                                             'sessionKey' => $row->session_id,
                                         ])
                                     @endif
+                                </td>
+                                <td class="etd-col-source-medium" data-label="Source/Medium">
+                                    <div class="etd-source-medium">{{ $row->source_medium ?? '—' }}</div>
                                 </td>
                                 @unless ($productDrillTableLayout && ! $deviceBrowserSessionColumns)
                                     <td class="etd-col-actions etd-num" data-label="Actions">{{ number_format((int) ($row->actions_count ?? 0)) }}</td>
