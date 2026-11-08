@@ -172,7 +172,7 @@ return [
         'rakuten' => 'Rakuten',
         'partnerize' => 'Partnerize',
         '(direct)' => 'Direct',
-        'multi sources' => 'multi sources',
+        'multi sources' => 'Multi sources',
     ],
 
     'utm_source_aliases' => [
@@ -242,7 +242,7 @@ return [
         'cpm' => 'CPM',
         'awin' => 'Awin',
         'none' => 'None',
-        'multi mediums' => 'multi mediums',
+        'multi mediums' => 'Multi mediums',
     ],
 
 ];

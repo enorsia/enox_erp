@@ -474,6 +474,16 @@ final class SessionTrafficAttribution
         return $labels[$source] ?? ucfirst((string) $source);
     }
 
+    public static function displayMediumLabel(?string $medium): string
+    {
+        $medium = trim((string) $medium);
+        if (strcasecmp($medium, self::MULTI_MEDIUM) === 0) {
+            return 'Multi mediums';
+        }
+
+        return $medium;
+    }
+
     /**
      * Canonical source/medium keys for dashboard traffic-source grouping.
      *

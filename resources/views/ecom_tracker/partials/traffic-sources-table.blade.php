@@ -115,7 +115,7 @@
                             {{ SessionTrafficAttribution::displaySourceLabel($source['source']) ?? $source['source'] }}
                         @endif
                     </td>
-                    <td>{{ $source['medium'] }}</td>
+                    <td>{{ \App\Support\SessionTrafficAttribution::displayMediumLabel($source['medium'] ?? '') }}</td>
                     <td class="etd-num">{{ number_format($source['sessions']) }}</td>
                     <td class="etd-num">{{ number_format($source['views']) }}</td>
                     <td class="etd-num">{{ number_format($source['add_to_cart']) }}</td>

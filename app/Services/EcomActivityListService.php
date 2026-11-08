@@ -124,7 +124,9 @@ class EcomActivityListService
             'durationBuckets' => array_map(fn (array $bucket) => $bucket['label'], TrackingDailyDuration::BUCKETS),
             'devices' => $lookups->get('device', collect())->pluck('name', 'id')->all(),
             'browsers' => $lookups->get('browser', collect())->pluck('name', 'id')->all(),
-            'utmSources' => $sources->pluck('name', 'id')->all(),
+            'utmSources' => $sources->mapWithKeys(fn (object $source): array => [
+                (int) $source->id => SessionTrafficAttribution::displaySourceLabel((string) $source->name) ?? (string) $source->name,
+            ])->all(),
             'utmMediums' => $utmMediums,
             'departments' => collect($categories->whereNull('parent_id')->pluck('name', 'id'))
                 ->map(fn (string $name) => TrackerCategoryIdentity::formatDepartmentDisplayName($name))
@@ -1813,7 +1815,7 @@ class EcomActivityListService
             ) {
                 $dropMedium[] = 'focus';
             }
-            $addChip('Medium: '.$medium, $dropMedium);
+            $addChip('Medium: '.SessionTrafficAttribution::displayMediumLabel((string) $medium), $dropMedium);
         }
 
         if (filled($request->query('department'))) {
@@ -2063,7 +2065,9 @@ class EcomActivityListService
     private function formatSourceMediumPair(string $source, string $medium): string
     {
         $sourceLabel = SessionTrafficAttribution::displaySourceLabel($source) ?? $source;
-        $mediumLabel = $medium === '' || strtolower($medium) === 'none' ? '—' : $medium;
+        $mediumLabel = $medium === '' || strtolower($medium) === 'none'
+            ? '—'
+            : SessionTrafficAttribution::displayMediumLabel($medium);
 
         return $sourceLabel.' / '.$mediumLabel;
     }

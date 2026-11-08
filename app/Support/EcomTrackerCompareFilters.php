@@ -144,7 +144,7 @@ final class EcomTrackerCompareFilters
             $value = (string) $medium;
             $rows[] = [
                 'value' => $value,
-                'label' => $value,
+                'label' => SessionTrafficAttribution::displayMediumLabel($value),
                 'selected' => $current === $value,
             ];
         }
