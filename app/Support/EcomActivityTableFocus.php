@@ -14,7 +14,7 @@ final class EcomActivityTableFocus
     private const FOCUS_COLUMN_KEYS = [
         'audience' => ['device'],
         'devices' => ['device_detail'],
-        'traffic' => ['traffic_medium'],
+        'traffic' => [],
         'session_quality' => ['classification_reason'],
         'products' => ['products_viewed', 'adds', 'purchases'],
     ];
@@ -80,7 +80,6 @@ final class EcomActivityTableFocus
             if ($request->input('focus') === 'session') {
                 $keys = self::mergeKeys($keys, ['device_detail']);
             }
-            $keys = self::mergeKeys($keys, ['traffic_medium']);
         }
 
         if (self::hasDurationScope($request) && $request->input('focus') === 'session') {

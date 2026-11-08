@@ -403,20 +403,33 @@ class TrackerDashboardSyncService
             ->distinct()
             ->pluck('session_id');
 
-        if ($sessionIds->isEmpty()) {
-            return [];
+        $fromActions = [];
+        if ($sessionIds->isNotEmpty()) {
+            $query = TrackerDatabase::table('activity_ecom_user as u')
+                ->whereIn('u.session_id', $sessionIds)
+                ->where('u.sync_try', '<', self::MAX_SYNC_TRY);
+
+            $this->applySyncableSessionFilter($query, 'u');
+
+            $fromActions = $query->orderBy('u.id')
+                ->pluck('u.id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
         }
 
-        $query = TrackerDatabase::table('activity_ecom_user as u')
-            ->whereIn('u.session_id', $sessionIds)
+        $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
+        $idle = TrackerDatabase::table('activity_ecom_user as u')
             ->where('u.sync_try', '<', self::MAX_SYNC_TRY);
+        $this->applySyncableSessionFilter($idle, 'u');
+        $this->applyPendingOrRetryFilter($idle, $retryAfter, 'u');
+        $this->applyHasNoUnsyncedActionsFilter($idle, 'u');
 
-        $this->applySyncableSessionFilter($query, 'u');
-
-        return $query->orderBy('u.id')
+        $fromIdle = $idle->orderBy('u.id')
             ->pluck('u.id')
             ->map(fn ($id) => (int) $id)
             ->all();
+
+        return array_values(array_unique([...$fromActions, ...$fromIdle]));
     }
 
     /**
@@ -547,21 +560,11 @@ class TrackerDashboardSyncService
 
         $query = TrackerDatabase::table('activity_ecom_user as u');
 
-        $this->applyHasAtLeastOneActionFilter($query, 'u');
         $this->applyHasNoUnsyncedActionsFilter($query, 'u');
 
         TrackerTime::applySessionActivityWindow($query, $fromDay, $toDay, 'u');
 
         return $query;
-    }
-
-    private function applyHasAtLeastOneActionFilter(Builder $query, string $alias): void
-    {
-        $query->whereExists(function (Builder $exists) use ($alias): void {
-            $exists->selectRaw('1')
-                ->from('activity_ecom_user_actions as a')
-                ->whereColumn('a.session_id', "{$alias}.session_id");
-        });
     }
 
     /**
@@ -650,7 +653,11 @@ class TrackerDashboardSyncService
         $dailyVisitorRowId = $this->findOrCreateDailyVisitor($mainVisitorId, $visitorId, $visitDate);
 
         $trackingSessionId = $this->upsertTrackingSession($sessionRow, $sessionId, $dailyVisitorRowId, $allActions);
-        [$trafficId, $source, $medium] = $this->upsertSessionDetails($trackingSessionId, $sessionRow, $allActions, $deviceId, $browserId);
+        $this->upsertSessionDetails($trackingSessionId, $sessionRow, $allActions, $deviceId, $browserId);
+        $this->applyVisitorDayTrafficBucket($visitorId, $visitDate, $trackingSessionId);
+        if (filled($previousVisitDate) && (string) $previousVisitDate !== $visitDate && $visitorId !== '') {
+            $this->applyVisitorDayTrafficBucket($visitorId, (string) $previousVisitDate, $trackingSessionId);
+        }
 
         $this->syncActionsForSession($trackingSessionId, $visitDate, $applyActions, $visitorId, $rebuildFromFullHistory);
         $this->upsertRecoverableSale($trackingSessionId, $visitDate, $sessionRow, $allActions);
@@ -1464,7 +1471,7 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * utm_source / utm_medium hold the dashboard traffic bucket: last marketing touch in the session when recorded.
+     * utm_source / utm_medium store this session's own touches. The calendar-day bucket is applied after this, across the visitor's sessions that day.
      *
      * @param  array<string, mixed>  $sessionRow
      * @param  Collection<int, object>  $actions
@@ -1493,7 +1500,6 @@ class TrackerDashboardSyncService
         }
 
         $touches = SessionTrafficAttribution::normalizeTouchesForAttributionStorage($touches);
-        $touches = SessionTrafficAttribution::applySessionAttributionCarry($sessionRow, $touches);
 
         $touchSignature = static function (array $touch): string {
             $source = (string) ($touch['source'] ?? '');
@@ -1569,16 +1575,96 @@ class TrackerDashboardSyncService
         ];
     }
 
+    /**
+     * One source and one medium for this visitor on this calendar day, written onto every session that day.
+     * Direct and none do not count. The next calendar day is resolved on its own.
+     */
+    private function applyVisitorDayTrafficBucket(string $visitorId, string $visitDate, int $trackingSessionId): void
+    {
+        $visitorId = trim($visitorId);
+
+        $query = TrackerDatabase::table('tracking_session as ts')
+            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
+            ->where('dv.visit_date', $visitDate);
+
+        if ($visitorId === '') {
+            $query->where('ts.id', $trackingSessionId);
+        } else {
+            $mainId = TrackerDatabase::table('tracking_main_visitor')
+                ->where('visitor_id', Str::limit($visitorId, 36, ''))
+                ->value('id');
+
+            if ($mainId === null) {
+                $query->where('ts.id', $trackingSessionId);
+            } else {
+                $query->where('dv.tracking_main_visitor_id', (int) $mainId);
+            }
+        }
+
+        $sessions = $query->get(['ts.id as tracking_session_id', 'ts.session_id']);
+        if ($sessions->isEmpty()) {
+            return;
+        }
+
+        $sessionIds = $sessions->pluck('session_id')->map(fn ($id) => (string) $id)->all();
+        $activityRows = TrackerDatabase::table('activity_ecom_user')
+            ->whereIn('session_id', $sessionIds)
+            ->get(['session_id', 'landing_page', 'created_at'])
+            ->keyBy('session_id');
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['session_id', 'id', 'page_url', 'referer', 'created_at'])
+            ->groupBy('session_id');
+
+        $touches = [];
+        foreach ($sessions as $session) {
+            $activity = $activityRows->get($session->session_id);
+            if ($activity === null) {
+                continue;
+            }
+
+            $sessionActions = $actions->get($session->session_id, collect());
+            $sessionTouches = SessionTrafficAttribution::normalizeTouchesForAttributionStorage(
+                SessionTrafficAttribution::collectSessionTrafficTouches((array) $activity, $sessionActions),
+            );
+            if ($sessionTouches === []) {
+                $referer = (string) ($sessionActions->first(fn (object $action): bool => filled($action->referer ?? null))?->referer ?? '');
+                $sessionTouches = [SessionTrafficAttribution::resolvedTrafficBucket($activity, [''], $referer)];
+            }
+
+            foreach ($sessionTouches as $touch) {
+                $touches[] = $touch;
+            }
+        }
+
+        $bucket = SessionTrafficAttribution::resolveVisitorDayBucket($touches);
+        [$source, $medium] = $this->trafficSourceMedium($bucket['source'], $bucket['medium']);
+        $trafficId = $this->findOrCreateTrafficSource($source, $medium);
+        $trackingIds = $sessions->pluck('tracking_session_id')->map(fn ($id) => (int) $id)->all();
+
+        TrackerDatabase::table('tracking_session_details')
+            ->whereIn('tracking_session_id', $trackingIds)
+            ->where(function (Builder $details) use ($source, $medium, $trafficId): void {
+                $details->where('utm_source', '!=', $source)
+                    ->orWhere('utm_medium', '!=', $medium)
+                    ->orWhere('tracking_traffic_source_id', '!=', $trafficId)
+                    ->orWhereNull('tracking_traffic_source_id');
+            })
+            ->update([
+                'tracking_traffic_source_id' => $trafficId,
+                'utm_source' => $source,
+                'utm_medium' => $medium,
+                'updated_at' => now(),
+            ]);
+    }
+
     // ===== 4. Lookup tables =====
 
     private function findOrCreateDevice(string $name): ?int
     {
-        $name = trim($name);
-        if ($name === '') {
-            return null;
-        }
-
-        $name = Str::limit($name, 50, '');
+        $name = $this->deviceBrowserName($name);
 
         return $this->insertOrFetch('tracking_device', [
             'name' => $name,
@@ -1589,18 +1675,24 @@ class TrackerDashboardSyncService
 
     private function findOrCreateBrowser(string $name): ?int
     {
-        $name = trim($name);
-        if ($name === '') {
-            return null;
-        }
-
-        $name = Str::limit($name, 50, '');
+        $name = $this->deviceBrowserName($name);
 
         return $this->insertOrFetch('tracking_browser', [
             'name' => $name,
             'created_at' => now(),
             'updated_at' => now(),
         ], ['name' => $name]);
+    }
+
+    /** Blank and any spelling of unknown are one Unknown row. */
+    private function deviceBrowserName(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '' || strcasecmp($name, 'unknown') === 0) {
+            $name = 'Unknown';
+        }
+
+        return Str::limit($name, 50, '');
     }
 
     /**
@@ -1623,7 +1715,7 @@ class TrackerDashboardSyncService
         [$source, $medium] = $this->trafficSourceMedium($source, $medium);
 
         $existing = TrackerDatabase::table('tracking_traffic_source')->where('name', $source)->first();
-        if ($existing !== null && (string) ($existing->medium ?? '') !== $medium) {
+        if ($existing !== null && (string) ($existing->medium ?? '') !== $medium && $medium !== SessionTrafficAttribution::MULTI_MEDIUM) {
             TrackerDatabase::table('tracking_traffic_source')->where('id', $existing->id)->update([
                 'medium' => $medium,
                 'updated_at' => now(),
@@ -2080,8 +2172,8 @@ class TrackerDashboardSyncService
     private function audienceKeys(?int $deviceId, ?int $browserId, string $source, string $medium): array
     {
         return [
-            ['type' => TrackingDailyAudience::TYPE_DEVICE, 'dimension_id' => $deviceId ?? 0, 'source' => '', 'medium' => ''],
-            ['type' => TrackingDailyAudience::TYPE_BROWSER, 'dimension_id' => $browserId ?? 0, 'source' => '', 'medium' => ''],
+            ['type' => TrackingDailyAudience::TYPE_DEVICE, 'dimension_id' => $deviceId ?: (int) $this->findOrCreateDevice('Unknown'), 'source' => '', 'medium' => ''],
+            ['type' => TrackingDailyAudience::TYPE_BROWSER, 'dimension_id' => $browserId ?: (int) $this->findOrCreateBrowser('Unknown'), 'source' => '', 'medium' => ''],
             ['type' => TrackingDailyAudience::TYPE_TRAFFIC_SOURCE, 'dimension_id' => $this->trafficDimensionId($source, $medium), 'source' => $source, 'medium' => $medium],
         ];
     }
@@ -2894,6 +2986,7 @@ class TrackerDashboardSyncService
 
         $this->purgeEmptyDailyCategoryRows($date);
         $this->purgeEmptyTrafficAudienceRows($date);
+        $this->purgeEmptyDeviceBrowserAudienceRows($date);
 
         $this->backfillTrackingSessionStartedAt($date);
 
@@ -3891,6 +3984,26 @@ class TrackerDashboardSyncService
             ->where('proceed_checkouts', 0)
             ->where('sold_qty', 0)
             ->where('orders', 0)
+            ->where('sale_amount', 0)
+            ->delete();
+    }
+
+    /** A blank device or browser is Unknown. Drop the zero row so it does not show as a second Unknown. */
+    private function purgeEmptyDeviceBrowserAudienceRows(string $date): void
+    {
+        TrackerDatabase::table('tracking_daily_audiences')
+            ->where('metric_date', $date)
+            ->whereIn('type', [
+                TrackingDailyAudience::TYPE_DEVICE,
+                TrackingDailyAudience::TYPE_BROWSER,
+            ])
+            ->where('sessions', 0)
+            ->where('views', 0)
+            ->where('add_to_carts', 0)
+            ->where('begin_checkouts', 0)
+            ->where('proceed_checkouts', 0)
+            ->where('payments', 0)
+            ->where('sold_qty', 0)
             ->where('sale_amount', 0)
             ->delete();
     }

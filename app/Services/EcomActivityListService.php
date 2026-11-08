@@ -96,6 +96,9 @@ class EcomActivityListService
      */
     public function filterOptions(?int $departmentId = null): array
     {
+        SessionTrafficAttribution::ensureMultiSourceOption();
+        SessionTrafficAttribution::ensureUnknownSourceOption();
+
         $lookups = TrackerDatabase::table('tracking_device')->selectRaw("'device' as type, id, name, NULL as medium, NULL as parent_id")
             ->unionAll(TrackerDatabase::table('tracking_browser')->selectRaw("'browser', id, name, NULL, NULL"))
             ->unionAll(TrackerDatabase::table('tracking_traffic_source')->selectRaw("'source', id, name, medium, NULL"))
@@ -1922,7 +1925,6 @@ class EcomActivityListService
                 ->keyBy(fn (object $row) => (int) $row->id);
 
             $this->attachPaymentSuccessActions($fetched);
-            $sourcesBySession = $this->exportSourcesBySession($fetched);
 
             foreach ($chunk as $id) {
                 $row = $fetched->get($id);
@@ -1930,13 +1932,7 @@ class EcomActivityListService
                     continue;
                 }
 
-                $traffic = $sourcesBySession[(int) $row->id] ?? null;
-                $exportLines = $this->commerceExportLines(
-                    $row,
-                    $serial,
-                    $traffic['source'] ?? null,
-                    $traffic['medium'] ?? null,
-                );
+                $exportLines = $this->commerceExportLines($row, $serial);
                 foreach ($exportLines as $line) {
                     $lines[] = $line;
                 }
@@ -2048,123 +2044,6 @@ class EcomActivityListService
         return $lines;
     }
 
-    /**
-     * Sources and mediums for the visitor behind each session, earliest first.
-     *
-     * @param  Collection<int, object>  $sessions
-     * @return array<int, array{source: string, medium: ?string, label: ?string}>
-     */
-    private function exportSourcesBySession(Collection $sessions): array
-    {
-        $dailyIds = [];
-        $sessionDaily = [];
-
-        foreach ($sessions as $session) {
-            $dailyId = (int) ($session->tracking_daily_visitor_id ?? 0);
-            $sessionDaily[(int) $session->id] = $dailyId;
-            if ($dailyId > 0) {
-                $dailyIds[$dailyId] = $dailyId;
-            }
-        }
-
-        if ($dailyIds === []) {
-            return [];
-        }
-
-        $mainByDaily = TrackerDatabase::table('tracking_daily_visitor')
-            ->whereIn('id', array_values($dailyIds))
-            ->pluck('tracking_main_visitor_id', 'id');
-
-        $mainIds = [];
-        foreach ($mainByDaily as $mainId) {
-            $mainId = (int) $mainId;
-            if ($mainId > 0) {
-                $mainIds[$mainId] = $mainId;
-            }
-        }
-
-        if ($mainIds === []) {
-            return [];
-        }
-
-        $touches = TrackerDatabase::table('tracking_session as ts')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->join('tracking_session_details as tsd', 'tsd.tracking_session_id', '=', 'ts.id')
-            ->leftJoin('tracking_traffic_source as tts', 'tts.id', '=', 'tsd.tracking_traffic_source_id')
-            ->whereIn('dv.tracking_main_visitor_id', array_values($mainIds))
-            ->orderBy('ts.created_at')
-            ->orderBy('ts.id')
-            ->orderBy('tsd.touch_sequence')
-            ->orderBy('tsd.id')
-            ->get([
-                'dv.tracking_main_visitor_id',
-                'tsd.utm_source',
-                'tsd.utm_medium',
-                'tts.name as traffic_source_name',
-                'tts.medium as traffic_source_medium',
-            ]);
-
-        $lists = [];
-        $seen = [];
-        $mediumLists = [];
-        $seenMediums = [];
-        $pairLists = [];
-        $seenPairs = [];
-
-        foreach ($touches as $touch) {
-            $mainId = (int) $touch->tracking_main_visitor_id;
-            $label = filled($touch->utm_source ?? null)
-                ? trim((string) $touch->utm_source)
-                : (filled($touch->traffic_source_name ?? null) ? trim((string) $touch->traffic_source_name) : 'Direct');
-            if ($label === '') {
-                $label = 'Direct';
-            }
-
-            $key = strtolower($label);
-            if (! isset($seen[$mainId][$key])) {
-                $seen[$mainId][$key] = true;
-                $lists[$mainId][] = $label;
-            }
-
-            $mediumLabel = filled($touch->utm_medium ?? null)
-                ? trim((string) $touch->utm_medium)
-                : (filled($touch->traffic_source_medium ?? null) ? trim((string) $touch->traffic_source_medium) : '');
-
-            $pairKey = $key.'|'.strtolower($mediumLabel === '' ? 'none' : $mediumLabel);
-            if (! isset($seenPairs[$mainId][$pairKey])) {
-                $seenPairs[$mainId][$pairKey] = true;
-                $pairLists[$mainId][] = $this->formatSourceMediumPair($label, $mediumLabel);
-            }
-
-            if ($mediumLabel === '') {
-                continue;
-            }
-
-            $mediumKey = strtolower($mediumLabel);
-            if (isset($seenMediums[$mainId][$mediumKey])) {
-                continue;
-            }
-
-            $seenMediums[$mainId][$mediumKey] = true;
-            $mediumLists[$mainId][] = $mediumLabel;
-        }
-
-        $bySession = [];
-
-        foreach ($sessionDaily as $sessionId => $dailyId) {
-            $mainId = (int) ($mainByDaily[$dailyId] ?? 0);
-            if ($mainId > 0 && isset($lists[$mainId])) {
-                $bySession[$sessionId] = [
-                    'source' => implode(', ', $lists[$mainId]),
-                    'medium' => isset($mediumLists[$mainId]) ? implode(', ', $mediumLists[$mainId]) : null,
-                    'label' => isset($pairLists[$mainId]) ? implode(', ', $pairLists[$mainId]) : null,
-                ];
-            }
-        }
-
-        return $bySession;
-    }
-
     private function sourceMediumFromSessionRow(object $row): string
     {
         $source = filled($row->session_touch_utm_source ?? null)
@@ -2187,6 +2066,143 @@ class EcomActivityListService
         $mediumLabel = $medium === '' || strtolower($medium) === 'none' ? '—' : $medium;
 
         return $sourceLabel.' / '.$mediumLabel;
+    }
+
+    /**
+     * Multi source or multi medium days list each real pair, earliest first, comma separated.
+     *
+     * @param  Collection<int, object>  $rows
+     */
+    private function attachMultiDaySourceLabels(Collection $rows): void
+    {
+        $multiRows = $rows->filter(function (object $row): bool {
+            $source = strtolower(trim((string) ($row->session_touch_utm_source ?? '')));
+            $medium = strtolower(trim((string) ($row->session_touch_utm_medium ?? '')));
+
+            return $source === SessionTrafficAttribution::MULTI_SOURCE
+                || $medium === SessionTrafficAttribution::MULTI_MEDIUM;
+        });
+
+        if ($multiRows->isEmpty()) {
+            return;
+        }
+
+        $dailyIds = $multiRows
+            ->map(fn (object $row): int => (int) ($row->tracking_daily_visitor_id ?? 0))
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $labels = $this->daySourceMediumLabels($dailyIds);
+
+        foreach ($multiRows as $row) {
+            $label = $labels[(int) ($row->tracking_daily_visitor_id ?? 0)] ?? null;
+            if (filled($label)) {
+                $row->source_medium = $label;
+            }
+        }
+    }
+
+    /**
+     * @param  list<int>  $dailyIds
+     * @return array<int, string>
+     */
+    private function daySourceMediumLabels(array $dailyIds): array
+    {
+        if ($dailyIds === []) {
+            return [];
+        }
+
+        $sessions = TrackerDatabase::table('tracking_session')
+            ->whereIn('tracking_daily_visitor_id', $dailyIds)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['session_id', 'tracking_daily_visitor_id']);
+
+        $sessionIds = $sessions->pluck('session_id')->map(fn ($id) => (string) $id)->all();
+        if ($sessionIds === []) {
+            return [];
+        }
+
+        $activityRows = TrackerDatabase::table('activity_ecom_user')
+            ->whereIn('session_id', $sessionIds)
+            ->get(['session_id', 'landing_page', 'created_at'])
+            ->keyBy('session_id');
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['session_id', 'id', 'page_url', 'referer', 'created_at'])
+            ->groupBy('session_id');
+
+        $labels = [];
+
+        foreach ($sessions->groupBy('tracking_daily_visitor_id') as $dailyId => $daySessions) {
+            $touches = [];
+
+            foreach ($daySessions as $session) {
+                $activity = $activityRows->get($session->session_id);
+                if ($activity === null) {
+                    continue;
+                }
+
+                $sessionActions = $actions->get($session->session_id, collect());
+                $sessionTouches = SessionTrafficAttribution::normalizeTouchesForAttributionStorage(
+                    SessionTrafficAttribution::collectSessionTrafficTouches((array) $activity, $sessionActions),
+                );
+                if ($sessionTouches === []) {
+                    $referer = (string) ($sessionActions->first(fn (object $action): bool => filled($action->referer ?? null))?->referer ?? '');
+                    $sessionTouches = [SessionTrafficAttribution::resolvedTrafficBucket($activity, [''], $referer)];
+                }
+
+                foreach ($sessionTouches as $touch) {
+                    $touches[] = $touch;
+                }
+            }
+
+            $label = $this->commaSourceMediumLabel($touches);
+            if ($label !== null) {
+                $labels[(int) $dailyId] = $label;
+            }
+        }
+
+        return $labels;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $touches
+     */
+    private function commaSourceMediumLabel(array $touches): ?string
+    {
+        $pairs = [];
+        $seen = [];
+
+        foreach ($touches as $touch) {
+            if (! is_array($touch)) {
+                continue;
+            }
+
+            $source = SessionTrafficAttribution::normalizeSource(trim((string) ($touch['source'] ?? ''))) ?? '';
+            if ($source === '' || $source === '(direct)' || $source === SessionTrafficAttribution::MULTI_SOURCE) {
+                continue;
+            }
+
+            $medium = strtolower(trim((string) ($touch['medium'] ?? '')));
+            if ($medium === SessionTrafficAttribution::MULTI_MEDIUM) {
+                continue;
+            }
+
+            $key = $source.'|'.$medium;
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $pairs[] = $this->formatSourceMediumPair($source, $medium === 'none' ? '' : $medium);
+        }
+
+        return $pairs === [] ? null : implode(', ', $pairs);
     }
 
     /**
@@ -2265,13 +2281,11 @@ class EcomActivityListService
             $this->attachProductCommerceCells($rows, $productCode, $range);
         }
 
-        $sourceMediumBySession = [];
         if ($rows->isNotEmpty()) {
             $this->attachPaymentSuccessActions($rows);
-            $sourceMediumBySession = $this->exportSourcesBySession($rows);
         }
 
-        $rows = $rows->map(function (object $row) use ($focusKeys, $isProductDrill, $isSessionList, $productCode, $range, $sourceMediumBySession) {
+        $rows = $rows->map(function (object $row) use ($focusKeys, $isProductDrill, $isSessionList, $productCode, $range) {
             if ($isProductDrill) {
                 $commerce = $this->commerceCellForProductDrill($row, $productCode, $range);
                 $commerce['presentation'] = $this->productDrillCommercePresentation($row, $commerce);
@@ -2285,11 +2299,14 @@ class EcomActivityListService
             $row->commerce = $commerce;
             $row->trust = $this->trustCell($row);
             $row->focus = $this->focusMetrics($row, $focusKeys);
-            $row->source_medium = $sourceMediumBySession[(int) $row->id]['label']
-                ?? $this->sourceMediumFromSessionRow($row);
+            $row->source_medium = $this->sourceMediumFromSessionRow($row);
 
             return $row;
         });
+
+        if ($rows->isNotEmpty()) {
+            $this->attachMultiDaySourceLabels($rows);
+        }
 
         return new LengthAwarePaginator($rows, $total, $perPage, $page, [
             'path' => Paginator::resolveCurrentPath(),
