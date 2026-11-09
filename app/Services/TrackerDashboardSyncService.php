@@ -417,19 +417,7 @@ class TrackerDashboardSyncService
                 ->all();
         }
 
-        $retryAfter = now()->subMinutes(self::FAILED_RETRY_COOLDOWN_MINUTES);
-        $idle = TrackerDatabase::table('activity_ecom_user as u')
-            ->where('u.sync_try', '<', self::MAX_SYNC_TRY);
-        $this->applySyncableSessionFilter($idle, 'u');
-        $this->applyPendingOrRetryFilter($idle, $retryAfter, 'u');
-        $this->applyHasNoUnsyncedActionsFilter($idle, 'u');
-
-        $fromIdle = $idle->orderBy('u.id')
-            ->pluck('u.id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
-
-        return array_values(array_unique([...$fromActions, ...$fromIdle]));
+        return $fromActions;
     }
 
     /**
@@ -519,10 +507,8 @@ class TrackerDashboardSyncService
     }
 
     /**
-     * --force: in the date window, find sessions whose actions are all dashboard-synced, mark them pending again, and replay.
+     * --force: every session in the date window is marked pending again and replayed, pending or already done.
      * Window = session started or was last active in range ({@see TrackerTime::applySessionActivityWindow()}).
-     * Includes stuck rows (user pending but every action still SYNC_DONE after an old --force).
-     * {@see planChunks()} only queues sessions with pending/failed actions.
      */
     public function requeueSyncedSessionsForDashboard(Carbon $from, ?Carbon $to = null): int
     {
@@ -559,8 +545,6 @@ class TrackerDashboardSyncService
         $toDay = ($to ?? $from)->copy()->endOfDay();
 
         $query = TrackerDatabase::table('activity_ecom_user as u');
-
-        $this->applyHasNoUnsyncedActionsFilter($query, 'u');
 
         TrackerTime::applySessionActivityWindow($query, $fromDay, $toDay, 'u');
 
@@ -1373,7 +1357,6 @@ class TrackerDashboardSyncService
             ->where('session_id', $sessionId)
             ->update([
                 'actions_count' => $count,
-                'updated_at' => now(),
             ]);
     }
 

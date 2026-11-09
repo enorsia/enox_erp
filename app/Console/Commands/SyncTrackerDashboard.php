@@ -12,7 +12,7 @@ use Illuminate\Console\Command;
 class SyncTrackerDashboard extends Command
 {
     protected $signature = 'tracker:sync-dashboard
-                            {--force : Re-sync sessions in the date range that are already fully synced to the dashboard}
+                            {--force : Re-sync every session in the date range, pending or already done}
                             {--from= : Required with --force: range start (visitor timezone calendar day)}
                             {--to= : Optional with --force: range end day (defaults to --from)}';
 
@@ -38,7 +38,7 @@ class SyncTrackerDashboard extends Command
             $endDay = $to ?? $from;
 
             $this->info(sprintf(
-                'Force requeue: %d already-synced session(s) (%s to %s; started or last active in range).',
+                'Force requeue: %d session(s) (%s to %s; started or last active in range).',
                 $requeued,
                 $from->toDateString(),
                 $endDay->toDateString(),
