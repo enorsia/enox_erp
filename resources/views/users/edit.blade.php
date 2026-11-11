@@ -117,7 +117,7 @@
                                         <div class="toggle-thumb"></div>
                                     </div>
                                     <span class="text-sm text-slate-600 dark:text-slate-300 font-medium" onclick="toggleSwitch('statusToggle')">Active status</span>
-                                    <input type="checkbox" class="hidden" name="status" id="statusCheckbox" {{ $user->status ? 'checked' : '' }}>
+                                    <input type="hidden" name="status" id="statusValue" value="{{ $user->status ? '1' : '0' }}">
                                 </label>
                             </div>
 
@@ -128,7 +128,7 @@
                                         <div class="toggle-thumb"></div>
                                     </div>
                                     <span class="text-sm text-slate-600 dark:text-slate-300 font-medium" onclick="toggleSwitch('twoFactorToggle')">Require Google Authenticator (2FA)</span>
-                                    <input type="checkbox" class="hidden" name="two_factor_enabled" id="twoFactorCheckbox" value="1" {{ $user->two_factor_enabled ? 'checked' : '' }}>
+                                    <input type="hidden" name="two_factor_enabled" id="twoFactorValue" value="{{ $user->two_factor_enabled ? '1' : '0' }}">
                                 </label>
                                 <p class="f-hint mt-2">When enabled, this user must enter a 6-digit code at login unless this browser is trusted.</p>
 

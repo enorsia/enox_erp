@@ -1,11 +1,17 @@
 import $ from '$';
 
-/** Match toggle-track "on" class to hidden checkboxes (Toggle → Checkbox id). */
+/** Sync toggle UI to hidden Value/Checkbox fields before submit. */
 function syncUserFormToggles() {
     document.querySelectorAll('.toggle-track[id$="Toggle"]').forEach((track) => {
+        const isOn = track.classList.contains('on');
+        const value = isOn ? '1' : '0';
+        const valueInput = document.getElementById(track.id.replace('Toggle', 'Value'));
+        if (valueInput) {
+            valueInput.value = value;
+        }
         const checkbox = document.getElementById(track.id.replace('Toggle', 'Checkbox'));
         if (checkbox) {
-            checkbox.checked = track.classList.contains('on');
+            checkbox.checked = isOn;
         }
     });
 }
