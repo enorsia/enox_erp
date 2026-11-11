@@ -1,5 +1,15 @@
 import $ from '$';
 
+/** Match toggle-track "on" class to hidden checkboxes (Toggle → Checkbox id). */
+function syncUserFormToggles() {
+    document.querySelectorAll('.toggle-track[id$="Toggle"]').forEach((track) => {
+        const checkbox = document.getElementById(track.id.replace('Toggle', 'Checkbox'));
+        if (checkbox) {
+            checkbox.checked = track.classList.contains('on');
+        }
+    });
+}
+
 $(document).ready(function () {
 
     /* ══════════════════════════════════
@@ -36,11 +46,13 @@ $(document).ready(function () {
                 },
             },
             submitHandler: function (form) {
+                syncUserFormToggles();
                 const $btn = $('.submit-btn');
                 $btn.prop('disabled', true).html(window.loader);
                 form.submit();
             },
         });
+        $('#validateForm').on('submit', syncUserFormToggles);
     }
 
     /* ══════════════════════════════════
@@ -79,11 +91,13 @@ $(document).ready(function () {
                 },
             },
             submitHandler: function (form) {
+                syncUserFormToggles();
                 const $btn = $('.submit-btn');
                 $btn.prop('disabled', true).html(window.loader);
                 form.submit();
             },
         });
+        $('#EditValidateForm').on('submit', syncUserFormToggles);
     }
 });
 
