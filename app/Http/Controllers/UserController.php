@@ -75,19 +75,29 @@ class UserController extends Controller
         try {
             $enableTwoFactor = $request->boolean('two_factor_enabled');
 
+            $this->logUserTwoFactor('create_started', null, $request, [
+                'email' => $request->input('email'),
+                'enable_requested' => $enableTwoFactor,
+            ]);
+
             $user  = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'designation' => $request->designation,
                 'avatar' => $filename,
                 'password' => Hash::make($request->password),
-                'status' => $request->filled('status'),
+                'status' => $request->boolean('status'),
                 'two_factor_enabled' => $enableTwoFactor,
             ]);
 
             if ($enableTwoFactor) {
                 $this->twoFactor->assignSecret($user, $this->twoFactor->generateSecret());
             }
+
+            $this->logUserTwoFactor('create_completed', $user->fresh(), $request, [
+                'secret_assigned' => $enableTwoFactor,
+                'has_two_factor_secret' => $user->two_factor_secret !== null,
+            ]);
 
             $user->assignRole($request->role);
 
@@ -105,6 +115,11 @@ class UserController extends Controller
 
             return redirect()->route('admin.users.index');
         } catch (\Exception $e) {
+            $this->logUserTwoFactor('create_failed', null, $request, [
+                'email' => $request->input('email'),
+                'error' => $e->getMessage(),
+                'exception_class' => $e::class,
+            ]);
             Log::error('User created failed: ' . $e->getMessage());
             notify()->error('Failed to created user', 'Error');
             return redirect()->route('admin.users.index');
@@ -170,7 +185,7 @@ class UserController extends Controller
                 'email' => $request->email,
                 'designation' => $request->designation,
                 'password' => $request->filled('password') ? Hash::make($request->password) : $user->password,
-                'status' => $request->filled('status'),
+                'status' => $request->boolean('status'),
                 'two_factor_enabled' => $enableTwoFactor,
             ]);
 
@@ -196,8 +211,10 @@ class UserController extends Controller
 
             $this->logUserTwoFactor('update_2fa_processed', $user->fresh(), $request, [
                 'enable_requested' => $enableTwoFactor,
+                'db_two_factor_enabled_before' => $wasTwoFactorEnabled,
                 'secret_assigned' => $secretAssigned,
                 'two_factor_cleared' => $twoFactorCleared,
+                'status_parsed' => $request->boolean('status'),
             ]);
             $user->syncRoles([$request->role]);
 
@@ -362,29 +379,46 @@ class UserController extends Controller
     /**
      * Structured diagnostic logging for admin user 2FA (grep server logs for "[user.2fa]").
      */
-    protected function logUserTwoFactor(string $event, User $user, ?Request $request = null, array $extra = []): void
+    protected function logUserTwoFactor(string $event, ?User $user, ?Request $request = null, array $extra = []): void
     {
-        $trustedCount = $user->trusted_devices_count ?? null;
-        if ($trustedCount === null && $user->relationLoaded('trustedDevices')) {
-            $trustedCount = $user->trustedDevices->count();
+        $context = [
+            'event' => $event,
+            'admin_user_id' => Auth::id(),
+        ];
+
+        if ($user !== null) {
+            $trustedCount = $user->trusted_devices_count ?? null;
+            if ($trustedCount === null && $user->relationLoaded('trustedDevices')) {
+                $trustedCount = $user->trustedDevices->count();
+            }
+
+            $context = array_merge($context, [
+                'target_user_id' => $user->id,
+                'target_email' => $user->email,
+                'two_factor_enabled' => (bool) $user->two_factor_enabled,
+                'has_two_factor_secret' => $user->two_factor_secret !== null,
+                'two_factor_confirmed_at' => $user->two_factor_confirmed_at?->toIso8601String(),
+                'two_factor_enrolled' => $this->twoFactor->isEnrolled($user),
+                'trusted_devices_count' => $trustedCount,
+            ]);
         }
 
-        $context = array_merge([
-            'event' => $event,
-            'target_user_id' => $user->id,
-            'target_email' => $user->email,
-            'two_factor_enabled' => (bool) $user->two_factor_enabled,
-            'has_two_factor_secret' => $user->two_factor_secret !== null,
-            'two_factor_confirmed_at' => $user->two_factor_confirmed_at?->toIso8601String(),
-            'two_factor_enrolled' => $this->twoFactor->isEnrolled($user),
-            'trusted_devices_count' => $trustedCount,
-            'admin_user_id' => Auth::id(),
-        ], $extra);
+        $context = array_merge($context, $extra);
 
         if ($request !== null) {
+            $rawTwoFactor = $request->input('two_factor_enabled');
+            $context['request_method'] = $request->method();
+            $context['request_path'] = $request->path();
             $context['request_has_two_factor_field'] = $request->has('two_factor_enabled');
-            $context['request_two_factor_value'] = $request->input('two_factor_enabled');
+            $context['request_two_factor_value'] = $rawTwoFactor;
+            $context['request_two_factor_raw_type'] = is_array($rawTwoFactor) ? 'array' : get_debug_type($rawTwoFactor);
             $context['request_two_factor_parsed'] = $request->boolean('two_factor_enabled');
+            $context['request_has_status_field'] = $request->has('status');
+            $context['request_status_value'] = $request->input('status');
+            $context['request_status_parsed'] = $request->boolean('status');
+            $context['request_form_keys'] = array_keys($request->except([
+                'password', 'password_confirmation', '_token', '_method', 'avatar',
+            ]));
         }
 
         Log::info('[user.2fa] '.$event, $context);

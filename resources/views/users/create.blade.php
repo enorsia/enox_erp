@@ -149,8 +149,7 @@
                                     </div>
                                     <span class="text-sm text-slate-600 dark:text-slate-300 font-medium" onclick="toggleSwitch('statusToggle')">Active status
                                     </span>
-                                    <input type="checkbox" name="status" id="statusCheckbox" class="hidden"
-                                        {{ old('status') ? 'checked' : '' }}>
+                                    <input type="hidden" name="status" id="statusValue" value="{{ old('status') ? '1' : '0' }}">
                                 </label>
                                 <p class="f-hint mt-1">Enable to activate this user immediately.</p>
                             </div>
@@ -163,8 +162,8 @@
                                     </div>
                                     <span class="text-sm text-slate-600 dark:text-slate-300 font-medium"
                                         onclick="toggleSwitch('twoFactorToggle')">Require Google Authenticator (2FA)</span>
-                                    <input type="checkbox" class="hidden" name="two_factor_enabled" id="twoFactorCheckbox"
-                                        value="1" {{ old('two_factor_enabled') ? 'checked' : '' }}>
+                                    <input type="hidden" name="two_factor_enabled" id="twoFactorValue"
+                                        value="{{ old('two_factor_enabled') ? '1' : '0' }}">
                                 </label>
                                 <p class="f-hint mt-2">When enabled, this user must verify with a 6-digit code at login unless the browser is trusted. They will scan a QR on first login (or you can show it after saving on Edit user).</p>
                             </div>

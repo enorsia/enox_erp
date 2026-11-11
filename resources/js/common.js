@@ -104,11 +104,17 @@ window.toggleSwitch = function (id, event) {
     const track = document.getElementById(id);
     if (!track) return;
     track.classList.toggle('on');
-    // Sync the hidden checkbox (naming convention: replace 'Toggle' with 'Checkbox')
-    const checkboxId = id.replace('Toggle', 'Checkbox');
-    const checkbox = document.getElementById(checkboxId);
+    const isOn = track.classList.contains('on');
+    const value = isOn ? '1' : '0';
+    // Checkbox (legacy): Toggle → Checkbox
+    const checkbox = document.getElementById(id.replace('Toggle', 'Checkbox'));
     if (checkbox) {
-        checkbox.checked = track.classList.contains('on');
+        checkbox.checked = isOn;
+    }
+    // Hidden input (users edit/create): Toggle → Value
+    const valueInput = document.getElementById(id.replace('Toggle', 'Value'));
+    if (valueInput) {
+        valueInput.value = value;
     }
 };
 
