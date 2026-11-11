@@ -106,6 +106,9 @@
                                 @else
                                     <span class="badge-custom badge-red">Inactive</span>
                                 @endif
+                                @if ($user->two_factor_enabled)
+                                    <span class="badge-custom badge-blue">2FA</span>
+                                @endif
                             </div>
                             <p class="text-[12px] text-slate-400 dark:text-slate-500">{{ $user->email ?? '' }}</p>
                             <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">

@@ -1,6 +1,6 @@
 <!-- ═══════ SIDEBAR ═══════ -->
 <aside id="sidebar"
-    class="w-[230px] min-w-[230px] bg-[#0c1521] flex flex-col overflow-y-auto sidebar-scroll z-50 lg:relative lg:translate-x-0 transition-all duration-300">
+    class="w-[230px] min-w-[230px] flex flex-col overflow-y-auto sidebar-scroll z-50 lg:relative lg:translate-x-0 transition-all duration-300">
 
     <!-- Logo + desktop collapse toggle -->
     <div
@@ -29,8 +29,8 @@
 
         {{-- Access --}}
         @canany(avaiablePermissionsMap()['prefix']['authentication_'] ?? [])
-            <div class="pt-4 pb-1">
-                <p class="menu-title text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Access</p>
+            <div class="sidebar-section" data-section="access">
+                <p class="menu-title">Access</p>
 
                 @can('authentication.users.index')
                     <a href="{{ route('admin.users.index') }}"
@@ -71,8 +71,8 @@
 
         {{-- General --}}
         @canany(avaiablePermissionsMap()['prefix']['general_'] ?? [])
-            <div class="pt-4">
-                <p class="menu-title text-[9px] tracking-[1.8px] uppercase text-white/30 font-semibold px-[18px] pb-2">Main</p>
+            <div class="sidebar-section" data-section="main">
+                <p class="menu-title">Main</p>
 
                 @can('general.dashboard.index')
                     <a href="{{ route('admin.dashboard') }}"
@@ -119,42 +119,42 @@
                             <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
                                 @can('general.chart.index')
                                     <a href="{{ route('admin.selling_chart.index') }}"
-                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/manage*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/selling-chart/manage*') ? 'is-active' : '' }} transition-colors">
                                         Chart
                                     </a>
                                 @endcan
 
                                 @can('general.forecasting.index')
                                     <a href="{{ route('admin.selling_chart.forecasting') }}"
-                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/forecasting*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/selling-chart/forecasting*') ? 'is-active' : '' }} transition-colors">
                                         Forecasting
                                     </a>
                                 @endcan
 
                                 @can('general.discounts.index')
                                     <a href="{{ route('admin.selling_chart.discounts') }}"
-                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/discounts*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/selling-chart/discounts*') ? 'is-active' : '' }} transition-colors">
                                         Discounts
                                     </a>
                                 @endcan
 
                                 @can('general.fabrication.index')
                                     <a href="{{ route('admin.selling_chart.fabrication.index') }}"
-                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/fabrication*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/selling-chart/fabrication*') ? 'is-active' : '' }} transition-colors">
                                         Fabrication
                                     </a>
                                 @endcan
 
                                 @can('general.expense.index')
                                     <a href="{{ route('admin.selling_chart.expense.index') }}"
-                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/selling-chart/expense*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/selling-chart/expense*') ? 'is-active' : '' }} transition-colors">
                                         Expense
                                     </a>
                                 @endcan
 
                                 @can('settings.platforms.index')
                                     <a href="{{ route('admin.platforms.index') }}"
-                                        class="block py-1.5 px-3 text-[12px] rounded-md {{ Request::is('admin/platforms*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }} transition-colors">
+                                        class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/platforms*') ? 'is-active' : '' }} transition-colors">
                                         Platforms
                                     </a>
                                 @endcan
@@ -171,7 +171,8 @@
                 avaiablePermissionsMap()['prefix']['ecommerce_'] ?? [],
                 config('tracker.enabled') ? (avaiablePermissionsMap()['prefix']['ecom_tracker_'] ?? []) : []
             ))
-            <div class="pb-1">
+            <div class="sidebar-section" data-section="insights">
+                <p class="menu-title">Insights</p>
                 <div x-data="{ open: {{ Request::is('admin/sales-spends/*') ? 'true' : 'false' }} }">
                     <button @click="open = !open"
                         class="w-full nav-link-item flex items-center gap-2.5 px-[18px] py-2 text-[13px] {{ Request::is('admin/sales-spends/*') ? 'text-accent-200 bg-accent-400/20' : 'text-white/55 hover:bg-white/5 hover:text-white/90' }}">
@@ -193,49 +194,49 @@
                         <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
                             @can('general.dashboard.index')
                                 <a href="{{ route('admin.sales.analytics') }}"
-                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/dashboard*') && !Request::is('admin/sales-spends/analytics-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/sales-spends/dashboard*') && !Request::is('admin/sales-spends/analytics-report*') ? 'is-active' : '' }}">
                                     Dashboard
                                 </a>
                             @endcan
 
                             @can('general.daily_sale.index')
                                 <a href="{{ route('admin.daily-sales.index') }}"
-                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/daily-sales*', 'admin/sales-spends/sales-report*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/sales-spends/daily-sales*', 'admin/sales-spends/sales-report*') ? 'is-active' : '' }}">
                                     Daily Sales
                                 </a>
                             @endcan
 
                             @can('general.daily_return.index')
                                 <a href="{{ route('admin.daily-returns.index') }}"
-                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/daily-returns*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/sales-spends/daily-returns*') ? 'is-active' : '' }}">
                                     Daily Return
                                 </a>
                             @endcan
 
                             @can('general.monthly_budget.index')
                                 <a href="{{ route('admin.monthly-budgets.index') }}"
-                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/monthly-budgets*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/sales-spends/monthly-budgets*') ? 'is-active' : '' }}">
                                     Monthly Budget
                                 </a>
                             @endcan
 
                             @can('general.sale_tracking.index')
                                 <a href="{{ route('admin.ads-performance.index') }}"
-                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/ads-performance*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/sales-spends/ads-performance*') ? 'is-active' : '' }}">
                                     Ads Performance
                                 </a>
                             @endcan
 
                             @can('general.return_reason_type.index')
                                 <a href="{{ route('admin.return-reason.index') }}"
-                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/return-reason*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/sales-spends/return-reason*') ? 'is-active' : '' }}">
                                     Return Reasons
                                 </a>
                             @endcan
 
                             @can('general.sale_platform.index')
                                 <a href="{{ route('admin.sale-platforms.index') }}"
-                                    class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/sales-spends/sale-platforms*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                    class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/sales-spends/sale-platforms*') ? 'is-active' : '' }}">
                                     Platforms
                                 </a>
                             @endcan
@@ -271,21 +272,21 @@
                             <div class="ml-[18px] pl-4 border-l border-white/10 py-1 space-y-0.5">
                                 @can('ecommerce.wh_stock_in_out.index')
                                     <a href="{{ route('admin.style.stock.index') }}"
-                                        class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/style/stock*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                        class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/style/stock*') ? 'is-active' : '' }}">
                                         Stock Performance
                                     </a>
                                 @endcan
 
                                 @can('ecommerce.ranking_products.index')
                                     <a href="{{ route('admin.ecommerce.ranking-products.index') }}"
-                                        class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ Request::is('admin/ecommerce/ranking-products*', 'admin/ecommerce/ctr-summary*') ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                        class="sidebar-sub-link block px-3 rounded-md transition-colors {{ Request::is('admin/ecommerce/ranking-products*', 'admin/ecommerce/ctr-summary*') ? 'is-active' : '' }}">
                                         Product Ranking
                                     </a>
                                 @endcan
 
                                 @can('ecom_tracker.dashboard.index')
                                     <a href="{{ route('admin.ecom-tracker.dashboard') }}"
-                                        class="block py-1.5 px-3 text-[12px] rounded-md transition-colors {{ $isTrackingRoute ? 'text-accent-200 bg-accent-400/15' : 'text-white/45 hover:text-white/80 hover:bg-white/5' }}">
+                                        class="sidebar-sub-link block px-3 rounded-md transition-colors {{ $isTrackingRoute ? 'is-active' : '' }}">
                                         Enox Tracking
                                     </a>
                                 @endcan

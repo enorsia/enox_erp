@@ -30,6 +30,10 @@ class User extends Authenticatable
         'gender',
         'address',
         'status',
+        'two_factor_enabled',
+        'two_factor_secret',
+        'two_factor_confirmed_at',
+        'two_factor_devices_reset_at',
     ];
 
     /**
@@ -54,7 +58,15 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_system' => 'boolean',
+            'two_factor_enabled' => 'boolean',
+            'two_factor_confirmed_at' => 'datetime',
+            'two_factor_devices_reset_at' => 'datetime',
         ];
+    }
+
+    public function trustedDevices()
+    {
+        return $this->hasMany(UserTrustedDevice::class);
     }
 
     /**

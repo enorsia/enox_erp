@@ -120,6 +120,50 @@
                                     <input type="checkbox" class="hidden" name="status" id="statusToggleCheckbox" {{ $user->status ? 'checked' : '' }}>
                                 </label>
                             </div>
+
+                            <!-- Two-factor authentication -->
+                            <div class="pt-3 border-t border-slate-200 dark:border-slate-700">
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <div class="toggle-track {{ $user->two_factor_enabled ? 'on' : '' }}" id="twoFactorToggle" onclick="toggleSwitch('twoFactorToggle')">
+                                        <div class="toggle-thumb"></div>
+                                    </div>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium" onclick="toggleSwitch('twoFactorToggle')">Require Google Authenticator (2FA)</span>
+                                    <input type="checkbox" class="hidden" name="two_factor_enabled" id="twoFactorCheckbox" value="1" {{ $user->two_factor_enabled ? 'checked' : '' }}>
+                                </label>
+                                <p class="f-hint mt-2">When enabled, this user must enter a 6-digit code at login unless this browser is trusted.</p>
+
+                                @if ($user->two_factor_enabled)
+                                    <ul class="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                                        @if ($user->two_factor_confirmed_at)
+                                            <li>Authenticator: <span class="text-emerald-600 dark:text-emerald-400 font-medium">Active</span> (since {{ $user->two_factor_confirmed_at->format('M j, Y') }})</li>
+                                        @else
+                                            <li>Authenticator: <span class="text-amber-600 dark:text-amber-400 font-medium">Pending</span> — user must confirm on first login</li>
+                                        @endif
+                                        <li>Trusted browsers: <span class="font-medium text-slate-700 dark:text-slate-200">{{ $user->trusted_devices_count }}</span></li>
+                                    </ul>
+                                @endif
+
+                                @if ($user->two_factor_enabled && $user->two_factor_secret)
+                                    @php
+                                        $twoFactor = app(\App\Services\TwoFactorAuthService::class);
+                                        $otpUrl = $twoFactor->provisioningUri($user);
+                                    @endphp
+                                    <div class="mt-3 p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40">
+                                        <p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Setup QR (Google Authenticator)</p>
+                                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&amp;data={{ urlencode($otpUrl) }}" width="180" height="180" alt="2FA QR code" class="rounded-md border border-slate-200 dark:border-slate-600">
+                                        <p class="f-hint mt-2">Share this QR if the user has not finished setup yet.</p>
+                                    </div>
+                                @endif
+
+                                @if ($user->two_factor_enabled)
+                                    <button type="submit"
+                                        form="resetTrustedDevicesForm"
+                                        class="mt-3 w-full px-3 py-2 text-xs font-semibold rounded-lg border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:bg-amber-900/20"
+                                        onclick="return confirm('Clear all trusted devices? This user must enter 2FA on every browser again.');">
+                                        Force 2FA on next login (reset trusted devices)
+                                    </button>
+                                @endif
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -145,5 +189,11 @@
                 </div>
             </div>
         </form>
+
+        @if ($user->two_factor_enabled)
+            <form id="resetTrustedDevicesForm" method="POST" action="{{ route('admin.users.reset-two-factor-devices', $user) }}" class="hidden">
+                @csrf
+            </form>
+        @endif
     </div>
 @endsection

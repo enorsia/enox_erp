@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
         });
         $middleware->alias([
             'internal.api' => InternalApiAuth::class,
+            'two_factor.verified' => \App\Http\Middleware\EnsureTwoFactorVerified::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
