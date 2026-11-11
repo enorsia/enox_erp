@@ -157,10 +157,11 @@ class UserController extends Controller
 
             $filePath = public_path('upload/user_images/' . $user->avatar);
             $fileUrl = null;
+            $wasTwoFactorEnabled = (bool) $user->two_factor_enabled;
             $enableTwoFactor = $request->boolean('two_factor_enabled');
 
             $this->logUserTwoFactor('update_started', $user, $request, [
-                'db_two_factor_enabled_before' => (bool) $user->two_factor_enabled,
+                'db_two_factor_enabled_before' => $wasTwoFactorEnabled,
                 'enable_requested' => $enableTwoFactor,
             ]);
 
@@ -184,7 +185,7 @@ class UserController extends Controller
                 }
             }
 
-            if (! $enableTwoFactor) {
+            if (! $enableTwoFactor && $wasTwoFactorEnabled) {
                 $user->forceFill([
                     'two_factor_secret' => null,
                     'two_factor_confirmed_at' => null,
