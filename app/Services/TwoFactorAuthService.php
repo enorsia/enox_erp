@@ -10,6 +10,7 @@ use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use PragmaRX\Google2FA\Google2FA;
 
@@ -68,13 +69,23 @@ class TwoFactorAuthService
 
     public function qrCodeDataUri(string $otpAuthUrl, int $size = 180): string
     {
-        $renderer = new ImageRenderer(
-            new RendererStyle($size, 0),
-            new SvgImageBackEnd()
-        );
-        $svg = (new Writer($renderer))->writeString($otpAuthUrl);
+        try {
+            $renderer = new ImageRenderer(
+                new RendererStyle($size, 0),
+                new SvgImageBackEnd()
+            );
+            $svg = (new Writer($renderer))->writeString($otpAuthUrl);
 
-        return 'data:image/svg+xml;base64,'.base64_encode($svg);
+            return 'data:image/svg+xml;base64,'.base64_encode($svg);
+        } catch (\Throwable $e) {
+            Log::error('[user.2fa] qr_code_generation_failed', [
+                'message' => $e->getMessage(),
+                'exception_class' => $e::class,
+                'size' => $size,
+            ]);
+
+            throw $e;
+        }
     }
 
     public function assignSecret(User $user, string $secret): void

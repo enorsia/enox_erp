@@ -131,6 +131,8 @@ class UserController extends Controller
         $roles = Role::all();
         $user->loadCount('trustedDevices');
 
+        $this->logUserTwoFactor('edit_page_view', $user);
+
         return view('users.edit', compact('user', 'roles'));
     }
 
@@ -157,6 +159,11 @@ class UserController extends Controller
             $fileUrl = null;
             $enableTwoFactor = $request->boolean('two_factor_enabled');
 
+            $this->logUserTwoFactor('update_started', $user, $request, [
+                'db_two_factor_enabled_before' => (bool) $user->two_factor_enabled,
+                'enable_requested' => $enableTwoFactor,
+            ]);
+
             $user->update([
                 'name' => $request->name,
                 'email' => $request->email,
@@ -166,10 +173,14 @@ class UserController extends Controller
                 'two_factor_enabled' => $enableTwoFactor,
             ]);
 
+            $secretAssigned = false;
+            $twoFactorCleared = false;
+
             if ($enableTwoFactor) {
                 $user->refresh();
                 if (! $user->two_factor_secret) {
                     $this->twoFactor->assignSecret($user, $this->twoFactor->generateSecret());
+                    $secretAssigned = true;
                 }
             }
 
@@ -179,7 +190,14 @@ class UserController extends Controller
                     'two_factor_confirmed_at' => null,
                 ])->save();
                 $user->trustedDevices()->delete();
+                $twoFactorCleared = true;
             }
+
+            $this->logUserTwoFactor('update_2fa_processed', $user->fresh(), $request, [
+                'enable_requested' => $enableTwoFactor,
+                'secret_assigned' => $secretAssigned,
+                'two_factor_cleared' => $twoFactorCleared,
+            ]);
             $user->syncRoles([$request->role]);
 
             if ($request->hasFile('avatar')) {
@@ -255,12 +273,24 @@ class UserController extends Controller
 
             $user->refresh();
 
+            $this->logUserTwoFactor('update_completed', $user, $request, [
+                'show_qr_on_edit' => (bool) $user->two_factor_enabled && $user->two_factor_secret !== null,
+            ]);
+
             notify()->success("User updated successfully.", "Success");
 
             return redirect()->route('admin.users.edit', $user);
         } catch (\Exception $e) {
             notify()->error('Failed to updated user', 'Error');
-            Log::error('User updated failed: ' . $e->getMessage(), ['user_id' => $user->id, 'exception' => $e]);
+            $this->logUserTwoFactor('update_failed', $user, $request, [
+                'error' => $e->getMessage(),
+                'exception_class' => $e::class,
+            ]);
+            Log::error('[user.2fa] update_exception', [
+                'user_id' => $user->id,
+                'message' => $e->getMessage(),
+                'exception' => $e,
+            ]);
 
             return redirect()
                 ->route('admin.users.edit', $user)
@@ -272,7 +302,11 @@ class UserController extends Controller
     {
         Gate::authorize('authentication.users.edit');
 
+        $this->logUserTwoFactor('reset_trusted_devices_requested', $user);
+
         $this->twoFactor->revokeAllTrustedDevices($user);
+
+        $this->logUserTwoFactor('reset_trusted_devices_done', $user->fresh());
 
         activity()
             ->causedBy(Auth::user())
@@ -322,5 +356,36 @@ class UserController extends Controller
             notify()->error('Failed to deleting user', 'Error');
             return redirect()->back();
         }
+    }
+
+    /**
+     * Structured diagnostic logging for admin user 2FA (grep server logs for "[user.2fa]").
+     */
+    protected function logUserTwoFactor(string $event, User $user, ?Request $request = null, array $extra = []): void
+    {
+        $trustedCount = $user->trusted_devices_count ?? null;
+        if ($trustedCount === null && $user->relationLoaded('trustedDevices')) {
+            $trustedCount = $user->trustedDevices->count();
+        }
+
+        $context = array_merge([
+            'event' => $event,
+            'target_user_id' => $user->id,
+            'target_email' => $user->email,
+            'two_factor_enabled' => (bool) $user->two_factor_enabled,
+            'has_two_factor_secret' => $user->two_factor_secret !== null,
+            'two_factor_confirmed_at' => $user->two_factor_confirmed_at?->toIso8601String(),
+            'two_factor_enrolled' => $this->twoFactor->isEnrolled($user),
+            'trusted_devices_count' => $trustedCount,
+            'admin_user_id' => Auth::id(),
+        ], $extra);
+
+        if ($request !== null) {
+            $context['request_has_two_factor_field'] = $request->has('two_factor_enabled');
+            $context['request_two_factor_value'] = $request->input('two_factor_enabled');
+            $context['request_two_factor_parsed'] = $request->boolean('two_factor_enabled');
+        }
+
+        Log::info('[user.2fa] '.$event, $context);
     }
 }
