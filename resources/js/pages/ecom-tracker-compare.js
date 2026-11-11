@@ -365,6 +365,7 @@ const TREND_SERIES_COLORS = {
     begin_checkout: '#ea580c',
     proceed_checkout: '#e11d48',
     purchases: '#16a34a',
+    sale_amount: '#0f766e',
     items_sold_qty: '#65a30d',
     conversion_rate: '#a21caf',
 };
@@ -382,6 +383,7 @@ const TREND_SERIES_ORDER = [
     'begin_checkout',
     'proceed_checkout',
     'purchases',
+    'sale_amount',
     'items_sold_qty',
     'conversion_rate',
 ];
@@ -422,6 +424,10 @@ function trendTickLimit(labelCount, useHorizontalScroll = false) {
 }
 
 function trendUsesHorizontalScroll(labelCount) {
+    if (isNarrow() && labelCount > 8) {
+        return true;
+    }
+
     if (labelCount <= 24) {
         return false;
     }
@@ -434,9 +440,9 @@ function trendMinWidth(labelCount) {
         return null;
     }
 
-    const pixelsPerLabel = isNarrow() ? 34 : 30;
+    const pixelsPerLabel = isNarrow() ? 40 : 30;
 
-    return Math.max(labelCount * pixelsPerLabel, 320);
+    return Math.max(labelCount * pixelsPerLabel, isNarrow() ? 360 : 320);
 }
 
 function sessionsForLogScale(values) {
@@ -455,10 +461,18 @@ function applyTrendChartLayout(wrapId, hintId, labelCount) {
 
     if (wrap) {
         wrap.style.minWidth = minWidth ? `${minWidth}px` : '';
+        wrap.style.width = minWidth ? `${minWidth}px` : '';
     }
 
     if (hint) {
         hint.hidden = !useHorizontalScroll;
+        if (useHorizontalScroll && isNarrow()) {
+            hint.textContent = labelCount <= 24
+                ? 'Swipe horizontally to see all hours'
+                : 'Swipe horizontally to see all dates';
+        } else if (useHorizontalScroll) {
+            hint.textContent = 'Swipe horizontally to see all dates';
+        }
     }
 }
 
@@ -507,12 +521,14 @@ function initCompareTrendChart({
     } = trend;
 
     const orderedSeries = sortTrendSeries(series);
+    const plottedSeries = orderedSeries.filter((entry) => !entry.tooltip_only);
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
+    const showRateAxis = plottedSeries.some((entry) => (entry.y_axis_id || 'y') === 'y1');
 
     applyTrendChartLayout(wrapId, hintId, labels.length);
-    renderTrendLegend(legendId, orderedSeries);
+    renderTrendLegend(legendId, plottedSeries);
 
-    const datasets = orderedSeries.map((entry, index) => {
+    const datasets = plottedSeries.map((entry, index) => {
         const color = trendSeriesColor(entry.key);
         const isConversion = entry.key === 'conversion_rate';
         const isBar = entry.chart_type === 'bar';
@@ -531,7 +547,11 @@ function initCompareTrendChart({
             borderColor: isBar ? `${color}CC` : color,
             backgroundColor: isBar ? `${color}99` : color,
             pointRadius: isBar ? 0 : (labels.length > 24 && !useHorizontalScroll ? 0 : 2.5),
-            pointHoverRadius: isBar ? 0 : 4,
+            pointHoverRadius: isBar ? 0 : 6,
+            pointHoverBorderWidth: isBar ? 0 : 2,
+            pointHoverBorderColor: isDark() ? '#0f172a' : '#ffffff',
+            pointHoverBackgroundColor: color,
+            hoverBorderWidth: isBar ? 0 : 2,
             tension: isBar ? 0 : 0.3,
             fill: false,
             yAxisID: entry.y_axis_id || 'y',
@@ -547,10 +567,13 @@ function initCompareTrendChart({
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+            interaction: { mode: 'index', intersect: false, axis: 'x' },
             layout: {
                 padding: {
-                    right: useHorizontalScroll ? 8 : 0,
+                    top: isNarrow() ? 6 : 0,
+                    right: useHorizontalScroll ? 8 : (showRateAxis && isNarrow() ? 8 : 0),
+                    bottom: isNarrow() ? 10 : 0,
+                    left: isNarrow() ? 4 : 0,
                 },
             },
             plugins: {
@@ -593,6 +616,7 @@ function initCompareTrendChart({
                     },
                 },
                 y1: {
+                    display: showRateAxis,
                     position: 'right',
                     grid: { display: false },
                     min: 0,
@@ -605,15 +629,32 @@ function initCompareTrendChart({
         },
     });
 
+    bindTrendTooltipDismiss(document.getElementById(scrollId));
+
+    requestAnimationFrame(() => {
+        chart.resize();
+        requestAnimationFrame(() => chart.resize());
+    });
+
     window.addEventListener('resize', () => {
+        const useScroll = trendUsesHorizontalScroll(labels.length);
+
         applyTrendChartLayout(wrapId, hintId, labels.length);
-        renderTrendLegend(legendId, orderedSeries);
+        renderTrendLegend(legendId, plottedSeries);
         chart.options.plugins.legend.display = !isCompactChart();
+        chart.options.scales.x.ticks.autoSkip = !useScroll && labels.length > 24;
+        chart.options.scales.x.ticks.maxTicksLimit = trendTickLimit(labels.length, useScroll);
+        chart.options.scales.x.ticks.maxRotation = useScroll || labels.length > 20 ? 45 : 0;
+        chart.options.scales.x.ticks.minRotation = useScroll ? 35 : 0;
+        chart.options.layout.padding = {
+            top: isNarrow() ? 6 : 0,
+            right: useScroll ? 8 : (showRateAxis && isNarrow() ? 8 : 0),
+            bottom: isNarrow() ? 10 : 0,
+            left: isNarrow() ? 4 : 0,
+        };
         chart.resize();
         scheduleCompareSectionSync();
     });
-
-    bindTrendTooltipDismiss(document.getElementById(scrollId));
 }
 
 function accent() {
@@ -834,7 +875,7 @@ function restoreCompareTrendChartAfterPrint({ canvasId, wrapId, legendId, hintId
     const wrap = document.getElementById(wrapId);
     const labels = trend?.labels || [];
     const chart = Chart.getChart(canvasId);
-    const orderedSeries = sortTrendSeries(trend?.series || []);
+    const orderedSeries = sortTrendSeries(trend?.series || []).filter((entry) => !entry.tooltip_only);
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
 
     if (wrap) {

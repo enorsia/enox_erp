@@ -48,9 +48,13 @@
                                 value="{{ old('email') }}" autocomplete="username" inputmode="email" spellcheck="false" autocapitalize="none" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label" for="login-password">Password</label>
-                            <input type="password" id="login-password" name="password" class="form-control" placeholder="Enter your password"
-                                autocomplete="current-password" required>
+                            <label class="form-label" for="example-password">Password</label>
+                            <div class="position-relative">
+                                <input type="password" id="example-password" name="password" class="form-control" placeholder="Enter your password" style="padding-left: 0.85rem !important; padding-right: 0.85rem !important;">
+                                <button type="button" id="togglePassword" class="btn btn-link position-absolute top-50 end-0 translate-middle-y text-muted border-0" aria-label="Show password" style="text-decoration: none; box-shadow: none;">
+                                    <i class="bx bx-show fs-18" id="togglePasswordIcon"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <div class="form-check">
@@ -79,6 +83,20 @@
 
     <script src="{{ asset('assets/js/vendor.js') }}"></script>
     <script src="{{ asset('assets/js/app.js') }}"></script>
+    <script>
+        (function () {
+            var password = document.getElementById('example-password');
+            var toggleBtn = document.getElementById('togglePassword');
+            var icon = document.getElementById('togglePasswordIcon');
+            if (!password || !toggleBtn || !icon) return;
+            toggleBtn.addEventListener('click', function () {
+                var hidden = password.type === 'password';
+                password.type = hidden ? 'text' : 'password';
+                icon.className = hidden ? 'bx bx-hide fs-18' : 'bx bx-show fs-18';
+                toggleBtn.setAttribute('aria-label', hidden ? 'Hide password' : 'Show password');
+            });
+        })();
+    </script>
 </body>
 </html>
 

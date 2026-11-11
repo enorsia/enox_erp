@@ -107,7 +107,10 @@
                 'modifier' => $group['modifier'],
                 'cols' => $group['cols'],
                 'metrics' => $group['metrics'],
-                'metricHrefs' => array_map(fn (array $metric) => $activityLink($metric['activity']), $group['metrics']),
+                'metricHrefs' => array_map(
+                    fn (array $metric) => $activityLink(($metric['activity'] ?? []) + ['focus' => 'session']),
+                    $group['metrics'],
+                ),
             ])
         @endforeach
     </div>
@@ -244,37 +247,44 @@
         <div class="etd-panel-head etd-panel-head--device-browser">
             <h2 class="etd-panel-title">Device &amp; browser</h2>
             <div class="etd-panel-head-actions">
-                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $activityLink()])
+                @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $activityLink(['focus' => 'devices'])])
             </div>
         </div>
         @include('ecom_tracker.partials.device-browser-breakdown', [
             'devices' => $dashboard['devices'],
-            'deviceActivityLink' => fn (array $row) => $activityLink(['device_type' => $row['id']]),
-            'browserActivityLink' => fn (array $row) => $activityLink(array_filter([
-                'browser_type' => $row['id'] ?? null,
-                'focus' => filled($row['id'] ?? null) ? 'devices' : null,
-            ], fn ($value) => $value !== null && $value !== '')),
+            'deviceActivityLink' => fn (array $row) => filled($row['id'] ?? null)
+                ? $activityLink(['device_type' => $row['id'], 'focus' => 'session'], ['device_type'])
+                : $activityLink(),
+            'browserActivityLink' => fn (array $row) => filled($row['id'] ?? null)
+                ? $activityLink(['browser_type' => $row['id'], 'focus' => 'session'], ['browser_type'])
+                : $activityLink(),
         ])
     </div>
 
     <div class="etd-panel etd-print-unit mb-3" id="traffic">
         <div class="etd-panel-head">
             <h2 class="etd-panel-title">Traffic sources</h2>
-            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $activityLink()])
+            @include('ecom_tracker.partials.view-details-button', ['detailUrl' => $activityLink(['focus' => 'traffic'])])
         </div>
         @include('ecom_tracker.partials.traffic-sources-table', [
             'rows' => $dashboard['traffic'],
-            'activitySourceLink' => fn (array $row) => $activityLink(array_filter([
-                'utm_source' => $row['id'] ?? null,
-                'utm_medium' => filled($row['medium'] ?? null) ? $row['medium'] : null,
-            ], fn ($value) => $value !== null && $value !== '')),
+            'activitySourceLink' => fn (array $row) => filled($row['id'] ?? null) && ($row['source'] ?? '') !== 'Other'
+                ? $activityLink(array_filter([
+                    'utm_source' => $row['id'],
+                    'utm_medium' => filled($row['medium'] ?? null) ? $row['medium'] : null,
+                    'focus' => 'session',
+                ], fn ($value) => $value !== null && $value !== ''), ['utm_source', 'utm_medium'])
+                : null,
         ])
     </div>
 
     @include('ecom_tracker.partials.acquisition-insights', [
         'distribution' => $dashboard['durations'],
         'newReturning' => $dashboard['newReturning'],
-        'activityDurationLink' => fn (array $bucket) => $activityLink(['duration' => $bucket['key']]),
+        'activityDurationLink' => fn (array $bucket) => $activityLink([
+            'duration' => $bucket['key'],
+            'focus' => 'session',
+        ], ['duration']),
     ])
         </div>
     </div>

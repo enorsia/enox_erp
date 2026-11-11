@@ -131,7 +131,7 @@
                 </section>
                 <section class="etd-activity-filter-section">
                     <p class="etd-activity-filter-section-title">Traffic source</p>
-                    <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Last marketing touch in that visit (synced). Return visits within {{ (int) config('tracker.attribution_carry_hours', 24) }}h keep the same source when the new visit has no campaign URL; after that → Direct.</p>
+                    <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Per visitor, for that calendar day, after sync. One source that day applies to every session that day. More than one source is Multi sources. Medium uses the same rule. The next day starts again. No source that day is Direct.</p>
                     <div class="etd-activity-filter-grid">
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">UTM source</span>
@@ -145,7 +145,7 @@
                             <span class="etd-filter-compact-label">UTM medium</span>
                             <select name="utm_medium[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All">
                                 @foreach ($filterOptions['utmMediums'] as $medium)
-                                    <option value="{{ $medium }}" @selected(in_array($medium, (array) request('utm_medium', []), true))>{{ $medium }}</option>
+                                    <option value="{{ $medium }}" @selected(in_array($medium, (array) request('utm_medium', []), true))>{{ \App\Support\SessionTrafficAttribution::displayMediumLabel($medium) }}</option>
                                 @endforeach
                             </select>
                         </label>

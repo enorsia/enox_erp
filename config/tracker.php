@@ -172,6 +172,7 @@ return [
         'rakuten' => 'Rakuten',
         'partnerize' => 'Partnerize',
         '(direct)' => 'Direct',
+        'multi sources' => 'Multi sources',
     ],
 
     'utm_source_aliases' => [
@@ -211,6 +212,7 @@ return [
         'share-a-sale' => 'shareasale',
         'rak' => 'rakuten',
         'impactradius' => 'impact',
+        'unknown' => 'Unknown',
         'kv' => 'klaviyo',
         'kl' => 'klaviyo',
         'mc' => 'mailchimp',
@@ -240,6 +242,7 @@ return [
         'cpm' => 'CPM',
         'awin' => 'Awin',
         'none' => 'None',
+        'multi mediums' => 'Multi mediums',
     ],
 
 ];

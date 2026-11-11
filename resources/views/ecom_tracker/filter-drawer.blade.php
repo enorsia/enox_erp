@@ -1,5 +1,11 @@
 <div id="ecom-dashboard-filter-backdrop" class="etd-filter-panel__backdrop etd-filter-panel--closed js-ecom-dashboard-filter-close" aria-hidden="true"></div>
 
+@php
+    use App\Support\TrackerTime;
+    $filterToday = TrackerTime::localNow()->toDateString();
+    $filterYesterday = TrackerTime::localNow()->subDay()->toDateString();
+@endphp
+
 <div id="ecom-dashboard-filter-drawer"
      role="dialog" aria-modal="true" aria-label="Filters" aria-hidden="true"
      class="etd-filter-panel etd-filter-drawer etd-filter-panel--wide etd-filter-drawer--wide etd-filter-panel--closed">
@@ -20,20 +26,40 @@
     </div>
     <form method="GET" action="{{ $data['filterFormAction'] ?? route('admin.ecom-tracker.dashboard') }}" class="etd-filter-panel__form">
         <div class="etd-filter-panel__body etd-filter-drawer__body">
-            <section class="etd-filter-period etd-filter-period--drawer-mobile etd-activity-filter-section etd-activity-filter-section--full">
+            <section class="etd-filter-period etd-filter-period--drawer-mobile etd-activity-filter-section etd-activity-filter-section--full"
+                     data-etd-filter-period
+                     data-etd-period="{{ $data['period'] }}"
+                     data-etd-today="{{ $filterToday }}"
+                     data-etd-yesterday="{{ $filterYesterday }}"
+                     data-etd-range-from="{{ $data['dateFrom'] }}"
+                     data-etd-range-to="{{ $data['dateTo'] }}"
+                     data-etd-today-label="Today"
+                     data-etd-yesterday-label="Yesterday">
                 <p class="etd-activity-filter-section-title">Date range</p>
                 <div class="etd-filter-period__nav">
-                    <button type="button" class="etd-filter-period__nav-btn" aria-label="Previous day"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 19l-7-7 7-7"/></svg></button>
-                    <span class="etd-filter-period__nav-label">{{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => 'Custom', default => 'Today' } }}</span>
-                    <span class="etd-filter-period__nav-btn is-disabled" aria-disabled="true"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg></span>
+                    <button type="button"
+                            class="etd-filter-period__nav-btn js-etd-filter-period-shift @if(empty($data['prevUrl'])) is-disabled @endif"
+                            data-shift="-1"
+                            aria-label="Previous period"
+                            @disabled(empty($data['prevUrl']))>
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 19l-7-7 7-7"/></svg>
+                    </button>
+                    <span class="etd-filter-period__nav-label js-etd-filter-period-nav-label">{{ match ($data['period']) { 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'custom' => $data['rangeLabel'], default => 'Today' } }}</span>
+                    <button type="button"
+                            class="etd-filter-period__nav-btn js-etd-filter-period-shift @if(empty($data['nextUrl'])) is-disabled @endif"
+                            data-shift="1"
+                            aria-label="Next period"
+                            @disabled(empty($data['nextUrl']))>
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 5l7 7-7 7"/></svg>
+                    </button>
                 </div>
                 <input type="hidden" name="period" id="ecom-dashboard-filter-period" value="{{ $data['period'] }}">
                 <div class="etd-filter-period__presets" role="group" aria-label="Date presets">
-                    <a href="{{ ($data['periodPresetUrl'] ?? fn (string $key) => route('admin.ecom-tracker.dashboard', ['period' => $key]))('24h') }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '24h' ? 'is-active' : '' }}">Today</a>
-                    <a href="{{ ($data['periodPresetUrl'] ?? fn (string $key) => route('admin.ecom-tracker.dashboard', ['period' => $key]))('yesterday') }}" class="etd-filter-period__preset no-underline {{ $data['period'] === 'yesterday' ? 'is-active' : '' }}">Yesterday</a>
-                    <a href="{{ ($data['periodPresetUrl'] ?? fn (string $key) => route('admin.ecom-tracker.dashboard', ['period' => $key]))('7d') }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '7d' ? 'is-active' : '' }}">7 days</a>
-                    <a href="{{ ($data['periodPresetUrl'] ?? fn (string $key) => route('admin.ecom-tracker.dashboard', ['period' => $key]))('30d') }}" class="etd-filter-period__preset no-underline {{ $data['period'] === '30d' ? 'is-active' : '' }}">30 days</a>
-                    <button type="button" class="etd-filter-period__preset js-ecom-dashboard-drawer-custom-preset {{ $data['period'] === 'custom' ? 'is-active' : '' }}">Custom range</button>
+                    <button type="button" class="etd-filter-period__preset {{ $data['period'] === '24h' ? 'is-active' : '' }}" data-period="24h">Today</button>
+                    <button type="button" class="etd-filter-period__preset {{ $data['period'] === 'yesterday' ? 'is-active' : '' }}" data-period="yesterday">Yesterday</button>
+                    <button type="button" class="etd-filter-period__preset {{ $data['period'] === '7d' ? 'is-active' : '' }}" data-period="7d">7 days</button>
+                    <button type="button" class="etd-filter-period__preset {{ $data['period'] === '30d' ? 'is-active' : '' }}" data-period="30d">30 days</button>
+                    <button type="button" class="etd-filter-period__preset js-ecom-dashboard-drawer-custom-preset {{ $data['period'] === 'custom' ? 'is-active' : '' }}" data-period="custom">Custom range</button>
                 </div>
                 <div id="ecom-dashboard-drawer-custom-dates"
                      class="etd-date-range etd-filter-period__custom etd-activity-filter-grid @if($data['period'] !== 'custom') etd-filter-period__custom--closed @endif"
@@ -81,7 +107,7 @@
                 </section>
                 <section class="etd-activity-filter-section">
                     <p class="etd-activity-filter-section-title">Traffic source</p>
-                    <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Sessions by last marketing touch in that session.</p>
+                    <p class="etd-activity-filter-section-hint text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-snug">Per visitor, for that calendar day, after sync. One source that day applies to every session that day. More than one source is Multi sources. Medium uses the same rule. The next day starts again. No source that day is Direct.</p>
                     <div class="etd-activity-filter-grid">
                         <label class="etd-filter-compact-field">
                             <span class="etd-filter-compact-label">UTM source</span>
@@ -95,7 +121,7 @@
                             <span class="etd-filter-compact-label">UTM medium</span>
                             <select name="utm_medium[]" multiple class="tom-select etd-tom-select w-full" data-placeholder="All">
                                 @foreach (($filterOptions ?? [])['utmMediums'] ?? [] as $medium)
-                                    <option value="{{ $medium }}" @selected(in_array($medium, (array) request('utm_medium', []), true))>{{ $medium }}</option>
+                                    <option value="{{ $medium }}" @selected(in_array($medium, (array) request('utm_medium', []), true))>{{ \App\Support\SessionTrafficAttribution::displayMediumLabel($medium) }}</option>
                                 @endforeach
                             </select>
                         </label>

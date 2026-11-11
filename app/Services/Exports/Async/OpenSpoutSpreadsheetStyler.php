@@ -84,6 +84,25 @@ final class OpenSpoutSpreadsheetStyler
         return $this->columnHeaderStyle;
     }
 
+    public function columnHeaderStyleForColumn(int $columnIndex): Style
+    {
+        if (! $this->layout->shouldCenterAlignColumn($columnIndex)) {
+            return $this->columnHeaderStyle;
+        }
+
+        if (isset($this->cellStyleCache['header-center'])) {
+            return $this->cellStyleCache['header-center'];
+        }
+
+        return $this->cellStyleCache['header-center'] = (new Style)
+            ->setFontBold()
+            ->setFontSize(12)
+            ->setBackgroundColor(Color::toARGB(self::HEADER_PINK))
+            ->setCellAlignment(CellAlignment::CENTER)
+            ->setCellVerticalAlignment(CellVerticalAlignment::CENTER)
+            ->setBorder($this->outlineBorder());
+    }
+
     public function totalsRowStyle(): Style
     {
         return $this->totalsRowStyle;

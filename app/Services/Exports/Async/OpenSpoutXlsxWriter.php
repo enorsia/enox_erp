@@ -84,6 +84,7 @@ class OpenSpoutXlsxWriter implements StreamingExportWriter
     public function writeRows(array $rows, array $meta = []): void
     {
         $orderLastIndices = $meta['order_last_indices'] ?? [];
+        $separatorColumnsByRow = $meta['separator_columns'] ?? [];
         $batchMergeRanges = $this->normalizeMergeRanges($meta['merge_ranges'] ?? []);
 
         foreach ($rows as $index => $row) {
@@ -94,14 +95,19 @@ class OpenSpoutXlsxWriter implements StreamingExportWriter
             }
 
             $isOrderEnd = in_array($index, $orderLastIndices, true);
+            $rowSeparatorColumns = $separatorColumnsByRow[$index] ?? null;
             $normalized = $this->normalizeRow($row);
             $this->trackColumnContentLengths($normalized);
             $columnStyles = [];
 
             foreach ($normalized as $columnIndex => $value) {
+                $useSeparator = is_array($rowSeparatorColumns)
+                    ? in_array($columnIndex, $rowSeparatorColumns, true)
+                    : $isOrderEnd;
+
                 $columnStyles[$columnIndex] = $this->styler->cellStyleForColumn(
                     $columnIndex,
-                    $isOrderEnd,
+                    $useSeparator,
                     $this->layout->shouldVerticallyCenterColumn($columnIndex),
                 );
             }
@@ -164,7 +170,13 @@ class OpenSpoutXlsxWriter implements StreamingExportWriter
             $values[] = $headings[$index] ?? '';
         }
 
-        $this->writer->addRow(Row::fromValues($values, $this->styler->columnHeaderStyle()));
+        $columnStyles = [];
+
+        foreach ($values as $index => $value) {
+            $columnStyles[$index] = $this->styler->columnHeaderStyleForColumn($index);
+        }
+
+        $this->writer->addRow(Row::fromValuesWithStyles($values, null, $columnStyles));
         $this->trackColumnContentLengths($values);
         $this->currentRow++;
     }

@@ -92,10 +92,13 @@ class EcomActivityListService
      * Option lists for the filter drawer: devices, traffic sources, departments and the selected
      * department's categories, read from the small lookup tables in one UNION ALL query.
      *
-     * @return array{funnelStages: array<int, string>, durationBuckets: array<string, string>, devices: array<int, string>, browsers: array<int, string>, utmSources: array<int, string>, utmMediums: list<string>, departments: array<int, string>, categories: array<int, string>}
+     * @return array{funnelStages: array<int, string>, durationBuckets: array<int, string>, devices: array<int, string>, browsers: array<int, string>, utmSources: array<int, string>, utmMediums: list<string>, departments: array<int, string>, categories: array<int, string>}
      */
     public function filterOptions(?int $departmentId = null): array
     {
+        SessionTrafficAttribution::ensureMultiSourceOption();
+        SessionTrafficAttribution::ensureUnknownSourceOption();
+
         $lookups = TrackerDatabase::table('tracking_device')->selectRaw("'device' as type, id, name, NULL as medium, NULL as parent_id")
             ->unionAll(TrackerDatabase::table('tracking_browser')->selectRaw("'browser', id, name, NULL, NULL"))
             ->unionAll(TrackerDatabase::table('tracking_traffic_source')->selectRaw("'source', id, name, medium, NULL"))
@@ -118,10 +121,12 @@ class EcomActivityListService
 
         return [
             'funnelStages' => array_intersect_key(TrackingSession::FUNNEL_STAGES, array_flip(TrackingSession::FILTER_FUNNEL_STAGES)),
-            'durationBuckets' => array_map(fn (array $bucket) => $bucket['label'], TrackingSession::DURATION_BUCKETS),
+            'durationBuckets' => array_map(fn (array $bucket) => $bucket['label'], TrackingDailyDuration::BUCKETS),
             'devices' => $lookups->get('device', collect())->pluck('name', 'id')->all(),
             'browsers' => $lookups->get('browser', collect())->pluck('name', 'id')->all(),
-            'utmSources' => $sources->pluck('name', 'id')->all(),
+            'utmSources' => $sources->mapWithKeys(fn (object $source): array => [
+                (int) $source->id => SessionTrafficAttribution::displaySourceLabel((string) $source->name) ?? (string) $source->name,
+            ])->all(),
             'utmMediums' => $utmMediums,
             'departments' => collect($categories->whereNull('parent_id')->pluck('name', 'id'))
                 ->map(fn (string $name) => TrackerCategoryIdentity::formatDepartmentDisplayName($name))
@@ -282,7 +287,7 @@ class EcomActivityListService
     }
 
     /**
-     * @return array{search: string, product_code: string, session_id: string, funnel: list<int>, has_order: ?bool, devices: list<int>, browsers: list<int>, logged_in: ?bool, durations: list<string>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
+     * @return array{search: string, product_code: string, session_id: string, funnel: list<int>, has_order: ?bool, devices: list<int>, browsers: list<int>, logged_in: ?bool, durations: list<int>, duration: ?int, utm_sources: list<int>, utm_mediums: list<string>, department: ?int, categories: list<int>, visitor_type: ?string}
      */
     public static function filtersFromRequest(Request $request): array
     {
@@ -302,7 +307,10 @@ class EcomActivityListService
             'devices' => $ints('device_type'),
             'browsers' => $ints('browser_type'),
             'logged_in' => $bool('logged_in'),
-            'durations' => array_values(array_intersect($strings('duration_bucket'), array_keys(TrackingSession::DURATION_BUCKETS))),
+            'durations' => array_values(array_filter(
+                array_map('intval', (array) $request->input('duration_bucket', [])),
+                fn (int $id) => isset(TrackingDailyDuration::BUCKETS[$id]),
+            )),
             'duration' => isset(TrackingDailyDuration::BUCKETS[$request->integer('duration')]) ? $request->integer('duration') : null,
             'utm_sources' => $ints('utm_source'),
             'utm_mediums' => $strings('utm_medium'),
@@ -326,7 +334,7 @@ class EcomActivityListService
         if (trim((string) $request->query('product_code', '')) !== '') {
             $params['product_code'] = $request->query('product_code');
             $params['focus'] = 'products';
-        } elseif (in_array($request->query('focus'), ['products', 'session'], true)) {
+        } elseif (in_array($request->query('focus'), ['products', 'session', 'devices', 'traffic'], true)) {
             $params['focus'] = $request->query('focus');
         }
 
@@ -715,7 +723,8 @@ class EcomActivityListService
         }
 
         $focusLabel = $this->funnelFocusLabel($filters);
-        $sessionListLabel = $this->sessionListSectionLabel($filters);
+        $focus = $request->query('focus');
+        $sessionListLabel = $this->sessionListSectionLabel($filters, is_string($focus) ? $focus : null);
 
         return [
             'sectionLabel' => $isProductDrill ? 'Product performance' : ($isSessionList ? $sessionListLabel : 'Audience & engagement'),
@@ -841,7 +850,7 @@ class EcomActivityListService
     /**
      * @param  array<string, mixed>  $filters
      */
-    private function sessionListSectionLabel(array $filters): string
+    private function sessionListSectionLabel(array $filters, ?string $focus = null): string
     {
         $stages = array_values(array_map('intval', $filters['funnel'] ?? []));
         if (count($stages) === 1 && isset(self::FUNNEL_FOCUS_LABELS[$stages[0]])) {
@@ -852,7 +861,23 @@ class EcomActivityListService
             return 'Session';
         }
 
-        return 'Recoverable sale';
+        if (($filters['devices'] ?? []) !== [] || ($filters['browsers'] ?? []) !== [] || $focus === 'devices') {
+            return 'Device & browser';
+        }
+
+        if (($filters['utm_sources'] ?? []) !== [] || ($filters['utm_mediums'] ?? []) !== [] || $focus === 'traffic') {
+            return 'Traffic sources';
+        }
+
+        if (($filters['duration'] ?? null) !== null || ($filters['durations'] ?? []) !== []) {
+            return 'Session duration';
+        }
+
+        if (($filters['has_order'] ?? null) === true) {
+            return 'Sale & conversion';
+        }
+
+        return 'Audience & engagement';
     }
 
     /**
@@ -956,8 +981,9 @@ class EcomActivityListService
 
         $sales = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
-            ->tap($scope)
-            ->selectRaw('COUNT(o.id) as payments')
+            ->whereBetween('o.metric_date', [$range['from']->toDateString(), $range['to']->toDateString()])
+            ->tap(fn (Builder $query) => $this->applyFilters($query, $filters, $range, $forDashboard))
+            ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as payments')
             ->selectRaw('COALESCE(SUM(o.items_qty), 0) as sold_qty')
             ->selectRaw('COALESCE(SUM(o.amount_paid), 0) as sale_amount')
             ->first();
@@ -975,7 +1001,7 @@ class EcomActivityListService
             'cart_drops' => (int) ($row->cart_drops ?? 0),
             'checkout_drops' => (int) ($row->checkout_drops ?? 0),
             'proceed_drops' => (int) ($row->proceed_drops ?? 0),
-            'purchase_sessions' => (int) ($row->purchase_sessions ?? 0),
+            'purchase_sessions' => (int) ($sales->payments ?? 0),
             'payments' => (int) ($sales->payments ?? 0),
             'items_sold' => (int) ($sales->sold_qty ?? 0),
             'sale_amount' => round((float) ($sales->sale_amount ?? 0), 2),
@@ -1069,11 +1095,15 @@ class EcomActivityListService
      * - A cycle runs until payment_success includes that product; the same product in the same
      *   session after pay starts a new cycle (open cycle state resets for that code).
      * - Each stage contributes once per committed cycle. Begin and proceed use the max cart qty
-     *   for that product code. Add sums each sku: the highest add-click qty of that sku in the cycle.
-     *   An edit_bag event replaces that sku qty with the bag quantity.
+     *   for that product code. Add sums each sku: the highest qty from the add_to_cart event and the edit_bag event.
+     *   An edit_bag event is the bag after the edit. Each line is checked with the add event and the max qty is kept,
+     *   so two sizes of one product at qty 1 count as add 2.
      *   Paid is the order line qty when the cycle closes. Not a sum of every click.
      * - Unpaid open cycles are committed at end of this pass (add/begin/proceed maxes only).
-     * - Session totals sum all committed cycles; sync sums sessions onto tracking_daily_products.
+     * - Session totals sum all committed cycles. Views stay per session.
+     *   Sync then keeps one add / begin / proceed follow per visitor from the start
+     *   of the calendar day to the end of that day: the max qty, and a later session
+     *   that day only adds the increase.
      *
      * @param  iterable<object>  $actions  chronological (order by id)
      * @param  array<string, string>  $skuToParentCode
@@ -1126,7 +1156,7 @@ class EcomActivityListService
                 }
 
                 if ($type === 'edit_bag') {
-                    $this->setProductFunnelCycleSkuQty($openCycles, $code, $sku, $qty);
+                    $this->applyEditBagSkuQty($openCycles, $action, $trackedFilter, $skuToParentCode);
                 } else {
                     $this->bumpProductFunnelCycleSkuMax($openCycles, $code, $sku, $qty);
                 }
@@ -1201,14 +1231,54 @@ class EcomActivityListService
     }
 
     /**
-     * Bag quantity edit replaces the sku qty. A later checkout uses this quantity.
+     * The edit_bag payload is the bag after the edit. Each line is kept if it is higher than the add_to_cart qty for that sku.
      *
      * @param  array<string, array{add_max: int, begin_max: int, proceed_max: int, add_by_sku?: array<string, int>}>  $openCycles
+     * @param  array<string, true>  $trackedCodes
+     * @param  array<string, string>  $skuToParentCode
      */
-    private function setProductFunnelCycleSkuQty(array &$openCycles, string $code, string $sku, int $qty): void
+    private function applyEditBagSkuQty(array &$openCycles, object $action, array $trackedCodes, array $skuToParentCode): void
     {
-        $openCycles[$code] ??= ['add_max' => 0, 'begin_max' => 0, 'proceed_max' => 0, 'add_by_sku' => []];
-        $openCycles[$code]['add_by_sku'][$sku] = max(1, $qty);
+        $payload = json_decode((string) ($action->add_to_cart ?? ''), true);
+        $items = is_array($payload) ? ($payload['items'] ?? $payload['cart_items'] ?? []) : [];
+        $applied = false;
+
+        if (is_array($items)) {
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+
+                $codes = $this->parentStyleCodesFromCartItem($item, $trackedCodes, $skuToParentCode);
+                if ($codes === []) {
+                    continue;
+                }
+
+                $sku = trim((string) ($item['sku'] ?? ''));
+                if ($sku === '') {
+                    $sku = trim((string) ($item['product_code'] ?? ''));
+                }
+                $qty = max(1, (int) ($item['qty'] ?? 1));
+                foreach ($codes as $code) {
+                    $this->bumpProductFunnelCycleSkuMax($openCycles, $code, $sku, $qty);
+                    $applied = true;
+                }
+            }
+        }
+
+        if ($applied) {
+            return;
+        }
+
+        $code = $this->resolveParentStyleCodeFromAddAction($action, $trackedCodes, $skuToParentCode);
+        if ($code === null) {
+            return;
+        }
+
+        [$sku, $qty] = $this->addToCartSkuAndQty($action);
+        if ($qty > 0) {
+            $this->bumpProductFunnelCycleSkuMax($openCycles, $code, $sku, $qty);
+        }
     }
 
     /**
@@ -1623,7 +1693,7 @@ class EcomActivityListService
         if (filled($request->query('product_code'))) {
             $addChip((string) $request->query('product_code'), ['product_code', 'focus']);
             $chips[] = [
-                'label' => 'Clear section',
+                'label' => 'Clear filter',
                 'remove_url' => $resetUrl,
             ];
         }
@@ -1632,7 +1702,7 @@ class EcomActivityListService
         if ($sessionFocus && filled($request->query('session_id'))) {
             $addChip((string) $request->query('session_id'), ['session_id', 'focus']);
             $chips[] = [
-                'label' => 'Clear section',
+                'label' => 'Clear filter',
                 'remove_url' => $resetUrl,
             ];
         }
@@ -1653,16 +1723,31 @@ class EcomActivityListService
             $addChip('Funnel: '.implode(', ', $labels), $sessionFocus ? ['funnel', 'focus'] : ['funnel']);
             if ($sessionFocus && ! filled($request->query('session_id'))) {
                 $chips[] = [
-                    'label' => 'Clear section',
+                    'label' => 'Clear filter',
                     'remove_url' => $resetUrl,
                 ];
             }
         }
 
-        if ($request->query('has_order') === '1') {
-            $addChip('Has order: With order', ['has_order']);
-        } elseif ($request->query('has_order') === '0') {
-            $addChip('Has order: Without order', ['has_order']);
+        if ($request->query('has_order') === '1' || $request->query('has_order') === '0') {
+            $dropOrder = ['has_order'];
+            if (
+                $request->query('focus') === 'session'
+                && ! $request->filled('funnel')
+                && ! filled($request->query('session_id'))
+            ) {
+                $dropOrder[] = 'focus';
+            }
+            $addChip(
+                $request->query('has_order') === '1' ? 'Has order: With order' : 'Has order: Without order',
+                $dropOrder,
+            );
+            if ($request->query('focus') === 'session' && ! filled($request->query('session_id')) && ! $request->filled('funnel')) {
+                $chips[] = [
+                    'label' => 'Clear filter',
+                    'remove_url' => $resetUrl,
+                ];
+            }
         }
 
         if ($request->query('logged_in') === '1') {
@@ -1673,21 +1758,64 @@ class EcomActivityListService
 
         foreach ((array) $request->query('device_type', []) as $deviceId) {
             $name = $filterOptions['devices'][(int) $deviceId] ?? $deviceId;
-            $addChip('Device: '.ucfirst((string) $name), ['device_type']);
+            $dropDevice = ['device_type'];
+            if (
+                $request->query('focus') === 'session'
+                && ! $request->filled('funnel')
+                && ! filled($request->query('session_id'))
+                && ! $request->filled('browser_type')
+            ) {
+                $dropDevice[] = 'focus';
+            }
+            $addChip('Device: '.ucfirst((string) $name), $dropDevice);
         }
 
         foreach ((array) $request->query('browser_type', []) as $browserId) {
             $name = $filterOptions['browsers'][(int) $browserId] ?? $browserId;
-            $addChip('Browser: '.ucfirst((string) $name), ['browser_type', 'focus']);
+            $dropBrowser = ['browser_type'];
+            if (
+                $request->query('focus') === 'devices'
+                || (
+                    $request->query('focus') === 'session'
+                    && ! $request->filled('funnel')
+                    && ! filled($request->query('session_id'))
+                    && ! $request->filled('device_type')
+                )
+            ) {
+                $dropBrowser[] = 'focus';
+            }
+            $addChip('Browser: '.ucfirst((string) $name), $dropBrowser);
         }
 
         foreach ((array) $request->query('utm_source', []) as $sourceId) {
             $name = $filterOptions['utmSources'][(int) $sourceId] ?? $sourceId;
-            $addChip('Source: '.$name, ['utm_source']);
+            $dropSource = ['utm_source'];
+            if (
+                $request->query('focus') === 'session'
+                && ! $request->filled('funnel')
+                && ! filled($request->query('session_id'))
+                && ! $request->filled('device_type')
+                && ! $request->filled('browser_type')
+                && ! $request->filled('utm_medium')
+            ) {
+                $dropSource[] = 'focus';
+            }
+            $addChip('Source: '.$name, $dropSource);
         }
 
         foreach ((array) $request->query('utm_medium', []) as $medium) {
-            $addChip('Medium: '.$medium, ['utm_medium']);
+            $dropMedium = ['utm_medium'];
+            if (
+                $request->query('focus') === 'session'
+                && ! $request->filled('funnel')
+                && ! filled($request->query('session_id'))
+                && ! $request->filled('device_type')
+                && ! $request->filled('browser_type')
+                && ! $request->filled('utm_source')
+            ) {
+                $dropMedium[] = 'focus';
+            }
+            $addChip('Medium: '.SessionTrafficAttribution::displayMediumLabel((string) $medium), $dropMedium);
         }
 
         if (filled($request->query('department'))) {
@@ -1702,16 +1830,415 @@ class EcomActivityListService
         }
 
         foreach ((array) $request->query('duration_bucket', []) as $bucket) {
-            $label = TrackingSession::DURATION_BUCKETS[$bucket]['label'] ?? $bucket;
+            $label = TrackingDailyDuration::BUCKETS[(int) $bucket]['label'] ?? $bucket;
             $addChip('Duration: '.$label, ['duration_bucket']);
         }
 
         if (filled($request->query('duration'))) {
             $bucket = TrackingDailyDuration::BUCKETS[(int) $request->query('duration')] ?? null;
-            $addChip('Duration: '.($bucket['label'] ?? $request->query('duration')), ['duration']);
+            $dropDuration = ['duration'];
+            if (
+                $request->query('focus') === 'session'
+                && ! $request->filled('funnel')
+                && ! filled($request->query('session_id'))
+                && ! $request->filled('device_type')
+                && ! $request->filled('browser_type')
+                && ! $request->filled('utm_source')
+                && ! $request->filled('utm_medium')
+            ) {
+                $dropDuration[] = 'focus';
+            }
+            $addChip('Duration: '.($bucket['label'] ?? $request->query('duration')), $dropDuration);
         }
 
         return $chips;
+    }
+
+    /**
+     * Header line for the activity Excel file: active filters, then the commerce rows included.
+     *
+     * @param  array<string, mixed>  $filterOptions
+     */
+    public function exportFilterSummary(Request $request, string $resetUrl, array $filterOptions): string
+    {
+        $labels = [];
+        foreach ($this->filterChips($request, $resetUrl, $filterOptions) as $chip) {
+            $label = (string) ($chip['label'] ?? '');
+            if ($label === '' || in_array($label, ['Clear filter', 'Clear filters'], true)) {
+                continue;
+            }
+            $labels[] = $label;
+        }
+
+        $labels[] = 'Cart, begin checkout, proceed checkout, sold';
+
+        return implode(' · ', $labels);
+    }
+
+    /**
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     * @param  array<string, mixed>  $filters
+     * @return array{rows: list<list<int|float|string|null>>, merges: list<array{column: int, start_row: int, end_row: int}>, separators: array<int, list<int>>}
+     */
+    public function commerceExportRows(array $range, array $filters, string $sortBy = self::DEFAULT_SORT): array
+    {
+        $funnel = array_values(array_map('intval', $filters['funnel'] ?? []));
+        $sortBy = self::normalizeSort($sortBy, trim((string) ($filters['product_code'] ?? '')) !== '');
+
+        $scope = function (Builder $query) use ($range, $filters, $funnel): void {
+            $this->applySessionDateScope($query, $range);
+            $this->applyFilters($query, $filters, $range);
+            if ($funnel === [] || array_intersect($funnel, [3, 4, 5, 6]) !== []) {
+                if ($funnel === []) {
+                    $query->where(function (Builder $inner): void {
+                        $inner->whereIn('ts.latest_funnel_stage', [3, 4, 5, 6])
+                            ->orWhere('ts.has_order', 1);
+                    });
+                }
+            }
+        };
+
+        if ($sortBy === 'order_value') {
+            $orderCount = (int) TrackerDatabase::table('tracking_session as ts')
+                ->tap($scope)
+                ->where('ts.has_order', 1)
+                ->count();
+            $orderedIds = array_map('intval', $this->orderValuePageIds($scope, $orderCount, 0, 500000));
+        } else {
+            $orderedIds = TrackerDatabase::table('tracking_session as ts')
+                ->tap($scope)
+                ->tap(fn (Builder $query) => $this->applySort($query, $sortBy, $filters, $range))
+                ->pluck('ts.id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        }
+
+        $lines = [];
+        $separators = [];
+        $serial = 1;
+        $dataIndex = 0;
+        $separatorColumns = range(0, 18);
+
+        foreach (array_chunk($orderedIds, 200) as $chunk) {
+            $fetched = $this->withCommerceAction(TrackerDatabase::table('tracking_session as ts'))
+                ->tap(fn (Builder $query) => $this->withVisitorTrust($query))
+                ->whereIn('ts.id', $chunk)
+                ->get()
+                ->keyBy(fn (object $row) => (int) $row->id);
+
+            $this->attachPaymentSuccessActions($fetched);
+
+            foreach ($chunk as $id) {
+                $row = $fetched->get($id);
+                if ($row === null) {
+                    continue;
+                }
+
+                $exportLines = $this->commerceExportLines($row, $serial);
+                foreach ($exportLines as $line) {
+                    $lines[] = $line;
+                }
+
+                $count = count($exportLines);
+                $separators[$dataIndex + $count - 1] = $separatorColumns;
+
+                $dataIndex += $count;
+                $serial++;
+            }
+        }
+
+        return [
+            'rows' => $lines,
+            'merges' => [],
+            'separators' => $separators,
+        ];
+    }
+
+    /**
+     * @return list<list<int|float|string|null>>
+     */
+    private function commerceExportLines(object $row, int $serial, ?string $sources = null, ?string $mediums = null): array
+    {
+        $stage = (int) ($row->latest_funnel_stage ?? 0);
+        $paid = (int) ($row->has_order ?? 0) === 1 || $stage >= 6;
+        if ($paid) {
+            $stage = 6;
+        }
+
+        $stepLabel = match ($stage) {
+            6 => 'Sold',
+            5 => 'Proceed checkout',
+            4 => 'Begin checkout',
+            default => 'Add to cart',
+        };
+
+        $commerce = $this->commerceCell($row);
+        $payments = $row->payment_success_actions ?? collect();
+        $orderIds = [];
+        $sale = 0.0;
+        $actionAt = null;
+
+        if ($payments instanceof Collection) {
+            foreach ($payments as $payment) {
+                $orderId = trim((string) ($payment->order_id ?? ''));
+                if ($orderId !== '') {
+                    $orderIds[] = $orderId;
+                }
+                $sale += (float) ($payment->amount_paid ?? $payment->commerce_total ?? 0);
+                if ($paid && filled($payment->created_at ?? null)) {
+                    $actionAt = $payment->created_at;
+                }
+            }
+        }
+
+        if ($actionAt === null) {
+            $actionAt = $row->commerce_at ?? null;
+        }
+
+        $cartValue = $this->amount($row->commerce_total);
+        $amount = $paid && $sale > 0 ? round($sale, 2) : $cartValue;
+
+        $name = trim((string) ($row->name ?? ''));
+        if ($name === '') {
+            $name = (int) ($row->is_logged_in ?? 0) === 1 ? 'Signed-in visitor' : 'Guest visitor';
+        }
+
+        $source = $sources ?? (filled($row->session_touch_utm_source ?? null)
+            ? (string) $row->session_touch_utm_source
+            : (filled($row->traffic_source_name ?? null) ? (string) $row->traffic_source_name : 'Direct'));
+        $medium = $mediums ?? (filled($row->session_touch_utm_medium ?? null)
+            ? (string) $row->session_touch_utm_medium
+            : (filled($row->traffic_source_medium ?? null) ? (string) $row->traffic_source_medium : ''));
+        $products = $this->exportProductLines($commerce);
+        if ($products === []) {
+            $products[] = ['code' => '', 'sku' => '', 'title' => '', 'color' => '', 'size' => '', 'qty' => 0];
+        }
+
+        $orderId = implode(', ', array_values(array_unique($orderIds)));
+        $lines = [];
+
+        foreach ($products as $product) {
+            $qty = max(0, (int) ($product['qty'] ?? 0));
+
+            $lines[] = [
+                $serial,
+                $stepLabel,
+                $name,
+                trim((string) ($row->email ?? '')),
+                trim((string) ($row->phone ?? '')),
+                (int) ($row->is_logged_in ?? 0) === 1 ? 'Signed in' : 'Guest',
+                $product['code'],
+                $product['sku'],
+                $product['title'],
+                $product['color'],
+                $product['size'],
+                $qty,
+                $amount,
+                $orderId,
+                $source,
+                $medium,
+                filled($row->device_name ?? null) ? ucfirst((string) $row->device_name) : '',
+                TrackerTime::formatFromStorage($row->created_at) ?? '',
+                TrackerTime::formatFromStorage($actionAt) ?? '',
+            ];
+        }
+
+        return $lines;
+    }
+
+    private function sourceMediumFromSessionRow(object $row): string
+    {
+        $source = filled($row->session_touch_utm_source ?? null)
+            ? trim((string) $row->session_touch_utm_source)
+            : (filled($row->traffic_source_name ?? null) ? trim((string) $row->traffic_source_name) : '');
+        if ($source === '') {
+            return '—';
+        }
+
+        $medium = filled($row->session_touch_utm_medium ?? null)
+            ? trim((string) $row->session_touch_utm_medium)
+            : (filled($row->traffic_source_medium ?? null) ? trim((string) $row->traffic_source_medium) : '');
+
+        return $this->formatSourceMediumPair($source, $medium);
+    }
+
+    private function formatSourceMediumPair(string $source, string $medium): string
+    {
+        $sourceLabel = SessionTrafficAttribution::displaySourceLabel($source) ?? $source;
+        $mediumLabel = $medium === '' || strtolower($medium) === 'none'
+            ? '—'
+            : SessionTrafficAttribution::displayMediumLabel($medium);
+
+        return $sourceLabel.' / '.$mediumLabel;
+    }
+
+    /**
+     * Multi source or multi medium days list each real pair, earliest first, comma separated.
+     *
+     * @param  Collection<int, object>  $rows
+     */
+    private function attachMultiDaySourceLabels(Collection $rows): void
+    {
+        $multiRows = $rows->filter(function (object $row): bool {
+            $source = strtolower(trim((string) ($row->session_touch_utm_source ?? '')));
+            $medium = strtolower(trim((string) ($row->session_touch_utm_medium ?? '')));
+
+            return $source === SessionTrafficAttribution::MULTI_SOURCE
+                || $medium === SessionTrafficAttribution::MULTI_MEDIUM;
+        });
+
+        if ($multiRows->isEmpty()) {
+            return;
+        }
+
+        $dailyIds = $multiRows
+            ->map(fn (object $row): int => (int) ($row->tracking_daily_visitor_id ?? 0))
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $labels = $this->daySourceMediumLabels($dailyIds);
+
+        foreach ($multiRows as $row) {
+            $label = $labels[(int) ($row->tracking_daily_visitor_id ?? 0)] ?? null;
+            if (filled($label)) {
+                $row->source_medium = $label;
+            }
+        }
+    }
+
+    /**
+     * @param  list<int>  $dailyIds
+     * @return array<int, string>
+     */
+    private function daySourceMediumLabels(array $dailyIds): array
+    {
+        if ($dailyIds === []) {
+            return [];
+        }
+
+        $sessions = TrackerDatabase::table('tracking_session')
+            ->whereIn('tracking_daily_visitor_id', $dailyIds)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['session_id', 'tracking_daily_visitor_id']);
+
+        $sessionIds = $sessions->pluck('session_id')->map(fn ($id) => (string) $id)->all();
+        if ($sessionIds === []) {
+            return [];
+        }
+
+        $activityRows = TrackerDatabase::table('activity_ecom_user')
+            ->whereIn('session_id', $sessionIds)
+            ->get(['session_id', 'landing_page', 'created_at'])
+            ->keyBy('session_id');
+        $actions = TrackerDatabase::table('activity_ecom_user_actions')
+            ->whereIn('session_id', $sessionIds)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['session_id', 'id', 'page_url', 'referer', 'created_at'])
+            ->groupBy('session_id');
+
+        $labels = [];
+
+        foreach ($sessions->groupBy('tracking_daily_visitor_id') as $dailyId => $daySessions) {
+            $touches = [];
+
+            foreach ($daySessions as $session) {
+                $activity = $activityRows->get($session->session_id);
+                if ($activity === null) {
+                    continue;
+                }
+
+                $sessionActions = $actions->get($session->session_id, collect());
+                $sessionTouches = SessionTrafficAttribution::normalizeTouchesForAttributionStorage(
+                    SessionTrafficAttribution::collectSessionTrafficTouches((array) $activity, $sessionActions),
+                );
+                if ($sessionTouches === []) {
+                    $referer = (string) ($sessionActions->first(fn (object $action): bool => filled($action->referer ?? null))?->referer ?? '');
+                    $sessionTouches = [SessionTrafficAttribution::resolvedTrafficBucket($activity, [''], $referer)];
+                }
+
+                foreach ($sessionTouches as $touch) {
+                    $touches[] = $touch;
+                }
+            }
+
+            $label = $this->commaSourceMediumLabel($touches);
+            if ($label !== null) {
+                $labels[(int) $dailyId] = $label;
+            }
+        }
+
+        return $labels;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $touches
+     */
+    private function commaSourceMediumLabel(array $touches): ?string
+    {
+        $pairs = [];
+        $seen = [];
+
+        foreach ($touches as $touch) {
+            if (! is_array($touch)) {
+                continue;
+            }
+
+            $source = SessionTrafficAttribution::normalizeSource(trim((string) ($touch['source'] ?? ''))) ?? '';
+            if ($source === '' || $source === '(direct)' || $source === SessionTrafficAttribution::MULTI_SOURCE) {
+                continue;
+            }
+
+            $medium = strtolower(trim((string) ($touch['medium'] ?? '')));
+            if ($medium === SessionTrafficAttribution::MULTI_MEDIUM) {
+                continue;
+            }
+
+            $key = $source.'|'.$medium;
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $pairs[] = $this->formatSourceMediumPair($source, $medium === 'none' ? '' : $medium);
+        }
+
+        return $pairs === [] ? null : implode(', ', $pairs);
+    }
+
+    /**
+     * @param  array<string, mixed>  $commerce
+     * @return list<array{code: string, sku: string, title: string, color: string, size: string, qty: int}>
+     */
+    private function exportProductLines(array $commerce): array
+    {
+        $lines = [];
+
+        foreach ($commerce['expandable_commerce_events'] ?? [] as $event) {
+            if (! is_array($event)) {
+                continue;
+            }
+
+            foreach ($event['products'] ?? [] as $product) {
+                if (! is_array($product)) {
+                    continue;
+                }
+
+                $lines[] = [
+                    'code' => trim((string) ($product['code'] ?? '')),
+                    'sku' => trim((string) ($product['sku'] ?? '')),
+                    'title' => trim((string) ($product['name'] ?? $product['title'] ?? '')),
+                    'color' => trim((string) ($product['color_po'] ?? '')),
+                    'size' => trim((string) ($product['size'] ?? '')),
+                    'qty' => max(1, (int) ($product['qty'] ?? 1)),
+                ];
+            }
+        }
+
+        return $lines;
     }
 
     /**
@@ -1776,9 +2303,14 @@ class EcomActivityListService
             $row->commerce = $commerce;
             $row->trust = $this->trustCell($row);
             $row->focus = $this->focusMetrics($row, $focusKeys);
+            $row->source_medium = $this->sourceMediumFromSessionRow($row);
 
             return $row;
         });
+
+        if ($rows->isNotEmpty()) {
+            $this->attachMultiDaySourceLabels($rows);
+        }
 
         return new LengthAwarePaginator($rows, $total, $perPage, $page, [
             'path' => Paginator::resolveCurrentPath(),
@@ -1897,7 +2429,7 @@ class EcomActivityListService
         if (! empty($filters['durations'])) {
             $query->where(function (Builder $durations) use ($filters) {
                 foreach ($filters['durations'] as $key) {
-                    $bucket = TrackingSession::DURATION_BUCKETS[$key];
+                    $bucket = TrackingDailyDuration::BUCKETS[$key];
                     $durations->orWhere(fn (Builder $range) => $range
                         ->where('ts.duration_seconds', '>=', $bucket['min'])
                         ->when($bucket['max'] !== null, fn (Builder $q) => $q->where('ts.duration_seconds', '<=', $bucket['max'])));
@@ -4160,10 +4692,15 @@ class EcomActivityListService
     private function product(array $item): array
     {
         $title = trim((string) ($item['product_name'] ?? ''));
-        $code = trim((string) ($item['product_code'] ?? $item['sku'] ?? ''));
+        $code = trim((string) ($item['product_code'] ?? ''));
+        $sku = trim((string) ($item['sku'] ?? ''));
+        $name = $title !== '' ? $title : ($code !== '' ? $code : ($sku !== '' ? $sku : 'Product'));
 
         return array_filter([
-            'title' => $title !== '' && $code !== '' ? "{$title} ({$code})" : ($title ?: ($code ?: 'Product')),
+            'title' => $title !== '' && $code !== '' ? "{$title} ({$code})" : ($title ?: ($code ?: ($sku ?: 'Product'))),
+            'name' => $name,
+            'code' => $code,
+            'sku' => $sku,
             'size' => trim((string) ($item['size_name'] ?? '')),
             'color_po' => trim((string) ($item['color_name'] ?? '')),
             'qty' => (string) max(1, (int) ($item['qty'] ?? 1)),

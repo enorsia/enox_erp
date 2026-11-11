@@ -19,45 +19,38 @@ Each session is attributed on its own before visitor-level rules apply.
 
 1. Collect touches from **all** `activity_ecom_user_actions` for the session (landing URL + marketing params on later `page_url`s). Same-site referer alone does **not** create a new paid/affiliate touch.
 2. If none, fall back to session row / landing heuristics (`resolvedTrafficBucket`).
-3. **24-hour visitor carry** (below).
-4. **Replace** stored touches when the collected list changes (not append-only).
+3. **Replace** stored touches when the collected list changes (not append-only).
+4. **Calendar-day visitor bucket** (below) overwrites `utm_source` / `utm_medium` on that visitor's sessions for the visit date.
 
 **User activity UTM filter** and **traffic drill-down** (`utm_source` = `tracking_traffic_source.id`):
 
-- Match **last touch** in that session (`MAX(touch_sequence)`), including `utm_medium` on that row.
+- Match the synced day bucket on the session (`utm_source` / `utm_medium` on `tracking_session_details`), including `utm_medium`.
 
 **Session detail → “Session traffic”:**
 
 - Shows the same synced rows as the filter (after sync). Falls back to live action collection only if sync has not run.
 
-## 3. Source 1 → Source 2 → “sticks” to Source 2 (visitor + visit)
+## 3. One source and one medium per visitor per calendar day
 
-**Business rule (CEO):** If a user comes on **source 1**, then later on **source 2**, then **after source 2** the same user’s activity should count under **source 2** until a **newer** campaign URL or the carry window ends.
+**Business rule:** Source and medium are counted from the start of the calendar day to the end of that day (`TRACKER_VISITOR_TIMEZONE`). The next calendar day starts again. Paid qty and sale stay on the order placed time.
 
-How the product implements that:
+| That day | Source | Medium |
+|----------|--------|--------|
+| Only Direct | `(direct)` | `none` |
+| Direct, then one real source (for example Google) | That source, on **every** session that day | That session's real medium, on **every** session that day |
+| Two or more different real sources | `multi sources` on every session that day | Resolved on its own |
+| Two or more different real mediums | Resolved on its own | `multi mediums` on every session that day |
+| Next day, no source | `(direct)` | `none` |
 
-| Step | What happens |
-|------|----------------|
-| Visit A | Campaign **source 1** on URL → stored as touch 1; filters = source 1. |
-| Visit B (later) | Campaign **source 2** on URL → stored; filters = **source 2**. |
-| Visit C (no UTMs) | No campaign on landing/browse → would be Direct, but **24h carry** reuses visitor’s **latest** qualifying touch → **source 2**. |
-| Visit D | New campaign **source 3** on URL → **source 3** takes over (latest marketing wins). |
-| After 24h | No qualifying touch in window → **Direct**. |
+Direct and medium `none` do not count as a second source or medium. The same source twice is still that one source. Source and medium are decided separately.
 
-**Same visit:** If the user hits source 1 then source 2 then keeps browsing with no UTMs, we **drop trailing Direct** touches and keep the **last in-session marketing** touch (source 2), not Direct.
+**Same visit:** Trailing Direct after a marketing touch in that session is dropped before the day is counted (`normalizeTouchesForAttributionStorage()`).
 
-Implementation:
+Implementation: `SessionTrafficAttribution::resolveVisitorDayBucket()` then `TrackerDashboardSyncService::applyVisitorDayTrafficBucket()` during dashboard sync.
 
-- `normalizeTouchesForAttributionStorage()` — remove trailing Direct after a marketing touch in the same session.
-- `applySessionAttributionCarry()` — Direct-only visits reuse **last qualifying touch for that visitor** in the carry window (always the **newest** source, e.g. source 2 after source 1).
+## 4. Day boundary
 
-## 4. Twenty-four-hour visitor carry (config)
-
-| Setting | Default | Rule |
-|---------|---------|------|
-| `TRACKER_ATTRIBUTION_CARRY_HOURS` | **24** | Window for §3 cross-visit stickiness. After 24h with no qualifying touch → **Direct**. |
-
-Qualifying touch = UTM / click-id on URL (`AttributionRules::isMarketingQualifyingTouch`).
+This is the calendar day of the session visit date, not a rolling 24 hours and not the 7-day conversion window. A return the next day with no campaign URL is Direct.
 
 ## 5. Seven-day visitor marketing (list columns & conversion copy)
 
@@ -65,7 +58,7 @@ Qualifying touch = UTM / click-id on URL (`AttributionRules::isMarketingQualifyi
 |---------|---------|------|
 | `TRACKER_CONVERSION_WINDOW_DAYS` | **7** | For `list_traffic_utm_*` on `activity_ecom_user`, conversion blocks, and some dashboard SQL — last marketing touch in **7 days** before session end / payment (skips Direct for order credit). |
 
-**Not** used for User activity UTM source/medium filters (those use §2 last in-session touch).
+**Not** used for User activity UTM source/medium filters (those use the calendar-day bucket in §3).
 
 ## 6. Orders / revenue
 
@@ -87,3 +80,4 @@ Qualifying touch = UTM / click-id on URL (`AttributionRules::isMarketingQualifyi
 | Date | Change |
 |------|--------|
 | 2026-10-26 | Document rules; sync rebuilds touches from full action history; 24h visitor carry; strip trailing Direct after in-session marketing; session page prefers synced touches; source-2 stickiness documented. |
+| 2026-11-08 | Sync and user-activity filters use one source and one medium per visitor per calendar day. More than one real value that day is `multi sources` / `multi mediums`. The next day starts again. |

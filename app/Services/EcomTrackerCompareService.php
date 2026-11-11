@@ -336,6 +336,8 @@ class EcomTrackerCompareService
     {
         $baseQuery = EcomTrackerCompareFilters::activityIndexQuery($filters, $backUrl);
         $activityIndexUrl = route('admin.ecom-activity.index', $baseQuery);
+        $devicesDetailUrl = route('admin.ecom-activity.index', array_merge($baseQuery, ['focus' => 'devices']));
+        $trafficDetailUrl = route('admin.ecom-activity.index', array_merge($baseQuery, ['focus' => 'traffic']));
 
         $byDevice = [];
         foreach ($dashboard['devices']['by_device'] ?? [] as $row) {
@@ -343,6 +345,7 @@ class EcomTrackerCompareService
             $deviceQuery = $baseQuery;
             if ($deviceType !== null && $deviceType !== '') {
                 $deviceQuery['device_type'] = [(int) $deviceType];
+                $deviceQuery['focus'] = 'session';
             }
             $byDevice[] = array_merge($row, [
                 'activity_url' => route('admin.ecom-activity.index', $deviceQuery),
@@ -355,7 +358,7 @@ class EcomTrackerCompareService
             $browserQuery = $baseQuery;
             if ($browserId !== null && $browserId !== '') {
                 $browserQuery['browser_type'] = [(int) $browserId];
-                $browserQuery['focus'] = 'devices';
+                $browserQuery['focus'] = 'session';
             }
             $byBrowser[] = array_merge($row, [
                 'activity_url' => route('admin.ecom-activity.index', $browserQuery),
@@ -373,6 +376,7 @@ class EcomTrackerCompareService
                         array_merge($baseQuery, array_filter([
                             'utm_source' => [(int) $sourceId],
                             'utm_medium' => filled($row['medium'] ?? null) ? [(string) $row['medium']] : null,
+                            'focus' => 'session',
                         ], fn ($value) => $value !== null && $value !== [])),
                     ),
             ]);
@@ -386,6 +390,7 @@ class EcomTrackerCompareService
                     'admin.ecom-activity.index',
                     array_merge($baseQuery, array_filter([
                         'duration' => $bucket['key'] ?? null,
+                        'focus' => 'session',
                     ], fn ($value) => $value !== null && $value !== '')),
                 ),
             ]);
@@ -397,9 +402,9 @@ class EcomTrackerCompareService
                 'by_device' => $byDevice,
                 'by_browser' => $byBrowser,
             ],
-            'devicesDetailUrl' => $activityIndexUrl,
+            'devicesDetailUrl' => $devicesDetailUrl,
             'traffic' => $traffic,
-            'trafficDetailUrl' => $activityIndexUrl,
+            'trafficDetailUrl' => $trafficDetailUrl,
             'durations' => $durations,
             'newReturning' => $dashboard['newReturning'] ?? ['unique' => 0, 'returning' => 0],
             'audienceDetailUrl' => $activityIndexUrl,

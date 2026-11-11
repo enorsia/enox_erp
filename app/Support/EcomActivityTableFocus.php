@@ -14,7 +14,7 @@ final class EcomActivityTableFocus
     private const FOCUS_COLUMN_KEYS = [
         'audience' => ['device'],
         'devices' => ['device_detail'],
-        'traffic' => ['traffic_source', 'traffic_medium'],
+        'traffic' => [],
         'session_quality' => ['classification_reason'],
         'products' => ['products_viewed', 'adds', 'purchases'],
     ];
@@ -68,12 +68,22 @@ final class EcomActivityTableFocus
             $keys = self::FOCUS_COLUMN_KEYS[$focus];
         }
 
+        if ($focus === 'traffic') {
+            $keys = self::mergeKeys(['device_detail'], $keys);
+        }
+
         if (self::hasDeviceScope($request)) {
             $keys = self::mergeKeys($keys, ['device_detail']);
         }
 
         if (self::hasTrafficScope($request)) {
-            $keys = self::mergeKeys($keys, ['traffic_source', 'traffic_medium']);
+            if ($request->input('focus') === 'session') {
+                $keys = self::mergeKeys($keys, ['device_detail']);
+            }
+        }
+
+        if (self::hasDurationScope($request) && $request->input('focus') === 'session') {
+            $keys = self::mergeKeys($keys, ['device_detail']);
         }
 
         if (filled($request->input('visitor_type'))) {
@@ -134,5 +144,10 @@ final class EcomActivityTableFocus
         }
 
         return $request->filled('utm_source') || $request->filled('utm_medium');
+    }
+
+    private static function hasDurationScope(Request $request): bool
+    {
+        return $request->filled('duration');
     }
 }
