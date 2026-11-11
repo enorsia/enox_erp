@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\CloudflareFileDeleteJob;
 use App\Jobs\CloudflareFileUploadJob;
 use App\Models\User;
+use App\Services\TwoFactorAuthService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,10 @@ use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
+    public function __construct(
+        protected TwoFactorAuthService $twoFactor
+    ) {}
+
     public function index(Request $request): View
     {
         Gate::authorize('authentication.users.index');
@@ -68,6 +73,8 @@ class UserController extends Controller
         }
 
         try {
+            $enableTwoFactor = $request->boolean('two_factor_enabled');
+
             $user  = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
@@ -75,7 +82,12 @@ class UserController extends Controller
                 'avatar' => $filename,
                 'password' => Hash::make($request->password),
                 'status' => $request->filled('status'),
+                'two_factor_enabled' => $enableTwoFactor,
             ]);
+
+            if ($enableTwoFactor) {
+                $this->twoFactor->assignSecret($user, $this->twoFactor->generateSecret());
+            }
 
             $user->assignRole($request->role);
 
@@ -112,6 +124,7 @@ class UserController extends Controller
     {
         Gate::authorize('authentication.users.edit');
         $roles = Role::all();
+        $user->loadCount('trustedDevices');
 
         return view('users.edit', compact('user', 'roles'));
     }
@@ -137,13 +150,29 @@ class UserController extends Controller
 
             $filePath = public_path('upload/user_images/' . $user->avatar);
             $fileUrl = null;
+            $enableTwoFactor = $request->boolean('two_factor_enabled');
+            $wasTwoFactorEnabled = (bool) $user->two_factor_enabled;
+
             $user->update([
                 'name' => $request->name,
                 'email' => $request->email,
                 'designation' => $request->designation,
                 'password' => $request->filled('password') ? Hash::make($request->password) : $user->password,
                 'status' => $request->filled('status'),
+                'two_factor_enabled' => $enableTwoFactor,
             ]);
+
+            if ($enableTwoFactor && ! $wasTwoFactorEnabled && ! $user->two_factor_secret) {
+                $this->twoFactor->assignSecret($user, $this->twoFactor->generateSecret());
+            }
+
+            if (! $enableTwoFactor) {
+                $user->forceFill([
+                    'two_factor_secret' => null,
+                    'two_factor_confirmed_at' => null,
+                ])->save();
+                $user->trustedDevices()->delete();
+            }
             $user->syncRoles([$request->role]);
 
             if ($request->hasFile('avatar')) {
@@ -224,6 +253,22 @@ class UserController extends Controller
             Log::error('User updated failed: ' . $e->getMessage());
             return redirect()->route('admin.users.index');
         }
+    }
+
+    public function resetTwoFactorDevices(User $user): RedirectResponse
+    {
+        Gate::authorize('authentication.users.edit');
+
+        $this->twoFactor->revokeAllTrustedDevices($user);
+
+        activity()
+            ->causedBy(Auth::user())
+            ->performedOn($user)
+            ->log('Reset trusted devices / 2FA remember-for-device for '.$user->name);
+
+        notify()->success('Trusted devices cleared. User must complete 2FA again on every device.', 'Success');
+
+        return redirect()->route('admin.users.edit', $user);
     }
 
     public function destroy(User $user): RedirectResponse

@@ -8,6 +8,7 @@ use App\Http\Controllers\DailySaleController;
 use App\Http\Controllers\DailyReturnController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\TwoFactorAuthController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardAnalyticsController;
@@ -34,12 +35,21 @@ Route::get('/', fn() => Auth::check()
 
 Route::prefix('admin')->name('admin.')->controller(AuthController::class)->group(function () {
     Route::get('/login', 'showLogin')->middleware('guest')->name('login');
-    Route::post('/login', 'login')->name('login.post');
+    Route::post('/login', 'login')->middleware('throttle:10,1')->name('login.post');
     Route::post('/logout', 'logout')->middleware('auth')->name('logout');
 });
 
-Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
+Route::prefix('admin')->name('admin.')->middleware('guest')->controller(TwoFactorAuthController::class)->group(function () {
+    Route::get('/two-factor/challenge', 'showChallenge')->name('two-factor.challenge');
+    Route::post('/two-factor/challenge', 'verifyChallenge')->middleware('throttle:10,1')->name('two-factor.challenge.post');
+    Route::get('/two-factor/setup', 'showSetup')->name('two-factor.setup');
+    Route::post('/two-factor/setup', 'confirmSetup')->middleware('throttle:10,1')->name('two-factor.setup.post');
+});
+
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'two_factor.verified'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('users/{user}/reset-two-factor-devices', [UserController::class, 'resetTwoFactorDevices'])
+        ->name('users.reset-two-factor-devices');
     Route::resource('users', UserController::class);
     Route::resource('roles', RoleController::class);
     Route::resource('platforms', PlatformController::class);

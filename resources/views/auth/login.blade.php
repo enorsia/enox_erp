@@ -40,21 +40,25 @@
                     <h2 class="fw-bold fs-24">Sign In</h2>
                     <p class="text-muted mt-1 mb-4">Enter your email address and password to access admin panel.</p>
 
-                    <form action="{{route('admin.login.post')}}" class="authentication-form" method="POST">
+                    <form id="login-form" action="{{ route('admin.login.post') }}" class="authentication-form" method="POST" autocomplete="on">
                         @csrf
                         <div class="mb-3">
-                            <label class="form-label" for="example-email">Email</label>
-                            <input type="email" id="example-email" name="email" class="form-control" placeholder="Enter your email">
+                            <label class="form-label" for="login-email">Email</label>
+                            <input type="email" id="login-email" name="email" class="form-control" placeholder="Enter your email"
+                                value="{{ old('email') }}" autocomplete="username" inputmode="email" spellcheck="false" autocapitalize="none" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label" for="example-password">Password</label>
-                            <input type="password" id="example-password" name="password" class="form-control" placeholder="Enter your password">
+                            <label class="form-label" for="login-password">Password</label>
+                            <input type="password" id="login-password" name="password" class="form-control" placeholder="Enter your password"
+                                autocomplete="current-password" required>
                         </div>
                         <div class="mb-3">
                             <div class="form-check">
-                                <input type="checkbox" class="form-check-input" id="checkbox-signin" name="remember_me">
+                                <input type="checkbox" class="form-check-input" id="checkbox-signin" name="remember_me" value="1"
+                                    {{ old('remember_me') ? 'checked' : '' }}>
                                 <label class="form-check-label" for="checkbox-signin">Remember me</label>
                             </div>
+                            <p class="form-text text-muted small mb-0">Keeps you signed in on this browser (server session). Your browser can still save email and password separately.</p>
                         </div>
 
                         <div class="mb-1 text-center d-grid">

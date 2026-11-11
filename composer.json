@@ -12,10 +12,12 @@
         "php": "^8.2",
         "ext-zip": "*",
         "appslabke/lara-izitoast": "^1.1",
+        "bacon/bacon-qr-code": "*",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
         "maatwebsite/excel": "^3.1",
         "openspout/openspout": "^4.28",
+        "pragmarx/google2fa-laravel": "*",
         "predis/predis": "^2.0",
         "spatie/laravel-activitylog": "*",
         "spatie/laravel-permission": "*"

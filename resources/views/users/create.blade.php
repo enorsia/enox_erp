@@ -154,6 +154,20 @@
                                 </label>
                                 <p class="f-hint mt-1">Enable to activate this user immediately.</p>
                             </div>
+
+                            <div class="pt-3 border-t border-slate-200 dark:border-slate-700">
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <div class="toggle-track {{ old('two_factor_enabled') ? 'on' : '' }}" id="twoFactorToggle"
+                                        onclick="toggleSwitch('twoFactorToggle')">
+                                        <div class="toggle-thumb"></div>
+                                    </div>
+                                    <span class="text-sm text-slate-600 dark:text-slate-300 font-medium"
+                                        onclick="toggleSwitch('twoFactorToggle')">Require Google Authenticator (2FA)</span>
+                                    <input type="checkbox" class="hidden" name="two_factor_enabled" id="twoFactorCheckbox"
+                                        value="1" {{ old('two_factor_enabled') ? 'checked' : '' }}>
+                                </label>
+                                <p class="f-hint mt-2">When enabled, this user must verify with a 6-digit code at login unless the browser is trusted. They will scan a QR on first login (or you can show it after saving on Edit user).</p>
+                            </div>
                         </div>
                     </div>
                 </div>
