@@ -117,7 +117,7 @@
                                         <div class="toggle-thumb"></div>
                                     </div>
                                     <span class="text-sm text-slate-600 dark:text-slate-300 font-medium" onclick="toggleSwitch('statusToggle')">Active status</span>
-                                    <input type="checkbox" class="hidden" name="status" id="statusToggleCheckbox" {{ $user->status ? 'checked' : '' }}>
+                                    <input type="checkbox" class="hidden" name="status" id="statusCheckbox" {{ $user->status ? 'checked' : '' }}>
                                 </label>
                             </div>
 
@@ -150,7 +150,7 @@
                                     @endphp
                                     <div class="mt-3 p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40">
                                         <p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Setup QR (Google Authenticator)</p>
-                                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&amp;data={{ urlencode($otpUrl) }}" width="180" height="180" alt="2FA QR code" class="rounded-md border border-slate-200 dark:border-slate-600">
+                                        <img src="{{ $twoFactor->qrCodeDataUri($otpUrl) }}" width="180" height="180" alt="2FA QR code" class="rounded-md border border-slate-200 dark:border-slate-600">
                                         <p class="f-hint mt-2">Share this QR if the user has not finished setup yet.</p>
                                     </div>
                                 @endif

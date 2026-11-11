@@ -4,6 +4,10 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Models\UserTrustedDevice;
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Str;
@@ -60,6 +64,17 @@ class TwoFactorAuthService
             $user->email,
             $secret
         );
+    }
+
+    public function qrCodeDataUri(string $otpAuthUrl, int $size = 180): string
+    {
+        $renderer = new ImageRenderer(
+            new RendererStyle($size, 0),
+            new SvgImageBackEnd()
+        );
+        $svg = (new Writer($renderer))->writeString($otpAuthUrl);
+
+        return 'data:image/svg+xml;base64,'.base64_encode($svg);
     }
 
     public function assignSecret(User $user, string $secret): void

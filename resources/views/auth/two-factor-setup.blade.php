@@ -23,7 +23,7 @@
                     @endif
 
                     <div class="mb-4 text-center">
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&amp;data={{ urlencode($otpUrl) }}" width="200" height="200" alt="2FA QR code" class="border rounded">
+                        <img src="{{ app(\App\Services\TwoFactorAuthService::class)->qrCodeDataUri($otpUrl, 200) }}" width="200" height="200" alt="2FA QR code" class="border rounded">
                         <p class="text-muted small mt-2 mb-0">Manual key: <code>{{ $secret }}</code></p>
                     </div>
 

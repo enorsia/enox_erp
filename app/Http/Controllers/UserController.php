@@ -98,6 +98,11 @@ class UserController extends Controller
                 ->log('Created new user account for ' . $user->name . ' (' . $user->email . ')');
 
             notify()->success("User created successfully.", "Success");
+
+            if ($enableTwoFactor) {
+                return redirect()->route('admin.users.edit', $user);
+            }
+
             return redirect()->route('admin.users.index');
         } catch (\Exception $e) {
             Log::error('User created failed: ' . $e->getMessage());
@@ -151,7 +156,6 @@ class UserController extends Controller
             $filePath = public_path('upload/user_images/' . $user->avatar);
             $fileUrl = null;
             $enableTwoFactor = $request->boolean('two_factor_enabled');
-            $wasTwoFactorEnabled = (bool) $user->two_factor_enabled;
 
             $user->update([
                 'name' => $request->name,
@@ -162,8 +166,11 @@ class UserController extends Controller
                 'two_factor_enabled' => $enableTwoFactor,
             ]);
 
-            if ($enableTwoFactor && ! $wasTwoFactorEnabled && ! $user->two_factor_secret) {
-                $this->twoFactor->assignSecret($user, $this->twoFactor->generateSecret());
+            if ($enableTwoFactor) {
+                $user->refresh();
+                if (! $user->two_factor_secret) {
+                    $this->twoFactor->assignSecret($user, $this->twoFactor->generateSecret());
+                }
             }
 
             if (! $enableTwoFactor) {
@@ -246,12 +253,18 @@ class UserController extends Controller
             }
 
 
+            $user->refresh();
+
             notify()->success("User updated successfully.", "Success");
-            return redirect()->route('admin.users.index');
+
+            return redirect()->route('admin.users.edit', $user);
         } catch (\Exception $e) {
             notify()->error('Failed to updated user', 'Error');
-            Log::error('User updated failed: ' . $e->getMessage());
-            return redirect()->route('admin.users.index');
+            Log::error('User updated failed: ' . $e->getMessage(), ['user_id' => $user->id, 'exception' => $e]);
+
+            return redirect()
+                ->route('admin.users.edit', $user)
+                ->withInput($request->except(['password', 'password_confirmation', 'avatar']));
         }
     }
 
