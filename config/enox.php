@@ -20,6 +20,7 @@ return [
         'selling_chart_sizes_by_category' => 'selling-chart/get-sizes-by-category',
         'selling_chart_po_histories' => 'selling-chart/get-po-histories',
         'style_stock_report' => 'styles/stock',
+        'style_orders' => 'styles/orders',
         'selling_chart_update_discount' => 'selling-chart/update-discount',
         'tracking_site_settings' => 'tracking/site-settings',
         'tracking_products_total_sold' => 'tracking/products/total-sold',

@@ -2,15 +2,19 @@
 
 namespace App\Http\Controllers;
 
+
 use App\ApiServices\SellingChartApiService;
+use App\ApiServices\StyleProfitService;
 use App\Models\Platform;
 use App\Models\SellingChartBasicInfo;
 use App\Models\SellingChartExpense;
 use App\Services\StyleStockReportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -19,6 +23,7 @@ class StyleStockReportController extends Controller
     public function __construct(
         protected StyleStockReportService $service,
         protected SellingChartApiService $sellingChartApiService,
+        protected StyleProfitService $styleProfitService
     ) {}
 
 
@@ -223,5 +228,39 @@ class StyleStockReportController extends Controller
         $html = view('selling_chart.discounts.partials.card-edit-panel', $data)->render();
 
         return response()->json(['status' => true, 'data' => $html]);
+    }
+
+    public function styleOrders(Request $request)
+    {
+        $data = [
+            'lookup_names' => collect(),
+            'start' => 0,
+        ];
+
+        try {
+            $startDate = Carbon::parse($request->input('start_date', '2026-10-08'))->startOfDay();
+            $endDate = Carbon::parse($request->input('end_date', '2026-10-08'))->endOfDay();
+
+            $filters = [
+                'start_date' => $startDate->toIso8601String(),
+                'end_date' => $endDate->toIso8601String(),
+            ];
+
+            $response = $this->styleProfitService->get($filters);
+
+            if ($response->failed()) {
+                throw new \Exception('API request failed');
+            }
+            $apiData = $response->json();
+            $ecomOrders = $this->styleProfitService->ecomOrdersNormalize($apiData);
+
+            dd($ecomOrders);
+
+        } catch (\Exception $e) {
+            Log::error('Fabrication API Error', [
+                'message' => $e->getMessage(),
+            ]);
+        }
+        return view('selling_chart.fabrication.index', $data);
     }
 }
