@@ -36,19 +36,43 @@
                         sessionHasPaymentSuccess: @js(in_array('payment_success', $reachedSteps, true)),
                         existingOrderIds: @js(collect($sessionPaymentOrders ?? [])->pluck('order_id')->filter()->values()->all()),
                         replicaGrand: '',
-                        replicaPaidAt: '',
-                        replicaPaidAtMin: '',
                         replicaPaymentMethod: 'WORLD PAY',
                         replicaFormAction: '',
+                        syncReplicaPaidAtPicker(paidAt, paidAtMin) {
+                            this.$nextTick(() => {
+                                const el = this.$refs.replicaPaidAtInput;
+
+                                if (! el) {
+                                    return;
+                                }
+
+                                el.value = paidAt;
+
+                                if (! el._etdFlatpickr && window.initEtdFlatpickr) {
+                                    window.initEtdFlatpickr(el);
+                                }
+
+                                const fp = el._etdFlatpickr;
+
+                                if (! fp) {
+                                    return;
+                                }
+
+                                fp.setDate(paidAt, false);
+
+                                if (paidAtMin) {
+                                    fp.set('minDate', paidAtMin);
+                                }
+                            });
+                        },
                         openReplica(actionId, grandTotal, paidAt, paidAtMin) {
                             this.replicaGrand = grandTotal;
-                            this.replicaPaidAt = paidAt;
-                            this.replicaPaidAtMin = paidAtMin;
                             this.replicaPaymentMethod = 'WORLD PAY';
                             this.replicaFormAction = @js(route('admin.ecom-activity.proceed-payment-success', ['session' => $activityUser->session_id, 'action' => 0])).replace('/proceed/0/', '/proceed/' + actionId + '/');
                             this.replicaDuplicateConfirmed = false;
                             this.replicaDuplicateOpen = false;
                             this.replicaOpen = true;
+                            this.syncReplicaPaidAtPicker(paidAt, paidAtMin);
                         },
                         submitReplica() {
                             if (this.sessionHasPaymentSuccess && !this.replicaDuplicateConfirmed) {
@@ -121,9 +145,9 @@
                                         $replicaPaidAtDefault = '';
                                         if ($proceedLocal) {
                                             $earliestPaid = $proceedLocal->copy()->addMinute();
-                                            $replicaProceedMinAt = $earliestPaid->format('Y-m-d\TH:i');
+                                            $replicaProceedMinAt = $earliestPaid->format('Y-m-d H:i');
                                             $nowLocal = \App\Support\TrackerTime::localNow();
-                                            $replicaPaidAtDefault = ($nowLocal->greaterThan($earliestPaid) ? $nowLocal : $earliestPaid)->format('Y-m-d\TH:i');
+                                            $replicaPaidAtDefault = ($nowLocal->greaterThan($earliestPaid) ? $nowLocal : $earliestPaid)->format('Y-m-d H:i');
                                         }
                                     @endphp
                                     <button type="button"
@@ -263,7 +287,7 @@
                         <div class="relative w-full max-w-md rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-xl p-5">
                             <h3 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100 mb-1">Create payment success</h3>
                             <p class="text-[12px] text-slate-500 dark:text-slate-400 mb-4">
-                                Cart, customer, and lines come from this proceed checkout. Enter order details from the shop.
+                                Cart, customer, and lines come from this proceed checkout. Paid at is the real payment time (stored like the storefront API).
                             </p>
                             <form method="POST"
                                   x-ref="replicaForm"
@@ -298,11 +322,15 @@
                                 </label>
                                 <label class="block">
                                     <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Paid at ({{ \App\Support\TrackerTime::timezoneLabel() }})</span>
-                                    <input type="datetime-local" name="paid_at"
-                                           x-model="replicaPaidAt"
-                                           x-bind:min="replicaPaidAtMin"
-                                           class="mt-1 w-full h-9 px-3 text-[13px] rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900">
-                                    <span class="mt-1 block text-[11px] text-slate-400">Must be after this proceed checkout time.</span>
+                                    <input type="text"
+                                           name="paid_at"
+                                           required
+                                           readonly
+                                           x-ref="replicaPaidAtInput"
+                                           placeholder="Select date & time"
+                                           autocomplete="off"
+                                           class="etd-flatpickr-datetime mt-1 w-full h-9 px-3 text-[13px] rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900">
+                                    <span class="mt-1 block text-[11px] text-slate-400">Must be after proceed checkout. Drives event time and dashboard payment day.</span>
                                 </label>
                                 <div class="flex justify-end gap-2 pt-2">
                                     <button type="button"

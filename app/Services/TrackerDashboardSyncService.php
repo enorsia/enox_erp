@@ -268,8 +268,10 @@ class TrackerDashboardSyncService
                 // Loaded actions are counted into the daily tables now, so they must be done even if the
                 // session row changed meanwhile (it stays pending and only its new actions are synced next time).
                 $this->markActionsSynced($actions);
-                $this->refreshTrackingSessionActionsCount($rawSessionId);
                 $this->markSessionSynced($sessionPk, $sessionUpdatedAt, $sessionRow);
+                // After markSessionSynced (matches updated_at). Refreshing actions_count first used to bump
+                // updated_at and leave the session stuck pending while the new payment_success was already synced.
+                $this->refreshTrackingSessionActionsCount($rawSessionId);
             }, 3);
 
             return true;

@@ -23,7 +23,6 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
-use Throwable;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EcomActivityController extends Controller
@@ -289,7 +288,6 @@ class EcomActivityController extends Controller
         string $session,
         int $action,
         TrackIngestService $ingest,
-        TrackerDashboardSyncService $dashboardSync,
     ): RedirectResponse {
         Gate::authorize('ecom_tracker.activity.show');
 
@@ -298,7 +296,7 @@ class EcomActivityController extends Controller
             'payment_method' => ['required', 'string', 'max:50'],
             'amount_paid' => ['required', 'numeric', 'min:0'],
             'order_pk' => ['nullable', 'string', 'max:20'],
-            'paid_at' => ['nullable', 'date'],
+            'paid_at' => ['required', 'date'],
         ]);
 
         $proceed = ActivityEcomUserAction::query()
@@ -311,9 +309,7 @@ class EcomActivityController extends Controller
         $orderId = trim($validated['order_id']);
 
         $proceedAt = TrackerTime::toUtc($proceed->created_at);
-        $paidAt = filled($validated['paid_at'] ?? null)
-            ? TrackerTime::toUtc($validated['paid_at'])
-            : TrackerTime::nowUtc();
+        $paidAt = $this->paymentPaidAtUtc($validated['paid_at']);
 
         if ($proceedAt !== null && $paidAt !== null && ! $paidAt->greaterThan($proceedAt)) {
             return redirect()->back()
@@ -337,19 +333,9 @@ class EcomActivityController extends Controller
             );
         }
 
-        try {
-            $dashboardSync->syncPendingBySessionId($session);
-        } catch (Throwable $exception) {
-            EcomTrackerLogger::backend()->error('analytics.activity.payment_replica_sync', 'Payment success stored; dashboard sync failed', [
-                'session_id' => $session,
-                'order_id' => $orderId,
-                'message' => $exception->getMessage(),
-            ]);
-        }
-
         return redirect()->back()->with(
             'payment_success_replica',
-            'Payment success created for order '.$orderId.'.',
+            'Payment success created for order '.$orderId.'. Session left pending for the next dashboard sync.',
         );
     }
 
@@ -824,9 +810,8 @@ class EcomActivityController extends Controller
         $amountPaid = round((float) $manual['amount_paid'], 2);
         $paymentMethod = trim((string) $manual['payment_method']);
         $orderPk = trim((string) ($manual['order_pk'] ?? ''));
-        $paidAt = filled($manual['paid_at'] ?? null)
-            ? TrackerTime::formatUtc($manual['paid_at'])
-            : TrackerTime::formatUtc(TrackerTime::nowUtc());
+        $paidAtUtc = $this->paymentPaidAtUtc($manual['paid_at']);
+        $paidAt = TrackerTime::formatUtc($paidAtUtc);
 
         $totals = is_array($proceedPayload['totals'] ?? null) ? $proceedPayload['totals'] : [];
         $totals['grand_total'] = $amountPaid;
@@ -867,6 +852,7 @@ class EcomActivityController extends Controller
                     'items' => $this->paymentItemsFromProceed($proceedPayload),
                     'internal' => [
                         'created_via_erp_panel' => true,
+                        'payment_at' => $paidAt,
                         'auth_user_id' => $authUser?->id,
                         'auth_user_name' => trim((string) ($authUser?->name ?? '')),
                         'recorded_at' => TrackerTime::formatUtc(TrackerTime::nowUtc()),
@@ -921,6 +907,20 @@ class EcomActivityController extends Controller
         }
 
         return $lines;
+    }
+
+    /**
+     * Paid at from the form is visitor-local wall time, stored as UTC like /api/track.
+     */
+    private function paymentPaidAtUtc(mixed $paidAt): ?Carbon
+    {
+        $text = trim((string) $paidAt);
+
+        if ($text === '') {
+            return null;
+        }
+
+        return Carbon::parse($text, TrackerTime::timezone())->utc();
     }
 
     private function paymentSuccessPageUrl(?string $pageUrl): ?string
