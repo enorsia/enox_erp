@@ -24,6 +24,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Throwable;
 
 class EcomActivityController extends Controller
 {
@@ -910,7 +911,7 @@ class EcomActivityController extends Controller
     }
 
     /**
-     * Paid at from the form is visitor-local wall time, stored as UTC like /api/track.
+     * Paid at from the form is visitor-local wall time (12-hour or 24-hour), stored as UTC like /api/track.
      */
     private function paymentPaidAtUtc(mixed $paidAt): ?Carbon
     {
@@ -920,7 +921,25 @@ class EcomActivityController extends Controller
             return null;
         }
 
-        return Carbon::parse($text, TrackerTime::timezone())->utc();
+        $tz = TrackerTime::timezone();
+
+        foreach ([
+            'Y-m-d h:i A',
+            'Y-m-d H:i',
+            'd M Y, h:i A',
+        ] as $format) {
+            try {
+                $parsed = Carbon::createFromFormat($format, $text, $tz);
+
+                if ($parsed !== false) {
+                    return $parsed->utc();
+                }
+            } catch (Throwable) {
+                continue;
+            }
+        }
+
+        return Carbon::parse($text, $tz)->utc();
     }
 
     private function paymentSuccessPageUrl(?string $pageUrl): ?string

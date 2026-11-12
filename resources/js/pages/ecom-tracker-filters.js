@@ -157,10 +157,10 @@ function initFlatpickrElement(element) {
         allowInput: true,
         disableMobile: true,
         altInput: true,
-        altFormat: isDatetime ? 'd M Y, H:i' : 'd M Y',
-        dateFormat: isDatetime ? 'Y-m-d H:i' : 'Y-m-d',
+        altFormat: isDatetime ? 'd M Y, h:i K' : 'd M Y',
+        dateFormat: isDatetime ? 'Y-m-d h:i K' : 'Y-m-d',
         enableTime: isDatetime,
-        time_24hr: isDatetime,
+        time_24hr: false,
         defaultDate: element.value || element.dataset.default || null,
         altInputClass,
         appendTo: (inFilterPanel || inModal) ? document.body : undefined,
@@ -170,7 +170,7 @@ function initFlatpickrElement(element) {
         onReady(_selectedDates, _dateStr, instance) {
             if (instance.altInput) {
                 instance.altInput.placeholder = element.dataset.placeholder
-                    || (isDatetime ? 'Select date & time' : 'Select date');
+                    || (isDatetime ? 'Select date & time (12-hour)' : 'Select date');
             }
         },
     });

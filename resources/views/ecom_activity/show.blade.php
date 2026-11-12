@@ -321,16 +321,16 @@
                                            placeholder="Internal order id">
                                 </label>
                                 <label class="block">
-                                    <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Paid at ({{ \App\Support\TrackerTime::timezoneLabel() }})</span>
+                                    <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Paid at ({{ \App\Support\TrackerTime::timezoneLabel() }}, 12-hour)</span>
                                     <input type="text"
                                            name="paid_at"
                                            required
                                            readonly
                                            x-ref="replicaPaidAtInput"
-                                           placeholder="Select date & time"
+                                           placeholder="Select date & time (12-hour)"
                                            autocomplete="off"
                                            class="etd-flatpickr-datetime mt-1 w-full h-9 px-3 text-[13px] rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900">
-                                    <span class="mt-1 block text-[11px] text-slate-400">Must be after proceed checkout. Drives event time and dashboard payment day.</span>
+                                    <span class="mt-1 block text-[11px] text-slate-400">UK local time with AM/PM. Must be after proceed checkout. Drives event time and dashboard payment day.</span>
                                 </label>
                                 <div class="flex justify-end gap-2 pt-2">
                                     <button type="button"
