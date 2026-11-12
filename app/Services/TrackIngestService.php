@@ -19,6 +19,7 @@ use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -292,6 +293,73 @@ class TrackIngestService
         ]);
 
         return $acceptedUnique->all();
+    }
+
+    /**
+     * Store one payment_success on an existing session, using the same row mapping as /api/track.
+     * Does not open a new visitor session.
+     *
+     * @param  array<string, mixed>  $event
+     */
+    public function storePaymentSuccessOnSession(string $sessionId, array $event): bool
+    {
+        $event['session_id'] = $sessionId;
+        $event['action_type'] = 'payment_success';
+        $event['id'] = filled($event['id'] ?? null) ? (string) $event['id'] : (string) Str::uuid();
+
+        $this->validatePaymentSuccessPayload($event);
+
+        if ($this->isDuplicatePaymentSuccess($event)) {
+            return false;
+        }
+
+        $session = ActivityEcomUser::query()->where('session_id', $sessionId)->first();
+        $previousLastActive = $session?->getRawOriginal('last_active_at');
+
+        $row = $this->mapEventToRow($sessionId, $event);
+        $row['is_sync'] = ActivityEcomUserAction::SYNC_PENDING;
+
+        ActivityEcomUserAction::query()->updateOrInsert(
+            ['event_id' => $event['id']],
+            $row,
+        );
+
+        $this->syncSessionActionCount($sessionId, false, null);
+        $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
+        $this->restoreLastActiveIfEarlier($sessionId, $previousLastActive);
+
+        TrackerDatabase::table('activity_ecom_user')
+            ->where('session_id', $sessionId)
+            ->update(['is_sync' => ActivityEcomUser::SYNC_PENDING]);
+
+        $this->logInfo('ingest.event_stored', 'One action saved', [
+            'session_id' => $sessionId,
+            'event_id' => $event['id'],
+            'action_type' => 'payment_success',
+            'page_url' => $event['page_url'] ?? null,
+            'source' => 'proceed_checkout_replica',
+        ]);
+
+        return true;
+    }
+
+    private function restoreLastActiveIfEarlier(string $sessionId, mixed $previousLastActive): void
+    {
+        $previous = TrackerTime::toUtc($previousLastActive);
+
+        if ($previous === null) {
+            return;
+        }
+
+        $current = TrackerTime::toUtc(
+            ActivityEcomUser::query()->where('session_id', $sessionId)->value('last_active_at'),
+        );
+
+        if ($current !== null && $previous->greaterThan($current)) {
+            ActivityEcomUser::query()->where('session_id', $sessionId)->update([
+                'last_active_at' => TrackerTime::formatUtc($previous),
+            ]);
+        }
     }
 
     /**

@@ -28,7 +28,65 @@
         <div class="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
 
             <div class="space-y-4 min-w-0">
-                <div class="section-card">
+                <div class="section-card"
+                     x-data="{
+                        replicaOpen: false,
+                        replicaDuplicateOpen: false,
+                        replicaDuplicateConfirmed: false,
+                        sessionHasPaymentSuccess: @js(in_array('payment_success', $reachedSteps, true)),
+                        existingOrderIds: @js(collect($sessionPaymentOrders ?? [])->pluck('order_id')->filter()->values()->all()),
+                        replicaGrand: '',
+                        replicaPaymentMethod: 'WORLD PAY',
+                        replicaFormAction: '',
+                        syncReplicaPaidAtPicker(paidAt, paidAtMin) {
+                            this.$nextTick(() => {
+                                const el = this.$refs.replicaPaidAtInput;
+
+                                if (! el) {
+                                    return;
+                                }
+
+                                el.value = paidAt;
+
+                                if (! el._etdFlatpickr && window.initEtdFlatpickr) {
+                                    window.initEtdFlatpickr(el);
+                                }
+
+                                const fp = el._etdFlatpickr;
+
+                                if (! fp) {
+                                    return;
+                                }
+
+                                fp.setDate(paidAt, false);
+
+                                if (paidAtMin) {
+                                    fp.set('minDate', paidAtMin);
+                                }
+                            });
+                        },
+                        openReplica(actionId, grandTotal, paidAt, paidAtMin) {
+                            this.replicaGrand = grandTotal;
+                            this.replicaPaymentMethod = 'WORLD PAY';
+                            this.replicaFormAction = @js(route('admin.ecom-activity.proceed-payment-success', ['session' => $activityUser->session_id, 'action' => 0])).replace('/proceed/0/', '/proceed/' + actionId + '/');
+                            this.replicaDuplicateConfirmed = false;
+                            this.replicaDuplicateOpen = false;
+                            this.replicaOpen = true;
+                            this.syncReplicaPaidAtPicker(paidAt, paidAtMin);
+                        },
+                        submitReplica() {
+                            if (this.sessionHasPaymentSuccess && !this.replicaDuplicateConfirmed) {
+                                this.replicaDuplicateOpen = true;
+                                return;
+                            }
+                            this.$refs.replicaForm.submit();
+                        },
+                        confirmDuplicateReplica() {
+                            this.replicaDuplicateConfirmed = true;
+                            this.replicaDuplicateOpen = false;
+                            this.$refs.replicaForm.submit();
+                        },
+                     }">
                     <div class="section-title flex-wrap gap-2">
                         <div class="flex items-center gap-2">
                             <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -42,6 +100,10 @@
                             </span>
                         @endif
                     </div>
+
+                    @if (session('payment_success_replica'))
+                        <p class="text-[12px] text-slate-600 dark:text-slate-300 mb-3">{{ session('payment_success_replica') }}</p>
+                    @endif
 
                     @if ($timeline->total() > 0)
                         <p class="text-[11px] text-slate-400 mb-3">
@@ -73,6 +135,26 @@
                                             <span class="text-slate-400">(combined)</span>
                                         @endif
                                     </span>
+                                @endif
+                                @if ($item->action_type === 'proceed_checkout' && filled($item->id))
+                                    @php
+                                        $proceedReplica = is_array($item->proceed_to_checkout) ? $item->proceed_to_checkout : [];
+                                        $replicaGrandDefault = (string) (($proceedReplica['totals']['grand_total'] ?? null) ?: ($proceedReplica['cart_total'] ?? ''));
+                                        $proceedLocal = \App\Support\TrackerTime::toLocal($item->created_at);
+                                        $replicaProceedMinAt = '';
+                                        $replicaPaidAtDefault = '';
+                                        if ($proceedLocal) {
+                                            $earliestPaid = $proceedLocal->copy()->addMinute();
+                                            $replicaProceedMinAt = $earliestPaid->format('Y-m-d H:i');
+                                            $nowLocal = \App\Support\TrackerTime::localNow();
+                                            $replicaPaidAtDefault = ($nowLocal->greaterThan($earliestPaid) ? $nowLocal : $earliestPaid)->format('Y-m-d H:i');
+                                        }
+                                    @endphp
+                                    <button type="button"
+                                            class="ml-auto inline-flex items-center px-2.5 h-7 text-[11px] font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700"
+                                            @click="openReplica(@js($item->id), @js($replicaGrandDefault), @js($replicaPaidAtDefault), @js($replicaProceedMinAt))">
+                                        Go to success
+                                    </button>
                                 @endif
                             </div>
 
@@ -194,6 +276,107 @@
                     @endforelse
 
                     @include('layouts.pagination', ['paginator' => $timeline])
+
+                    <div x-show="replicaOpen"
+                         x-cloak
+                         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                         role="dialog"
+                         aria-modal="true"
+                         aria-label="Create payment success">
+                        <div class="absolute inset-0 bg-slate-900/50" @click="replicaOpen = false"></div>
+                        <div class="relative w-full max-w-md rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-xl p-5">
+                            <h3 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100 mb-1">Create payment success</h3>
+                            <p class="text-[12px] text-slate-500 dark:text-slate-400 mb-4">
+                                Cart, customer, and lines come from this proceed checkout. Paid at is the real payment time (stored like the storefront API).
+                            </p>
+                            <form method="POST"
+                                  x-ref="replicaForm"
+                                  x-bind:action="replicaFormAction"
+                                  class="space-y-3"
+                                  @submit.prevent="submitReplica()">
+                                @csrf
+                                <label class="block">
+                                    <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Order number</span>
+                                    <input type="text" name="order_id" required maxlength="50"
+                                           class="mt-1 w-full h-9 px-3 text-[13px] rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900"
+                                           placeholder="e.g. 6131901203">
+                                </label>
+                                <label class="block">
+                                    <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Payment method</span>
+                                    <input type="text" name="payment_method" required maxlength="50"
+                                           x-model="replicaPaymentMethod"
+                                           class="mt-1 w-full h-9 px-3 text-[13px] rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900"
+                                           placeholder="e.g. WORLD PAY">
+                                </label>
+                                <label class="block">
+                                    <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Amount paid (GBP)</span>
+                                    <input type="number" name="amount_paid" required min="0" step="0.01"
+                                           x-model="replicaGrand"
+                                           class="mt-1 w-full h-9 px-3 text-[13px] rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900">
+                                </label>
+                                <label class="block">
+                                    <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Shop order PK (optional)</span>
+                                    <input type="text" name="order_pk" maxlength="20"
+                                           class="mt-1 w-full h-9 px-3 text-[13px] rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900"
+                                           placeholder="Internal order id">
+                                </label>
+                                <label class="block">
+                                    <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Paid at ({{ \App\Support\TrackerTime::timezoneLabel() }})</span>
+                                    <input type="text"
+                                           name="paid_at"
+                                           required
+                                           readonly
+                                           x-ref="replicaPaidAtInput"
+                                           placeholder="Select date & time"
+                                           autocomplete="off"
+                                           class="etd-flatpickr-datetime mt-1 w-full h-9 px-3 text-[13px] rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900">
+                                    <span class="mt-1 block text-[11px] text-slate-400">Must be after proceed checkout. Drives event time and dashboard payment day.</span>
+                                </label>
+                                <div class="flex justify-end gap-2 pt-2">
+                                    <button type="button"
+                                            @click="replicaOpen = false"
+                                            class="px-3 h-9 text-[13px] rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">
+                                        Cancel
+                                    </button>
+                                    <button type="submit"
+                                            class="px-3 h-9 text-[13px] font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
+                                        Submit
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div x-show="replicaDuplicateOpen"
+                         x-cloak
+                         class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                         role="alertdialog"
+                         aria-modal="true"
+                         aria-label="Confirm duplicate payment success">
+                        <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-md" @click="replicaDuplicateOpen = false"></div>
+                        <div class="relative z-10 w-full max-w-sm rounded-xl border border-amber-200 dark:border-amber-800/50 bg-white dark:bg-slate-800 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 p-5">
+                            <h3 class="text-[15px] font-semibold text-slate-800 dark:text-slate-100 mb-1">Already has payment success</h3>
+                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mb-2">
+                                This session already has a payment success event. Are you sure you want to create another one?
+                            </p>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-4" x-show="existingOrderIds.length > 0">
+                                Existing order<span x-show="existingOrderIds.length > 1">s</span>:
+                                <span class="font-mono" x-text="existingOrderIds.join(', ')"></span>
+                            </p>
+                            <div class="flex justify-end gap-2">
+                                <button type="button"
+                                        @click="replicaDuplicateOpen = false"
+                                        class="px-3 h-9 text-[13px] rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">
+                                    Cancel
+                                </button>
+                                <button type="button"
+                                        @click="confirmDuplicateReplica()"
+                                        class="px-3 h-9 text-[13px] font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700">
+                                    Yes, create
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

@@ -15,7 +15,9 @@ import {
 } from 'chart.js';
 import {
     bindTrendTooltipDismiss,
+    bindTrendRateAxisLegendToggle,
     createTrendTooltipHandler,
+    isTrendSeriesHiddenByDefault,
 } from '../lib/ecom-tracker-trend-tooltip';
 import { bindActivityScrollRestore } from '../lib/ecom-tracker-scroll-restore';
 import './ecom-tracker-filters';
@@ -523,7 +525,9 @@ function initCompareTrendChart({
     const orderedSeries = sortTrendSeries(series);
     const plottedSeries = orderedSeries.filter((entry) => !entry.tooltip_only);
     const useHorizontalScroll = trendUsesHorizontalScroll(labels.length);
-    const showRateAxis = plottedSeries.some((entry) => (entry.y_axis_id || 'y') === 'y1');
+    const showRateAxis = plottedSeries.some(
+        (entry) => (entry.y_axis_id || 'y') === 'y1' && !isTrendSeriesHiddenByDefault(entry.key),
+    );
 
     applyTrendChartLayout(wrapId, hintId, labels.length);
     renderTrendLegend(legendId, plottedSeries);
@@ -558,6 +562,7 @@ function initCompareTrendChart({
             order: index,
             barThickness,
             maxBarThickness: isBar ? 14 : undefined,
+            hidden: isTrendSeriesHiddenByDefault(entry.key),
         };
     });
 
@@ -630,6 +635,7 @@ function initCompareTrendChart({
     });
 
     bindTrendTooltipDismiss(document.getElementById(scrollId));
+    bindTrendRateAxisLegendToggle(chart);
 
     requestAnimationFrame(() => {
         chart.resize();

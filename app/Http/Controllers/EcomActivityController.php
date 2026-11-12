@@ -6,6 +6,7 @@ use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
 use App\Services\EcomActivityExportService;
 use App\Services\EcomActivityListService;
+use App\Services\TrackIngestService;
 use App\Services\TrackerDashboardSyncService;
 use App\Support\EcomActivityTableFocus;
 use App\Support\EcomTrackerLogger;
@@ -16,10 +17,12 @@ use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EcomActivityController extends Controller
@@ -278,6 +281,62 @@ class EcomActivityController extends Controller
             'relatedVisitorSessions' => $this->relatedVisitorSessions($activityUser),
             'badgeColors' => self::BADGE_COLORS,
         ]);
+    }
+
+    public function storePaymentSuccessFromProceed(
+        Request $request,
+        string $session,
+        int $action,
+        TrackIngestService $ingest,
+    ): RedirectResponse {
+        Gate::authorize('ecom_tracker.activity.show');
+
+        $validated = $request->validate([
+            'order_id' => ['required', 'string', 'max:50'],
+            'payment_method' => ['required', 'string', 'max:50'],
+            'amount_paid' => ['required', 'numeric', 'min:0'],
+            'order_pk' => ['nullable', 'string', 'max:20'],
+            'paid_at' => ['required', 'date'],
+        ]);
+
+        $proceed = ActivityEcomUserAction::query()
+            ->where('session_id', $session)
+            ->where('id', $action)
+            ->where('action_type', 'proceed_checkout')
+            ->firstOrFail();
+
+        $payload = is_array($proceed->proceed_to_checkout) ? $proceed->proceed_to_checkout : [];
+        $orderId = trim($validated['order_id']);
+
+        $proceedAt = TrackerTime::toUtc($proceed->created_at);
+        $paidAt = $this->paymentPaidAtUtc($validated['paid_at']);
+
+        if ($proceedAt !== null && $paidAt !== null && ! $paidAt->greaterThan($proceedAt)) {
+            return redirect()->back()
+                ->withInput()
+                ->with(
+                    'payment_success_replica',
+                    'Paid at must be after the proceed checkout time ('
+                    .TrackerTime::formatFromStorage($proceed->created_at, 'd M Y, h:i A').').',
+                );
+        }
+
+        $stored = $ingest->storePaymentSuccessOnSession(
+            $session,
+            $this->paymentSuccessEventFromProceed($proceed, $payload, $validated, $request->user()),
+        );
+
+        if (! $stored) {
+            return redirect()->back()->with(
+                'payment_success_replica',
+                'Payment success for order '.$orderId.' is already recorded.',
+            );
+        }
+
+        return redirect()->back()->with(
+            'payment_success_replica',
+            'Payment success created for order '.$orderId.'. Session left pending for the next dashboard sync.',
+        );
     }
 
     /**
@@ -729,5 +788,151 @@ class EcomActivityController extends Controller
             ->filter(fn (string $id) => $id !== '')
             ->unique()
             ->values();
+    }
+
+    /**
+     * Same payment_success object the storefront posts to /api/track (proceed payload + manual order fields).
+     *
+     * @param  array<string, mixed>  $proceedPayload
+     * @param  array<string, mixed>  $manual
+     * @return array<string, mixed>
+     */
+    private function paymentSuccessEventFromProceed(
+        ActivityEcomUserAction $proceed,
+        array $proceedPayload,
+        array $manual,
+        ?\App\Models\User $authUser = null,
+    ): array {
+        $customer = is_array($proceedPayload['customer'] ?? null) ? $proceedPayload['customer'] : [];
+        $shipping = is_array($customer['shipping'] ?? null) ? $customer['shipping'] : [];
+        $coupon = trim((string) ($proceedPayload['coupon_code'] ?? ''));
+        $orderId = trim((string) $manual['order_id']);
+        $amountPaid = round((float) $manual['amount_paid'], 2);
+        $paymentMethod = trim((string) $manual['payment_method']);
+        $orderPk = trim((string) ($manual['order_pk'] ?? ''));
+        $paidAtUtc = $this->paymentPaidAtUtc($manual['paid_at']);
+        $paidAt = TrackerTime::formatUtc($paidAtUtc);
+
+        $totals = is_array($proceedPayload['totals'] ?? null) ? $proceedPayload['totals'] : [];
+        $totals['grand_total'] = $amountPaid;
+
+        $address = [
+            'country' => (string) ($shipping['country'] ?? ''),
+            'line_1' => (string) ($shipping['line_1'] ?? ''),
+            'line_2' => (string) ($shipping['line_2'] ?? ''),
+            'postcode' => (string) ($shipping['postcode'] ?? ''),
+            'town_city' => (string) ($shipping['town_city'] ?? ''),
+        ];
+
+        return [
+            'id' => (string) Str::uuid(),
+            'session_id' => $proceed->session_id,
+            'action_type' => 'payment_success',
+            'page_url' => $this->paymentSuccessPageUrl($proceed->page_url),
+            'referer' => $proceed->page_url,
+            'created_at' => $paidAt,
+            'payment_success' => [
+                'order_id' => $orderId,
+                'amount_paid' => $amountPaid,
+                'payment_method' => $paymentMethod,
+                'currency' => 'GBP',
+                'checkout_info' => [
+                    'order_number' => $orderId,
+                    'order_pk' => $orderPk,
+                    'coupon_code' => $coupon,
+                    'customer' => [
+                        'first_name' => (string) ($customer['first_name'] ?? ''),
+                        'last_name' => (string) ($customer['last_name'] ?? ''),
+                        'email' => (string) ($customer['email'] ?? ''),
+                        'phone' => (string) ($customer['phone'] ?? ''),
+                    ],
+                    'shipping' => $address,
+                    'billing' => $address,
+                    'totals' => $totals,
+                    'items' => $this->paymentItemsFromProceed($proceedPayload),
+                    'internal' => [
+                        'created_via_erp_panel' => true,
+                        'payment_at' => $paidAt,
+                        'auth_user_id' => $authUser?->id,
+                        'auth_user_name' => trim((string) ($authUser?->name ?? '')),
+                        'recorded_at' => TrackerTime::formatUtc(TrackerTime::nowUtc()),
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $proceed
+     * @return list<array<string, mixed>>
+     */
+    private function paymentItemsFromProceed(array $proceed): array
+    {
+        $items = $proceed['cart_items'] ?? [];
+
+        if (! is_array($items)) {
+            return [];
+        }
+
+        $lines = [];
+
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $line = [
+                'product_id' => (string) ($item['product_id'] ?? ''),
+                'product_code' => (string) ($item['product_code'] ?? ''),
+                'sku' => (string) ($item['sku'] ?? ''),
+                'product_name' => (string) ($item['product_name'] ?? ''),
+                'qty' => (float) ($item['qty'] ?? 0),
+                'price' => (float) ($item['price'] ?? 0),
+                'color_id' => (string) ($item['color_id'] ?? ''),
+                'color_name' => (string) ($item['color_name'] ?? ''),
+                'size_id' => (string) ($item['size_id'] ?? ''),
+                'size_name' => (string) ($item['size_name'] ?? ''),
+                'item_variant' => (string) ($item['item_variant'] ?? ''),
+            ];
+
+            foreach (['category_id', 'category_name', 'category_code', 'department_id', 'department_name'] as $key) {
+                $value = trim((string) ($item[$key] ?? ''));
+
+                if ($value !== '') {
+                    $line[$key] = $value;
+                }
+            }
+
+            $lines[] = $line;
+        }
+
+        return $lines;
+    }
+
+    /**
+     * Paid at from the form is visitor-local wall time, stored as UTC like /api/track.
+     */
+    private function paymentPaidAtUtc(mixed $paidAt): ?Carbon
+    {
+        $text = trim((string) $paidAt);
+
+        if ($text === '') {
+            return null;
+        }
+
+        return Carbon::parse($text, TrackerTime::timezone())->utc();
+    }
+
+    private function paymentSuccessPageUrl(?string $pageUrl): ?string
+    {
+        $parts = parse_url((string) $pageUrl);
+
+        if (! is_array($parts) || empty($parts['host'])) {
+            return $pageUrl;
+        }
+
+        $scheme = $parts['scheme'] ?? 'https';
+
+        return $scheme.'://'.$parts['host'].'/payment/success';
     }
 }

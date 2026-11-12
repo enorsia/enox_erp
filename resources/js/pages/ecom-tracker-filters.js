@@ -151,6 +151,7 @@ function initFlatpickrElement(element) {
     const altInputClass = inputClasses(element);
 
     const inFilterPanel = Boolean(element.closest('.etd-filter-panel'));
+    const inModal = Boolean(element.closest('[role="dialog"]'));
 
     const fp = flatpickr(element, {
         allowInput: true,
@@ -162,7 +163,7 @@ function initFlatpickrElement(element) {
         time_24hr: isDatetime,
         defaultDate: element.value || element.dataset.default || null,
         altInputClass,
-        appendTo: inFilterPanel ? document.body : undefined,
+        appendTo: (inFilterPanel || inModal) ? document.body : undefined,
         onChange(_selectedDates, dateStr, instance) {
             notifyInputChange(instance.input, dateStr);
         },
