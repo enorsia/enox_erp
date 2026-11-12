@@ -58,6 +58,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'two_factor.verified
     Route::get('ecom-activity/export', [EcomActivityController::class, 'export'])->name('ecom-activity.export');
     Route::get('ecom-activity/categories', [EcomActivityController::class, 'categories'])->name('ecom-activity.categories');
     Route::get('ecom-activity/{session}', [EcomActivityController::class, 'show'])->name('ecom-activity.show');
+    Route::post('ecom-activity/{session}/proceed/{action}/payment-success', [EcomActivityController::class, 'storePaymentSuccessFromProceed'])
+        ->name('ecom-activity.proceed-payment-success');
     Route::prefix('exports')->name('exports.')->controller(UserExportController::class)->group(function () {
         Route::get('active', 'active')->name('active');
         Route::get('{export}/status', 'status')->name('status');
