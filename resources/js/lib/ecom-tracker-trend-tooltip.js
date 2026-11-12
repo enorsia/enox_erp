@@ -1,3 +1,45 @@
+/** Shopper journey over time — hidden on first load; user can enable via legend. */
+export const TREND_SERIES_HIDDEN_BY_DEFAULT = new Set([
+    'sessions',
+    'category_views',
+    'product_views',
+    'begin_checkout',
+    'proceed_checkout',
+    'conversion_rate',
+]);
+
+export function isTrendSeriesHiddenByDefault(key) {
+    return TREND_SERIES_HIDDEN_BY_DEFAULT.has(key);
+}
+
+/**
+ * Hide right-hand rate axis until conversion rate (or other y1 series) is visible.
+ */
+export function bindTrendRateAxisLegendToggle(chart) {
+    const scale = chart.options.scales?.y1;
+
+    if (!scale) {
+        return;
+    }
+
+    const syncRateAxis = () => {
+        const visible = chart.data.datasets.some(
+            (dataset, index) => dataset.yAxisID === 'y1' && chart.isDatasetVisible(index),
+        );
+        scale.display = visible;
+    };
+
+    chart.options.plugins.legend.onClick = (_event, legendItem, legend) => {
+        const ci = legend.chart;
+        const index = legendItem.datasetIndex;
+        ci.setDatasetVisibility(index, !ci.isDatasetVisible(index));
+        syncRateAxis();
+        ci.update();
+    };
+
+    syncRateAxis();
+}
+
 const TREND_TOOLTIP_GROUPS = [
     { label: 'Reach', keys: ['unique_visitors', 'sessions'] },
     { label: 'Views', keys: ['category_views', 'product_views'] },
