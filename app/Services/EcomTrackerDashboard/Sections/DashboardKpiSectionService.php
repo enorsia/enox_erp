@@ -7,6 +7,16 @@ use Illuminate\Support\Collection;
 
 class DashboardKpiSectionService
 {
+    /**
+     * KPI totals for a date range from synced {@see tracking_daily_summaries} rows (dashboard never reads activity_* live).
+     *
+     * @param  Collection<int, object>  $rows
+     */
+    public function totalsFromSummaryRows(Collection $rows): array
+    {
+        return $this->totals($rows, (int) $rows->sum('unique_visitors'));
+    }
+
     private function totals(Collection $rows, int $uniqueVisitors): array
     {
         $totals = ['unique_visitors' => $uniqueVisitors];
@@ -60,8 +70,8 @@ class DashboardKpiSectionService
                 $metric('Avg stay time', 'avg_stay_seconds', $duration, 'Average Duration per session in the period (total stay time divided by session count).'),
             ]],
             ['title' => 'Sale & conversion', 'modifier' => 'etd-kpi-group--sale', 'cols' => 2, 'metrics' => [
-                $metric('Items sold', 'items_sold', $count, 'Total units from completed orders for sessions in this period (sum of order header quantities; same scope as Payments).', ['has_order' => 1]),
-                $metric('Sale amount', 'sale_amount', fn (float|int $value) => '£'.number_format((float) $value, 2), 'Total paid from those orders (sum of order amount_paid; same scope as Payments). Not the same as Product performance Sale line totals.', ['has_order' => 1]),
+                $metric('Items sold', 'items_sold', $count, 'Total units from orders paid in this period (payment calendar day; same scope as Payments).', ['has_order' => 1]),
+                $metric('Sale amount', 'sale_amount', fn (float|int $value) => '£'.number_format((float) $value, 2), 'Total paid from those orders (payment calendar day; same scope as Payments). Not the same as Product performance Sale line totals.', ['has_order' => 1]),
             ]],
             ['title' => 'Funnel drop-off', 'modifier' => 'etd-kpi-group--funnel', 'cols' => 4, 'metrics' => [
                 $this->funnelDropMetric(

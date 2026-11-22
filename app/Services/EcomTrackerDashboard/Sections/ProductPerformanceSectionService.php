@@ -3,9 +3,11 @@
 namespace App\Services\EcomTrackerDashboard\Sections;
 
 use App\Services\EcomActivityListService;
+use App\Services\EcomTrackerDashboard\Concerns\InteractsWithSessionFilterRatios;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 
 class ProductPerformanceSectionService
@@ -34,7 +36,7 @@ class ProductPerformanceSectionService
         'views',
     ];
 
-    use \App\Services\EcomTrackerDashboard\Concerns\InteractsWithSessionFilterRatios;
+    use InteractsWithSessionFilterRatios;
 
     public static function normalizeProductListSort(mixed $sort): string
     {
@@ -92,7 +94,20 @@ class ProductPerformanceSectionService
 
         $all = $this->applyProductListHasOrderFilter($all, $sessionFilters);
 
-        return $this->packageProductRows($all, $limit, $from, $to, $period, $sessionFilters);
+        $packaged = $this->packageProductRows($all, $limit, $from, $to, $period, $sessionFilters);
+
+        if (! EcomActivityListService::hasDashboardSessionFilters($sessionRatioFilters)) {
+            $daily = TrackerDatabase::table('tracking_daily_summaries')
+                ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                ->get();
+            $packaged['totals']['add_to_cart'] = (int) $daily->sum('cart_sessions');
+            $packaged['totals']['begin_checkout'] = (int) $daily->sum('checkout_sessions');
+            $packaged['totals']['proceed_checkout'] = (int) $daily->sum('proceed_sessions');
+            $packaged['totals']['paid'] = (int) $daily->sum('items_sold');
+            $packaged['totals']['revenue'] = round((float) $daily->sum('sale_amount'), 2);
+        }
+
+        return $packaged;
     }
 
     /**
@@ -577,7 +592,7 @@ class ProductPerformanceSectionService
     /**
      * @param  list<int>  $categoryIds
      * @param  array<string, mixed>  $sessionFilters
-     * @return \Illuminate\Database\Query\Builder
+     * @return Builder
      */
     private function categoryOrderLinesQuery(
         Carbon $from,
@@ -602,5 +617,4 @@ class ProductPerformanceSectionService
 
         return $query;
     }
-
 }

@@ -2,19 +2,17 @@
 
 namespace App\Services;
 
-use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
-use App\Services\EcomTrackerDashboard\Sections\RecoverableSaleSectionService;
-use App\Support\TrackerDatabase;
-
 use App\Models\TrackingDailyAudience;
 use App\Models\TrackingDailyDuration;
+use App\Services\EcomTrackerDashboard\EcomTrackerDashboardService;
+use App\Services\EcomTrackerDashboard\Sections\RecoverableSaleSectionService;
 use App\Support\EcomTrackerCompareKpiGroups;
 use App\Support\SessionTrafficAttribution;
+use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Rebuild dashboard-shaped compare column data from filtered tracking_session rows (compare page only).
@@ -45,7 +43,7 @@ class EcomTrackerCompareFilteredDashboardService
     ) {}
 
     /**
-     * @param  array<string, mixed>  $dashboard  unfiltered dashboard payload from {@see \App\Services\EcomTrackerDashboard\EcomTrackerDashboardService}
+     * @param  array<string, mixed>  $dashboard  unfiltered dashboard payload from {@see EcomTrackerDashboardService}
      * @param  array{from: Carbon, to: Carbon}  $range
      * @param  array<string, mixed>  $sessionFilters
      * @return array<string, mixed>
@@ -197,14 +195,14 @@ class EcomTrackerCompareFilteredDashboardService
             ->groupBy('hour')
             ->pluck('sessions', 'hour');
 
-        $orderHourExpr = "HOUR(CONVERT_TZ(o.ordered_at, '+00:00', '".str_replace("'", "''", $tz)."'))";
+        $sessionHourExpr = "HOUR(CONVERT_TZ(u.created_at, '+00:00', '".str_replace("'", "''", $tz)."'))";
 
         $itemRows = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
+            ->join('activity_ecom_user as u', 'u.session_id', '=', 'ts.session_id')
             ->tap($scope)
-            ->whereBetween('o.ordered_at', $bounds)
-            ->selectRaw("{$orderHourExpr} as hour")
-            ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as payments')
+            ->selectRaw("{$sessionHourExpr} as hour")
+            ->selectRaw('COUNT(o.id) as payments')
             ->selectRaw('COALESCE(SUM(o.items_qty), 0) as items_sold')
             ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as purchase_sessions')
             ->groupBy('hour')

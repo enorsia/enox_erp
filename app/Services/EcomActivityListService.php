@@ -8,6 +8,7 @@ use App\Models\ActivityEcomUserAction;
 use App\Models\TrackingCategory;
 use App\Models\TrackingDailyDuration;
 use App\Models\TrackingSession;
+use App\Services\EcomTrackerDashboard\Sections\DashboardKpiSectionService;
 use App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService;
 use App\Support\CheckoutPayloadTotals;
 use App\Support\CommercePricingExtractor;
@@ -579,7 +580,7 @@ class EcomActivityListService
 
         $sales = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
-            ->tap($scope)
+            ->tap(fn (Builder $query) => $this->constrainOrderSalesInRange($query, $range, $filters))
             ->selectRaw('COUNT(o.id) as sold')
             ->selectRaw('COALESCE(SUM(o.items_qty), 0) as sold_qty')
             ->selectRaw('COALESCE(SUM(o.amount_paid), 0) as sale_amount')
@@ -611,7 +612,7 @@ class EcomActivityListService
     /**
      * Quantity on the latest add / begin / proceed action for the sessions in this filter.
      *
-     * @param  \Closure(\Illuminate\Database\Query\Builder): void  $scope
+     * @param  \Closure(Builder): void  $scope
      * @return array{add_qty: int, begin_qty: int, proceed_qty: int}
      */
     private function sessionListStepQty(\Closure $scope): array
@@ -948,7 +949,30 @@ class EcomActivityListService
     }
 
     /**
-     * Session-level totals in the same shape as dashboard KPI groups ({@see \App\Services\EcomTrackerDashboard\Sections\DashboardKpiSectionService::groups()}).
+     * Sale KPIs: orders by payment day ({@see tracking_orders.metric_date}). Session filters apply when the list is narrowed.
+     *
+     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
+     * @param  array<string, mixed>  $filters
+     */
+    public function constrainOrderSalesInRange(Builder $query, array $range, array $filters, bool $forDashboard = false): void
+    {
+        $query->whereBetween('o.metric_date', [
+            $range['from']->toDateString(),
+            $range['to']->toDateString(),
+        ]);
+
+        $narrowed = $forDashboard
+            ? self::hasDashboardSessionFilters($filters)
+            : self::hasActiveFilters($filters);
+
+        if ($narrowed) {
+            $this->applySessionDateScope($query, $range);
+            $this->applyFilters($query, $filters, $range, $forDashboard);
+        }
+    }
+
+    /**
+     * Session-level totals in the same shape as dashboard KPI groups ({@see DashboardKpiSectionService::groups()}).
      *
      * @param  array{from: Carbon, to: Carbon}  $range
      * @param  array<string, mixed>  $filters
@@ -981,9 +1005,8 @@ class EcomActivityListService
 
         $sales = TrackerDatabase::table('tracking_orders as o')
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
-            ->whereBetween('o.metric_date', [$range['from']->toDateString(), $range['to']->toDateString()])
-            ->tap(fn (Builder $query) => $this->applyFilters($query, $filters, $range, $forDashboard))
-            ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as payments')
+            ->tap(fn (Builder $query) => $this->constrainOrderSalesInRange($query, $range, $filters, $forDashboard))
+            ->selectRaw('COUNT(o.id) as payments')
             ->selectRaw('COALESCE(SUM(o.items_qty), 0) as sold_qty')
             ->selectRaw('COALESCE(SUM(o.amount_paid), 0) as sale_amount')
             ->first();
@@ -2804,7 +2827,7 @@ class EcomActivityListService
 
     /**
      * Product drill-down KPIs: session scope matches activity product filter ({@see applyProductCodeSessionFilter});
-     * funnel totals match {@see \App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService::products()}.
+     * funnel totals match {@see ProductPerformanceSectionService::products()}.
      *
      * @param  array{from: Carbon, to: Carbon, period?: string}  $range
      * @param  array<string, mixed>  $filters
@@ -2824,7 +2847,6 @@ class EcomActivityListService
             ->selectRaw('COALESCE(SUM(ts.duration_seconds), 0) as stay_seconds')
             ->first();
 
-        [$fromBound, $toBound] = TrackerTime::storageRange($range['from'], $range['to']);
         $period = self::normalizePeriod($range['period'] ?? self::DEFAULT_PERIOD);
 
         $performance = $this->productPerformanceTotalsForDrill(
@@ -2841,8 +2863,7 @@ class EcomActivityListService
             ->join('tracking_session as ts', 'ts.id', '=', 'o.tracking_session_id')
             ->tap($scope)
             ->where(fn (Builder $product) => $this->whereProductCodeOrSku($product, 'p', $productCode))
-            ->whereBetween('o.ordered_at', [$fromBound, $toBound])
-            ->selectRaw('COUNT(DISTINCT o.tracking_session_id) as sold')
+            ->selectRaw('COUNT(o.id) as sold')
             ->selectRaw('COALESCE(SUM(od.qty), 0) as sold_qty')
             ->selectRaw('COALESCE(SUM(od.line_total), 0) as sale_amount')
             ->first();
@@ -2895,7 +2916,7 @@ class EcomActivityListService
             ];
         }
 
-        $packaged = app(\App\Services\EcomTrackerDashboard\Sections\ProductPerformanceSectionService::class)
+        $packaged = app(ProductPerformanceSectionService::class)
             ->products($from, $to, $period, $filters, null);
         $row = collect($packaged['rows'] ?? [])->firstWhere('code', $productCode);
 

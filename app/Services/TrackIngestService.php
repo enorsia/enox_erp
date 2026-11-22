@@ -13,6 +13,7 @@ use App\Support\TrackerCategoryIdentity;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerPaymentCheckoutEnricher;
 use App\Support\TrackerRedisSupport;
+use App\Support\TrackerSessionClock;
 use App\Support\TrackerTime;
 use App\Support\UserAgentParser;
 use Carbon\Carbon;
@@ -326,6 +327,7 @@ class TrackIngestService
 
         $this->syncSessionActionCount($sessionId, false, null);
         $this->syncSessionUserFromPaymentSuccess($sessionId, $event);
+        $this->syncSessionLastActiveFromEvents($sessionId, [$event]);
         $this->restoreLastActiveIfEarlier($sessionId, $previousLastActive);
 
         TrackerDatabase::table('activity_ecom_user')
@@ -341,6 +343,122 @@ class TrackIngestService
         ]);
 
         return true;
+    }
+
+    /**
+     * Pick the session that owns this replica payment timestamp (30-minute gap rules),
+     * creating a new activity_ecom_user row when the clock falls outside every existing session.
+     */
+    public function resolveReplicaPaymentSessionId(ActivityEcomUser $anchorSession, Carbon $paidAt): string
+    {
+        $visitorId = trim((string) $anchorSession->visitor_id);
+
+        if ($visitorId === '') {
+            return $anchorSession->session_id;
+        }
+
+        $paidDay = TrackerTime::localDate($paidAt);
+        $anchorDay = $this->localVisitDateForActivityUser($anchorSession);
+
+        // Storefront rule: a new calendar day starts a new session (even inside the 30-minute gap).
+        if ($paidDay !== $anchorDay) {
+            $owner = $this->findVisitorSessionOnLocalDay($visitorId, $paidAt, $paidDay);
+
+            if ($owner !== null) {
+                return $owner->session_id;
+            }
+
+            $sessionId = (string) Str::uuid();
+            $this->createReplicaBackfillSession($anchorSession, $sessionId, $paidAt);
+
+            return $sessionId;
+        }
+
+        $sessionId = $this->visitorSessionResolver->sessionIdForEventClock($visitorId, $paidAt, [
+            'live_session_id' => $anchorSession->session_id,
+        ]);
+
+        if (! ActivityEcomUser::query()->where('session_id', $sessionId)->exists()) {
+            $this->createReplicaBackfillSession($anchorSession, $sessionId, $paidAt);
+        }
+
+        return $sessionId;
+    }
+
+    private function localVisitDateForActivityUser(ActivityEcomUser $session): string
+    {
+        $earliest = TrackerTime::toUtc($session->getRawOriginal('created_at'));
+
+        $firstActionAt = ActivityEcomUserAction::query()
+            ->where('session_id', $session->session_id)
+            ->min('created_at');
+
+        if ($firstActionAt !== null) {
+            $actionUtc = TrackerTime::toUtc($firstActionAt);
+
+            if ($actionUtc !== null && ($earliest === null || $actionUtc->lessThan($earliest))) {
+                $earliest = $actionUtc;
+            }
+        }
+
+        return TrackerTime::localDate($earliest);
+    }
+
+    private function findVisitorSessionOnLocalDay(string $visitorId, Carbon $paidAt, string $localDay): ?ActivityEcomUser
+    {
+        $sessions = ActivityEcomUser::query()
+            ->where('visitor_id', $visitorId)
+            ->orderBy('created_at')
+            ->get();
+
+        foreach ($sessions as $session) {
+            if ($this->localVisitDateForActivityUser($session) !== $localDay) {
+                continue;
+            }
+
+            if (TrackerSessionClock::eventFallsInSessionWindow($paidAt, $session)) {
+                return $session;
+            }
+        }
+
+        return null;
+    }
+
+    private function createReplicaBackfillSession(ActivityEcomUser $anchor, string $sessionId, Carbon $paidAt): void
+    {
+        $paidAtFormatted = TrackerTime::formatUtc($paidAt) ?? TrackerTime::formatUtc(TrackerTime::nowUtc());
+
+        ActivityEcomUser::query()->firstOrCreate(
+            ['session_id' => $sessionId],
+            [
+                'visitor_id' => $anchor->visitor_id,
+                'user_id' => $anchor->user_id,
+                'user_name' => $anchor->user_name,
+                'user_email' => $anchor->user_email,
+                'user_phone' => $anchor->user_phone,
+                'device_type' => $anchor->device_type,
+                'browser' => $anchor->browser,
+                'os' => $anchor->os,
+                'utm_source' => $anchor->utm_source,
+                'utm_medium' => $anchor->utm_medium,
+                'utm_campaign' => $anchor->utm_campaign,
+                'landing_page' => $anchor->landing_page,
+                'is_logged_in' => $anchor->is_logged_in,
+                'session_duration_seconds' => 0,
+                'actions_count' => 0,
+                'is_sync' => ActivityEcomUser::SYNC_PENDING,
+                'created_at' => $paidAtFormatted,
+                'last_active_at' => $paidAtFormatted,
+                'updated_at' => TrackerTime::formatUtc(TrackerTime::nowUtc()),
+            ],
+        );
+
+        $this->logInfo('ingest.replica_session', 'Backfill session for replica payment outside proceed window', [
+            'visitor_id' => $anchor->visitor_id,
+            'anchor_session_id' => $anchor->session_id,
+            'session_id' => $sessionId,
+            'paid_at' => $paidAtFormatted,
+        ]);
     }
 
     private function restoreLastActiveIfEarlier(string $sessionId, mixed $previousLastActive): void
