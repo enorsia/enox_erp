@@ -1,0 +1,125 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    // ---------- Look & feel ----------
+    "workbench.colorTheme": "Abyss",
+    "workbench.iconTheme": "material-icon-theme",
+    "editor.fontFamily": "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+    "editor.fontSize": 17,
+    "editor.lineHeight": 1.6,
+    "editor.fontLigatures": true,
+    "editor.minimap.enabled": false,
+    "editor.bracketPairColorization.enabled": true,
+    "editor.rulers": [],
+    // ---------- Editor behavior ----------
+    "editor.tabSize": 4,
+    "editor.formatOnSave": true,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.associations": {
+      "*.blade.php": "blade"
+    },
+    "emmet.includeLanguages": {
+      "blade": "html"
+    },
+    "[blade]": {
+      "editor.defaultFormatter": "shufo.vscode-blade-formatter",
+      "editor.tabSize": 4
+    },
+    "[php]": {
+      "editor.defaultFormatter": "bmewburn.vscode-intelephense-client"
+    },
+    "[javascript][typescript][json][jsonc][css]": {
+      "editor.tabSize": 2
+    },
+    // ---------- Intelephense: what to index ----------
+    // NOTE: setting this REPLACES the defaults, so they are repeated here.
+    // vendor/ is intentionally NOT excluded, so Ctrl+Click into Laravel works.
+    "intelephense.files.exclude": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/vendor/**/{Tests,tests}/**",
+      "**/vendor/**/vendor/**",
+      "**/storage/**",
+      "**/bootstrap/cache/**",
+      "**/public/build/**",
+      "**/public/storage/**",
+      "**/public/vendor/**",
+      "**/public/assets/**",
+      "**/public/uploads/**",
+      "**/.phpunit.cache/**",
+      "**/coverage/**",
+      "**/dist/**",
+      "**/.history/**"
+    ],
+    "intelephense.files.maxSize": 2000000,
+    "intelephense.environment.phpVersion": "8.3.0",
+    "intelephense.telemetry.enabled": false,
+    "php.suggest.basic": false,
+    "php.validate.enable": false,
+    // ---------- Explorer / search / watcher noise ----------
+    "files.exclude": {
+      "**/.git": true,
+      "**/.DS_Store": true,
+      "**/.phpunit.cache": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/vendor": true,
+      "**/storage/framework": true,
+      "**/storage/logs": true,
+      "**/bootstrap/cache": true,
+      "**/public/build": true,
+      "**/*.min.js": true,
+      "**/*.map": true,
+      "**/composer.lock": true,
+      "**/package-lock.json": true
+    },
+    "files.watcherExclude": {
+      "**/.git/objects/**": true,
+      "**/node_modules/**": true,
+      "**/vendor/**": true,
+      "**/storage/framework/**": true,
+      "**/storage/logs/**": true,
+      "**/bootstrap/cache/**": true,
+      "**/public/build/**": true
+    },
+    // ---------- Tailwind (if used) ----------
+    "tailwindCSS.includeLanguages": {
+      "blade": "html"
+    },
+    "tailwindCSS.experimental.classRegex": [
+      [
+        "class=\"([^\"]*)\"",
+        "([^\"\\s]+)"
+      ]
+    ]
+  },
+  "extensions": {
+    "recommendations": [
+      "laravel.vscode-laravel",
+      "bmewburn.vscode-intelephense-client",
+      "onecentlin.laravel-blade",
+      "shufo.vscode-blade-formatter",
+      "onecentlin.laravel5-snippets",
+      "codingyu.laravel-goto-view",
+      "stef-k.laravel-goto-controller",
+      "ryannaddy.laravel-artisan",
+      "xdebug.php-debug",
+      "bradlc.vscode-tailwindcss",
+      "mikestead.dotenv",
+      "editorconfig.editorconfig",
+      "zhuangtongfa.material-theme",
+      "pkief.material-icon-theme",
+      "eamodio.gitlens"
+    ],
+    "unwantedRecommendations": [
+      "felixfbecker.php-intellisense",
+      "ikappas.phpcs"
+    ]
+  }
+}

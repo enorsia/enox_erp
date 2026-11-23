@@ -19,6 +19,60 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
         }
     }
 
+    function initStyleStockFilterSelects() {
+        const TomSelectCtor = window.TomSelect;
+        if (!TomSelectCtor) {
+            setTimeout(initStyleStockFilterSelects, 100);
+            return;
+        }
+
+        document.querySelectorAll(".ssr-filter-select").forEach((el) => {
+            if (!(el instanceof HTMLSelectElement) || el.tomselect) {
+                return;
+            }
+
+            const useClearButton = el.id !== "discount_status";
+
+            try {
+                const ts = new TomSelectCtor(el, {
+                    allowEmptyOption: true,
+                    placeholder:
+                        el.dataset.placeholder || "Select an option...",
+                    maxOptions: null,
+                    searchField: ["text"],
+                    sortField: [{ field: "$order" }],
+                    plugins: useClearButton ? ["clear_button"] : [],
+                    wrapperClass: "ts-wrapper single",
+                    dropdownParent: "body",
+                });
+
+                if (el.disabled) {
+                    ts.disable();
+                }
+            } catch (error) {
+                console.error("SSR filter TomSelect init failed", el.id, error);
+            }
+        });
+    }
+
+    function setFilterSelectValue(selectId, value) {
+        const el = document.getElementById(selectId);
+        if (!el) {
+            return;
+        }
+
+        const nextValue = value ?? "";
+
+        if (el.tomselect) {
+            el.tomselect.setValue(nextValue, true);
+            return;
+        }
+
+        if (window.$) {
+            window.$(el).val(nextValue);
+        }
+    }
+
     function productHasDiscount(product) {
         return (
             product?.has_discount === true ||
@@ -161,6 +215,9 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
 
         const styleStockData = getStyleStockData();
 
+        requestAnimationFrame(() => {
+            initStyleStockFilterSelects();
+        });
         renderDiscountSummary(styleStockData);
 
         function resetToggleIcons() {
@@ -168,14 +225,34 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
         }
 
         function hideAllSubRows() {
-            $(".category-row, .product-row").addClass("hidden");
+            $(".category-row, .product-row, .product-discounts-row").addClass(
+                "hidden",
+            );
             resetToggleIcons();
         }
 
         function clearFilterHidden() {
-            $(".department-row, .category-row, .product-row").removeClass(
-                "ssr-filter-hidden",
-            );
+            $(
+                ".department-row, .category-row, .product-row, .product-discounts-row",
+            ).removeClass("ssr-filter-hidden");
+        }
+
+        function syncProductDiscountRow($productRow) {
+            const $discountRow = $productRow.next("tr.product-discounts-row");
+            if (!$discountRow.length) {
+                return;
+            }
+
+            if (
+                $productRow.hasClass("hidden") ||
+                $productRow.hasClass("ssr-filter-hidden") ||
+                String($discountRow.attr("data-has-discount") || "0") !== "1"
+            ) {
+                $discountRow.addClass("hidden");
+                return;
+            }
+
+            $discountRow.removeClass("hidden");
         }
 
         function getProductLocation($product) {
@@ -362,8 +439,13 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
                             show = itemNo.indexOf(productCode) !== -1;
                         }
 
+                        const $discountRow = $product.next(
+                            "tr.product-discounts-row",
+                        );
+
                         if (show) {
                             $product.removeClass("ssr-filter-hidden");
+                            $discountRow.removeClass("ssr-filter-hidden");
 
                             if (
                                 autoExpandProducts &&
@@ -374,6 +456,8 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
                                 $product.addClass("hidden");
                             }
 
+                            syncProductDiscountRow($product);
+
                             catVisible = true;
 
                             if (!firstMatch) {
@@ -381,6 +465,7 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
                             }
                         } else {
                             $product.addClass("ssr-filter-hidden hidden");
+                            $discountRow.addClass("ssr-filter-hidden hidden");
                         }
                     });
 
@@ -421,10 +506,48 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
         }
 
         function populateCategoryOptions(deptKey) {
+            const categoryEl = document.getElementById("search_category");
             const $categorySelect = $("#search_category");
+            const emptyLabel = "-- Select Category --";
+
+            if (categoryEl?.tomselect) {
+                const ts = categoryEl.tomselect;
+                const nextOptions = [{ value: "", text: emptyLabel }];
+
+                if (deptKey && styleStockData[deptKey]) {
+                    $.each(
+                        styleStockData[deptKey].categories,
+                        function (catKey, category) {
+                            nextOptions.push({
+                                value: catKey,
+                                text: category.category_name,
+                            });
+                        },
+                    );
+                }
+
+                ts.clear();
+                ts.clearOptions();
+                nextOptions.forEach((opt) => ts.addOption(opt));
+                ts.refreshOptions(false);
+                ts.setValue("", true);
+
+                if (!deptKey || !styleStockData[deptKey]) {
+                    categoryEl.disabled = true;
+                    ts.disable();
+                    return;
+                }
+
+                categoryEl.disabled = false;
+                ts.enable();
+                return;
+            }
+
             $categorySelect
                 .empty()
-                .append('<option value="">-- Select Category --</option>');
+                .append(
+                    $("<option>", { value: "", text: emptyLabel }),
+                );
 
             if (!deptKey || !styleStockData[deptKey]) {
                 $categorySelect.prop("disabled", true);
@@ -477,9 +600,12 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
                 const location = getProductLocation($matchedRow);
 
                 if (location) {
-                    $("#search_department").val(location.deptKey);
+                    setFilterSelectValue(
+                        "search_department",
+                        location.deptKey,
+                    );
                     populateCategoryOptions(location.deptKey);
-                    $("#search_category").val(location.catKey);
+                    setFilterSelectValue("search_category", location.catKey);
                 }
 
                 applyFilters();
@@ -493,11 +619,8 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
                     $matchedRow.removeClass("ssr-row--highlight");
                 }, 2000);
             } else {
-                $("#search_department").val("");
-                $("#search_category")
-                    .empty()
-                    .append('<option value="">-- Select Category --</option>')
-                    .prop("disabled", true);
+                setFilterSelectValue("search_department", "");
+                populateCategoryOptions("");
                 alert(
                     "No product found with code: " + $("#search_product").val(),
                 );
@@ -520,11 +643,11 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
 
             if (!deptKey || !catKey || count <= 0) return;
 
-            $("#discount_status").val("3");
+            setFilterSelectValue("discount_status", "3");
             $("#search_product").val("");
-            $("#search_department").val(deptKey);
+            setFilterSelectValue("search_department", deptKey);
             populateCategoryOptions(deptKey);
-            $("#search_category").val(catKey);
+            setFilterSelectValue("search_category", catKey);
             applyFilters();
 
             const $catRow = $(
@@ -558,9 +681,12 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
             if ($targets.hasClass("hidden")) {
                 $targets.each(function () {
                     const categoryTarget = $(this).data("target");
-                    $("." + categoryTarget)
+                    $("tr.product-row." + categoryTarget)
                         .filter(":not(.ssr-filter-hidden)")
-                        .addClass("hidden");
+                        .each(function () {
+                            $(this).addClass("hidden");
+                            syncProductDiscountRow($(this));
+                        });
                     $(this)
                         .find(".ssr-chevron")
                         .removeClass("ssr-chevron--open");
@@ -574,20 +700,143 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
             if ($(this).hasClass("ssr-filter-hidden")) return;
 
             const target = $(this).data("target");
-            $("." + target)
+            $("tr.product-row." + target)
                 .filter(":not(.ssr-filter-hidden)")
-                .toggleClass("hidden");
+                .each(function () {
+                    $(this).toggleClass("hidden");
+                    syncProductDiscountRow($(this));
+                });
             $(this).find(".ssr-chevron").toggleClass("ssr-chevron--open");
         });
 
-        $(document).on("click", ".discount-btn", function () {
-            const itemSlug = $(this).data("itemSlug");
-            let url = $(this).data("url");
+        const styleDetailLoading = `
+                <div class="flex flex-col items-center justify-center py-12">
+                    <svg
+                        class="w-10 h-10 animate-spin text-indigo-600"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                    >
+                        <circle
+                            class="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            stroke-width="4"
+                        ></circle>
+                        <path
+                            class="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                    </svg>
+                    <p class="mt-4 text-sm text-slate-500">Fetching data ...</p>
+                </div>
+            `;
+
+        const styleDetailError = `
+                <div class="py-8 text-center text-red-500">
+                    Unable to load style details. Please try again.
+                </div>
+            `;
+
+        const $drawerBody = $("#drawerBodyContent");
+        const fancyboxOptions = {
+            closeButton: "top",
+            Thumbs: {
+                type: "classic",
+            },
+        };
+
+        function bindFancyboxIn(root) {
+            if (!root || root === document) {
+                prepareFancyboxPublicLinks(
+                    '[data-fancybox^="gallery-style-stock-"]',
+                    document,
+                );
+                Fancybox.bind(
+                    '[data-fancybox^="gallery-style-stock-"]',
+                    fancyboxOptions,
+                );
+                return;
+            }
+
+            prepareFancyboxPublicLinks(
+                '[data-fancybox^="gallery-style-alert-"]',
+                root,
+            );
+            prepareFancyboxPublicLinks(
+                '[data-fancybox^="gallery-style-stock-"]',
+                root,
+            );
+            Fancybox.bind(
+                root,
+                '[data-fancybox^="gallery-style-alert-"], [data-fancybox^="gallery-style-stock-"]',
+                fancyboxOptions,
+            );
+        }
+
+        $(document).on("click", ".ssr-style-detail-trigger", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const url =
+                $(this).attr("data-detail-url") ||
+                $(this).data("detailUrl");
+            const itemNo =
+                $(this).attr("data-item-no") ||
+                $(this).data("itemNo") ||
+                "";
+
+            if (!url) return;
+
+            $("#styleDrawerLabel").text("Style");
+            $("#setEcomSku").text(itemNo ? "#" + itemNo : "");
+
             $.ajax({
                 type: "GET",
                 url: url,
+                dataType: "json",
                 beforeSend: function () {
-                    $("#discountContent").html(`
+                    $drawerBody.html(styleDetailLoading);
+                },
+                success: function (response) {
+                    if (response && response.status && response.data) {
+                        $drawerBody.html(response.data);
+                        bindFancyboxIn($drawerBody[0]);
+                        if (response.title) {
+                            $("#setEcomSku").text("#" + response.title);
+                        }
+                    } else {
+                        $drawerBody.html(
+                            `<div class="py-8 text-center text-red-500">${(response && response.message) || "Unable to load style details."}</div>`,
+                        );
+                    }
+                },
+                error: function (xhr) {
+                    const message =
+                        xhr?.responseJSON?.message ||
+                        "Unable to load style details. Please try again.";
+                    $drawerBody.html(
+                        `<div class="py-8 text-center text-red-500">${message}</div>`,
+                    );
+                },
+            });
+        });
+
+        $(document).on("click", ".discount-btn", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const itemSlug = $(this).data("itemSlug");
+            const url = $(this).data("url");
+            $("#styleDrawerLabel").text("Ecom SKU");
+            $.ajax({
+                type: "GET",
+                url: url,
+                dataType: "json",
+                beforeSend: function () {
+                    $drawerBody.html(`
                 <div class="flex flex-col items-center justify-center py-12">
                     <svg
                         class="w-10 h-10 animate-spin text-indigo-600"
@@ -617,22 +866,24 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
             `);
                 },
                 success: function (response) {
-                    if (response.status) {
-                        $("#discountContent").html(response.data);
+                    if (response && response.status) {
+                        $drawerBody.html(response.data);
                         if (itemSlug) {
-                            $("#discountContent .discount-edit-panel").attr(
-                                "data-item-slug",
-                                itemSlug,
-                            );
+                            $drawerBody
+                                .find(".discount-edit-panel")
+                                .attr("data-item-slug", itemSlug);
                         }
-                        const ecomSku = $('p[identify="Ecom SKU"]')
+                        const ecomSku = $drawerBody
+                            .find('p[identify="Ecom SKU"]')
                             .text()
                             .trim();
-                        $("#setEcomSku").text("#"+ecomSku);
+                        if (ecomSku) {
+                            $("#setEcomSku").text("#" + ecomSku);
+                        }
                     }
                 },
                 error: function () {
-                    $("#discountContent").html(`
+                    $drawerBody.html(`
                 <div class="py-8 text-center text-red-500">
                     Something went wrong.
                 </div>
@@ -641,13 +892,38 @@ import { prepareFancyboxPublicLinks } from "./fancybox-public-url";
             });
         });
 
-        prepareFancyboxPublicLinks('[data-fancybox^="gallery-style-stock-"]');
-        Fancybox.bind('[data-fancybox^="gallery-style-stock-"]', {
-            closeButton: "top",
-            Thumbs: {
-                type: "classic",
-            },
+        $(document).on("click", ".ssr-style-alert-color-toggle", function () {
+            const $btn = $(this);
+            const $panel = $btn
+                .closest(".border")
+                .find(".ssr-style-alert-color-meta")
+                .first();
+            const willExpand = $panel.hasClass("hidden");
+
+            $panel.toggleClass("hidden", !willExpand);
+            $btn.text(
+                willExpand ? "Hide shipping & remark" : "Show shipping & remark",
+            );
+            $btn.attr("aria-expanded", willExpand ? "true" : "false");
         });
+
+        $(document).on("click", ".ssr-applied-discounts__toggle", function () {
+            const $btn = $(this);
+            const $root = $btn.closest(".ssr-applied-discounts");
+            const $extras = $root.find(".ssr-applied-discounts__extra");
+            const extraCount = parseInt($btn.data("extraCount"), 10) || 0;
+            const willExpand = $extras.first().hasClass("hidden");
+
+            $extras.toggleClass("hidden", !willExpand);
+            $btn.text(
+                willExpand
+                    ? "See less"
+                    : "See more (" + extraCount + ")",
+            );
+            $btn.attr("aria-expanded", willExpand ? "true" : "false");
+        });
+
+        bindFancyboxIn(document);
     }
 
     if (document.readyState === "loading") {

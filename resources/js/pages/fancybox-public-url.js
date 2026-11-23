@@ -4,8 +4,8 @@ export function toFancyboxPublicUrl(url) {
     return url.replace(/\/w=\d+$/, '/public');
 }
 
-export function prepareFancyboxPublicLinks(selector) {
-    document.querySelectorAll(selector).forEach((el) => {
+export function prepareFancyboxPublicLinks(selector, root = document) {
+    root.querySelectorAll(selector).forEach((el) => {
         const href = el.getAttribute('href');
         if (href) {
             el.setAttribute('href', toFancyboxPublicUrl(href));

@@ -1986,6 +1986,20 @@ body > .ts-dropdown .ts-dropdown-content {
 /* ═══════════════════════════════════════════════════════════════
    STYLE STOCK REPORT — table, progress bars, expandable rows
    ═══════════════════════════════════════════════════════════════ */
+.ssr-search-filters > div {
+    min-width: 0;
+}
+
+/* Tom Select wrapper: no outer box (only .ts-control is styled like ranking page) */
+.ssr-search-filters .etd-ranking-products-context .ts-wrapper {
+    width: 100%;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
 .ssr-table-wrap {
     overflow-x: auto;
     border-radius: 0.875rem;
@@ -2060,6 +2074,22 @@ body > .ts-dropdown .ts-dropdown-content {
 }
 
 .dark .ssr-row--product {
+    background: rgba(255, 255, 255, 0.01);
+}
+
+.ssr-row--product-discounts {
+    background: #fff;
+}
+
+.dark .ssr-row--product-discounts {
+    background: rgba(255, 255, 255, 0.01);
+}
+
+.ssr-row--product-discounts:hover {
+    background: #fff;
+}
+
+.dark .ssr-row--product-discounts:hover {
     background: rgba(255, 255, 255, 0.01);
 }
 
@@ -2166,8 +2196,123 @@ body > .ts-dropdown .ts-dropdown-content {
 .ssr-product-wrap {
     display: flex;
     align-items: flex-start;
+    flex-wrap: nowrap;
     gap: 0.625rem;
     padding-left: 1rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ssr-product-wrap > div:not(.ssr-applied-discounts-slot) {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.ssr-applied-discounts-slot--inline {
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    width: auto;
+    min-width: 16.5rem;
+    max-width: 28rem;
+    margin-left: 1rem;
+}
+
+.ssr-applied-discounts-slot--inline .ssr-applied-discounts {
+    width: 100%;
+    max-width: 28rem;
+}
+
+@media (min-width: 1024px) {
+    .ssr-applied-discounts-slot--inline:has(.ssr-applied-discounts__chip--range) {
+        min-width: 24rem;
+    }
+
+    .ssr-applied-discounts-slot--inline .ssr-applied-discounts__track {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+/* Desktop: discounts stay inline in product cell */
+.ssr-applied-discounts-slot--row {
+    display: none;
+}
+
+tr.product-discounts-row {
+    display: none;
+}
+
+/* Tablet + mobile: full-width discounts in a dedicated table row */
+@media (max-width: 1023px) {
+    .ssr-product-wrap {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding-left: 0.75rem;
+    }
+
+    .ssr-product-wrap > div:not(.ssr-applied-discounts-slot) {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .ssr-applied-discounts-slot--inline {
+        display: none !important;
+    }
+
+    tr.product-discounts-row:not(.hidden) {
+        display: table-row;
+    }
+
+    .ssr-applied-discounts-slot--row:not(.hidden) {
+        display: block;
+        width: auto;
+        min-width: 0;
+        max-width: 20rem;
+    }
+
+    .ssr-row--product-discounts td {
+        padding-top: 0;
+        border-top: none;
+        vertical-align: top;
+    }
+
+    .ssr-product-discounts-cell {
+        padding-top: 0;
+        padding-bottom: 0.4rem;
+    }
+
+    .ssr-product-discounts-cell .ssr-applied-discounts-slot--row:not(.hidden) {
+        padding-left: 0.75rem;
+    }
+
+    .ssr-applied-discounts-slot--row .ssr-applied-discounts {
+        width: auto;
+        max-width: 20rem;
+    }
+
+    .ssr-applied-discounts-slot--row .ssr-applied-discounts__track {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        max-width: 20rem;
+    }
+
+    .ssr-applied-discounts-slot--row .ssr-applied-discounts:has(.ssr-applied-discounts__chip--range) {
+        max-width: 100%;
+    }
+
+    .ssr-applied-discounts-slot--row .ssr-applied-discounts:has(.ssr-applied-discounts__chip--range)
+        .ssr-applied-discounts__track {
+        max-width: 100%;
+    }
+
+    .ssr-label-cell--product {
+        vertical-align: top;
+    }
+
+    .ssr-row--product td.text-right {
+        vertical-align: top;
+        white-space: nowrap;
+    }
 }
 
 .ssr-product-img {
@@ -2404,6 +2549,212 @@ body > .ts-dropdown .ts-dropdown-content {
     color: #94a3b8;
     text-align: center;
     padding: 1rem 0;
+}
+
+/* ── Style Stock — applied discounts (per product row) ── */
+.ssr-applied-discounts {
+    border: 1px dotted #c4b5fd;
+    border-radius: 0.75rem;
+    padding: 0.55rem 0.65rem;
+    min-width: 0;
+    width: auto;
+    max-width: 28rem;
+    box-sizing: border-box;
+    overflow: hidden;
+    container-type: inline-size;
+    container-name: applied-discounts;
+    background: linear-gradient(
+        145deg,
+        rgba(255, 255, 255, 0.98) 0%,
+        rgba(245, 243, 255, 0.55) 100%
+    );
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.dark .ssr-applied-discounts {
+    border-color: rgba(167, 139, 250, 0.45);
+    background: linear-gradient(
+        145deg,
+        rgba(30, 41, 59, 0.65) 0%,
+        rgba(49, 46, 129, 0.15) 100%
+    );
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.ssr-applied-discounts__title {
+    margin: 0 0 0.4rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #7c3aed;
+}
+
+.dark .ssr-applied-discounts__title {
+    color: #c4b5fd;
+}
+
+.ssr-applied-discounts__track {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+    align-items: start;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.ssr-applied-discounts__extra.hidden {
+    display: none;
+}
+
+.ssr-applied-discounts__chip {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.2rem 0.45rem;
+    border: 1px dotted #e2e8f0;
+    border-radius: 0.5rem;
+    background: #ffffff;
+    font-size: 0.6875rem;
+    line-height: 1.35;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.dark .ssr-applied-discounts__chip {
+    border-color: #475569;
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.ssr-applied-discounts__chip--range {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+    height: 100%;
+    padding: 0.35rem 0.5rem;
+}
+
+.ssr-applied-discounts__toggle {
+    display: block;
+    margin: 0.35rem 0 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: #7c3aed;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.ssr-applied-discounts__toggle:hover {
+    color: #6d28d9;
+}
+
+.dark .ssr-applied-discounts__toggle {
+    color: #c4b5fd;
+}
+
+.dark .ssr-applied-discounts__toggle:hover {
+    color: #ddd6fe;
+}
+
+.ssr-applied-discounts__platform {
+    font-weight: 700;
+    font-size: 0.625rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #475569;
+}
+
+.dark .ssr-applied-discounts__platform {
+    color: #cbd5e1;
+}
+
+.ssr-applied-discounts__price {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #6d28d9;
+    flex-shrink: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.dark .ssr-applied-discounts__price {
+    color: #c4b5fd;
+}
+
+.ssr-applied-discounts__ranges {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.ssr-applied-discounts__range-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.35rem;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 0.6875rem;
+    box-sizing: border-box;
+}
+
+.ssr-applied-discounts__range {
+    color: #64748b;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dark .ssr-applied-discounts__range {
+    color: #94a3b8;
+}
+
+.ssr-applied-discounts__empty {
+    margin: 0;
+    font-size: 0.6875rem;
+    color: #94a3b8;
+}
+
+/* ── Style alert drawer — color remark / shipping (collapsed) ── */
+.ssr-style-alert-color-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #7c3aed;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.ssr-style-alert-color-toggle:hover {
+    color: #6d28d9;
+}
+
+.dark .ssr-style-alert-color-toggle {
+    color: #c4b5fd;
+}
+
+.ssr-style-alert-color-meta.hidden {
+    display: none;
 }
 
 /* ── Dashboard home (page layout & badges) ── */

@@ -505,68 +505,109 @@ $(document).ready(function () {
         return { has_range: false, platform_ranges: {}, platform_discounts };
     }
 
-    function buildAppliedDiscountsHtml(appliedDiscounts) {
-        if (!appliedDiscounts) return '';
-
-        const boxOpen =
-            '<div class="rounded-lg p-2 bg-slate-200 dark:bg-slate-700/50 border border-transparent dark:border-slate-600">';
-        const boxClose = '</div>';
-        const title =
-            '<p class="text-slate-800 dark:text-slate-200 text-[12px] font-medium mb-1">Applied Discounts:</p>';
+    function appliedDiscountEntries(appliedDiscounts) {
+        if (!appliedDiscounts) return [];
 
         if (appliedDiscounts.has_range) {
-            const items = Object.entries(appliedDiscounts.platform_ranges || {})
-                .map(([code, ranges]) => {
-                    const rangeLines = (ranges || [])
-                        .map((item) =>
-                            '<span class="block text-slate-600 dark:text-slate-400">' +
-                            (item.range || 'N/A') +
-                            ' — ' +
-                            formatDiscountPrice(item.price) +
-                            '</span>'
-                        )
-                        .join('');
-
-                    return (
-                        '<div class="ssr-product-meta text-slate-600 dark:text-slate-400">' +
-                        '<span class="font-medium text-slate-700 dark:text-slate-300">' +
-                        formatPlatformCode(code) +
-                        ':</span>' +
-                        rangeLines +
-                        '</div>'
-                    );
-                })
-                .join('');
-
-            return (
-                boxOpen +
-                title +
-                '<div class="grid grid-cols-2 gap-x-3 gap-y-1">' +
-                (items || '<p class="ssr-product-meta col-span-2 text-slate-600 dark:text-slate-400">No discounts applied</p>') +
-                '</div>' +
-                boxClose
+            return Object.entries(appliedDiscounts.platform_ranges || {}).map(
+                ([code, ranges]) => ({
+                    type: 'range',
+                    code,
+                    ranges: ranges || [],
+                }),
             );
         }
 
-        const items = (appliedDiscounts.platform_discounts || [])
-            .map((discount) =>
-                '<p class="ssr-product-meta text-slate-600 dark:text-slate-400">' +
-                '<span class="font-medium text-slate-700 dark:text-slate-300">' +
-                formatPlatformCode(discount.code) +
-                ':</span> ' +
-                formatDiscountPrice(discount.price) +
-                '</p>'
+        return (appliedDiscounts.platform_discounts || []).map((discount) => ({
+            type: 'flat',
+            code: discount.code,
+            price: discount.price,
+        }));
+    }
+
+    function renderAppliedDiscountPlatform(entry) {
+        const platform = formatPlatformCode(entry.code);
+
+        if (entry.type === 'range') {
+            const rangeLines = (entry.ranges || [])
+                .map(
+                    (item) =>
+                        '<span class="ssr-applied-discounts__range-line">' +
+                        '<span class="ssr-applied-discounts__range">' +
+                        (item.range || 'N/A') +
+                        '</span>' +
+                        '<span class="ssr-applied-discounts__price">' +
+                        formatDiscountPrice(item.price) +
+                        '</span>' +
+                        '</span>',
+                )
+                .join('');
+
+            return (
+                '<div class="ssr-applied-discounts__chip ssr-applied-discounts__chip--range">' +
+                '<span class="ssr-applied-discounts__platform">' +
+                platform +
+                '</span>' +
+                '<div class="ssr-applied-discounts__ranges">' +
+                rangeLines +
+                '</div>' +
+                '</div>'
+            );
+        }
+
+        return (
+            '<span class="ssr-applied-discounts__chip">' +
+            '<span class="ssr-applied-discounts__platform">' +
+            platform +
+            '</span>' +
+            '<span class="ssr-applied-discounts__price">' +
+            formatDiscountPrice(entry.price) +
+            '</span>' +
+            '</span>'
+        );
+    }
+
+    function buildAppliedDiscountsHtml(appliedDiscounts) {
+        const entries = appliedDiscountEntries(appliedDiscounts);
+        if (!entries.length) return '';
+
+        const visible = entries.slice(0, 3);
+        const extra = entries.slice(3);
+        const extraCount = extra.length;
+
+        const boxOpen = '<div class="ssr-applied-discounts">';
+        const boxClose = '</div>';
+        const title = '<p class="ssr-applied-discounts__title">Applied discounts</p>';
+
+        const extraWrapped = extra
+            .map(
+                (entry) =>
+                    '<div class="ssr-applied-discounts__extra hidden">' +
+                    renderAppliedDiscountPlatform(entry) +
+                    '</div>',
             )
             .join('');
 
-        return (
+        let html =
             boxOpen +
             title +
-            '<div class="grid grid-cols-2 gap-x-3 gap-y-1">' +
-            (items || '<p class="ssr-product-meta col-span-2 text-slate-600 dark:text-slate-400">No discounts applied</p>') +
-            '</div>' +
-            boxClose
-        );
+            '<div class="ssr-applied-discounts__track">' +
+            visible.map(renderAppliedDiscountPlatform).join('') +
+            extraWrapped +
+            '</div>';
+
+        if (extraCount > 0) {
+            html +=
+                '<button type="button" class="ssr-applied-discounts__toggle" data-extra-count="' +
+                extraCount +
+                '" aria-expanded="false">See more (' +
+                extraCount +
+                ')</button>';
+        }
+
+        html += boxClose;
+
+        return html;
     }
 
     function updateStyleStockAppliedDiscounts($scope) {
@@ -580,11 +621,24 @@ $(document).ready(function () {
         const html = buildAppliedDiscountsHtml(appliedDiscounts);
         if (!html) return;
 
-        const $box = $('.applied-discounts-' + itemSlug);
-        if (!$box.length) return;
+        const $boxes = $('.applied-discounts-' + itemSlug);
+        if (!$boxes.length) return;
 
-        $box.html(html).removeClass('hidden');
-        $box.closest('.product-row').attr('data-has-discount', '1');
+        $boxes.html(html).removeClass('hidden');
+
+        const $productRow = $boxes
+            .filter('.ssr-applied-discounts-slot--inline')
+            .closest('.product-row');
+        if ($productRow.length) {
+            $productRow.attr('data-has-discount', '1');
+            const $discountRow = $productRow.next('tr.product-discounts-row');
+            if ($discountRow.length) {
+                $discountRow.attr('data-has-discount', '1');
+                if (!$productRow.hasClass('hidden')) {
+                    $discountRow.removeClass('hidden');
+                }
+            }
+        }
     }
 
     function submitDiscountForm($form) {

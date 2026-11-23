@@ -3,7 +3,8 @@
 @section('title', 'Stock Performance')
 
 @section('content')
-    <div x-data="{ drawerOpen: false, imagePopup: null }" @keydown.escape.window="drawerOpen = false; imagePopup = null">
+    <div x-data="{ drawerOpen: false, imagePopup: null }"
+        @keydown.escape.window="drawerOpen = false; imagePopup = null">
         <div id="enox_style_stock_report" class="hidden" data-style-stocks='@json($style_stocks)'></div>
         <div id="discounts-page-content"
          data-calculate-url="{{ route('admin.selling_chart.calculate.platform.profit') }}"
@@ -50,7 +51,7 @@
             </div>
 
             {{-- ─── Search Filters ─── --}}
-            <div class="an-card p-4">
+            <div class="an-card ssr-search-filters-card p-4 overflow-visible">
                 <div class="flex items-center gap-2 mb-4">
                     <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" stroke-width="2"
                         viewBox="0 0 24 24">
@@ -60,10 +61,12 @@
                     <h2 class="text-[14px] font-semibold text-slate-800 dark:text-slate-100">Search & Filter</h2>
                 </div>
 
-                <div class="grid grid-cols-1 xl:grid-cols-5 gap-4 items-end">
-                    <div>
+                <div class="ssr-search-filters grid grid-cols-1 xl:grid-cols-5 gap-4 items-end">
+                    <div class="min-w-0 etd-ranking-products-context">
                         <label class="f-label" for="search_department">Department</label>
-                        <select id="search_department" name="search_department" class="f-input custom-select">
+                        <select id="search_department" name="search_department"
+                            class="w-full text-[13px] ssr-filter-select"
+                            data-placeholder="-- Select Department --">
                             <option value="">-- Select Department --</option>
                             @foreach ($style_stocks as $deptKey => $department)
                                 <option value="{{ $deptKey }}">{{ $department['department_name'] }}</option>
@@ -71,25 +74,30 @@
                         </select>
                     </div>
 
-                    <div>
+                    <div class="min-w-0 etd-ranking-products-context">
                         <label class="f-label" for="search_category">Category</label>
-                        <select id="search_category" name="search_category" class="f-input custom-select" disabled>
+                        <select id="search_category" name="search_category"
+                            class="w-full text-[13px] ssr-filter-select"
+                            data-placeholder="-- Select Category --"
+                            disabled>
                             <option value="">-- Select Category --</option>
                         </select>
                     </div>
 
-                    <div>
-                        <label class="f-label" for="search_product">Product Code</label>
-                        <input type="text" id="search_product" name="search_product" class="f-input" placeholder="Enter product code">
-                    </div>
-
-                    <div>
+                    <div class="min-w-0 etd-ranking-products-context">
                         <label class="f-label" for="discount_status">Discount</label>
-                        <select id="discount_status" name="discount_status" class="f-input custom-select">
+                        <select id="discount_status" name="discount_status"
+                            class="w-full text-[13px] ssr-filter-select"
+                            data-placeholder="All items">
                             <option value="1">All items</option>
                             <option value="2">Non discount items</option>
                             <option value="3">Discount items</option>
                         </select>
+                    </div>
+
+                    <div class="min-w-0">
+                        <label class="f-label" for="search_product">Product Code</label>
+                        <input type="text" id="search_product" name="search_product" class="f-input" placeholder="Enter product code">
                     </div>
 
                     <div class="flex gap-2">
@@ -236,7 +244,9 @@
                                         <tr class="ssr-row ssr-row--product product-row category-{{ $deptKey }}-{{ $catKey }} hidden"
                                             data-has-discount="{{ $product['has_discount'] ? '1' : '0' }}"
                                             data-stock="{{ $product['stock'] }}"
-                                            data-sold="{{ $product['sold'] }}">
+                                            data-sold="{{ $product['sold'] }}"
+                                            data-style="{{ $product['style'] }}"
+                                            data-detail-url="{{ route('admin.style.stock.detail', $product['style']) }}">
                                             <td class="ssr-label-cell ssr-label-cell--product">
                                                 <div class="ssr-product-wrap">
                                                     @if (!empty($product['image_link']))
@@ -249,22 +259,26 @@
                                                         </a>
                                                     @endif
                                                     <div>
-                                                        <a href="{{ $product['link'] }}" target="_blank"
-                                                            class="ssr-product-link">{{ $product['item_no'] }}</a>
+                                                        <button type="button"
+                                                            @click="drawerOpen = true"
+                                                            class="ssr-product-link ssr-style-detail-trigger text-left underline decoration-slate-300/80 underline-offset-2 hover:text-accent-500 cursor-pointer bg-transparent border-0 p-0"
+                                                            data-detail-url="{{ route('admin.style.stock.detail', $product['style']) }}"
+                                                            data-item-no="{{ $product['item_no'] }}">{{ $product['item_no'] }}</button>
                                                         <p class="ssr-product-meta">Ecom. Price: {{ $product['ecom_price'] }}</p>
                                                         {{-- @if ($product['itemPrice']['maxDiscountPrice'] > 0)
                                                             <p class="ssr-product-meta">Dis. Price: {{ $product['discount_price'] }}</p>
                                                         @endif --}}
                                                         <p class="ssr-product-meta">FOB Price: {{ $product['fob_price'] }}</p>
 
-                                                        <span data-url="{{ route('admin.style.stock.discounts', $product['style']) }}"
+                                                        <button type="button"
+                                                            @click="drawerOpen = true"
+                                                            data-url="{{ route('admin.style.stock.discounts', $product['style']) }}"
                                                             data-item-slug="{{ Str::slug($product['item_no']) }}"
-                                                            type="button" @click="drawerOpen = true"
-                                                            class="flex items-center gap-2 text-[12px] transition-colors underline cursor-pointer discount-btn">Apply
-                                                            discount</span>
+                                                            class="flex items-center gap-2 text-[12px] transition-colors underline cursor-pointer discount-btn bg-transparent border-0 p-0 text-left">Apply
+                                                            discount</button>
 
                                                     </div>
-                                                    <div class="ms-5 min-w-[180px] applied-discounts-{{ Str::slug($product['item_no']) }} {{ ($product['has_discount'] && !empty($product['applied_discounts'])) ? '' : 'hidden' }}">
+                                                    <div class="ssr-applied-discounts-slot ssr-applied-discounts-slot--inline applied-discounts-{{ Str::slug($product['item_no']) }} {{ ($product['has_discount'] && !empty($product['applied_discounts'])) ? '' : 'hidden' }}">
                                                         @if ($product['has_discount'] && !empty($product['applied_discounts']))
                                                             @include('style_stocks.partials.applied-discounts', [
                                                                 'appliedDiscounts' => $product['applied_discounts'],
@@ -289,6 +303,18 @@
                                                     'level' => 'product',
                                                     'type' => 'sold',
                                                 ])
+                                            </td>
+                                        </tr>
+                                        <tr class="ssr-row ssr-row--product-discounts product-discounts-row {{ ($product['has_discount'] && !empty($product['applied_discounts'])) ? '' : 'hidden' }} hidden"
+                                            data-has-discount="{{ $product['has_discount'] ? '1' : '0' }}">
+                                            <td colspan="3" class="ssr-label-cell ssr-label-cell--product ssr-product-discounts-cell">
+                                                <div class="ssr-applied-discounts-slot ssr-applied-discounts-slot--row applied-discounts-{{ Str::slug($product['item_no']) }} {{ ($product['has_discount'] && !empty($product['applied_discounts'])) ? '' : 'hidden' }}">
+                                                    @if ($product['has_discount'] && !empty($product['applied_discounts']))
+                                                        @include('style_stocks.partials.applied-discounts', [
+                                                            'appliedDiscounts' => $product['applied_discounts'],
+                                                        ])
+                                                    @endif
+                                                </div>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -369,7 +395,7 @@
             {{-- Drawer Head --}}
             <div
                 class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
-                <div class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 dark:text-slate-100 uppercase">Ecom SKU: <span id="setEcomSku"></span></div>
+                <div class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 dark:text-slate-100 uppercase"><span id="styleDrawerLabel">Details</span>: <span id="setEcomSku"></span></div>
                 <button @click="drawerOpen = false"
                     class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-200 transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -379,8 +405,8 @@
             </div>
 
             {{-- Drawer Body --}}
-            <div class="flex-1 flex flex-col overflow-hidden">
-                <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5" id="discountContent"></div>
+            <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-5" id="drawerBodyContent"></div>
             </div>
         </div>
     </div>

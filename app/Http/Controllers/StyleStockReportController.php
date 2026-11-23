@@ -6,6 +6,7 @@ use App\ApiServices\SellingChartApiService;
 use App\Models\Platform;
 use App\Models\SellingChartBasicInfo;
 use App\Models\SellingChartExpense;
+use App\Services\StyleStockAlertDetailService;
 use App\Services\StyleStockReportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,7 @@ class StyleStockReportController extends Controller
 {
     public function __construct(
         protected StyleStockReportService $service,
+        protected StyleStockAlertDetailService $alertDetailService,
         protected SellingChartApiService $sellingChartApiService,
     ) {}
 
@@ -203,6 +205,20 @@ class StyleStockReportController extends Controller
                 'Content-Type' => $result['content_type'],
             ],
         );
+    }
+
+    public function viewStyleDetail(string $style)
+    {
+        Gate::authorize('ecommerce.wh_stock_in_out.index');
+
+        $result = $this->alertDetailService->panelForStyle($style);
+
+        return response()->json([
+            'status' => $result['status'],
+            'message' => $result['message'],
+            'data' => $result['html'],
+            'title' => $result['title'],
+        ], $result['status'] ? 200 : 422);
     }
 
     public function viewDiscount(Request $request, $style)
