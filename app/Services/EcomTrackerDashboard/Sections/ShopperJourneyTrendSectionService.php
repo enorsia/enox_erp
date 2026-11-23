@@ -3,6 +3,7 @@
 namespace App\Services\EcomTrackerDashboard\Sections;
 
 use App\Services\EcomActivityListService;
+use App\Services\EcomTrackerDashboard\Concerns\InteractsWithSessionFilterRatios;
 use App\Support\TrackerDatabase;
 use App\Support\TrackerTime;
 use Carbon\Carbon;
@@ -16,7 +17,7 @@ class ShopperJourneyTrendSectionService
 
     private const TREND_MONTHLY_THRESHOLD_DAYS = 91;
 
-    use \App\Services\EcomTrackerDashboard\Concerns\InteractsWithSessionFilterRatios;
+    use InteractsWithSessionFilterRatios;
 
     public function buildTrend(Collection $summaries, array $range, int $days, string $period): array
     {
@@ -42,7 +43,6 @@ class ShopperJourneyTrendSectionService
 
         $labels = [];
         $data = $this->emptyTrendBucketData();
-        $trendSupport = $this->prefetchTrendSupportData($range + ['period' => $period]);
 
         foreach ($periodBuckets as [$periodStart, $periodEnd, $label]) {
             $labels[] = $label;
@@ -50,7 +50,6 @@ class ShopperJourneyTrendSectionService
                 $rangeSummaries,
                 $periodStart->toDateString(),
                 $periodEnd->toDateString(),
-                $trendSupport,
             );
             $this->pushTrendBucket($data, $bucketMetrics);
         }
@@ -75,12 +74,6 @@ class ShopperJourneyTrendSectionService
             ->get()
             ->keyBy(fn (object $row) => (int) $row->metric_hour);
 
-        $purchaseSessionsByHour = TrackerDatabase::table('tracking_orders')
-            ->where('metric_date', $date)
-            ->get(['tracking_session_id', 'ordered_at'])
-            ->groupBy(fn (object $order) => (int) Carbon::parse($order->ordered_at)->timezone(TrackerTime::timezone())->format('G'))
-            ->map(fn (Collection $orders) => $orders->pluck('tracking_session_id')->unique()->count());
-
         $labels = [];
         $data = $this->emptyTrendBucketData();
 
@@ -92,6 +85,8 @@ class ShopperJourneyTrendSectionService
         for ($hour = 0; $hour <= $endHour; $hour++) {
             $row = $rows->get($hour);
             $labels[] = sprintf('%02d:00', $hour);
+            $paidUnits = (int) ($row?->product_paid_units ?? 0);
+            $paidAmount = round((float) ($row?->product_sale_amount ?? 0), 2);
             $this->pushTrendBucket($data, [
                 'unique_visitors' => (int) ($row?->unique_visitors ?? 0),
                 'sessions' => (int) ($row?->sessions ?? 0),
@@ -100,10 +95,10 @@ class ShopperJourneyTrendSectionService
                 'cart_sessions' => (int) ($row?->product_add_units ?? 0),
                 'checkout_sessions' => (int) ($row?->product_begin_units ?? 0),
                 'proceed_sessions' => (int) ($row?->product_proceed_units ?? 0),
-                'payments' => (int) ($row?->payments ?? 0),
-                'items_sold' => (int) ($row?->product_paid_units ?? 0),
-                'sale_amount' => round((float) ($row?->product_sale_amount ?? 0), 2),
-                'purchase_sessions' => (int) ($purchaseSessionsByHour->get($hour) ?? 0),
+                'payments' => $paidUnits,
+                'items_sold' => $paidUnits,
+                'sale_amount' => $paidAmount,
+                'purchase_sessions' => $paidUnits,
             ]);
         }
 
@@ -160,63 +155,16 @@ class ShopperJourneyTrendSectionService
     }
 
     /**
-     * One round trip for trend buckets (avoids per-day visitor / purchase queries).
-     *
-     * @return array{
-     *     visitors_by_date: Collection<string, Collection<int, int>>,
-     *     purchase_session_ids_by_date: Collection<string, Collection<int, int>>
-     * }
-     */
-    /**
-     * @param  array{from: Carbon, to: Carbon, period?: string}  $range
-     */
-    private function prefetchTrendSupportData(array $range): array
-    {
-        $visitorsByDate = TrackerDatabase::table('tracking_session as ts')
-            ->join('tracking_daily_visitor as dv', 'dv.id', '=', 'ts.tracking_daily_visitor_id')
-            ->select(['dv.visit_date as session_date', 'ts.tracking_daily_visitor_id'])
-            ->tap(fn ($query) => TrackerTime::applyEcomActivitySessionScope(
-                $query,
-                $range['from'],
-                $range['to'],
-                $range['period'] ?? null,
-                'ts',
-            ))
-            ->get()
-            ->groupBy(fn (object $row) => (string) $row->session_date)
-            ->map(fn (Collection $rows) => $rows->pluck('tracking_daily_visitor_id')->map(fn ($id) => (int) $id));
-
-        $fromDate = $range['from']->toDateString();
-        $toDate = $range['to']->toDateString();
-
-        $purchaseSessionIdsByDate = TrackerDatabase::table('tracking_orders')
-            ->whereBetween('metric_date', [$fromDate, $toDate])
-            ->select(['metric_date', 'tracking_session_id'])
-            ->get()
-            ->groupBy(fn (object $row) => (string) $row->metric_date)
-            ->map(fn (Collection $rows) => $rows->pluck('tracking_session_id')->map(fn ($id) => (int) $id));
-
-        return [
-            'visitors_by_date' => $visitorsByDate,
-            'purchase_session_ids_by_date' => $purchaseSessionIdsByDate,
-        ];
-    }
-
-    /**
      * @param  Collection<string, object>  $summaries
-     * @param  array{
-     *     visitors_by_date: Collection<string, Collection<int, int>>,
-     *     purchase_session_ids_by_date: Collection<string, Collection<int, int>>
-     * }  $trendSupport
-     * @return array<string, int>
+     * @return array<string, int|float>
      */
     private function aggregateDailyTrendBucket(
         Collection $summaries,
         string $fromDate,
         string $toDate,
-        array $trendSupport,
     ): array {
         $metrics = [
+            'unique_visitors' => 0,
             'sessions' => 0,
             'category_views' => 0,
             'product_views' => 0,
@@ -233,33 +181,20 @@ class ShopperJourneyTrendSectionService
                 continue;
             }
 
+            $metrics['unique_visitors'] += (int) ($row->unique_visitors ?? 0);
             $metrics['sessions'] += (int) ($row->sessions ?? 0);
             $metrics['category_views'] += (int) ($row->category_views ?? 0);
             $metrics['product_views'] += (int) ($row->product_view_units ?? 0);
-            $metrics['cart_sessions'] += (int) ($row->product_add_units ?? 0);
-            $metrics['checkout_sessions'] += (int) ($row->product_begin_units ?? 0);
-            $metrics['proceed_sessions'] += (int) ($row->product_proceed_units ?? 0);
+            $metrics['cart_sessions'] += (int) ($row->cart_sessions ?? 0);
+            $metrics['checkout_sessions'] += (int) ($row->checkout_sessions ?? 0);
+            $metrics['proceed_sessions'] += (int) ($row->proceed_sessions ?? 0);
             $metrics['payments'] += (int) ($row->payments ?? 0);
-            $metrics['items_sold'] += (int) ($row->product_paid_units ?? 0);
-            $metrics['sale_amount'] += (float) ($row->product_sale_amount ?? 0);
-        }
-
-        $visitorIds = collect();
-        foreach ($trendSupport['visitors_by_date'] as $date => $ids) {
-            if ($date >= $fromDate && $date <= $toDate) {
-                $visitorIds = $visitorIds->merge($ids);
-            }
-        }
-
-        $purchaseSessionIds = collect();
-        foreach ($trendSupport['purchase_session_ids_by_date'] as $date => $ids) {
-            if ($date >= $fromDate && $date <= $toDate) {
-                $purchaseSessionIds = $purchaseSessionIds->merge($ids);
-            }
+            $metrics['items_sold'] += (int) ($row->items_sold ?? 0);
+            $metrics['sale_amount'] += (float) ($row->sale_amount ?? 0);
         }
 
         return [
-            'unique_visitors' => $visitorIds->unique()->count(),
+            'unique_visitors' => $metrics['unique_visitors'],
             'sessions' => $metrics['sessions'],
             'category_views' => $metrics['category_views'],
             'product_views' => $metrics['product_views'],
@@ -269,7 +204,7 @@ class ShopperJourneyTrendSectionService
             'payments' => $metrics['payments'],
             'items_sold' => $metrics['items_sold'],
             'sale_amount' => round((float) $metrics['sale_amount'], 2),
-            'purchase_sessions' => $purchaseSessionIds->unique()->count(),
+            'purchase_sessions' => $metrics['payments'],
         ];
     }
 

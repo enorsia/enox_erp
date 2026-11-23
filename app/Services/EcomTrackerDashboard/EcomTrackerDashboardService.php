@@ -2,7 +2,6 @@
 
 namespace App\Services\EcomTrackerDashboard;
 
-use App\Services\EcomActivityListService;
 use App\Services\EcomTrackerDashboard\Sections\CategoryPerformanceSectionService;
 use App\Services\EcomTrackerDashboard\Sections\DashboardKpiSectionService;
 use App\Services\EcomTrackerDashboard\Sections\DeviceBrowserSectionService;
@@ -14,6 +13,7 @@ use App\Services\EcomTrackerDashboard\Sections\TrafficSourcesSectionService;
 use App\Services\EcomTrackerDashboard\Sections\UniqueReturningSectionService;
 use App\Support\TrackerDatabase;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Store performance dashboard, read only from tracking_* tables (daily rollups filled by dashboard sync).
@@ -21,7 +21,6 @@ use Carbon\Carbon;
 class EcomTrackerDashboardService
 {
     public function __construct(
-        private EcomActivityListService $activityList,
         private DashboardKpiSectionService $kpiSection,
         private ShopperJourneyTrendSectionService $shopperJourneySection,
         private CategoryPerformanceSectionService $categorySection,
@@ -56,10 +55,12 @@ class EcomTrackerDashboardService
             'to' => $prevTo->copy()->endOfDay(),
             'period' => $period,
         ];
-        $rangeWithPeriod = $range + ['period' => $period];
-
-        $current = $this->activityList->dashboardTotals($rangeWithPeriod, [], forDashboard: true);
-        $previous = $this->activityList->dashboardTotals($prevRange, [], forDashboard: true);
+        $current = $this->kpiSection->totalsFromSummaryRows(
+            $this->summaryRowsInRange($summaries, $from, $to),
+        );
+        $previous = $this->kpiSection->totalsFromSummaryRows(
+            $this->summaryRowsInRange($summaries, $prevFrom->toDateString(), $prevTo->toDateString()),
+        );
 
         $uniqueReturning = $this->uniqueReturningSection->snapshot(
             (int) $current['unique_visitors'],
@@ -118,5 +119,15 @@ class EcomTrackerDashboardService
         ?int $limit = ProductPerformanceSectionService::PRODUCT_LIMIT,
     ): array {
         return $this->productSection->products($from, $to, $period, $sessionFilters, $limit);
+    }
+
+    /**
+     * @param  Collection<string, object>  $summaries  keyed by metric_date
+     */
+    private function summaryRowsInRange(Collection $summaries, string $from, string $to): Collection
+    {
+        return $summaries
+            ->filter(fn (object $row, string $date) => $date >= $from && $date <= $to)
+            ->values();
     }
 }

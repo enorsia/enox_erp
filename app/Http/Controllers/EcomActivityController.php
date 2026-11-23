@@ -4,10 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityEcomUser;
 use App\Models\ActivityEcomUserAction;
+use App\Models\User;
 use App\Services\EcomActivityExportService;
 use App\Services\EcomActivityListService;
-use App\Services\TrackIngestService;
 use App\Services\TrackerDashboardSyncService;
+use App\Services\TrackIngestService;
 use App\Support\EcomActivityTableFocus;
 use App\Support\EcomTrackerLogger;
 use App\Support\SessionTrafficAttribution;
@@ -322,10 +323,14 @@ class EcomActivityController extends Controller
                 );
         }
 
-        $stored = $ingest->storePaymentSuccessOnSession(
-            $session,
-            $this->paymentSuccessEventFromProceed($proceed, $payload, $validated, $request->user()),
-        );
+        $anchorSession = ActivityEcomUser::query()->where('session_id', $session)->firstOrFail();
+        $paidAtUtc = $paidAt ?? TrackerTime::nowUtc();
+        $targetSessionId = $ingest->resolveReplicaPaymentSessionId($anchorSession, $paidAtUtc);
+
+        $event = $this->paymentSuccessEventFromProceed($proceed, $payload, $validated, $request->user());
+        $event['session_id'] = $targetSessionId;
+
+        $stored = $ingest->storePaymentSuccessOnSession($targetSessionId, $event);
 
         if (! $stored) {
             return redirect()->back()->with(
@@ -334,10 +339,18 @@ class EcomActivityController extends Controller
             );
         }
 
-        return redirect()->back()->with(
-            'payment_success_replica',
-            'Payment success created for order '.$orderId.'. Session left pending for the next dashboard sync.',
-        );
+        $message = $targetSessionId === $session
+            ? 'Payment success created for order '.$orderId.'. Session left pending for the next dashboard sync.'
+            : 'Payment success created for order '.$orderId.' on session '.substr($targetSessionId, 0, 8).'… (paid time was outside this session window; a new session was used).';
+
+        $redirect = $targetSessionId === $session
+            ? redirect()->back()
+            : redirect()->route('admin.ecom-activity.show', $this->activityShowRouteParams(
+                $targetSessionId,
+                $request->query('back'),
+            ));
+
+        return $redirect->with('payment_success_replica', $message);
     }
 
     /**
@@ -802,7 +815,7 @@ class EcomActivityController extends Controller
         ActivityEcomUserAction $proceed,
         array $proceedPayload,
         array $manual,
-        ?\App\Models\User $authUser = null,
+        ?User $authUser = null,
     ): array {
         $customer = is_array($proceedPayload['customer'] ?? null) ? $proceedPayload['customer'] : [];
         $shipping = is_array($customer['shipping'] ?? null) ? $customer['shipping'] : [];
