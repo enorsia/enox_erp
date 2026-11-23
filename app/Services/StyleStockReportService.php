@@ -6,11 +6,14 @@ use App\ApiServices\StyleStockService;
 use App\Models\SellingChartBasicInfo;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class StyleStockReportService
 {
+    private const REPORT_CACHE_SECONDS = 600;
+
     public function __construct(
         protected StyleStockService $apiService,
     ) {}
@@ -21,8 +24,16 @@ class StyleStockReportService
     public function getReport(array $filters = []): array
     {
         try {
-            $response = $this->apiService->get($filters);
-            $styleStocks = $this->parseReportResponse($response);
+            $cacheKey = $this->reportCacheKey($filters);
+            $styleStocks = Cache::remember(
+                $cacheKey,
+                self::REPORT_CACHE_SECONDS,
+                function () use ($filters): Collection {
+                    $response = $this->apiService->get($filters);
+
+                    return $this->parseReportResponse($response);
+                },
+            );
 
             return [
                 'success' => true,
@@ -86,6 +97,13 @@ class StyleStockReportService
                 'error' => 'Unable to export style stock report. Please try again later.',
             ];
         }
+    }
+
+    protected function reportCacheKey(array $filters): string
+    {
+        ksort($filters);
+
+        return 'style_stock_report:'.md5(json_encode($filters));
     }
 
     protected function parseReportResponse(Response $response): Collection
