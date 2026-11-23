@@ -259,11 +259,27 @@
                                                         </a>
                                                     @endif
                                                     <div>
-                                                        <button type="button"
-                                                            @click="drawerOpen = true"
-                                                            class="ssr-product-link ssr-style-detail-trigger text-left underline decoration-slate-300/80 underline-offset-2 hover:text-accent-500 cursor-pointer bg-transparent border-0 p-0"
-                                                            data-detail-url="{{ route('admin.style.stock.detail', $product['style']) }}"
-                                                            data-item-no="{{ $product['item_no'] }}">{{ $product['item_no'] }}</button>
+                                                        <div class="ssr-product-title-row">
+                                                            <button type="button"
+                                                                @click="drawerOpen = true"
+                                                                class="ssr-product-link ssr-style-detail-trigger text-left underline decoration-slate-300/80 underline-offset-2 hover:text-accent-500 cursor-pointer bg-transparent border-0 p-0"
+                                                                data-detail-url="{{ route('admin.style.stock.detail', $product['style']) }}"
+                                                                data-item-no="{{ $product['item_no'] }}">{{ $product['item_no'] }}</button>
+                                                            @if (!empty($product['link']))
+                                                                <a href="{{ $product['link'] }}"
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    class="ssr-product-visit-web"
+                                                                    title="View on website"
+                                                                    aria-label="View {{ $product['item_no'] }} on website">
+                                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor"
+                                                                        stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                                            d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-5.25-4.5h4.5m0 0v4.5m0-4.5L10.5 13.5" />
+                                                                    </svg>
+                                                                </a>
+                                                            @endif
+                                                        </div>
                                                         <p class="ssr-product-meta">Ecom. Price: {{ $product['ecom_price'] }}</p>
                                                         {{-- @if ($product['itemPrice']['maxDiscountPrice'] > 0)
                                                             <p class="ssr-product-meta">Dis. Price: {{ $product['discount_price'] }}</p>
