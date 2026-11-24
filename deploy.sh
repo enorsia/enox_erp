@@ -83,7 +83,6 @@ fi
 if [ "$RUN_NPM" = "yes" ] && [ "$FAST_MODE" = "no" ]; then
     echo -e "${YELLOW}🧰 Installing npm dependencies...${NC}"
     npm install --omit=dev
-    npm run install
 else
     echo -e "${GREEN}⏭ Skipping npm install${NC}"
 fi
