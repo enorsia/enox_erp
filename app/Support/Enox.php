@@ -7,13 +7,13 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Query helpers for the ENORSIA shop read replica (enorsia_v2).
+ * Query helpers for the Enorsia shop read replica (enorsia_v2).
  */
-final class EnorsiaDatabase
+final class Enox
 {
     public static function connectionName(): string
     {
-        return (string) config('enorsia.database_connection', 'enorsia');
+        return (string) config('enox.database_connection', 'enox');
     }
 
     public static function connection(): Connection

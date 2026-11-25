@@ -282,6 +282,28 @@ final class SpreadsheetWriterProfile
         );
     }
 
+    public static function ecomDepartmentProductSales(array $headings): self
+    {
+        $columnCount = max(1, count($headings));
+
+        return new self(
+            layoutKey: 'ecom_department_product_sales',
+            columnCount: $columnCount,
+            mergeEndColumn: min(max(1, $columnCount - 1), 3),
+            phoneColumn: 0,
+            orderNumberColumn: 0,
+            sizeColumn: 0,
+            quantityColumn: 2,
+            moneyColumnStart: 3,
+            moneyColumnEnd: 3,
+            couponPercentColumn: 0,
+            totalLabelColumn: 0,
+            reportTitle: 'DEPARTMENT PRODUCT SALES REPORT',
+            overflowSheetPrefix: 'Sales Data',
+            autoSizeColumnsFromContent: true,
+        );
+    }
+
     public static function ecomRankingProducts(array $headings): self
     {
         $columnCount = max(1, count($headings));

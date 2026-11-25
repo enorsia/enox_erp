@@ -22,6 +22,7 @@ use App\Http\Controllers\EcomActivityController;
 use App\Http\Controllers\EcomTrackerDashboardController;
 use App\Http\Controllers\EcomTrackerDashboardCompareController;
 use App\Http\Controllers\EcommerceCtrSummaryController;
+use App\Http\Controllers\EcommerceDepartmentProductSalesController;
 use App\Http\Controllers\EcommerceRankingProductsController;
 use App\Http\Controllers\Exports\UserExportController;
 use App\Http\Controllers\SaleTrackingController;
@@ -73,6 +74,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'two_factor.verified
     Route::get('ecom-tracker/dashboard/compare', [EcomTrackerDashboardCompareController::class, 'index'])->name('ecom-tracker.dashboard.compare');
     Route::get('ecommerce/ctr-summary', [EcommerceCtrSummaryController::class, 'index'])->name('ecommerce.ctr-summary.index');
     Route::get('ecommerce/ctr-summary/export', [EcommerceCtrSummaryController::class, 'export'])->name('ecommerce.ctr-summary.export');
+    Route::get('ecommerce/department-product-sales', [EcommerceDepartmentProductSalesController::class, 'index'])->name('ecommerce.department-product-sales.index');
+    Route::get('ecommerce/department-product-sales/export', [EcommerceDepartmentProductSalesController::class, 'export'])->name('ecommerce.department-product-sales.export');
     Route::get('ecommerce/ranking-products', [EcommerceRankingProductsController::class, 'index'])->name('ecommerce.ranking-products.index');
     Route::get('ecommerce/ranking-products/export', [EcommerceRankingProductsController::class, 'export'])->name('ecommerce.ranking-products.export');
 

@@ -107,18 +107,18 @@ return [
             ]) : [],
         ],
 
-        // ENORSIA shop (enorsia_v2) — read-only replica on Enox Suite; no migrations on this connection
-        'enorsia' => [
+        // Enorsia shop (enorsia_v2) — read-only replica; config key enox (see config/enox.php, App\Support\Enox)
+        'enox' => [
             'driver' => 'mysql',
-            'url' => env('ENORSIA_DB_URL'),
-            'host' => env('ENORSIA_DB_HOST', env('DB_HOST', '127.0.0.1')),
-            'port' => env('ENORSIA_DB_PORT', env('DB_PORT', '3306')),
-            'database' => env('ENORSIA_DB_DATABASE', 'enorsia_v2'),
-            'username' => env('ENORSIA_DB_USERNAME', env('DB_USERNAME', 'root')),
-            'password' => env('ENORSIA_DB_PASSWORD', env('DB_PASSWORD', '')),
-            'unix_socket' => env('ENORSIA_DB_SOCKET', env('DB_SOCKET', '')),
-            'charset' => env('ENORSIA_DB_CHARSET', env('DB_CHARSET', 'utf8mb4')),
-            'collation' => env('ENORSIA_DB_COLLATION', env('DB_COLLATION', 'utf8mb4_unicode_ci')),
+            'url' => env('ENOX_DB_URL'),
+            'host' => env('ENOX_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('ENOX_DB_PORT', env('DB_PORT', '3306')),
+            'database' => env('ENOX_DB_DATABASE', 'enorsia_v2'),
+            'username' => env('ENOX_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('ENOX_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('ENOX_DB_SOCKET', env('DB_SOCKET', '')),
+            'charset' => env('ENOX_DB_CHARSET', env('DB_CHARSET', 'utf8mb4')),
+            'collation' => env('ENOX_DB_COLLATION', env('DB_COLLATION', 'utf8mb4_unicode_ci')),
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,

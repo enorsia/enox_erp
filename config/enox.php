@@ -1,6 +1,16 @@
 <?php
 
 return [
+    /*
+    |--------------------------------------------------------------------------
+    | Enorsia shop database (read replica)
+    |--------------------------------------------------------------------------
+    |
+    | Points at the enorsia_v2 MySQL replica on Enox Suite. Use Enox::table()
+    | for reporting queries (orders, products, departments). No migrations.
+    */
+    'database_connection' => env('ENOX_DB_CONNECTION', 'enox'),
+
     'base_url' => env('ENOX_API_BASE_URL'),
     'api_key' => env('ENOX_API_KEYS'),
     'timeout' => 10,

@@ -163,7 +163,7 @@ final class SpreadsheetExportLayout
                 companyStyleEndColumn: $profile->columnCount - 1,
                 hasOrderSeparators: true,
             ),
-            'ecom_product_performance', 'ecom_ctr_summary' => new self(
+            'ecom_product_performance', 'ecom_ctr_summary', 'ecom_department_product_sales' => new self(
                 profile: $profile,
                 columnWidths: SpreadsheetColumnWidthEstimator::forProfile($profile, $headings),
                 companyHeaderLines: 3,
@@ -181,7 +181,7 @@ final class SpreadsheetExportLayout
                 verticallyCenteredColumns: [],
                 rightAlignedColumns: [],
                 centerAlignedColumns: [],
-                quantityColumns: [],
+                quantityColumns: $profile->layoutKey === 'ecom_department_product_sales' ? [2] : [],
             ),
             'ecom_activity' => new self(
                 profile: $profile,
@@ -228,7 +228,7 @@ final class SpreadsheetExportLayout
      */
     public function companyHeaderTexts(array $context): array
     {
-        if (in_array($this->profile->layoutKey, ['ecom_activity', 'ecom_product_performance', 'ecom_ctr_summary'], true)) {
+        if (in_array($this->profile->layoutKey, ['ecom_activity', 'ecom_product_performance', 'ecom_ctr_summary', 'ecom_department_product_sales'], true)) {
             $lines = [$this->profile->reportTitle];
 
             if (! empty($context['start_date']) && ! empty($context['end_date'])) {
@@ -242,7 +242,7 @@ final class SpreadsheetExportLayout
 
             $defaultFilters = match ($this->profile->layoutKey) {
                 'ecom_product_performance' => 'ALL PRODUCTS',
-                'ecom_ctr_summary' => 'ALL ROWS',
+                'ecom_ctr_summary', 'ecom_department_product_sales' => 'ALL ROWS',
                 default => 'ALL SESSIONS',
             };
 

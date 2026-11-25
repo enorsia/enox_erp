@@ -18,6 +18,7 @@ return [
                 'wh_stock_in_out' => 'WH Stock In/Out',
                 'ctr_summary' => 'CTR Summary',
                 'ranking_products' => 'Ranking Products',
+                'department_product_sales' => 'Style Sold',
             ],
             'ecom_tracker' => [
                 'dashboard' => 'Store Performance',
@@ -109,6 +110,10 @@ return [
                 'actions' => ['index', 'export'],
             ],
             'ranking_products' => [
+                'guard' => 'web',
+                'actions' => ['index', 'export'],
+            ],
+            'department_product_sales' => [
                 'guard' => 'web',
                 'actions' => ['index', 'export'],
             ],
