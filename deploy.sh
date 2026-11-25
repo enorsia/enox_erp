@@ -21,6 +21,8 @@ RUN_ASSETS="no"
 RUN_MIGRATIONS="no"
 FAST_MODE="no"
 RUN_SUPERVISOR="no"
+RUN_NPM="no"
+
 
 ########################################
 # Read parameters
@@ -40,6 +42,9 @@ do
         --supervisor=yes)
         RUN_SUPERVISOR="yes"
         ;;
+        --npm=yes)
+        RUN_NPM="yes"
+        ;;
         --fast)
         FAST_MODE="yes"
         ;;
@@ -56,11 +61,10 @@ cd /srv/enox_erp || { echo -e "${RED}❌ Project folder not found${NC}"; exit 1;
 ########################################
 # Git update
 ########################################
-echo -e "${YELLOW}📦 Fetching latest code...${NC} "
+echo -e "${YELLOW}📦 Fetching latest code from master...${NC}"
 git fetch origin
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-echo -e "${YELLOW}🔀 Switching to branch $BRANCH...${NC}"
-git reset --hard origin/$BRANCH
+git checkout master
+git reset --hard origin/master
 
 ########################################
 # Composer
@@ -70,6 +74,17 @@ if [ "$RUN_COMPOSER" = "yes" ] && [ "$FAST_MODE" = "no" ]; then
     composer install --no-dev --optimize-autoloader
 else
     echo -e "${GREEN}⏭ Skipping composer install${NC}"
+fi
+
+
+########################################
+# NPM
+########################################
+if [ "$RUN_NPM" = "yes" ] && [ "$FAST_MODE" = "no" ]; then
+    echo -e "${YELLOW}🧰 Installing npm dependencies...${NC}"
+    npm install --omit=dev
+else
+    echo -e "${GREEN}⏭ Skipping npm install${NC}"
 fi
 
 ########################################
@@ -93,6 +108,9 @@ else
     echo -e "${GREEN}⏭ Skipping asset build${NC}"
 fi
 
+
+
+
 ########################################
 # Custom Migrations
 ########################################
@@ -103,7 +121,7 @@ if [ "$RUN_MIGRATIONS" = "yes" ] && [ "$FAST_MODE" = "no" ]; then
     bash run_migrations.sh
 
 else
-    echo -e "${GREEN}⏭ Skipping migrations${NC} "
+    echo -e "${GREEN}⏭ Skipping migrations${NC}"
 fi
 
 ########################################
@@ -111,7 +129,7 @@ fi
 ########################################
 echo -e "${YELLOW}⚙️ Fixing permissions...${NC}"
 
-chown -R enorsiauk_server_2:www-data storage bootstrap/cache 2>/dev/null || true
+chown -R ukenorsia:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 chmod -R g+rw storage/logs/*.log 2>/dev/null || true
 
@@ -138,6 +156,8 @@ sudo -u www-data php artisan event:cache
 
 ########################################
 # restart queue workers (optional)
+# Ensure supervisor worker listens on exports queue:
+#   php artisan queue:work --queue=exports,default
 ########################################
 if [ "$RUN_SUPERVISOR" = "yes" ]; then
     echo -e "${YELLOW}🔄 Restarting workers...${NC}"
@@ -145,6 +165,7 @@ if [ "$RUN_SUPERVISOR" = "yes" ]; then
     sudo supervisorctl reread
     sudo supervisorctl update
     sudo supervisorctl restart enox_suite_queue:*
+    sudo supervisorctl restart tracking-database-worker:*
 
     echo -e "${GREEN}✅ Worker restarted${NC}"
 else
