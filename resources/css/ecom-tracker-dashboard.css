@@ -9220,6 +9220,27 @@ a.etd-pager__btn:hover {
     margin-top: 0;
 }
 
+#ecom-tracker-dashboard-content.etd-page--style-sold .etd-header-toolbar-row {
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.35rem 0.5rem;
+}
+
+#ecom-tracker-dashboard-content.etd-page--style-sold .etd-header-period-nav {
+    justify-content: flex-start;
+    margin-right: auto;
+}
+
+#ecom-tracker-dashboard-content.etd-page--style-sold .etd-header-period-nav .etd-segmented {
+    justify-content: flex-start;
+}
+
+#ecom-tracker-dashboard-content.etd-page--style-sold .etd-header-toolbar-icon-group {
+    flex: 0 0 auto;
+    margin-left: auto;
+    justify-content: flex-end;
+}
+
 .etd-ctr-summary-page-title {
     font-size: 1.25rem;
     line-height: 1.3;
@@ -9439,6 +9460,14 @@ a.etd-pager__btn:hover {
         margin-top: 0;
     }
 
+    #ecom-tracker-dashboard-content.etd-page--style-sold .etd-header-toolbar-row {
+        justify-content: flex-end;
+    }
+
+    #ecom-tracker-dashboard-content.etd-page--style-sold .etd-header-period-nav {
+        display: none;
+    }
+
     .etd-page--ctr-summary .etd-topbar-btn--export .etd-header-btn-text {
         display: none;
     }
@@ -9553,14 +9582,27 @@ a.etd-pager__btn:hover {
         background: #0f172a;
     }
 
-    .etd-ctr-summary-list .etd-table--ctr-summary tbody tr.etd-ctr-summary-empty td {
+    .etd-ctr-summary-list .etd-table--ctr-summary tbody tr.etd-ctr-summary-empty td,
+    .etd-ctr-summary-list .etd-table--ctr-summary tbody tr.etd-ctr-summary-empty td.etd-ctr-summary-empty__cell {
         display: block;
-        padding: 0;
+        padding: 0 !important;
         text-align: center;
     }
 
     .etd-ctr-summary-list .etd-table--ctr-summary tbody tr.etd-ctr-summary-empty td::before {
         content: none;
+    }
+
+    .etd-ctr-summary-list .etd-table--ctr-summary tbody tr.etd-ctr-summary-empty td.etd-ctr-summary-empty__cell {
+        padding: 0;
+        font-size: 13px;
+        line-height: 1.45;
+        color: #64748b;
+        text-align: center;
+    }
+
+    .dark .etd-ctr-summary-list .etd-table--ctr-summary tbody tr.etd-ctr-summary-empty td.etd-ctr-summary-empty__cell {
+        color: #94a3b8;
     }
 }
 

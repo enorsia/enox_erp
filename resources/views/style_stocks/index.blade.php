@@ -37,7 +37,18 @@
 
                 </div>
 
-                @can('ecommerce.wh_stock_in_out.export')
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                    @can('ecommerce.department_product_sales.index')
+                        <a href="{{ route('admin.ecommerce.department-product-sales.index') }}"
+                            class="flex items-center gap-2 px-3.5 py-2 text-[13px] font-semibold rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm no-underline"
+                            title="Style sold by department and product code">
+                            <svg class="w-4 h-4 text-accent-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h6"/>
+                            </svg>
+                            Style Sold
+                        </a>
+                    @endcan
+                    @can('ecommerce.wh_stock_in_out.export')
                         <button type="submit" name="action" value="export_stock_analysis"
                             class="flex items-center gap-2 px-3.5 py-2 text-[13px] font-semibold rounded-xl bg-accent-400 hover:bg-accent-600 text-white transition-colors shadow-sm">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -46,7 +57,8 @@
                             </svg>
                             Export Report
                         </button>
-                @endcan
+                    @endcan
+                </div>
             </div>
 
             {{-- ─── Search Filters ─── --}}
