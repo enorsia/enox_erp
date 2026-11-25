@@ -87,9 +87,9 @@ else
     echo -e "${GREEN}⏭ Skipping npm install${NC}"
 fi
 
-########################################
-# Asset Build
-########################################
+#######################################
+#Asset Build
+#######################################
 # if [ "$RUN_ASSETS" = "yes" ] && [ "$FAST_MODE" = "no" ]; then
 
 #     echo -e "${YELLOW}🏗 Building assets safely...${NC}"
@@ -109,89 +109,33 @@ fi
 # fi
 
 
-########################################
-# Asset Build
-########################################
+
 if [ "$RUN_ASSETS" = "yes" ] && [ "$FAST_MODE" = "no" ]; then
 
     echo -e "${YELLOW}🏗 Building assets safely...${NC}"
 
-    # Clean previous temporary build
     rm -rf public/build_new
+    VITE_BUILD_DIR=build_new npm run build
 
-    # Build assets
-    if ! VITE_BUILD_DIR=build_new npm run build; then
-        echo -e "${RED}❌ Asset compilation failed. Existing build preserved.${NC}"
+    if [ ! -f public/build_new/manifest.json ]; then
+        echo -e "${RED}❌ Build output missing, keeping current build${NC}"
         exit 1
     fi
-
-    # Validate generated build
-    if [ ! -d public/build_new ]; then
-        echo -e "${RED}❌ Build directory not found: public/build_new${NC}"
-        exit 1
-    fi
-
-    if [ -z "$(ls -A public/build_new 2>/dev/null)" ]; then
-        echo -e "${RED}❌ Build directory is empty. Existing build preserved.${NC}"
-        exit 1
-    fi
-
-    echo -e "${GREEN}✅ Asset build completed successfully.${NC}"
 
     echo -e "${YELLOW}🔄 Swapping build folders...${NC}"
-
-    # Remove previous backup
-    rm -rf public/build_old || {
-        echo -e "${RED}❌ Failed to remove previous backup.${NC}"
+    rm -rf public/build_old
+    [ -d public/build ] && mv public/build public/build_old
+    if ! mv public/build_new public/build; then
+        [ -d public/build_old ] && mv public/build_old public/build
+        echo -e "${RED}❌ Swap failed, rolled back${NC}"
         exit 1
-    }
-
-    # Move current build to backup
-    if [ -d public/build ] || [ -L public/build ]; then
-
-        if ! mv public/build public/build_old; then
-            echo -e "${RED}❌ Failed to backup existing build. Deployment stopped.${NC}"
-            exit 1
-        fi
-
     fi
-
-    # Activate new build
-    if mv public/build_new public/build; then
-
-        echo -e "${GREEN}✅ New build activated successfully.${NC}"
-
-        # Remove old build after successful activation
-        rm -rf public/build_old
-
-        echo -e "${GREEN}✅ Old build backup cleaned successfully.${NC}"
-
-    else
-
-        echo -e "${RED}❌ Failed to activate new build. Starting rollback...${NC}"
-
-        # Restore previous build
-        if [ -d public/build_old ]; then
-
-            if mv public/build_old public/build; then
-                echo -e "${GREEN}✅ Previous build restored successfully.${NC}"
-            else
-                echo -e "${RED}❌ CRITICAL: Rollback failed. Manual recovery required.${NC}"
-            fi
-
-        fi
-
-        exit 1
-
-    fi
+    rm -rf public/build_old
 
 else
-
-    echo -e "${GREEN}⏭ Skipping asset build.${NC}"
-
+    echo -e "${GREEN}⏭ Skipping asset build${NC}"
 fi
 
-# rasel hasan
 
 ########################################
 # Custom Migrations
