@@ -107,6 +107,28 @@ return [
             ]) : [],
         ],
 
+        // ENORSIA shop (enorsia_v2) — read-only replica on Enox Suite; no migrations on this connection
+        'enorsia' => [
+            'driver' => 'mysql',
+            'url' => env('ENORSIA_DB_URL'),
+            'host' => env('ENORSIA_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('ENORSIA_DB_PORT', env('DB_PORT', '3306')),
+            'database' => env('ENORSIA_DB_DATABASE', 'enorsia_v2'),
+            'username' => env('ENORSIA_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('ENORSIA_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('ENORSIA_DB_SOCKET', env('DB_SOCKET', '')),
+            'charset' => env('ENORSIA_DB_CHARSET', env('DB_CHARSET', 'utf8mb4')),
+            'collation' => env('ENORSIA_DB_COLLATION', env('DB_COLLATION', 'utf8mb4_unicode_ci')),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'timezone' => '+00:00',
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? \Pdo\Mysql::ATTR_SSL_CA : \PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DB_URL'),
